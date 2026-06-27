@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Ingresar | Tienda de abarrotes</title>
+  <link rel="stylesheet" href="/css/styles.css">
+</head>
+<body class="login-page">
+  <main class="login-box">
+    <h1>Tienda de abarrotes</h1>
+    <p>Ingreso de administrador</p>
+    <form id="loginForm">
+      <label>Usuario
+        <input name="usuario" required autocomplete="username">
+      </label>
+      <label>Contraseña
+        <input name="password" type="password" required autocomplete="current-password">
+      </label>
+      <button type="submit">Iniciar sesión</button>
+      <div id="loginMessage" class="message"></div>
+    </form>
+  </main>
+  <script src="/js/login.js"></script>
+</body>
+</html>
