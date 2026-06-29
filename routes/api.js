@@ -164,6 +164,7 @@ router.get('/dashboard', async (req, res, next) => {
       chartVentasDias: ventasDias
     });
   } catch (error) {
+    if (error.status) return res.status(error.status).json({ error: error.message });
     next(error);
   }
 });
@@ -572,6 +573,71 @@ router.post('/pagos-fiado', async (req, res, next) => {
     });
     res.status(201).json({ message: 'Pago registrado.' });
   } catch (error) {
+    next(error);
+  }
+});
+
+router.post('/pagos-fiado/cliente', async (req, res, next) => {
+  try {
+    requireFields(req.body, ['idCliente', 'monto']);
+    const monto = asNumber(req.body.monto);
+    if (monto <= 0) return res.status(400).json({ error: 'El pago debe ser mayor a cero.' });
+
+    const result = await runTransaction(async (connection) => {
+      const [fiados] = await connection.query(
+        `SELECT *
+         FROM fiado
+         WHERE idCliente=? AND estado IN ('pendiente','parcial')
+         ORDER BY fechaInicio ASC, idFiado ASC
+         FOR UPDATE`,
+        [req.body.idCliente]
+      );
+      if (!fiados.length) {
+        const error = new Error('El cliente no tiene deudas pendientes.');
+        error.status = 400;
+        throw error;
+      }
+
+      const saldoAcumulado = fiados.reduce((sum, fiado) => sum + asNumber(fiado.saldoPendiente), 0);
+      if (monto > saldoAcumulado) {
+        const error = new Error(`El pago no puede superar el saldo acumulado de Bs ${saldoAcumulado.toFixed(2)}.`);
+        error.status = 400;
+        throw error;
+      }
+
+      let restante = monto;
+      const aplicaciones = [];
+      const observacion = nullableUpper(req.body.observacion || 'PAGO ACUMULADO');
+
+      for (const fiado of fiados) {
+        if (restante <= 0) break;
+        const saldoActual = asNumber(fiado.saldoPendiente);
+        const aplicado = Math.min(restante, saldoActual);
+        if (aplicado <= 0) continue;
+
+        await connection.query(
+          'INSERT INTO pagoFiado (idFiado, monto, observacion) VALUES (?, ?, ?)',
+          [fiado.idFiado, aplicado, observacion]
+        );
+
+        const totalPagado = asNumber(fiado.totalPagado) + aplicado;
+        const saldo = Math.max(0, asNumber(fiado.totalFiado) - totalPagado);
+        const estado = saldo === 0 ? 'pagado' : 'parcial';
+        await connection.query(
+          'UPDATE fiado SET totalPagado=?, saldoPendiente=?, estado=? WHERE idFiado=?',
+          [totalPagado, saldo, estado, fiado.idFiado]
+        );
+
+        aplicaciones.push({ idFiado: fiado.idFiado, monto: aplicado, saldoPendiente: saldo, estado });
+        restante = Number((restante - aplicado).toFixed(2));
+      }
+
+      return { saldoAcumulado, montoAplicado: monto, aplicaciones };
+    });
+
+    res.status(201).json({ message: 'Pago acumulado registrado.', ...result });
+  } catch (error) {
+    if (error.status) return res.status(error.status).json({ error: error.message });
     next(error);
   }
 });
