@@ -135,11 +135,13 @@ function validateProductPayload(body, editing = false) {
 
 router.get('/dashboard', async (req, res, next) => {
   try {
-    const [[ventasHoy], [ventasAyer], [ventasMes], [ventasMesPasado], [gananciaHoy], [gananciaMes], [bajoStock], [fiadosEstado], [ventasDias]] = await Promise.all([
+    const [[ventasHoy], [ventasAyer], [ventasMes], [ventasMesPasado], [ventasSemana], [ventasSemanaPasada], [gananciaHoy], [gananciaMes], [bajoStock], [fiadosEstado], [ventasDias]] = await Promise.all([
       pool.query('SELECT COALESCE(SUM(total), 0) total FROM venta WHERE DATE(fecha) = CURDATE()'),
       pool.query('SELECT COALESCE(SUM(total), 0) total FROM venta WHERE DATE(fecha) = DATE_SUB(CURDATE(), INTERVAL 1 DAY)'),
       pool.query('SELECT COALESCE(SUM(total), 0) total FROM venta WHERE YEAR(fecha)=YEAR(CURDATE()) AND MONTH(fecha)=MONTH(CURDATE())'),
       pool.query('SELECT COALESCE(SUM(total), 0) total FROM venta WHERE YEAR(fecha)=YEAR(DATE_SUB(CURDATE(), INTERVAL 1 MONTH)) AND MONTH(fecha)=MONTH(DATE_SUB(CURDATE(), INTERVAL 1 MONTH))'),
+      pool.query('SELECT COALESCE(SUM(total), 0) total FROM venta WHERE YEARWEEK(fecha, 1) = YEARWEEK(CURDATE(), 1)'),
+      pool.query('SELECT COALESCE(SUM(total), 0) total FROM venta WHERE YEARWEEK(fecha, 1) = YEARWEEK(DATE_SUB(CURDATE(), INTERVAL 1 WEEK), 1)'),
       pool.query('SELECT COALESCE(SUM(ganancia), 0) total FROM detalleVenta d JOIN venta v ON v.idVenta=d.idVenta WHERE DATE(v.fecha)=CURDATE()'),
       pool.query('SELECT COALESCE(SUM(ganancia), 0) total FROM detalleVenta d JOIN venta v ON v.idVenta=d.idVenta WHERE YEAR(v.fecha)=YEAR(CURDATE()) AND MONTH(v.fecha)=MONTH(CURDATE())'),
       pool.query('SELECT COUNT(*) total FROM producto WHERE stockUnidadesTotal < stockMinimo'),
@@ -153,6 +155,8 @@ router.get('/dashboard', async (req, res, next) => {
       ventasAyer: ventasAyer[0].total,
       ventasMes: ventasMes[0].total,
       ventasMesPasado: ventasMesPasado[0].total,
+      ventasSemana: ventasSemana[0].total,
+      ventasSemanaPasada: ventasSemanaPasada[0].total,
       gananciaHoy: gananciaHoy[0].total,
       gananciaMes: gananciaMes[0].total,
       bajoStock: bajoStock[0].total,

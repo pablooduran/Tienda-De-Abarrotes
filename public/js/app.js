@@ -155,34 +155,184 @@ async function loadView(id) {
   await handlers[id]();
 }
 
-function drawChart(canvas, labels, values, color = '#286a59') {
+function chartTooltip(canvas) {
+  const panel = canvas.closest('.panel') || canvas.parentElement;
+  if (!panel) return null;
+  panel.style.position = panel.style.position || 'relative';
+  let tooltip = panel.querySelector('.chart-tooltip');
+  if (!tooltip) {
+    tooltip = document.createElement('div');
+    tooltip.className = 'chart-tooltip';
+    panel.appendChild(tooltip);
+  }
+  return tooltip;
+}
+
+function bindChartTooltip(canvas, hitAreas) {
+  const tooltip = chartTooltip(canvas);
+  if (!tooltip) return;
+  canvas.onmousemove = (event) => {
+    const rect = canvas.getBoundingClientRect();
+    const x = event.clientX - rect.left;
+    const y = event.clientY - rect.top;
+    const hit = hitAreas.find((area) => {
+      if (area.type === 'circle') {
+        const dx = x - area.x;
+        const dy = y - area.y;
+        return Math.sqrt(dx * dx + dy * dy) <= area.r;
+      }
+      return x >= area.x && x <= area.x + area.w && y >= area.y && y <= area.y + area.h;
+    });
+    if (!hit) {
+      tooltip.classList.remove('show');
+      return;
+    }
+    tooltip.innerHTML = hit.text;
+    tooltip.style.left = `${Math.min(x + 14, rect.width - 130)}px`;
+    tooltip.style.top = `${Math.max(10, y - 34)}px`;
+    tooltip.classList.add('show');
+  };
+  canvas.onmouseleave = () => tooltip.classList.remove('show');
+}
+
+function drawChart(canvas, labels, values, color = '#286a59', tooltips = []) {
   const ctx = canvas.getContext('2d');
-  const width = canvas.width = canvas.clientWidth * devicePixelRatio;
-  const height = canvas.height = 220 * devicePixelRatio;
-  ctx.scale(devicePixelRatio, devicePixelRatio);
-  ctx.clearRect(0, 0, width, height);
+  const ratio = devicePixelRatio || 1;
+  const displayWidth = canvas.clientWidth || 320;
+  canvas.width = displayWidth * ratio;
+  canvas.height = 240 * ratio;
+  ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
+  ctx.clearRect(0, 0, displayWidth, 240);
   const max = Math.max(...values.map(Number), 1);
-  const barWidth = Math.max(18, (canvas.clientWidth - 50) / Math.max(values.length, 1) - 8);
-  ctx.font = '12px Arial';
+  const chartHeight = 150;
+  const bottom = 190;
+  const left = 34;
+  const gap = 10;
+  const barWidth = Math.max(18, (displayWidth - 58) / Math.max(values.length, 1) - gap);
+  const hitAreas = [];
+  ctx.font = '12px "Segoe UI", Arial';
   ctx.fillStyle = '#6b7684';
-  ctx.fillText('0', 8, 205);
+  ctx.fillText('0', 8, bottom + 5);
   values.forEach((value, index) => {
-    const x = 34 + index * (barWidth + 8);
-    const h = (Number(value) / max) * 150;
+    const x = left + index * (barWidth + gap);
+    const h = (Number(value) / max) * chartHeight;
+    const y = bottom - h;
     ctx.fillStyle = color;
-    ctx.fillRect(x, 190 - h, barWidth, h);
+    ctx.beginPath();
+    if (typeof ctx.roundRect === 'function') {
+      ctx.roundRect(x, y, barWidth, h || 2, 6);
+    } else {
+      ctx.rect(x, y, barWidth, h || 2);
+    }
+    ctx.fill();
     ctx.fillStyle = '#1d2733';
-    ctx.fillText(String(Number(value).toFixed(0)), x, 182 - h);
+    ctx.fillText(String(Number(value).toFixed(0)), x, Math.max(18, y - 8));
     ctx.save();
-    ctx.translate(x + 2, 210);
+    ctx.translate(x + 2, 216);
     ctx.rotate(-0.35);
     ctx.fillStyle = '#6b7684';
     ctx.fillText(String(labels[index] || '').slice(0, 12), 0, 0);
     ctx.restore();
+    hitAreas.push({
+      x,
+      y: Math.min(y, bottom - 2),
+      w: barWidth,
+      h: Math.max(h, 10),
+      text: tooltips[index] || `<strong>${escapeHtml(labels[index] || '')}</strong><br>Bs ${money(value)}`
+    });
   });
+  bindChartTooltip(canvas, hitAreas);
 }
 
-async function inicio() {
+function drawPieChart(canvas, labels, values, colors, tooltips = []) {
+  const ctx = canvas.getContext('2d');
+  const ratio = devicePixelRatio || 1;
+  const displayWidth = canvas.clientWidth || 320;
+  canvas.width = displayWidth * ratio;
+  canvas.height = 240 * ratio;
+  ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
+  ctx.clearRect(0, 0, displayWidth, 240);
+  const total = values.reduce((sum, value) => sum + Number(value || 0), 0);
+  const cx = Math.min(116, displayWidth * 0.38);
+  const cy = 112;
+  const radius = 78;
+  const hitAreas = [];
+  if (!total) {
+    ctx.fillStyle = '#e9eef1';
+    ctx.beginPath();
+    ctx.arc(cx, cy, radius, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = '#6b7684';
+    ctx.font = '13px "Segoe UI", Arial';
+    ctx.textAlign = 'center';
+    ctx.fillText('Sin ventas', cx, cy + 4);
+    ctx.textAlign = 'left';
+  } else {
+    let start = -Math.PI / 2;
+    values.forEach((value, index) => {
+      const slice = (Number(value || 0) / total) * Math.PI * 2;
+      const end = start + slice;
+      ctx.fillStyle = colors[index % colors.length];
+      ctx.beginPath();
+      ctx.moveTo(cx, cy);
+      ctx.arc(cx, cy, radius, start, end);
+      ctx.closePath();
+      ctx.fill();
+      const mid = start + slice / 2;
+      hitAreas.push({
+        type: 'circle',
+        x: cx + Math.cos(mid) * (radius * 0.55),
+        y: cy + Math.sin(mid) * (radius * 0.55),
+        r: Math.max(18, radius * Math.max(0.2, slice / (Math.PI * 2))),
+        text: tooltips[index] || `<strong>${escapeHtml(labels[index] || '')}</strong><br>Bs ${money(value)}`
+      });
+      start = end;
+    });
+  }
+  const legendX = Math.min(displayWidth - 150, cx + radius + 28);
+  ctx.font = '12px "Segoe UI", Arial';
+  labels.forEach((label, index) => {
+    const y = 42 + index * 28;
+    ctx.fillStyle = colors[index % colors.length];
+    ctx.fillRect(legendX, y, 10, 10);
+    ctx.fillStyle = '#1d2733';
+    ctx.fillText(String(label).slice(0, 16), legendX + 16, y + 9);
+  });
+  bindChartTooltip(canvas, hitAreas);
+}
+
+function dateKey(value) {
+  if (!value) return '';
+  if (typeof value === 'string' && /^\d{4}-\d{2}-\d{2}/.test(value)) return value.slice(0, 10);
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return String(value).slice(0, 10);
+  const pad = (n) => String(n).padStart(2, '0');
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
+}
+
+function dateOffsetKey(offset) {
+  const date = new Date();
+  date.setDate(date.getDate() - offset);
+  return dateKey(date);
+}
+
+function dayLabel(offset) {
+  if (offset === 0) return 'Hoy';
+  if (offset === 1) return 'Ayer';
+  if (offset === 2) return 'Anteayer';
+  return `Hace ${offset} días`;
+}
+
+function buildSalesDays(rows) {
+  const map = new Map(rows.map((row) => [dateKey(row.dia), Number(row.total || 0)]));
+  return [4, 3, 2, 1, 0].map((offset) => ({
+    label: dayLabel(offset),
+    key: dateOffsetKey(offset),
+    total: map.get(dateOffsetKey(offset)) || 0
+  }));
+}
+
+async function inicioLegacy() {
   const data = await api('/api/dashboard');
   const debtState = data.fiados || {
     pendiente: data.fiadosPendientes || data.fiadosActivos || 0,
@@ -211,6 +361,71 @@ async function inicio() {
   drawChart(document.getElementById('monthCompare'), ['MES ACTUAL', 'MES PASADO'], [data.ventasMes, data.ventasMesPasado], '#536471');
   drawChart(document.getElementById('debtsChart'), ['PENDIENTE', 'PARCIAL', 'PAGADO'], [debtState.pendiente || 0, debtState.parcial || 0, debtState.pagado || 0], '#b42318');
   drawChart(document.getElementById('daysChart'), days.map((r) => formatDate(r.dia).slice(8)), days.map((r) => r.total), '#18794e');
+}
+
+async function inicio() {
+  const data = await api('/api/dashboard');
+  const debtState = data.fiados || {
+    pendiente: data.fiadosPendientes || data.fiadosActivos || 0,
+    parcial: data.fiadosParciales || 0,
+    pagado: data.fiadosPagados || 0
+  };
+  const days = Array.isArray(data.chartVentasDias) ? data.chartVentasDias : [];
+  const salesDays = buildSalesDays(days);
+  const dayLabels = salesDays.map((day) => day.label);
+  const dayValues = salesDays.map((day) => day.total);
+  const dayTooltips = salesDays.map((day) => `<strong>${escapeHtml(day.label)}</strong><br>${escapeHtml(day.key)}<br>Ventas: Bs ${money(day.total)}`);
+  const activeDebts = Number(debtState.pendiente || 0) + Number(debtState.parcial || 0);
+
+  view.innerHTML = `
+    <div class="dashboard-hero">
+      <div>
+        <span class="eyebrow">Resumen de ventas</span>
+        <h3>Movimiento del negocio</h3>
+        <p>Comparación visual con datos reales de ventas registradas.</p>
+      </div>
+      <div class="hero-total">
+        <span>Ventas de hoy</span>
+        <strong>Bs ${money(data.ventasHoy)}</strong>
+      </div>
+    </div>
+    <div class="cards dashboard-cards">
+      <div class="card metric-card"><span>Ventas de ayer</span><strong>Bs ${money(data.ventasAyer)}</strong></div>
+      <div class="card metric-card"><span>Semana actual</span><strong>Bs ${money(data.ventasSemana)}</strong></div>
+      <div class="card metric-card"><span>Mes actual</span><strong>Bs ${money(data.ventasMes)}</strong></div>
+      <div class="card metric-card"><span>Ganancia hoy</span><strong>Bs ${money(data.gananciaHoy)}</strong></div>
+      <div class="card metric-card"><span>Bajo stock</span><strong>${data.bajoStock}</strong></div>
+      <div class="card metric-card"><span>Fiados activos</span><strong>${activeDebts}</strong></div>
+    </div>
+    <div class="dashboard-grid modern-dashboard">
+      <div class="panel chart-panel chart-panel-wide">
+        <div class="panel-title"><div><h3>Ventas de los últimos 5 días</h3><p class="muted">Hoy, ayer y los 3 días anteriores.</p></div></div>
+        <canvas id="dailyBars"></canvas>
+      </div>
+      <div class="panel chart-panel">
+        <div class="panel-title"><div><h3>Proporción por día</h3><p class="muted">Participación de cada día en el total.</p></div></div>
+        <canvas id="dailyPie"></canvas>
+      </div>
+      <div class="panel chart-panel">
+        <div class="panel-title"><div><h3>Comparativa semanal</h3><p class="muted">Semana actual frente a la anterior.</p></div></div>
+        <canvas id="weekCompare"></canvas>
+      </div>
+      <div class="panel chart-panel">
+        <div class="panel-title"><div><h3>Comparativa mensual</h3><p class="muted">Mes actual frente al mes pasado.</p></div></div>
+        <canvas id="monthCompare"></canvas>
+      </div>
+    </div>`;
+
+  drawChart(document.getElementById('dailyBars'), dayLabels, dayValues, '#286a59', dayTooltips);
+  drawPieChart(document.getElementById('dailyPie'), dayLabels, dayValues, ['#286a59', '#5f9f8c', '#8a6500', '#b42318', '#536471'], dayTooltips);
+  drawChart(document.getElementById('weekCompare'), ['Semana pasada', 'Semana actual'], [data.ventasSemanaPasada, data.ventasSemana], '#536471', [
+    `<strong>Semana pasada</strong><br>Ventas: Bs ${money(data.ventasSemanaPasada)}`,
+    `<strong>Semana actual</strong><br>Ventas: Bs ${money(data.ventasSemana)}`
+  ]);
+  drawChart(document.getElementById('monthCompare'), ['Mes pasado', 'Mes actual'], [data.ventasMesPasado, data.ventasMes], '#18794e', [
+    `<strong>Mes pasado</strong><br>Ventas: Bs ${money(data.ventasMesPasado)}`,
+    `<strong>Mes actual</strong><br>Ventas: Bs ${money(data.ventasMes)}`
+  ]);
 }
 
 function renderCrud(type, rows, fields, idField) {

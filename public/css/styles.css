@@ -13,14 +13,22 @@
 }
 
 * { box-sizing: border-box; }
+html { height: 100%; }
 body {
   margin: 0;
   font-family: "Segoe UI", Arial, Helvetica, sans-serif;
   color: var(--ink);
   background: var(--bg);
+  height: 100%;
+  overflow: hidden;
 }
 
-.layout { display: grid; grid-template-columns: 240px minmax(0, 1fr); min-height: 100vh; }
+.layout {
+  display: grid;
+  grid-template-columns: 240px minmax(0, 1fr);
+  height: 100vh;
+  overflow: hidden;
+}
 .sidebar {
   background: #213139;
   color: white;
@@ -30,10 +38,26 @@ body {
   gap: 18px;
   min-width: 0;
   max-width: 100%;
+  height: 100vh;
+  overflow: hidden;
 }
 .sidebar h1 { font-size: 22px; margin: 0 0 8px; }
-.sidebar nav { display: grid; gap: 6px; min-width: 0; max-width: 100%; }
+.sidebar nav {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+  width: 100%;
+  max-width: 100%;
+  flex: 1;
+  align-content: start;
+  overflow-y: auto;
+  overflow-x: hidden;
+  scrollbar-width: thin;
+}
 .sidebar button {
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
   color: white;
   background: transparent;
   border: 1px solid transparent;
@@ -43,10 +67,25 @@ body {
   cursor: pointer;
   transition: background 0.18s ease, border-color 0.18s ease, transform 0.18s ease;
 }
-.sidebar button.active, .sidebar button:hover { background: #324550; transform: translateX(2px); }
-.sidebar .ghost { margin-top: auto; border-color: #526773; }
+.sidebar button.active, .sidebar button:hover {
+  background: #324550;
+  border-color: #435966;
+  transform: none;
+}
+.sidebar .ghost {
+  flex: 0 0 auto;
+  margin-top: auto;
+  border-color: #526773;
+}
 
-.content { min-width: 0; max-width: 100%; overflow-x: hidden; padding: clamp(12px, 2.5vw, 24px); }
+.content {
+  min-width: 0;
+  max-width: 100%;
+  height: 100vh;
+  overflow-x: hidden;
+  overflow-y: auto;
+  padding: clamp(12px, 2.5vw, 24px);
+}
 .topbar {
   background: var(--panel);
   border: 1px solid var(--line);
@@ -83,7 +122,99 @@ body {
 }
 .dashboard-grid canvas, #reportChart {
   width: 100%;
-  height: 220px;
+  height: 240px;
+}
+.dashboard-hero {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 18px;
+  align-items: center;
+  background: #ffffff;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 20px;
+  margin-bottom: 14px;
+  box-shadow: 0 10px 28px rgba(29, 39, 51, 0.05);
+}
+.dashboard-hero h3 {
+  margin: 4px 0;
+  font-size: clamp(24px, 3vw, 34px);
+}
+.dashboard-hero p,
+.hero-total span,
+.metric-card span,
+.panel-title p {
+  margin: 0;
+  color: var(--muted);
+}
+.eyebrow {
+  display: inline-flex;
+  color: var(--brand);
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0;
+  text-transform: uppercase;
+}
+.hero-total {
+  min-width: 210px;
+  background: #eef6f3;
+  border: 1px solid #cae0d8;
+  border-radius: 8px;
+  padding: 16px;
+  text-align: right;
+}
+.hero-total strong {
+  display: block;
+  margin-top: 6px;
+  font-size: clamp(26px, 4vw, 38px);
+}
+.dashboard-cards {
+  margin-bottom: 14px;
+}
+.metric-card {
+  display: grid;
+  gap: 4px;
+}
+.metric-card strong {
+  font-size: 24px;
+}
+.modern-dashboard {
+  grid-template-columns: minmax(0, 1.15fr) minmax(300px, 0.85fr);
+}
+.chart-panel {
+  position: relative;
+  overflow: hidden;
+}
+.chart-panel-wide {
+  grid-row: span 2;
+}
+.panel-title {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: start;
+  margin-bottom: 8px;
+}
+.panel-title h3 {
+  margin: 0 0 4px;
+}
+.chart-tooltip {
+  position: absolute;
+  z-index: 4;
+  display: none;
+  min-width: 120px;
+  max-width: 190px;
+  padding: 8px 10px;
+  border-radius: 6px;
+  background: rgba(29, 39, 51, 0.94);
+  color: white;
+  font-size: 12px;
+  line-height: 1.4;
+  pointer-events: none;
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.18);
+}
+.chart-tooltip.show {
+  display: block;
 }
 .toolbar {
   display: grid;
@@ -407,12 +538,17 @@ tr.low-stock { background: var(--warn); }
 @media (max-width: 1100px) {
   .layout { grid-template-columns: 210px minmax(0, 1fr); }
   .toolbar { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .modern-dashboard { grid-template-columns: 1fr; }
+  .chart-panel-wide { grid-row: auto; }
   .cart-layout { grid-template-columns: 1fr; }
   .cart-panel { position: static; max-height: none; }
 }
 
 @media (max-width: 900px) {
-  .layout { grid-template-columns: 1fr; }
+  .layout {
+    grid-template-columns: 1fr;
+    grid-template-rows: auto minmax(0, 1fr);
+  }
   .sidebar {
     position: sticky;
     top: 0;
@@ -420,6 +556,8 @@ tr.low-stock { background: var(--warn); }
     padding: 12px;
     gap: 10px;
     overflow-x: hidden;
+    height: auto;
+    max-height: 42vh;
   }
   .sidebar h1 { font-size: 18px; }
   .sidebar nav {
@@ -436,8 +574,14 @@ tr.low-stock { background: var(--warn); }
     padding: 9px 10px;
   }
   .sidebar .ghost { margin-top: 0; }
+  .content {
+    height: auto;
+    min-height: 0;
+  }
   .topbar { padding: 14px; }
   .cards, form.grid, .form-grid, .item-row, .item-row.compact, .filter-bar, .toolbar, .dashboard-grid, .cart-layout, .compact-fields, .cart-item-controls, .cart-item-footer { grid-template-columns: 1fr; }
+  .dashboard-hero { grid-template-columns: 1fr; }
+  .hero-total { text-align: left; min-width: 0; }
   .cart-panel { position: static; max-height: none; }
   .product-result { grid-template-columns: 1fr; }
   .autocomplete-results { max-height: 44vh; }
