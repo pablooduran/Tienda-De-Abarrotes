@@ -1,4 +1,5 @@
 const express = require('express');
+const bcrypt = require('bcryptjs');
 const pool = require('../config/db');
 
 const router = express.Router();
@@ -12,8 +13,12 @@ function upper(value) {
   return String(value || '').trim().toUpperCase();
 }
 
-function nullableUpper(value) {
-  const text = upper(value);
+function cleanText(value) {
+  return String(value || '').trim();
+}
+
+function nullableText(value) {
+  const text = cleanText(value);
   return text || null;
 }
 
@@ -49,6 +54,31 @@ function requireFields(body, fields) {
   if (missing.length) {
     const error = new Error(`Campos obligatorios: ${missing.join(', ')}`);
     error.status = 400;
+    throw error;
+  }
+}
+
+function adminPasswordFromBody(body) {
+  return body.passwordAdministrador || body.adminPassword || body.contrasena || body.password || '';
+}
+
+async function requireAdminPassword(req) {
+  const password = adminPasswordFromBody(req.body || {});
+  if (!password) {
+    const error = new Error('Debes ingresar la contraseña del administrador.');
+    error.status = 400;
+    throw error;
+  }
+  const adminId = req.session?.admin?.id;
+  if (!adminId) {
+    const error = new Error('Sesión no válida. Inicia sesión nuevamente.');
+    error.status = 401;
+    throw error;
+  }
+  const [rows] = await pool.query('SELECT password FROM administrador WHERE idAdministrador=?', [adminId]);
+  if (!rows.length || !await bcrypt.compare(password, rows[0].password)) {
+    const error = new Error('Contraseña de administrador incorrecta.');
+    error.status = 403;
     throw error;
   }
 }
@@ -118,7 +148,7 @@ function validateProductPayload(body, editing = false) {
     ? asPositiveInteger(Number(body.stockUnidadesTotal), 'Stock total', true)
     : asPositiveInteger(Number(body.stockUnidadesTotal || body.stock || 0), 'Stock total', true);
   return {
-    nombre: upper(body.nombre),
+    nombre: cleanText(body.nombre),
     idProveedor: body.idProveedor || null,
     categoria,
     unidadMedida: body.unidadMedida,
@@ -243,7 +273,8 @@ router.delete('/productos/:id', async (req, res, next) => {
 function crudRoutes(base, table, idField, protectedDeleteMessage) {
   router.get(`/${base}`, async (req, res, next) => {
     try {
-      const [rows] = await pool.query(`SELECT * FROM ${table} ORDER BY nombre`);
+      const where = table === 'cliente' ? 'WHERE activo = 1' : '';
+      const [rows] = await pool.query(`SELECT * FROM ${table} ${where} ORDER BY nombre`);
       res.json(rows);
     } catch (error) {
       next(error);
@@ -253,10 +284,10 @@ function crudRoutes(base, table, idField, protectedDeleteMessage) {
   router.post(`/${base}`, async (req, res, next) => {
     try {
       requireFields(req.body, ['nombre']);
-      const nombre = upper(req.body.nombre);
+      const nombre = cleanText(req.body.nombre);
       const telefono = validatePhone(req.body.telefono);
       if (table === 'proveedor') {
-        await pool.query('INSERT INTO proveedor (nombre, telefono, direccion) VALUES (?, ?, ?)', [nombre, telefono, nullableUpper(req.body.direccion)]);
+        await pool.query('INSERT INTO proveedor (nombre, telefono, direccion) VALUES (?, ?, ?)', [nombre, telefono, nullableText(req.body.direccion)]);
       } else {
         await pool.query('INSERT INTO cliente (nombre, telefono) VALUES (?, ?)', [nombre, telefono]);
       }
@@ -269,10 +300,10 @@ function crudRoutes(base, table, idField, protectedDeleteMessage) {
   router.put(`/${base}/:id`, async (req, res, next) => {
     try {
       requireFields(req.body, ['nombre']);
-      const nombre = upper(req.body.nombre);
+      const nombre = cleanText(req.body.nombre);
       const telefono = validatePhone(req.body.telefono);
       if (table === 'proveedor') {
-        await pool.query('UPDATE proveedor SET nombre=?, telefono=?, direccion=? WHERE idProveedor=?', [nombre, telefono, nullableUpper(req.body.direccion), req.params.id]);
+        await pool.query('UPDATE proveedor SET nombre=?, telefono=?, direccion=? WHERE idProveedor=?', [nombre, telefono, nullableText(req.body.direccion), req.params.id]);
       } else {
         await pool.query('UPDATE cliente SET nombre=?, telefono=? WHERE idCliente=?', [nombre, telefono, req.params.id]);
       }
@@ -284,14 +315,48 @@ function crudRoutes(base, table, idField, protectedDeleteMessage) {
 
   router.delete(`/${base}/:id`, async (req, res, next) => {
     try {
+      if (table === 'cliente') {
+        await requireAdminPassword(req);
+        const [result] = await pool.query(
+          'UPDATE cliente SET activo=0, eliminadoEn=NOW() WHERE idCliente=? AND activo=1',
+          [req.params.id]
+        );
+        if (!result.affectedRows) return res.status(404).json({ error: 'Cliente no encontrado o ya está oculto.' });
+        return res.json({ message: 'Cliente ocultado. El historial se conserva.' });
+      }
       await pool.query(`DELETE FROM ${table} WHERE ${idField}=?`, [req.params.id]);
       res.json({ message: 'Registro eliminado.' });
     } catch (error) {
+      if (error.status) return res.status(error.status).json({ error: error.message });
       if (error.code === 'ER_ROW_IS_REFERENCED_2') return res.status(409).json({ error: protectedDeleteMessage });
       next(error);
     }
   });
 }
+
+router.get('/clientes/ocultos', async (req, res, next) => {
+  try {
+    const [rows] = await pool.query('SELECT * FROM cliente WHERE activo = 0 ORDER BY eliminadoEn DESC, nombre');
+    res.json(rows);
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.patch('/clientes/:id/restaurar', async (req, res, next) => {
+  try {
+    await requireAdminPassword(req);
+    const [result] = await pool.query(
+      'UPDATE cliente SET activo=1, eliminadoEn=NULL WHERE idCliente=? AND activo=0',
+      [req.params.id]
+    );
+    if (!result.affectedRows) return res.status(404).json({ error: 'Cliente oculto no encontrado.' });
+    res.json({ message: 'Cliente restaurado.' });
+  } catch (error) {
+    if (error.status) return res.status(error.status).json({ error: error.message });
+    next(error);
+  }
+});
 
 crudRoutes('clientes', 'cliente', 'idCliente', 'No se puede eliminar el cliente porque tiene ventas o fiados asociados.');
 crudRoutes('proveedores', 'proveedor', 'idProveedor', 'No se puede eliminar el proveedor porque tiene compras o productos asociados.');
@@ -466,7 +531,7 @@ router.post('/fiados', (req, res) => {
 router.get('/fiados', async (req, res, next) => {
   try {
     const { estado, idCliente, desde, hasta } = req.query;
-    const conditions = [];
+    const conditions = ['f.activo = 1'];
     const params = [];
     if (estado) {
       conditions.push('f.estado=?');
@@ -506,8 +571,24 @@ router.get('/fiados/activos', async (req, res, next) => {
       FROM fiado f
       JOIN cliente c ON c.idCliente=f.idCliente
       LEFT JOIN venta v ON v.idVenta=f.idVenta
-      WHERE f.estado IN ('pendiente','parcial')
+      WHERE f.activo = 1 AND f.estado IN ('pendiente','parcial')
       ORDER BY f.idFiado DESC
+    `);
+    res.json(rows);
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.get('/fiados/ocultos', async (req, res, next) => {
+  try {
+    const [rows] = await pool.query(`
+      SELECT f.*, c.nombre AS cliente, v.fecha AS fechaVenta, v.total AS totalVenta
+      FROM fiado f
+      JOIN cliente c ON c.idCliente=f.idCliente
+      LEFT JOIN venta v ON v.idVenta=f.idVenta
+      WHERE f.activo = 0
+      ORDER BY f.eliminadoEn DESC, f.idFiado DESC
     `);
     res.json(rows);
   } catch (error) {
@@ -547,13 +628,43 @@ router.get('/fiados/:id', async (req, res, next) => {
   }
 });
 
+router.patch('/fiados/:id/restaurar', async (req, res, next) => {
+  try {
+    await requireAdminPassword(req);
+    const [result] = await pool.query(
+      'UPDATE fiado SET activo=1, eliminadoEn=NULL WHERE idFiado=? AND activo=0',
+      [req.params.id]
+    );
+    if (!result.affectedRows) return res.status(404).json({ error: 'Fiado oculto no encontrado.' });
+    res.json({ message: 'Fiado restaurado.' });
+  } catch (error) {
+    if (error.status) return res.status(error.status).json({ error: error.message });
+    next(error);
+  }
+});
+
+router.delete('/fiados/:id', async (req, res, next) => {
+  try {
+    await requireAdminPassword(req);
+    const [result] = await pool.query(
+      'UPDATE fiado SET activo=0, eliminadoEn=NOW() WHERE idFiado=? AND activo=1',
+      [req.params.id]
+    );
+    if (!result.affectedRows) return res.status(404).json({ error: 'Fiado no encontrado o ya está oculto.' });
+    res.json({ message: 'Fiado ocultado. Los pagos e historial se conservan.' });
+  } catch (error) {
+    if (error.status) return res.status(error.status).json({ error: error.message });
+    next(error);
+  }
+});
+
 router.post('/pagos-fiado', async (req, res, next) => {
   try {
     requireFields(req.body, ['idFiado', 'monto']);
     const monto = asNumber(req.body.monto);
     if (monto <= 0) return res.status(400).json({ error: 'El pago debe ser mayor a cero.' });
     await runTransaction(async (connection) => {
-      const [rows] = await connection.query('SELECT * FROM fiado WHERE idFiado=? FOR UPDATE', [req.body.idFiado]);
+      const [rows] = await connection.query('SELECT * FROM fiado WHERE idFiado=? AND activo=1 FOR UPDATE', [req.body.idFiado]);
       if (rows.length === 0) {
         const error = new Error('Fiado no encontrado.');
         error.status = 404;
@@ -565,7 +676,7 @@ router.post('/pagos-fiado', async (req, res, next) => {
         error.status = 400;
         throw error;
       }
-      await connection.query('INSERT INTO pagoFiado (idFiado, monto, observacion) VALUES (?, ?, ?)', [req.body.idFiado, monto, nullableUpper(req.body.observacion)]);
+      await connection.query('INSERT INTO pagoFiado (idFiado, monto, observacion) VALUES (?, ?, ?)', [req.body.idFiado, monto, nullableText(req.body.observacion)]);
       const totalPagado = asNumber(fiado.totalPagado) + monto;
       const saldo = Math.max(0, asNumber(fiado.totalFiado) - totalPagado);
       const estado = saldo === 0 ? 'pagado' : 'parcial';
@@ -587,7 +698,7 @@ router.post('/pagos-fiado/cliente', async (req, res, next) => {
       const [fiados] = await connection.query(
         `SELECT *
          FROM fiado
-         WHERE idCliente=? AND estado IN ('pendiente','parcial')
+         WHERE idCliente=? AND activo=1 AND estado IN ('pendiente','parcial')
          ORDER BY fechaInicio ASC, idFiado ASC
          FOR UPDATE`,
         [req.body.idCliente]
@@ -607,7 +718,7 @@ router.post('/pagos-fiado/cliente', async (req, res, next) => {
 
       let restante = monto;
       const aplicaciones = [];
-      const observacion = nullableUpper(req.body.observacion || 'PAGO ACUMULADO');
+      const observacion = nullableText(req.body.observacion || 'Pago acumulado');
 
       for (const fiado of fiados) {
         if (restante <= 0) break;

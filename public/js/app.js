@@ -22,7 +22,7 @@ const sections = [
 
 function money(value) { return Number(value || 0).toFixed(2); }
 function intValue(value) { return Number(value || 0).toFixed(0); }
-function toUpperInput(value) { return String(value || '').toUpperCase(); }
+function normalizeSearch(value) { return String(value || '').trim().toLocaleLowerCase(); }
 function escapeHtml(value) {
   return String(value ?? '').replace(/[&<>"']/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char]));
 }
@@ -60,11 +60,7 @@ function statusBadge(status) {
   return `<span class="badge ${status || 'pagado'}">${escapeHtml(status || 'pagado')}</span>`;
 }
 
-function wireUppercase(scope = document) {
-  scope.querySelectorAll('[data-uppercase]').forEach((input) => {
-    input.addEventListener('input', () => { input.value = toUpperInput(input.value); });
-  });
-}
+function wireUppercase() {}
 function validatePhoneValue(value) {
   return !value || /^\d+$/.test(String(value).trim());
 }
@@ -99,6 +95,48 @@ function modal({ title: modalTitle, body, confirmText = 'Aceptar', cancelText = 
 function showError(text) { return modal({ title: 'No se pudo completar', body: `<p>${escapeHtml(text)}</p>`, confirmText: 'Entendido', danger: true }); }
 function showSuccess(text) { return modal({ title: 'Listo', body: `<p>${escapeHtml(text)}</p>`, confirmText: 'Aceptar' }); }
 function confirmAction(text, danger = false) { return modal({ title: 'Confirmar acción', body: `<p>${escapeHtml(text)}</p>`, confirmText: 'Confirmar', cancelText: 'Cancelar', danger }); }
+
+function requestAdminPassword(actionText) {
+  return new Promise((resolve) => {
+    modalRoot.innerHTML = `
+      <div class="modal-backdrop">
+        <div class="modal">
+          <h3>Confirmar eliminación segura</h3>
+          <div class="modal-body">
+            <p>${escapeHtml(actionText)}</p>
+            <p class="delete-warning">Esta acción no borrará el historial. El registro dejará de aparecer en las listas principales.</p>
+            <label class="password-confirm">Contraseña del administrador<input type="password" id="adminDeletePassword" autocomplete="current-password"></label>
+          </div>
+          <div class="modal-actions">
+            <button type="button" class="secondary" data-modal-cancel>Cancelar</button>
+            <button type="button" class="danger" data-modal-confirm>Eliminar</button>
+          </div>
+        </div>
+      </div>`;
+    const input = modalRoot.querySelector('#adminDeletePassword');
+    input.focus();
+    const close = (value) => {
+      modalRoot.innerHTML = '';
+      resolve(value);
+    };
+    modalRoot.querySelector('[data-modal-cancel]').addEventListener('click', () => close(null));
+    modalRoot.querySelector('[data-modal-confirm]').addEventListener('click', () => {
+      const password = input.value.trim();
+      if (!password) {
+        input.classList.add('input-error');
+        input.focus();
+        return;
+      }
+      close(password);
+    });
+    input.addEventListener('keydown', (event) => {
+      if (event.key === 'Enter') {
+        event.preventDefault();
+        modalRoot.querySelector('[data-modal-confirm]').click();
+      }
+    });
+  });
+}
 
 async function api(url, options = {}) {
   const response = await fetch(url, {
@@ -430,16 +468,20 @@ async function inicio() {
 }
 
 function renderCrud(type, rows, fields, idField) {
+  const hiddenButton = type === 'clientes'
+    ? '<div class="safe-delete-tools"><button type="button" class="secondary small" id="showHiddenClients">Ver clientes ocultos</button></div>'
+    : '';
   const formHtml = (row = {}) => `
     <form class="grid" id="${type}Form" data-id="${row[idField] || ''}">
-      ${fields.map((field) => `<label>${field.label}<input name="${field.name}" value="${escapeHtml(row[field.name] || '')}" ${field.upper ? 'data-uppercase' : ''} ${field.phone ? 'inputmode="numeric" pattern="[0-9]*"' : ''} ${field.required ? 'required' : ''}></label>`).join('')}
+      ${fields.map((field) => `<label>${field.label}<input name="${field.name}" value="${escapeHtml(row[field.name] || '')}" ${field.phone ? 'inputmode="numeric" pattern="[0-9]*"' : ''} ${field.required ? 'required' : ''}></label>`).join('')}
       <button type="submit">${row[idField] ? 'Actualizar' : 'Guardar'}</button>
     </form>`;
-  view.innerHTML = `<div class="panel">${formHtml()}</div><div class="panel table-wrap"><table>
+  view.innerHTML = `<div class="panel">${formHtml()}${hiddenButton}</div><div class="panel table-wrap"><table>
     <thead><tr>${fields.map((f) => `<th>${f.label}</th>`).join('')}<th>Acciones</th></tr></thead>
     <tbody>${rows.map((row) => `<tr>${fields.map((f) => `<td>${escapeHtml(row[f.name] || '')}</td>`).join('')}<td class="actions"><button class="small secondary" data-edit="${row[idField]}">Editar</button><button class="small danger" data-delete="${row[idField]}">Eliminar</button></td></tr>`).join('')}</tbody>
   </table></div>`;
   wireUppercase(view);
+  if (type === 'clientes') document.getElementById('showHiddenClients').addEventListener('click', showHiddenClients);
   view.querySelector(`#${type}Form`).addEventListener('submit', async (event) => saveCrud(event, type));
   view.querySelectorAll('[data-edit]').forEach((btn) => btn.addEventListener('click', () => {
     const row = rows.find((item) => String(item[idField]) === btn.dataset.edit);
@@ -448,13 +490,106 @@ function renderCrud(type, rows, fields, idField) {
     view.querySelector(`#${type}Form`).addEventListener('submit', async (event) => saveCrud(event, type));
   }));
   view.querySelectorAll('[data-delete]').forEach((btn) => btn.addEventListener('click', async () => {
-    if (!await confirmAction('¿Deseas eliminar este registro?', true)) return;
+    let requestOptions = { method: 'DELETE' };
+    if (type === 'clientes') {
+      const row = rows.find((item) => String(item[idField]) === btn.dataset.delete);
+      const password = await requestAdminPassword(`¿Deseas ocultar el cliente ${row?.nombre || ''}?`);
+      if (!password) return;
+      requestOptions = {
+        method: 'DELETE',
+        body: JSON.stringify({ passwordAdministrador: password })
+      };
+    } else if (!await confirmAction('¿Deseas eliminar este registro?', true)) {
+      return;
+    }
     try {
-      await api(`/api/${type}/${btn.dataset.delete}`, { method: 'DELETE' });
-      await showSuccess('Registro eliminado.');
+      await api(`/api/${type}/${btn.dataset.delete}`, requestOptions);
+      await showSuccess(type === 'clientes' ? 'Cliente ocultado. El historial se conserva.' : 'Registro eliminado.');
       loadView(type);
     } catch (error) { showError(error.message); }
   }));
+}
+
+async function showHiddenClients() {
+  try {
+    const rows = await api('/api/clientes/ocultos');
+    modalRoot.innerHTML = `
+      <div class="modal-backdrop">
+        <div class="modal modal-wide">
+          <h3>Clientes ocultos</h3>
+          <div class="modal-body">
+            ${rows.length ? `<div class="hidden-record-list">${rows.map((client) => `
+              <article class="hidden-record">
+                <div>
+                  <strong>${escapeHtml(client.nombre)}</strong>
+                  <p class="muted">Oculto${client.eliminadoEn ? `: ${formatDate(client.eliminadoEn)}` : ''}</p>
+                  <p class="hint">Teléfono: ${escapeHtml(client.telefono || 'Sin teléfono')}</p>
+                </div>
+                <button type="button" class="small secondary" data-restore-client="${client.idCliente}">Restaurar</button>
+              </article>`).join('')}</div>` : '<p class="muted empty-state">No hay clientes ocultos.</p>'}
+          </div>
+          <div class="modal-actions">
+            <button type="button" class="secondary" data-modal-cancel>Cerrar</button>
+          </div>
+        </div>
+      </div>`;
+    modalRoot.querySelector('[data-modal-cancel]').addEventListener('click', () => { modalRoot.innerHTML = ''; });
+    modalRoot.querySelectorAll('[data-restore-client]').forEach((btn) => btn.addEventListener('click', async () => {
+      const client = rows.find((item) => String(item.idCliente) === btn.dataset.restoreClient);
+      const password = await requestAdminPassword(`¿Deseas restaurar el cliente ${client?.nombre || ''}?`);
+      if (!password) return showHiddenClients();
+      try {
+        await api(`/api/clientes/${btn.dataset.restoreClient}/restaurar`, {
+          method: 'PATCH',
+          body: JSON.stringify({ passwordAdministrador: password })
+        });
+        await refreshCatalogs();
+        await showSuccess('Cliente restaurado.');
+        loadView('clientes');
+      } catch (error) { showError(error.message); }
+    }));
+  } catch (error) { showError(error.message); }
+}
+
+async function showHiddenDebts() {
+  try {
+    const rows = await api('/api/fiados/ocultos');
+    modalRoot.innerHTML = `
+      <div class="modal-backdrop">
+        <div class="modal modal-wide">
+          <h3>Fiados ocultos</h3>
+          <div class="modal-body">
+            ${rows.length ? `<div class="hidden-record-list">${rows.map((debt) => `
+              <article class="hidden-record">
+                <div>
+                  <strong>${escapeHtml(debt.cliente)} · Fiado #${debt.idFiado}</strong>
+                  <p class="muted">Oculto${debt.eliminadoEn ? `: ${formatDate(debt.eliminadoEn)}` : ''}</p>
+                  <p class="hint">Total: Bs ${money(debt.totalFiado)} · Pagado: Bs ${money(debt.totalPagado)} · Saldo: Bs ${money(debt.saldoPendiente)} · ${debt.estado}</p>
+                </div>
+                <button type="button" class="small secondary" data-restore-debt="${debt.idFiado}">Restaurar</button>
+              </article>`).join('')}</div>` : '<p class="muted empty-state">No hay fiados ocultos.</p>'}
+          </div>
+          <div class="modal-actions">
+            <button type="button" class="secondary" data-modal-cancel>Cerrar</button>
+          </div>
+        </div>
+      </div>`;
+    modalRoot.querySelector('[data-modal-cancel]').addEventListener('click', () => { modalRoot.innerHTML = ''; });
+    modalRoot.querySelectorAll('[data-restore-debt]').forEach((btn) => btn.addEventListener('click', async () => {
+      const debt = rows.find((item) => String(item.idFiado) === btn.dataset.restoreDebt);
+      const password = await requestAdminPassword(`¿Deseas restaurar el fiado #${debt?.idFiado || ''} de ${debt?.cliente || ''}?`);
+      if (!password) return showHiddenDebts();
+      try {
+        await api(`/api/fiados/${btn.dataset.restoreDebt}/restaurar`, {
+          method: 'PATCH',
+          body: JSON.stringify({ passwordAdministrador: password })
+        });
+        await refreshCatalogs();
+        await showSuccess('Fiado restaurado.');
+        await pagos();
+      } catch (error) { showError(error.message); }
+    }));
+  } catch (error) { showError(error.message); }
 }
 
 async function saveCrud(event, type) {
@@ -503,7 +638,7 @@ function productForm(row = {}) {
         <h4>Datos principales</h4>
         <p class="hint">Registra lo que se ve en mostrador. El precio de compra se coloca después al registrar una compra.</p>
       </div>
-      <label>Nombre del producto<input name="nombre" required data-uppercase value="${escapeHtml(row.nombre || '')}"></label>
+      <label>Nombre del producto<input name="nombre" required value="${escapeHtml(row.nombre || '')}"></label>
       <label>Proveedor<select name="idProveedor">${options(state.proveedores, 'idProveedor', 'nombre', 'Sin proveedor', row.idProveedor)}</select></label>
       <label>Categoría<select name="categoria" required>${categoryOptions(row.categoria || 'OTROS')}</select></label>
       <label>Tipo de compra<select id="tipoCompraProducto">
@@ -583,12 +718,12 @@ async function openProductModal(row = {}) {
 }
 
 function filterProductsLocal() {
-  const q = toUpperInput(document.getElementById('productSearch')?.value || '');
+  const q = normalizeSearch(document.getElementById('productSearch')?.value || '');
   const categoria = document.getElementById('productCategory')?.value || '';
   const proveedor = document.getElementById('productProvider')?.value || '';
   const low = document.getElementById('productLowStock')?.checked;
   const sort = document.getElementById('productSort')?.value || '';
-  let rows = state.productos.filter((p) => (!q || p.nombre.includes(q))
+  let rows = state.productos.filter((p) => (!q || normalizeSearch(p.nombre).includes(q))
     && (!categoria || p.categoria === categoria)
     && (!proveedor || String(p.idProveedor || '') === proveedor)
     && (!low || p.bajoStock));
@@ -622,7 +757,7 @@ async function productos() {
   view.innerHTML = `
     <div class="panel toolbar">
       <button id="addProduct">Añadir producto</button>
-      <label>Buscar<input id="productSearch" data-uppercase placeholder="Buscar producto"></label>
+      <label>Buscar<input id="productSearch" placeholder="Buscar producto"></label>
       <label>Categoría<select id="productCategory"><option value="">Todas</option>${categoryOptions()}</select></label>
       <label>Proveedor<select id="productProvider">${options(state.proveedores, 'idProveedor', 'nombre', 'Todos')}</select></label>
       <label class="check"><input id="productLowStock" type="checkbox"> Bajo stock</label>
@@ -641,13 +776,13 @@ async function productos() {
 function autocompleteBox(kind) {
   return `
     <div class="autocomplete">
-      <label>Buscar producto<input id="${kind}Search" data-uppercase placeholder="Escriba el producto"></label>
+      <label>Buscar producto<input id="${kind}Search" placeholder="Escriba el producto"></label>
       <div id="${kind}Results" class="autocomplete-results"></div>
     </div>`;
 }
 
 function operationFilters(kind) {
-  const q = toUpperInput(document.getElementById(`${kind}Search`)?.value || '');
+  const q = normalizeSearch(document.getElementById(`${kind}Search`)?.value || '');
   const category = document.getElementById(`${kind}Category`)?.value || '';
   const provider = document.getElementById(`${kind}Provider`)?.value || document.querySelector(`#${kind}Form [name="idProveedor"]`)?.value || '';
   const lowStock = document.getElementById(`${kind}LowStock`)?.checked || false;
@@ -658,7 +793,7 @@ function operationFilters(kind) {
 function filteredOperationProducts(kind) {
   const filters = operationFilters(kind);
   return state.productos.filter((p) => {
-    const byText = !filters.q || p.nombre.includes(filters.q);
+    const byText = !filters.q || normalizeSearch(p.nombre).includes(filters.q);
     const byCategory = !filters.category || p.categoria === filters.category;
     const byProvider = !filters.provider || String(p.idProveedor || '') === filters.provider;
     const byLowStock = !filters.lowStock || p.bajoStock;
@@ -921,7 +1056,7 @@ async function pagos() {
       <form class="grid" id="pagoForm">
         <label>Fiado activo<select name="idFiado" required>${state.fiados.filter((f) => f.estado !== 'pagado').map((f) => `<option value="${f.idFiado}">${escapeHtml(f.cliente)} - saldo Bs ${money(f.saldoPendiente)}</option>`).join('')}</select></label>
         <label>Monto<input name="monto" type="number" step="0.01" min="0.01" required></label>
-        <label>Observación<input name="observacion" data-uppercase></label>
+        <label>Observación<input name="observacion"></label>
         <button type="submit">Registrar pago</button>
       </form>
     </div>
@@ -1028,10 +1163,27 @@ function renderDebtCards(rows) {
       </div>
       <div class="debt-card-actions">
         <button class="small secondary" data-fiado="${f.idFiado}">Ver historial</button>
+        <button class="small danger" data-delete-fiado="${f.idFiado}">Ocultar fiado</button>
       </div>
     </article>`;
   }).join('');
   target.querySelectorAll('[data-fiado]').forEach((btn) => btn.addEventListener('click', () => showDebtDetail(btn.dataset.fiado)));
+  target.querySelectorAll('[data-delete-fiado]').forEach((btn) => btn.addEventListener('click', async () => {
+    const row = sorted.find((item) => String(item.idFiado) === btn.dataset.deleteFiado);
+    const password = await requestAdminPassword(`¿Deseas ocultar el fiado #${row?.idFiado || ''} de ${row?.cliente || ''}?`);
+    if (!password) return;
+    try {
+      await api(`/api/fiados/${btn.dataset.deleteFiado}`, {
+        method: 'DELETE',
+        body: JSON.stringify({ passwordAdministrador: password })
+      });
+      debtFocus = null;
+      await refreshCatalogs();
+      await showSuccess('Fiado ocultado. Los pagos e historial se conservan.');
+      if (document.getElementById('debtClient')) await loadDebtFilters();
+      else renderDebtCards(state.fiados);
+    } catch (error) { showError(error.message); }
+  }));
 }
 
 async function loadDebtFilters() {
@@ -1076,7 +1228,7 @@ async function pagos() {
       <form class="grid" id="pagoForm">
         <label>Fiado pendiente<select name="idFiado" required>${pendingOptions}</select></label>
         <label>Monto<input name="monto" type="number" step="0.01" min="0.01" required></label>
-        <label>Observación<input name="observacion" data-uppercase></label>
+        <label>Observación<input name="observacion"></label>
         <button type="submit">Registrar pago</button>
       </form>
     </div>
@@ -1086,7 +1238,10 @@ async function pagos() {
           <h3>Fiados / Pagos</h3>
           <p class="muted">Pendientes y parciales aparecen primero. Los pagados quedan como historial.</p>
         </div>
-        <button type="button" class="secondary small" id="toggleDebtFilters">Mostrar filtros</button>
+        <div class="debt-tool-actions">
+          <button type="button" class="secondary small" id="showHiddenDebts">Ver fiados ocultos</button>
+          <button type="button" class="secondary small" id="toggleDebtFilters">Mostrar filtros</button>
+        </div>
       </div>
       ${debtFocus ? `<p class="focus-note">Mostrando fiados relacionados con ${escapeHtml(debtFocus.cliente || 'el cliente seleccionado')}.</p>` : ''}
       <div class="filter-bar is-hidden" id="debtFilters">
@@ -1191,7 +1346,7 @@ async function pagos() {
           <div class="form-grid compact-fields">
             <label>Fiado pendiente<select name="idFiado">${pendingOptions}</select></label>
             <label>Monto<input name="monto" type="number" step="0.01" min="0.01"></label>
-            <label>Observación<input name="observacion" data-uppercase></label>
+            <label>Observación<input name="observacion"></label>
           </div>
           <button type="submit">Registrar pago</button>
         </div>
@@ -1200,7 +1355,7 @@ async function pagos() {
           <div class="form-grid compact-fields">
             <label>Cliente<select name="idCliente" id="clientPaymentId">${options(state.clientes, 'idCliente', 'nombre', 'Seleccione cliente', selectedClient)}</select></label>
             <label>Monto acumulado<input name="montoCliente" id="clientPaymentAmount" type="number" step="0.01" min="0.01"></label>
-            <label>Observación<input name="observacionCliente" data-uppercase value="PAGO ACUMULADO"></label>
+            <label>Observación<input name="observacionCliente" value="Pago acumulado"></label>
           </div>
           <div id="clientDebtSummary" class="client-debt-summary"></div>
           <button type="submit">Registrar pago acumulado</button>
@@ -1213,7 +1368,10 @@ async function pagos() {
           <h3>Fiados / Pagos</h3>
           <p class="muted">Pendientes y parciales aparecen primero. Los pagados quedan como historial.</p>
         </div>
-        <button type="button" class="secondary small" id="toggleDebtFilters">Mostrar filtros</button>
+        <div class="debt-tool-actions">
+          <button type="button" class="secondary small" id="showHiddenDebts">Ver fiados ocultos</button>
+          <button type="button" class="secondary small" id="toggleDebtFilters">Mostrar filtros</button>
+        </div>
       </div>
       ${debtFocus ? `<p class="focus-note">Mostrando fiados relacionados con ${escapeHtml(debtFocus.cliente || 'el cliente seleccionado')}.</p>` : ''}
       <div class="filter-bar is-hidden" id="debtFilters">
@@ -1237,6 +1395,7 @@ async function pagos() {
   };
   mode.addEventListener('change', togglePaymentMode);
   document.getElementById('clientPaymentId').addEventListener('change', renderClientPaymentSummary);
+  document.getElementById('showHiddenDebts').addEventListener('click', showHiddenDebts);
 
   document.getElementById('pagoForm').addEventListener('submit', async (event) => {
     event.preventDefault();

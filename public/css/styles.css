@@ -553,7 +553,56 @@ tr.low-stock { background: var(--warn); }
 .debt-card-actions {
   display: flex;
   justify-content: flex-end;
+  gap: 8px;
+  flex-wrap: wrap;
   margin-top: 12px;
+}
+.debt-tool-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+.safe-delete-tools {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 12px;
+}
+.hidden-record-list {
+  display: grid;
+  gap: 10px;
+}
+.hidden-record {
+  display: flex;
+  justify-content: space-between;
+  gap: 14px;
+  align-items: center;
+  padding: 12px;
+  border: 1px dashed #cbd5e1;
+  border-radius: 8px;
+  background: #f8fafc;
+  color: #475569;
+}
+.hidden-record strong {
+  color: var(--ink);
+}
+.delete-warning {
+  margin: 10px 0 14px;
+  padding: 10px 12px;
+  border: 1px solid #ffc9c2;
+  border-radius: 6px;
+  color: var(--danger);
+  background: #fff4f2;
+  font-weight: 600;
+}
+.password-confirm {
+  display: grid;
+  gap: 6px;
+  margin-top: 12px;
+}
+.input-error {
+  border-color: var(--danger);
+  box-shadow: 0 0 0 3px rgba(180, 35, 24, 0.12);
 }
 .filter-inline {
   display: contents;
@@ -715,6 +764,10 @@ tr.low-stock { background: var(--warn); }
   .hero-total { text-align: left; min-width: 0; }
   .accumulated-summary, .mini-debt-list div { grid-template-columns: 1fr; }
   .debt-card-main, .debt-card-actions { display: grid; justify-content: stretch; }
+  .debt-tool-actions, .safe-delete-tools, .hidden-record {
+    display: grid;
+    justify-content: stretch;
+  }
   .debt-card-values { grid-template-columns: 1fr; }
   .cart-panel { position: static; max-height: none; }
   .product-result { grid-template-columns: 1fr; }

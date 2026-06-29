@@ -84,7 +84,9 @@ async function createBaseTables(connection) {
     CREATE TABLE IF NOT EXISTS cliente (
       idCliente INT AUTO_INCREMENT PRIMARY KEY,
       nombre VARCHAR(100) NOT NULL,
-      telefono VARCHAR(30) NULL
+      telefono VARCHAR(30) NULL,
+      activo TINYINT(1) NOT NULL DEFAULT 1,
+      eliminadoEn DATETIME NULL
     )
   `);
 
@@ -173,7 +175,9 @@ async function createBaseTables(connection) {
       totalFiado DECIMAL(10,2) NOT NULL DEFAULT 0,
       totalPagado DECIMAL(10,2) NOT NULL DEFAULT 0,
       saldoPendiente DECIMAL(10,2) NOT NULL DEFAULT 0,
-      estado ENUM('pendiente','parcial','pagado') NOT NULL DEFAULT 'pendiente'
+      estado ENUM('pendiente','parcial','pagado') NOT NULL DEFAULT 'pendiente',
+      activo TINYINT(1) NOT NULL DEFAULT 1,
+      eliminadoEn DATETIME NULL
     )
   `);
 
@@ -200,6 +204,9 @@ async function createBaseTables(connection) {
 }
 
 async function ensureColumns(connection) {
+  await addColumnIfMissing(connection, 'cliente', 'activo', 'activo TINYINT(1) NOT NULL DEFAULT 1 AFTER telefono');
+  await addColumnIfMissing(connection, 'cliente', 'eliminadoEn', 'eliminadoEn DATETIME NULL AFTER activo');
+
   await addColumnIfMissing(connection, 'producto', 'idProveedor', 'idProveedor INT NULL AFTER nombre');
   await addColumnIfMissing(connection, 'producto', 'categoria', "categoria VARCHAR(50) NOT NULL DEFAULT 'OTROS' AFTER idProveedor");
   await addColumnIfMissing(connection, 'producto', 'unidadesPorPaquete', 'unidadesPorPaquete INT NOT NULL DEFAULT 1 AFTER unidadMedida');
@@ -212,6 +219,8 @@ async function ensureColumns(connection) {
   await addColumnIfMissing(connection, 'venta', 'tipo', "tipo ENUM('pagada','fiada') NOT NULL DEFAULT 'pagada' AFTER total");
 
   await addColumnIfMissing(connection, 'fiado', 'idVenta', 'idVenta INT NULL AFTER idCliente');
+  await addColumnIfMissing(connection, 'fiado', 'activo', 'activo TINYINT(1) NOT NULL DEFAULT 1 AFTER estado');
+  await addColumnIfMissing(connection, 'fiado', 'eliminadoEn', 'eliminadoEn DATETIME NULL AFTER activo');
 
   await addColumnIfMissing(connection, 'detalleVenta', 'costoUnitario', 'costoUnitario DECIMAL(10,2) NOT NULL DEFAULT 0 AFTER precioVenta');
   await addColumnIfMissing(connection, 'detalleVenta', 'subtotalCosto', 'subtotalCosto DECIMAL(10,2) NOT NULL DEFAULT 0 AFTER subtotal');
