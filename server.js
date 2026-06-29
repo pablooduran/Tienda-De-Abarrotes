@@ -1,6 +1,7 @@
 const path = require('path');
 const express = require('express');
 const session = require('express-session');
+const MySQLSessionStore = require('express-mysql-session')(session);
 const helmet = require('helmet');
 const bcrypt = require('bcryptjs');
 require('dotenv').config();
@@ -12,12 +13,37 @@ const authRoutes = require('./routes/auth');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
+const useSsl = String(process.env.DB_SSL || '').toLowerCase() === 'true'
+  || /aivencloud\.com$/i.test(process.env.DB_HOST || '');
+const sessionStore = new MySQLSessionStore({
+  host: process.env.DB_HOST,
+  port: Number(process.env.DB_PORT || 3306),
+  user: process.env.DB_USER,
+  password: process.env.DB_PASSWORD,
+  database: process.env.DB_NAME,
+  ssl: useSsl ? { rejectUnauthorized: false } : undefined,
+  createDatabaseTable: true,
+  schema: {
+    tableName: 'sessions',
+    columnNames: {
+      session_id: 'session_id',
+      expires: 'expires',
+      data: 'data'
+    }
+  }
+});
+
+sessionStore.on('error', (error) => {
+  console.error('Error en el almacen de sesiones MySQL.');
+  console.error(error.message);
+});
 
 app.set('trust proxy', 1);
 app.use(helmet({ contentSecurityPolicy: false }));
 app.use(express.urlencoded({ extended: true }));
 app.use(express.json());
 app.use(session({
+  store: sessionStore,
   name: 'tienda.sid',
   secret: process.env.SESSION_SECRET || 'cambia_esta_clave',
   resave: false,
