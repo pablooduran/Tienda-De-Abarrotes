@@ -9,11 +9,11 @@ let state = { productos: [], clientes: [], proveedores: [], fiados: [], ventas: 
 
 const sections = [
   ['inicio', 'Inicio', 'Resumen general del negocio'],
-  ['productos', 'Mis Productos', 'Catalogo, stock y presentaciones'],
+  ['productos', 'Productos', 'Catálogo, stock y presentaciones'],
   ['clientes', 'Clientes', 'Registro de clientes'],
   ['proveedores', 'Proveedores', 'Registro de proveedores'],
   ['ventas', 'Ventas', 'Venta pagada o fiada con buscador'],
-  ['compras', 'Mis Compras/Stock', 'Abastecimiento por caja, paquete o unidad'],
+  ['compras', 'Compras / stock', 'Abastecimiento por paquete o unidad'],
   ['historialVentas', 'Historial de ventas', 'Ventas realizadas y detalle'],
   ['pagos', 'Fiados / Pagos', 'Deudas, pagos parciales e historial'],
   ['reportes', 'Reportes', 'Consultas, filtros y ganancias']
@@ -53,7 +53,7 @@ function stockLabel(product) {
 }
 function packageText(product) {
   if (!product) return '';
-  return `${product.paquetesPorCaja || 1} paquetes por caja / ${product.unidadesPorPaquete || 1} unidades por paquete`;
+  return `${product.unidadesPorPaquete || 1} unidades por paquete`;
 }
 function statusBadge(status) {
   return `<span class="badge ${status || 'pagado'}">${escapeHtml(status || 'pagado')}</span>`;
@@ -68,7 +68,7 @@ function validatePhoneValue(value) {
   return !value || /^\d+$/.test(String(value).trim());
 }
 
-function modal({ title: modalTitle, body, confirmText = 'Aceptar', cancelText = '', danger = false, wide = false, preserveOnConfirm = false }) {
+function modal({ title: modalTitle, body, confirmText = 'Aceptar', cancelText = '', danger = false, wide = false, preserveOnConfirm = false, onOpen = null }) {
   return new Promise((resolve) => {
     modalRoot.innerHTML = `
       <div class="modal-backdrop">
@@ -82,6 +82,7 @@ function modal({ title: modalTitle, body, confirmText = 'Aceptar', cancelText = 
         </div>
       </div>`;
     wireUppercase(modalRoot);
+    if (typeof onOpen === 'function') onOpen(modalRoot);
     const close = (value) => {
       modalRoot.innerHTML = '';
       resolve(value);
@@ -96,7 +97,7 @@ function modal({ title: modalTitle, body, confirmText = 'Aceptar', cancelText = 
 }
 function showError(text) { return modal({ title: 'No se pudo completar', body: `<p>${escapeHtml(text)}</p>`, confirmText: 'Entendido', danger: true }); }
 function showSuccess(text) { return modal({ title: 'Listo', body: `<p>${escapeHtml(text)}</p>`, confirmText: 'Aceptar' }); }
-function confirmAction(text, danger = false) { return modal({ title: 'Confirmar accion', body: `<p>${escapeHtml(text)}</p>`, confirmText: 'Confirmar', cancelText: 'Cancelar', danger }); }
+function confirmAction(text, danger = false) { return modal({ title: 'Confirmar acción', body: `<p>${escapeHtml(text)}</p>`, confirmText: 'Confirmar', cancelText: 'Cancelar', danger }); }
 
 async function api(url, options = {}) {
   const response = await fetch(url, {
@@ -105,7 +106,7 @@ async function api(url, options = {}) {
   });
   if (response.status === 401) window.location.href = '/login.html';
   const data = await response.json().catch(() => ({}));
-  if (!response.ok) throw new Error(data.error || 'No se pudo completar la operacion.');
+  if (!response.ok) throw new Error(data.error || 'No se pudo completar la operación.');
   return data;
 }
 function formData(form) { return Object.fromEntries(new FormData(form).entries()); }
@@ -119,6 +120,7 @@ sections.forEach(([id, label]) => {
 });
 
 document.getElementById('logoutBtn').addEventListener('click', async () => {
+  if (!await confirmAction('¿Seguro que deseas cerrar sesión?')) return;
   await api('/auth/logout', { method: 'POST' });
   window.location.href = '/login.html';
 });
@@ -135,8 +137,8 @@ async function refreshCatalogs() {
   state = { productos, clientes, proveedores, fiados, ventas, categorias };
 }
 
-function options(rows, id, label, empty = 'Seleccione') {
-  return `<option value="">${empty}</option>` + rows.map((row) => `<option value="${row[id]}">${escapeHtml(row[label])}</option>`).join('');
+function options(rows, id, label, empty = 'Seleccione', selected = '') {
+  return `<option value="">${empty}</option>` + rows.map((row) => `<option value="${row[id]}" ${String(selected || '') === String(row[id]) ? 'selected' : ''}>${escapeHtml(row[label])}</option>`).join('');
 }
 function categoryOptions(value = '') {
   return state.categorias.map((cat) => `<option value="${cat}" ${value === cat ? 'selected' : ''}>${cat}</option>`).join('');
@@ -203,7 +205,7 @@ async function inicio() {
       <div class="panel"><h3>Ventas hoy vs ayer</h3><canvas id="salesCompare"></canvas></div>
       <div class="panel"><h3>Mes actual vs mes pasado</h3><canvas id="monthCompare"></canvas></div>
       <div class="panel"><h3>Fiados por estado</h3><canvas id="debtsChart"></canvas></div>
-      <div class="panel"><h3>Ventas ultimos dias</h3><canvas id="daysChart"></canvas></div>
+      <div class="panel"><h3>Ventas últimos días</h3><canvas id="daysChart"></canvas></div>
     </div>`;
   drawChart(document.getElementById('salesCompare'), ['HOY', 'AYER'], [data.ventasHoy, data.ventasAyer], '#286a59');
   drawChart(document.getElementById('monthCompare'), ['MES ACTUAL', 'MES PASADO'], [data.ventasMes, data.ventasMesPasado], '#536471');
@@ -230,7 +232,7 @@ function renderCrud(type, rows, fields, idField) {
     view.querySelector(`#${type}Form`).addEventListener('submit', async (event) => saveCrud(event, type));
   }));
   view.querySelectorAll('[data-delete]').forEach((btn) => btn.addEventListener('click', async () => {
-    if (!await confirmAction('Desea eliminar este registro?', true)) return;
+    if (!await confirmAction('¿Deseas eliminar este registro?', true)) return;
     try {
       await api(`/api/${type}/${btn.dataset.delete}`, { method: 'DELETE' });
       await showSuccess('Registro eliminado.');
@@ -244,7 +246,7 @@ async function saveCrud(event, type) {
   const form = event.target;
   const data = formData(form);
   if ('telefono' in data && !validatePhoneValue(data.telefono)) {
-    await showError('El telefono solo debe contener numeros.');
+    await showError('El teléfono solo debe contener números.');
     return;
   }
   const id = form.dataset.id;
@@ -258,41 +260,98 @@ async function saveCrud(event, type) {
 async function clientes() {
   renderCrud('clientes', state.clientes, [
     { name: 'nombre', label: 'Nombre', required: true, upper: true },
-    { name: 'telefono', label: 'Telefono', phone: true }
+    { name: 'telefono', label: 'Teléfono', phone: true }
   ], 'idCliente');
 }
 
 async function proveedores() {
   renderCrud('proveedores', state.proveedores, [
     { name: 'nombre', label: 'Nombre', required: true, upper: true },
-    { name: 'telefono', label: 'Telefono', phone: true },
-    { name: 'direccion', label: 'Direccion', upper: true }
+    { name: 'telefono', label: 'Teléfono', phone: true },
+    { name: 'direccion', label: 'Dirección', upper: true }
   ], 'idProveedor');
 }
 
 function productForm(row = {}) {
   const checked = (value) => value ? 'checked' : '';
+  const isPackagePurchase = Number(row.unidadesPorPaquete || 1) > 1 || row.permiteVentaPorPaquete;
+  const packagePrice = Number(row.precioVenta || 0) * Number(row.unidadesPorPaquete || 1);
   return `
-    <form class="grid" id="productoForm" data-id="${row.idProducto || ''}">
-      <label>Nombre<input name="nombre" required data-uppercase value="${escapeHtml(row.nombre || '')}"></label>
-      <label>Proveedor<select name="idProveedor">${options(state.proveedores, 'idProveedor', 'nombre', 'Sin proveedor')}</select></label>
-      <label>Categoria<select name="categoria" required>${categoryOptions(row.categoria || 'OTROS')}</select></label>
-      <label>Unidad base<select name="unidadMedida" required>${['unidad','paquete','kilo','gramo','litro','mililitro','caja','docena','bolsa'].map((u) => `<option value="${u}" ${row.unidadMedida === u ? 'selected' : ''}>${u}</option>`).join('')}</select></label>
-      <label>Paquetes por caja<input name="paquetesPorCaja" type="number" step="1" min="1" required value="${row.paquetesPorCaja || 1}"></label>
-      <label>Unidades por paquete<input name="unidadesPorPaquete" type="number" step="1" min="1" required value="${row.unidadesPorPaquete || 1}"></label>
-      <label>Precio venta unidad<input name="precioVenta" type="number" step="0.01" min="0" required value="${row.precioVenta || ''}"></label>
-      <label>Ultimo costo unidad<input name="ultimoPrecioCompra" type="number" step="0.01" min="0" value="${row.ultimoPrecioCompra || 0}"></label>
-      <label>Stock total unidades<input name="stockUnidadesTotal" type="number" step="1" min="0" required value="${row.stockUnidadesTotal ?? row.stock ?? 0}"></label>
-      <label>Stock minimo<input name="stockMinimo" type="number" step="1" min="1" required value="${row.stockMinimo || 5}"></label>
-      <label class="check"><input name="permiteVentaPorPaquete" type="checkbox" ${checked(row.permiteVentaPorPaquete)}> Vender por paquete</label>
+    <form class="grid product-form" id="productoForm" data-id="${row.idProducto || ''}">
+      <input type="hidden" name="unidadMedida" value="${escapeHtml(row.unidadMedida || 'unidad')}">
+      <input type="hidden" name="paquetesPorCaja" value="${row.paquetesPorCaja || 1}">
+      <input type="hidden" name="stockUnidadesTotal" value="${row.stockUnidadesTotal ?? row.stock ?? 0}">
+      <input type="hidden" name="ultimoPrecioCompra" value="${row.ultimoPrecioCompra || 0}">
+
+      <div class="form-section wide">
+        <h4>Datos principales</h4>
+        <p class="hint">Registra lo que se ve en mostrador. El precio de compra se coloca después al registrar una compra.</p>
+      </div>
+      <label>Nombre del producto<input name="nombre" required data-uppercase value="${escapeHtml(row.nombre || '')}"></label>
+      <label>Proveedor<select name="idProveedor">${options(state.proveedores, 'idProveedor', 'nombre', 'Sin proveedor', row.idProveedor)}</select></label>
+      <label>Categoría<select name="categoria" required>${categoryOptions(row.categoria || 'OTROS')}</select></label>
+      <label>Tipo de compra<select id="tipoCompraProducto">
+        <option value="unidad" ${!isPackagePurchase ? 'selected' : ''}>Unidad</option>
+        <option value="paquete" ${isPackagePurchase ? 'selected' : ''}>Paquete</option>
+      </select></label>
+
+      <div class="form-section wide">
+        <h4>Precios y stock</h4>
+      </div>
+      <label id="unitsPerPackageField">Unidades por paquete<input name="unidadesPorPaquete" type="number" step="1" min="1" required value="${row.unidadesPorPaquete || 1}"></label>
+      <label>Precio venta por unidad<input name="precioVenta" type="number" step="0.01" min="0" required value="${row.precioVenta || ''}"></label>
+      <label id="packagePriceField">Precio venta por paquete<input id="precioVentaPaquete" type="number" step="0.01" min="0" value="${packagePrice ? money(packagePrice) : ''}"></label>
+      <label>Stock mínimo<input name="stockMinimo" type="number" step="1" min="1" required value="${row.stockMinimo || 5}"></label>
+
+      <div class="form-section wide">
+        <h4>Venta permitida</h4>
+        <p class="hint">La venta por unidad queda como opción principal. La venta por paquete aparece solo si el producto tiene varias unidades por paquete.</p>
+      </div>
       <label class="check"><input name="permiteVentaPorUnidad" type="checkbox" ${checked(row.permiteVentaPorUnidad ?? true)}> Vender por unidad</label>
-      <p class="hint wide">La caja solo se usa para compras. En ventas solo apareceran paquete o unidad segun estas opciones.</p>
+      <label class="check" id="salePackageField"><input name="permiteVentaPorPaquete" type="checkbox" ${checked(row.permiteVentaPorPaquete)}> Vender por paquete</label>
+      <p class="hint wide">Los campos técnicos de stock se mantienen internamente para conservar la lógica actual.</p>
     </form>`;
+}
+
+function wireProductForm() {
+  const form = document.getElementById('productoForm');
+  if (!form) return;
+  const type = form.querySelector('#tipoCompraProducto');
+  const units = form.querySelector('[name="unidadesPorPaquete"]');
+  const unitPrice = form.querySelector('[name="precioVenta"]');
+  const packagePrice = form.querySelector('#precioVentaPaquete');
+  const packageSale = form.querySelector('[name="permiteVentaPorPaquete"]');
+  const toggle = () => {
+    const isPackage = type.value === 'paquete';
+    form.querySelector('#unitsPerPackageField').classList.toggle('is-hidden', !isPackage);
+    form.querySelector('#packagePriceField').classList.toggle('is-hidden', !isPackage);
+    form.querySelector('#salePackageField').classList.toggle('is-hidden', !isPackage);
+    if (!isPackage) {
+      units.value = 1;
+      packagePrice.value = '';
+      packageSale.checked = false;
+    }
+  };
+  const syncPackagePrice = () => {
+    if (type.value !== 'paquete') return;
+    const value = Number(unitPrice.value || 0) * Number(units.value || 1);
+    packagePrice.value = value ? money(value) : '';
+  };
+  const syncUnitPrice = () => {
+    if (type.value !== 'paquete') return;
+    const value = Number(packagePrice.value || 0) / Math.max(1, Number(units.value || 1));
+    if (value) unitPrice.value = money(value);
+  };
+  type.addEventListener('change', () => { toggle(); syncPackagePrice(); });
+  units.addEventListener('input', syncPackagePrice);
+  unitPrice.addEventListener('input', syncPackagePrice);
+  packagePrice.addEventListener('input', syncUnitPrice);
+  toggle();
 }
 
 async function openProductModal(row = {}) {
   const isEdit = Boolean(row.idProducto);
-  const ok = await modal({ title: isEdit ? 'Editar producto' : 'Anadir producto', body: productForm(row), confirmText: isEdit ? 'Actualizar' : 'Guardar', cancelText: 'Cancelar', wide: true, preserveOnConfirm: true });
+  const ok = await modal({ title: isEdit ? 'Editar producto' : 'Añadir producto', body: productForm(row), confirmText: isEdit ? 'Actualizar' : 'Guardar', cancelText: 'Cancelar', wide: true, preserveOnConfirm: true, onOpen: wireProductForm });
   if (!ok) return;
   const form = document.getElementById('productoForm');
   const data = formData(form);
@@ -325,7 +384,7 @@ function filterProductsLocal() {
 function renderProductTable(rows) {
   const target = document.getElementById('productTable');
   target.innerHTML = `<div class="table-wrap"><table>
-    <thead><tr><th>Nombre</th><th>Proveedor</th><th>Categoria</th><th>Precio</th><th>Stock</th><th>Presentacion</th><th>Estado</th><th>Acciones</th></tr></thead>
+    <thead><tr><th>Nombre</th><th>Proveedor</th><th>Categoría</th><th>Precio</th><th>Stock</th><th>Presentación</th><th>Estado</th><th>Acciones</th></tr></thead>
     <tbody>${rows.map((p) => `<tr class="${p.bajoStock ? 'low-stock' : ''}">
       <td>${escapeHtml(p.nombre)}</td><td>${escapeHtml(p.proveedor || 'SIN PROVEEDOR')}</td><td>${escapeHtml(p.categoria)}</td>
       <td>Bs ${money(p.precioVenta)}</td><td>${stockLabel(p)}</td><td>${packageText(p)}</td>
@@ -334,7 +393,7 @@ function renderProductTable(rows) {
     </tr>`).join('')}</tbody></table></div>`;
   target.querySelectorAll('[data-edit]').forEach((btn) => btn.addEventListener('click', () => openProductModal(state.productos.find((p) => String(p.idProducto) === btn.dataset.edit))));
   target.querySelectorAll('[data-delete]').forEach((btn) => btn.addEventListener('click', async () => {
-    if (!await confirmAction('Desea eliminar este producto?', true)) return;
+    if (!await confirmAction('¿Deseas eliminar este producto?', true)) return;
     try {
       await api(`/api/productos/${btn.dataset.delete}`, { method: 'DELETE' });
       await showSuccess('Producto eliminado.');
@@ -346,12 +405,12 @@ function renderProductTable(rows) {
 async function productos() {
   view.innerHTML = `
     <div class="panel toolbar">
-      <button id="addProduct">AÑADIR PRODUCTO</button>
-      <label>Buscar<input id="productSearch" data-uppercase placeholder="BUSCAR PRODUCTO"></label>
-      <label>Categoria<select id="productCategory"><option value="">TODAS</option>${categoryOptions()}</select></label>
-      <label>Proveedor<select id="productProvider">${options(state.proveedores, 'idProveedor', 'nombre', 'TODOS')}</select></label>
+      <button id="addProduct">Añadir producto</button>
+      <label>Buscar<input id="productSearch" data-uppercase placeholder="Buscar producto"></label>
+      <label>Categoría<select id="productCategory"><option value="">Todas</option>${categoryOptions()}</select></label>
+      <label>Proveedor<select id="productProvider">${options(state.proveedores, 'idProveedor', 'nombre', 'Todos')}</select></label>
       <label class="check"><input id="productLowStock" type="checkbox"> Bajo stock</label>
-      <label>Orden<select id="productSort"><option value="">Nombre</option><option value="precio_desc">Mas caro</option><option value="precio_asc">Mas barato</option></select></label>
+      <label>Orden<select id="productSort"><option value="">Nombre</option><option value="precio_desc">Más caro</option><option value="precio_asc">Más barato</option></select></label>
     </div>
     <div class="panel" id="productTable"></div>`;
   wireUppercase(view);
@@ -366,7 +425,7 @@ async function productos() {
 function autocompleteBox(kind) {
   return `
     <div class="autocomplete">
-      <label>Buscar producto<input id="${kind}Search" data-uppercase placeholder="ESCRIBA EL PRODUCTO"></label>
+      <label>Buscar producto<input id="${kind}Search" data-uppercase placeholder="Escriba el producto"></label>
       <div id="${kind}Results" class="autocomplete-results"></div>
     </div>`;
 }
@@ -383,12 +442,13 @@ function operationFilters(kind) {
 function filteredOperationProducts(kind) {
   const filters = operationFilters(kind);
   return state.productos.filter((p) => {
-    if (kind === 'compras' && !filters.showAll && !filters.provider) return false;
     const byText = !filters.q || p.nombre.includes(filters.q);
     const byCategory = !filters.category || p.categoria === filters.category;
     const byProvider = !filters.provider || String(p.idProveedor || '') === filters.provider;
     const byLowStock = !filters.lowStock || p.bajoStock;
-    const purchaseProvider = kind !== 'compras' || filters.showAll || !filters.provider || String(p.idProveedor || '') === filters.provider;
+    const purchaseProvider = kind !== 'compras'
+      || filters.showAll
+      || (filters.provider ? String(p.idProveedor || '') === filters.provider : !p.idProveedor);
     return byText && byCategory && byLowStock && (kind === 'ventas' ? byProvider : purchaseProvider);
   }).slice(0, 24);
 }
@@ -396,16 +456,12 @@ function filteredOperationProducts(kind) {
 function renderAutocomplete(kind) {
   const rows = filteredOperationProducts(kind);
   const target = document.getElementById(`${kind}Results`);
-  if (kind === 'compras' && !operationFilters(kind).showAll && !operationFilters(kind).provider) {
-    target.innerHTML = '<p class="muted">Seleccione un proveedor para ver sus productos.</p>';
-    return;
-  }
   target.innerHTML = rows.length ? rows.map((p) => `<article class="product-result ${p.bajoStock ? 'is-low' : ''}">
     <div>
       <strong>${escapeHtml(p.nombre)}</strong>
       <span>${escapeHtml(p.categoria)} | ${escapeHtml(p.proveedor || 'SIN PROVEEDOR')}</span>
       <small>${stockLabel(p)}</small>
-      <small>${kind === 'compras' ? `Ultima compra: Bs ${money(p.ultimoPrecioCompra)}` : `Precio: Bs ${money(p.precioVenta)}`}</small>
+      <small>${kind === 'compras' ? `Última compra: Bs ${money(p.ultimoPrecioCompra)}` : `Precio: Bs ${money(p.precioVenta)}`}</small>
       <small>${packageText(p)}</small>
     </div>
     <button type="button" class="small" data-product="${p.idProducto}">AGREGAR</button>
@@ -420,15 +476,16 @@ function operationView(kind) {
       <section class="panel product-picker">
         <div class="form-grid compact-fields">
           ${isSale ? `
-            <label>Proveedor<select id="${kind}Provider">${options(state.proveedores, 'idProveedor', 'nombre', 'TODOS')}</select></label>
-            <label>Categoria<select id="${kind}Category"><option value="">TODAS</option>${categoryOptions()}</select></label>
+            <label>Proveedor<select id="${kind}Provider">${options(state.proveedores, 'idProveedor', 'nombre', 'Todos')}</select></label>
+            <label>Categoría<select id="${kind}Category"><option value="">Todas</option>${categoryOptions()}</select></label>
             <label class="check"><input id="${kind}LowStock" type="checkbox"> Bajo stock</label>
           ` : `
-            <label>Proveedor<select name="idProveedor" id="${kind}Provider" required>${options(state.proveedores, 'idProveedor', 'nombre', 'SELECCIONE')}</select></label>
-            <label>Categoria<select id="${kind}Category"><option value="">TODAS</option>${categoryOptions()}</select></label>
-            <label class="check"><input id="showAllProducts" type="checkbox"> Mostrar todos</label>
+            <label>Proveedor de la compra<select name="idProveedor" id="${kind}Provider">${options(state.proveedores, 'idProveedor', 'nombre', 'Sin proveedor')}</select></label>
+            <label>Categoría<select id="${kind}Category"><option value="">Todas</option>${categoryOptions()}</select></label>
+            <label class="check"><input id="showAllProducts" type="checkbox"> Mostrar otros proveedores</label>
           `}
         </div>
+        ${isSale ? '' : '<p class="hint">El proveedor de la compra se usa para registrar el abastecimiento. Si queda en "Sin proveedor", se muestran productos sin proveedor asignado.</p>'}
         ${autocompleteBox(kind)}
       </section>
       <aside class="panel cart-panel">
@@ -441,16 +498,16 @@ function operationView(kind) {
         ${isSale ? `
           <div class="form-grid compact-fields">
             <label>Tipo de venta<select name="tipo"><option value="pagada">Venta pagada</option><option value="fiada">Venta fiada</option></select></label>
-            <label>Cliente<select name="idCliente">${options(state.clientes, 'idCliente', 'nombre', 'CLIENTE OCASIONAL')}</select></label>
+            <label>Cliente<select name="idCliente">${options(state.clientes, 'idCliente', 'nombre', 'Cliente ocasional')}</select></label>
           </div>
-        ` : '<p class="hint">Seleccione un proveedor y agregue productos al carrito de abastecimiento.</p>'}
+        ` : '<p class="hint">Agregue productos al carrito. Cada producto muestra su proveedor asociado para evitar confusiones.</p>'}
         <div id="items" class="cart-items"></div>
         <div id="cartWarnings" class="cart-warnings"></div>
         <div class="cart-total">
           <span>Total</span>
           <strong id="total">Bs 0.00</strong>
         </div>
-        <button type="submit" class="wide-button">${isSale ? 'REGISTRAR VENTA' : 'REGISTRAR COMPRA'}</button>
+        <button type="submit" class="wide-button">${isSale ? 'Registrar venta' : 'Registrar compra'}</button>
       </aside>
     </form>`;
   const search = document.getElementById(`${kind}Search`);
@@ -461,7 +518,6 @@ function operationView(kind) {
   const lowStockFilter = document.getElementById(`${kind}LowStock`);
   if (lowStockFilter) lowStockFilter.addEventListener('change', () => renderAutocomplete(kind));
   if (!isSale) {
-    document.querySelector(`#${kind}Form [name="idProveedor"]`).addEventListener('change', () => renderAutocomplete(kind));
     document.getElementById('showAllProducts').addEventListener('change', () => renderAutocomplete(kind));
   }
   document.getElementById(`${kind}Form`).addEventListener('submit', (event) => saveOperation(event, kind));
@@ -483,16 +539,20 @@ function addProductItem(kind, product) {
     product.permiteVentaPorPaquete ? '<option value="paquete">Paquete</option>' : '',
     product.permiteVentaPorUnidad ? '<option value="unidad">Unidad</option>' : ''
   ].join('');
+  const purchaseOptions = [
+    '<option value="unidad">Unidad</option>',
+    Number(product.unidadesPorPaquete || 1) > 1 ? '<option value="paquete">Paquete</option>' : ''
+  ].join('');
   const row = document.createElement('div');
   row.className = 'cart-item';
   row.dataset.product = product.idProducto;
   row.innerHTML = `
     <div class="cart-item-title">
       <strong>${escapeHtml(product.nombre)}</strong>
-      <span>${escapeHtml(product.categoria)} | ${stockLabel(product)}</span>
+      <span>${escapeHtml(product.categoria)} | ${escapeHtml(product.proveedor || 'Sin proveedor')} | ${stockLabel(product)}</span>
     </div>
     <div class="cart-item-controls">
-      <label>Presentacion<select name="presentacion">${isPurchase ? '<option value="caja">Caja</option><option value="paquete">Paquete</option><option value="unidad">Unidad</option>' : saleOptions}</select></label>
+      <label>Presentación<select name="presentacion">${isPurchase ? purchaseOptions : saleOptions}</select></label>
       <label>Cantidad<input name="cantidad" type="number" step="1" min="1" required value="1"></label>
       ${isPurchase ? '<label>Precio compra<input name="precioCompra" type="number" step="0.01" min="0" required></label>' : '<label>Precio<input name="precioVenta" readonly></label>'}
     </div>
@@ -572,16 +632,15 @@ async function saveOperation(event, kind) {
   const body = formData(form);
   body.items = collectItems(kind);
   if (body.items.length === 0) return showError('Debe agregar al menos un producto.');
-  if (kind === 'compras' && !body.idProveedor) return showError('Debe seleccionar proveedor para registrar la compra.');
   const invalidItem = body.items.some((item) => Number(item.cantidad) <= 0 || (kind === 'compras' && Number(item.precioCompra) <= 0));
   if (invalidItem) return showError('Revise cantidades y precios. Deben ser mayores a cero.');
   if ([...document.querySelectorAll('.cart-item.has-warning')].length) return showError('Hay productos con stock insuficiente. Ajuste cantidades antes de registrar.');
   if (body.tipo === 'fiada' && !body.idCliente) return showError('Una venta fiada debe tener cliente registrado.');
   const label = kind === 'ventas' ? (body.tipo === 'fiada' ? 'venta fiada' : 'venta pagada') : 'compra';
-  if (!await confirmAction(`Desea registrar esta ${label}?`)) return;
+  if (!await confirmAction(`¿Deseas registrar esta ${label}?`)) return;
   try {
     await api(`/api/${kind}`, { method: 'POST', body: JSON.stringify(body) });
-    await showSuccess('Operacion registrada.');
+    await showSuccess('Operación registrada.');
     loadView(kind);
   } catch (error) { showError(error.message); }
 }
@@ -604,7 +663,7 @@ async function showSaleDetail(idVenta) {
     await modal({ title: `Venta #${v.idVenta}`, wide: true, confirmText: 'Cerrar', body: `
       <p>${formatDate(v.fecha)} - ${escapeHtml(v.cliente)} - Bs ${money(v.total)}</p>
       ${v.tipo === 'fiada' ? `<p>Saldo: <strong class="${Number(v.saldoPendiente) > 0 ? 'text-danger' : 'text-ok'}">Bs ${money(v.saldoPendiente)}</strong> ${statusBadge(v.estadoFiado)}</p>` : ''}
-      <div class="table-wrap"><table><thead><tr><th>Producto</th><th>Cantidad</th><th>Presentacion</th><th>Unidades</th><th>Precio</th><th>Costo</th><th>Ganancia</th></tr></thead>
+      <div class="table-wrap"><table><thead><tr><th>Producto</th><th>Cantidad</th><th>Presentación</th><th>Unidades</th><th>Precio</th><th>Costo</th><th>Ganancia</th></tr></thead>
       <tbody>${data.detalle.map((d) => `<tr><td>${escapeHtml(d.nombre)}</td><td>${intValue(d.cantidad)}</td><td>${escapeHtml(d.presentacionVenta)}</td><td>${intValue(d.cantidadEquivalenteUnidades)}</td><td>Bs ${money(d.subtotal)}</td><td>Bs ${money(d.subtotalCosto)}</td><td>Bs ${money(d.ganancia)}</td></tr>`).join('')}</tbody></table></div>` });
   } catch (error) { showError(error.message); }
 }
@@ -615,7 +674,7 @@ async function pagos() {
       <form class="grid" id="pagoForm">
         <label>Fiado activo<select name="idFiado" required>${state.fiados.filter((f) => f.estado !== 'pagado').map((f) => `<option value="${f.idFiado}">${escapeHtml(f.cliente)} - saldo Bs ${money(f.saldoPendiente)}</option>`).join('')}</select></label>
         <label>Monto<input name="monto" type="number" step="0.01" min="0.01" required></label>
-        <label>Observacion<input name="observacion" data-uppercase></label>
+        <label>Observación<input name="observacion" data-uppercase></label>
         <button type="submit">Registrar pago</button>
       </form>
     </div>
@@ -629,7 +688,7 @@ async function pagos() {
   wireUppercase(view);
   document.getElementById('pagoForm').addEventListener('submit', async (event) => {
     event.preventDefault();
-    if (!await confirmAction('Desea registrar este pago de fiado?')) return;
+    if (!await confirmAction('¿Deseas registrar este pago de fiado?')) return;
     try {
       await api('/api/pagos-fiado', { method: 'POST', body: JSON.stringify(formData(event.target)) });
       await showSuccess('Pago registrado.');
@@ -664,9 +723,9 @@ async function showDebtDetail(idFiado) {
     const f = data.fiado;
     await modal({ title: `Fiado de ${f.cliente}`, wide: true, confirmText: 'Cerrar', body: `
       <p>Total: Bs ${money(f.totalFiado)} | Pagado: Bs ${money(f.totalPagado)} | Saldo: Bs ${money(f.saldoPendiente)} | ${statusBadge(f.estado)}</p>
-      <h4>Productos</h4><div class="table-wrap"><table><thead><tr><th>Producto</th><th>Cantidad</th><th>Presentacion</th><th>Subtotal</th></tr></thead>
+      <h4>Productos</h4><div class="table-wrap"><table><thead><tr><th>Producto</th><th>Cantidad</th><th>Presentación</th><th>Subtotal</th></tr></thead>
       <tbody>${data.detalle.map((d) => `<tr><td>${escapeHtml(d.nombre)}</td><td>${intValue(d.cantidad)}</td><td>${escapeHtml(d.presentacionVenta || 'unidad')}</td><td>Bs ${money(d.subtotal)}</td></tr>`).join('') || '<tr><td colspan="4">Sin detalle disponible</td></tr>'}</tbody></table></div>
-      <h4>Pagos</h4><div class="table-wrap"><table><thead><tr><th>Fecha</th><th>Monto</th><th>Observacion</th></tr></thead>
+      <h4>Pagos</h4><div class="table-wrap"><table><thead><tr><th>Fecha</th><th>Monto</th><th>Observación</th></tr></thead>
       <tbody>${data.pagos.map((p) => `<tr><td>${formatDate(p.fechaPago)}</td><td>Bs ${money(p.monto)}</td><td>${escapeHtml(p.observacion || '')}</td></tr>`).join('') || '<tr><td colspan="3">Sin pagos registrados</td></tr>'}</tbody></table></div>` });
   } catch (error) { showError(error.message); }
 }
@@ -676,7 +735,7 @@ function reportFilters(type) {
   if (type === 'ventasRango') return dateRange;
   if (type === 'comprasProveedor') return `<label>Proveedor<select name="idProveedor">${options(state.proveedores, 'idProveedor', 'nombre', 'TODOS')}</select></label>${dateRange}`;
   if (type === 'fiados') return `<label>Cliente<select name="idCliente">${options(state.clientes, 'idCliente', 'nombre', 'TODOS')}</select></label><label>Estado<select name="estado"><option value="">TODOS</option><option value="pendiente">PENDIENTE</option><option value="parcial">PARCIAL</option><option value="pagado">PAGADO</option></select></label>${dateRange}`;
-  if (type === 'ganancias') return `<label>Periodo<select name="periodo"><option value="dia">DIA</option><option value="semana">SEMANA</option><option value="mes">MES</option><option value="anio">ANO</option><option value="rango">RANGO</option></select></label>${dateRange}`;
+  if (type === 'ganancias') return `<label>Periodo<select name="periodo"><option value="dia">Día</option><option value="semana">Semana</option><option value="mes">Mes</option><option value="anio">Año</option><option value="rango">Rango</option></select></label>${dateRange}`;
   return '';
 }
 
@@ -685,10 +744,10 @@ async function reportes() {
     <div class="panel">
       <form class="grid" id="reportForm">
         <label>Reporte<select name="tipo" id="reportType">
-          <option value="ventasDia">Ventas del dia</option>
+          <option value="ventasDia">Ventas del día</option>
           <option value="ventasRango">Ventas por rango</option>
           <option value="bajoStock">Productos con bajo stock</option>
-          <option value="masVendidos">Productos mas vendidos</option>
+          <option value="masVendidos">Productos más vendidos</option>
           <option value="fiados">Fiados</option>
           <option value="pagosFiado">Historial de pagos</option>
           <option value="compras">Compras realizadas</option>
