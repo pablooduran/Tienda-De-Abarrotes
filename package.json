@@ -10,7 +10,8 @@
     "db:migrate": "node scripts/migrate-db.js",
     "db:create-admin": "node scripts/create-admin.js",
     "db:seed-demo": "node scripts/seed-demo.js",
-    "db:check-multitenant": "node scripts/check-multitenant.js"
+    "db:check-multitenant": "node scripts/check-multitenant.js",
+    "test:tenant-isolation": "node scripts/test-tenant-isolation.js"
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",

@@ -4,6 +4,22 @@ const pool = require('../config/db');
 
 const router = express.Router();
 
+function omitTenant(value) {
+  if (Array.isArray(value)) return value.map(omitTenant);
+  if (!value || typeof value !== 'object' || value instanceof Date) return value;
+  return Object.fromEntries(
+    Object.entries(value)
+      .filter(([key]) => key !== 'idTienda')
+      .map(([key, item]) => [key, omitTenant(item)])
+  );
+}
+
+router.use((req, res, next) => {
+  const sendJson = res.json.bind(res);
+  res.json = (body) => sendJson(omitTenant(body));
+  next();
+});
+
 const units = ['unidad', 'paquete', 'kilo', 'gramo', 'litro', 'mililitro', 'caja', 'docena', 'bolsa'];
 const categories = ['LACTEOS', 'LIMPIEZA', 'BEBIDAS', 'SNACKS', 'ABARROTES', 'ASEO PERSONAL', 'CONDIMENTOS', 'OTROS'];
 const purchasePresentations = ['caja', 'paquete', 'unidad'];
@@ -62,6 +78,26 @@ function adminPasswordFromBody(body) {
   return body.passwordAdministrador || body.adminPassword || body.contrasena || body.password || '';
 }
 
+function tenantId(req) {
+  return req.tenant.idTienda;
+}
+
+function notFound(message) {
+  const error = new Error(message);
+  error.status = 404;
+  return error;
+}
+
+async function requireTenantRecord(connection, table, idField, id, idTienda, extraWhere = '') {
+  if (!id) return null;
+  const [rows] = await connection.query(
+    `SELECT ${idField} FROM ${table} WHERE ${idField}=? AND idTienda=? ${extraWhere} LIMIT 1`,
+    [id, idTienda]
+  );
+  if (!rows.length) throw notFound('Registro relacionado no encontrado.');
+  return rows[0];
+}
+
 async function requireAdminPassword(req) {
   const password = adminPasswordFromBody(req.body || {});
   if (!password) {
@@ -75,7 +111,11 @@ async function requireAdminPassword(req) {
     error.status = 401;
     throw error;
   }
-  const [rows] = await pool.query('SELECT password FROM administrador WHERE idAdministrador=?', [adminId]);
+  const [rows] = await pool.query(
+    `SELECT password FROM administrador
+     WHERE idAdministrador=? AND idTienda=? AND rol='dueno_tienda' AND activo=1`,
+    [adminId, tenantId(req)]
+  );
   if (!rows.length || !await bcrypt.compare(password, rows[0].password)) {
     const error = new Error('Contraseña de administrador incorrecta.');
     error.status = 403;
@@ -103,7 +143,7 @@ function productSelect(where = '') {
     SELECT p.*, pr.nombre AS proveedor,
       p.stockUnidadesTotal < p.stockMinimo AS bajoStock
     FROM producto p
-    LEFT JOIN proveedor pr ON pr.idProveedor = p.idProveedor
+    LEFT JOIN proveedor pr ON pr.idProveedor = p.idProveedor AND pr.idTienda=p.idTienda
     ${where}
   `;
 }
@@ -165,18 +205,19 @@ function validateProductPayload(body, editing = false) {
 
 router.get('/dashboard', async (req, res, next) => {
   try {
+    const idTienda = tenantId(req);
     const [[ventasHoy], [ventasAyer], [ventasMes], [ventasMesPasado], [ventasSemana], [ventasSemanaPasada], [gananciaHoy], [gananciaMes], [bajoStock], [fiadosEstado], [ventasDias]] = await Promise.all([
-      pool.query('SELECT COALESCE(SUM(total), 0) total FROM venta WHERE DATE(fecha) = CURDATE()'),
-      pool.query('SELECT COALESCE(SUM(total), 0) total FROM venta WHERE DATE(fecha) = DATE_SUB(CURDATE(), INTERVAL 1 DAY)'),
-      pool.query('SELECT COALESCE(SUM(total), 0) total FROM venta WHERE YEAR(fecha)=YEAR(CURDATE()) AND MONTH(fecha)=MONTH(CURDATE())'),
-      pool.query('SELECT COALESCE(SUM(total), 0) total FROM venta WHERE YEAR(fecha)=YEAR(DATE_SUB(CURDATE(), INTERVAL 1 MONTH)) AND MONTH(fecha)=MONTH(DATE_SUB(CURDATE(), INTERVAL 1 MONTH))'),
-      pool.query('SELECT COALESCE(SUM(total), 0) total FROM venta WHERE YEARWEEK(fecha, 1) = YEARWEEK(CURDATE(), 1)'),
-      pool.query('SELECT COALESCE(SUM(total), 0) total FROM venta WHERE YEARWEEK(fecha, 1) = YEARWEEK(DATE_SUB(CURDATE(), INTERVAL 1 WEEK), 1)'),
-      pool.query('SELECT COALESCE(SUM(ganancia), 0) total FROM detalleVenta d JOIN venta v ON v.idVenta=d.idVenta WHERE DATE(v.fecha)=CURDATE()'),
-      pool.query('SELECT COALESCE(SUM(ganancia), 0) total FROM detalleVenta d JOIN venta v ON v.idVenta=d.idVenta WHERE YEAR(v.fecha)=YEAR(CURDATE()) AND MONTH(v.fecha)=MONTH(CURDATE())'),
-      pool.query('SELECT COUNT(*) total FROM producto WHERE stockUnidadesTotal < stockMinimo'),
-      pool.query("SELECT estado, COUNT(*) total FROM fiado GROUP BY estado"),
-      pool.query("SELECT DATE(fecha) dia, COALESCE(SUM(total),0) total FROM venta WHERE fecha >= DATE_SUB(CURDATE(), INTERVAL 6 DAY) GROUP BY DATE(fecha) ORDER BY dia")
+      pool.query('SELECT COALESCE(SUM(total), 0) total FROM venta WHERE idTienda=? AND DATE(fecha) = CURDATE()', [idTienda]),
+      pool.query('SELECT COALESCE(SUM(total), 0) total FROM venta WHERE idTienda=? AND DATE(fecha) = DATE_SUB(CURDATE(), INTERVAL 1 DAY)', [idTienda]),
+      pool.query('SELECT COALESCE(SUM(total), 0) total FROM venta WHERE idTienda=? AND YEAR(fecha)=YEAR(CURDATE()) AND MONTH(fecha)=MONTH(CURDATE())', [idTienda]),
+      pool.query('SELECT COALESCE(SUM(total), 0) total FROM venta WHERE idTienda=? AND YEAR(fecha)=YEAR(DATE_SUB(CURDATE(), INTERVAL 1 MONTH)) AND MONTH(fecha)=MONTH(DATE_SUB(CURDATE(), INTERVAL 1 MONTH))', [idTienda]),
+      pool.query('SELECT COALESCE(SUM(total), 0) total FROM venta WHERE idTienda=? AND YEARWEEK(fecha, 1) = YEARWEEK(CURDATE(), 1)', [idTienda]),
+      pool.query('SELECT COALESCE(SUM(total), 0) total FROM venta WHERE idTienda=? AND YEARWEEK(fecha, 1) = YEARWEEK(DATE_SUB(CURDATE(), INTERVAL 1 WEEK), 1)', [idTienda]),
+      pool.query('SELECT COALESCE(SUM(d.ganancia), 0) total FROM detalleVenta d JOIN venta v ON v.idVenta=d.idVenta AND v.idTienda=d.idTienda WHERE d.idTienda=? AND DATE(v.fecha)=CURDATE()', [idTienda]),
+      pool.query('SELECT COALESCE(SUM(d.ganancia), 0) total FROM detalleVenta d JOIN venta v ON v.idVenta=d.idVenta AND v.idTienda=d.idTienda WHERE d.idTienda=? AND YEAR(v.fecha)=YEAR(CURDATE()) AND MONTH(v.fecha)=MONTH(CURDATE())', [idTienda]),
+      pool.query('SELECT COUNT(*) total FROM producto WHERE idTienda=? AND stockUnidadesTotal < stockMinimo', [idTienda]),
+      pool.query('SELECT estado, COUNT(*) total FROM fiado WHERE idTienda=? GROUP BY estado', [idTienda]),
+      pool.query('SELECT DATE(fecha) dia, COALESCE(SUM(total),0) total FROM venta WHERE idTienda=? AND fecha >= DATE_SUB(CURDATE(), INTERVAL 6 DAY) GROUP BY DATE(fecha) ORDER BY dia', [idTienda])
     ]);
     const estados = { pendiente: 0, parcial: 0, pagado: 0 };
     fiadosEstado.forEach((row) => { estados[row.estado] = row.total; });
@@ -206,8 +247,8 @@ router.get('/categorias', (req, res) => {
 router.get('/productos', async (req, res, next) => {
   try {
     const { q, idProveedor, categoria, bajoStock, sort } = req.query;
-    const conditions = [];
-    const params = [];
+    const conditions = ['p.idTienda=?'];
+    const params = [tenantId(req)];
     if (q) {
       conditions.push('UPPER(p.nombre) LIKE ?');
       params.push(`%${upper(q)}%`);
@@ -233,11 +274,15 @@ router.get('/productos', async (req, res, next) => {
 router.post('/productos', async (req, res, next) => {
   try {
     const data = validateProductPayload(req.body);
+    const idTienda = tenantId(req);
+    if (data.idProveedor) {
+      await requireTenantRecord(pool, 'proveedor', 'idProveedor', data.idProveedor, idTienda);
+    }
     await pool.query(
       `INSERT INTO producto
-       (nombre, idProveedor, categoria, unidadMedida, unidadesPorPaquete, paquetesPorCaja, precioVenta, stock, stockMinimo, stockUnidadesTotal, ultimoPrecioCompra, permiteVentaPorPaquete, permiteVentaPorUnidad)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [data.nombre, data.idProveedor, data.categoria, data.unidadMedida, data.unidadesPorPaquete, data.paquetesPorCaja, data.precioVenta, data.stockUnidadesTotal, data.stockMinimo, data.stockUnidadesTotal, data.ultimoPrecioCompra, data.permiteVentaPorPaquete, data.permiteVentaPorUnidad]
+       (idTienda, nombre, idProveedor, categoria, unidadMedida, unidadesPorPaquete, paquetesPorCaja, precioVenta, stock, stockMinimo, stockUnidadesTotal, ultimoPrecioCompra, permiteVentaPorPaquete, permiteVentaPorUnidad)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [idTienda, data.nombre, data.idProveedor, data.categoria, data.unidadMedida, data.unidadesPorPaquete, data.paquetesPorCaja, data.precioVenta, data.stockUnidadesTotal, data.stockMinimo, data.stockUnidadesTotal, data.ultimoPrecioCompra, data.permiteVentaPorPaquete, data.permiteVentaPorUnidad]
     );
     res.status(201).json({ message: 'Producto guardado.' });
   } catch (error) {
@@ -248,12 +293,17 @@ router.post('/productos', async (req, res, next) => {
 router.put('/productos/:id', async (req, res, next) => {
   try {
     const data = validateProductPayload(req.body, true);
-    await pool.query(
+    const idTienda = tenantId(req);
+    if (data.idProveedor) {
+      await requireTenantRecord(pool, 'proveedor', 'idProveedor', data.idProveedor, idTienda);
+    }
+    const [result] = await pool.query(
       `UPDATE producto
        SET nombre=?, idProveedor=?, categoria=?, unidadMedida=?, unidadesPorPaquete=?, paquetesPorCaja=?, precioVenta=?, stock=?, stockMinimo=?, stockUnidadesTotal=?, ultimoPrecioCompra=?, permiteVentaPorPaquete=?, permiteVentaPorUnidad=?
-       WHERE idProducto=?`,
-      [data.nombre, data.idProveedor, data.categoria, data.unidadMedida, data.unidadesPorPaquete, data.paquetesPorCaja, data.precioVenta, data.stockUnidadesTotal, data.stockMinimo, data.stockUnidadesTotal, data.ultimoPrecioCompra, data.permiteVentaPorPaquete, data.permiteVentaPorUnidad, req.params.id]
+       WHERE idProducto=? AND idTienda=?`,
+      [data.nombre, data.idProveedor, data.categoria, data.unidadMedida, data.unidadesPorPaquete, data.paquetesPorCaja, data.precioVenta, data.stockUnidadesTotal, data.stockMinimo, data.stockUnidadesTotal, data.ultimoPrecioCompra, data.permiteVentaPorPaquete, data.permiteVentaPorUnidad, req.params.id, idTienda]
     );
+    if (!result.affectedRows) return res.status(404).json({ error: 'Producto no encontrado.' });
     res.json({ message: 'Producto actualizado.' });
   } catch (error) {
     next(error);
@@ -262,7 +312,8 @@ router.put('/productos/:id', async (req, res, next) => {
 
 router.delete('/productos/:id', async (req, res, next) => {
   try {
-    await pool.query('DELETE FROM producto WHERE idProducto=?', [req.params.id]);
+    const [result] = await pool.query('DELETE FROM producto WHERE idProducto=? AND idTienda=?', [req.params.id, tenantId(req)]);
+    if (!result.affectedRows) return res.status(404).json({ error: 'Producto no encontrado.' });
     res.json({ message: 'Producto eliminado.' });
   } catch (error) {
     if (error.code === 'ER_ROW_IS_REFERENCED_2') return res.status(409).json({ error: 'No se puede eliminar porque tiene registros asociados.' });
@@ -273,8 +324,11 @@ router.delete('/productos/:id', async (req, res, next) => {
 function crudRoutes(base, table, idField, protectedDeleteMessage) {
   router.get(`/${base}`, async (req, res, next) => {
     try {
-      const where = table === 'cliente' ? 'WHERE activo = 1' : '';
-      const [rows] = await pool.query(`SELECT * FROM ${table} ${where} ORDER BY nombre`);
+      const active = table === 'cliente' ? 'AND activo=1' : '';
+      const [rows] = await pool.query(
+        `SELECT * FROM ${table} WHERE idTienda=? ${active} ORDER BY nombre`,
+        [tenantId(req)]
+      );
       res.json(rows);
     } catch (error) {
       next(error);
@@ -286,10 +340,14 @@ function crudRoutes(base, table, idField, protectedDeleteMessage) {
       requireFields(req.body, ['nombre']);
       const nombre = cleanText(req.body.nombre);
       const telefono = validatePhone(req.body.telefono);
+      const idTienda = tenantId(req);
       if (table === 'proveedor') {
-        await pool.query('INSERT INTO proveedor (nombre, telefono, direccion) VALUES (?, ?, ?)', [nombre, telefono, nullableText(req.body.direccion)]);
+        await pool.query(
+          'INSERT INTO proveedor (idTienda, nombre, telefono, direccion) VALUES (?, ?, ?, ?)',
+          [idTienda, nombre, telefono, nullableText(req.body.direccion)]
+        );
       } else {
-        await pool.query('INSERT INTO cliente (nombre, telefono) VALUES (?, ?)', [nombre, telefono]);
+        await pool.query('INSERT INTO cliente (idTienda, nombre, telefono) VALUES (?, ?, ?)', [idTienda, nombre, telefono]);
       }
       res.status(201).json({ message: 'Registro guardado.' });
     } catch (error) {
@@ -302,11 +360,20 @@ function crudRoutes(base, table, idField, protectedDeleteMessage) {
       requireFields(req.body, ['nombre']);
       const nombre = cleanText(req.body.nombre);
       const telefono = validatePhone(req.body.telefono);
+      const idTienda = tenantId(req);
+      let result;
       if (table === 'proveedor') {
-        await pool.query('UPDATE proveedor SET nombre=?, telefono=?, direccion=? WHERE idProveedor=?', [nombre, telefono, nullableText(req.body.direccion), req.params.id]);
+        [result] = await pool.query(
+          'UPDATE proveedor SET nombre=?, telefono=?, direccion=? WHERE idProveedor=? AND idTienda=?',
+          [nombre, telefono, nullableText(req.body.direccion), req.params.id, idTienda]
+        );
       } else {
-        await pool.query('UPDATE cliente SET nombre=?, telefono=? WHERE idCliente=?', [nombre, telefono, req.params.id]);
+        [result] = await pool.query(
+          'UPDATE cliente SET nombre=?, telefono=? WHERE idCliente=? AND idTienda=?',
+          [nombre, telefono, req.params.id, idTienda]
+        );
       }
+      if (!result.affectedRows) return res.status(404).json({ error: 'Registro no encontrado.' });
       res.json({ message: 'Registro actualizado.' });
     } catch (error) {
       next(error);
@@ -318,13 +385,17 @@ function crudRoutes(base, table, idField, protectedDeleteMessage) {
       if (table === 'cliente') {
         await requireAdminPassword(req);
         const [result] = await pool.query(
-          'UPDATE cliente SET activo=0, eliminadoEn=NOW() WHERE idCliente=? AND activo=1',
-          [req.params.id]
+          'UPDATE cliente SET activo=0, eliminadoEn=NOW() WHERE idCliente=? AND idTienda=? AND activo=1',
+          [req.params.id, tenantId(req)]
         );
         if (!result.affectedRows) return res.status(404).json({ error: 'Cliente no encontrado o ya está oculto.' });
         return res.json({ message: 'Cliente ocultado. El historial se conserva.' });
       }
-      await pool.query(`DELETE FROM ${table} WHERE ${idField}=?`, [req.params.id]);
+      const [result] = await pool.query(
+        `DELETE FROM ${table} WHERE ${idField}=? AND idTienda=?`,
+        [req.params.id, tenantId(req)]
+      );
+      if (!result.affectedRows) return res.status(404).json({ error: 'Registro no encontrado.' });
       res.json({ message: 'Registro eliminado.' });
     } catch (error) {
       if (error.status) return res.status(error.status).json({ error: error.message });
@@ -336,7 +407,10 @@ function crudRoutes(base, table, idField, protectedDeleteMessage) {
 
 router.get('/clientes/ocultos', async (req, res, next) => {
   try {
-    const [rows] = await pool.query('SELECT * FROM cliente WHERE activo = 0 ORDER BY eliminadoEn DESC, nombre');
+    const [rows] = await pool.query(
+      'SELECT * FROM cliente WHERE idTienda=? AND activo=0 ORDER BY eliminadoEn DESC, nombre',
+      [tenantId(req)]
+    );
     res.json(rows);
   } catch (error) {
     next(error);
@@ -347,8 +421,8 @@ router.patch('/clientes/:id/restaurar', async (req, res, next) => {
   try {
     await requireAdminPassword(req);
     const [result] = await pool.query(
-      'UPDATE cliente SET activo=1, eliminadoEn=NULL WHERE idCliente=? AND activo=0',
-      [req.params.id]
+      'UPDATE cliente SET activo=1, eliminadoEn=NULL WHERE idCliente=? AND idTienda=? AND activo=0',
+      [req.params.id, tenantId(req)]
     );
     if (!result.affectedRows) return res.status(404).json({ error: 'Cliente oculto no encontrado.' });
     res.json({ message: 'Cliente restaurado.' });
@@ -361,7 +435,7 @@ router.patch('/clientes/:id/restaurar', async (req, res, next) => {
 crudRoutes('clientes', 'cliente', 'idCliente', 'No se puede eliminar el cliente porque tiene ventas o fiados asociados.');
 crudRoutes('proveedores', 'proveedor', 'idProveedor', 'No se puede eliminar el proveedor porque tiene compras o productos asociados.');
 
-async function validateItems(connection, items, type) {
+async function validateItems(connection, items, type, idTienda) {
   if (!Array.isArray(items) || items.length === 0) {
     const error = new Error('Debe agregar al menos un producto.');
     error.status = 400;
@@ -383,7 +457,10 @@ async function validateItems(connection, items, type) {
       error.status = 400;
       throw error;
     }
-    const [rows] = await connection.query(`${productSelect('WHERE p.idProducto=?')} FOR UPDATE`, [item.idProducto]);
+    const [rows] = await connection.query(
+      `${productSelect('WHERE p.idProducto=? AND p.idTienda=?')} FOR UPDATE`,
+      [item.idProducto, idTienda]
+    );
     if (rows.length === 0) {
       const error = new Error('Producto no encontrado.');
       error.status = 404;
@@ -417,26 +494,39 @@ async function validateItems(connection, items, type) {
 
 router.post('/ventas', async (req, res, next) => {
   try {
+    const idTienda = tenantId(req);
     const tipo = req.body.tipo === 'fiada' ? 'fiada' : 'pagada';
     if (tipo === 'fiada' && !req.body.idCliente) return res.status(400).json({ error: 'Una venta fiada debe tener cliente registrado.' });
     const result = await runTransaction(async (connection) => {
-      const items = await validateItems(connection, req.body.items, 'venta');
+      if (req.body.idCliente) {
+        await requireTenantRecord(connection, 'cliente', 'idCliente', req.body.idCliente, idTienda, 'AND activo=1');
+      }
+      const items = await validateItems(connection, req.body.items, 'venta', idTienda);
       const total = items.reduce((sum, item) => sum + item.subtotal, 0);
-      const [venta] = await connection.query('INSERT INTO venta (total, tipo, idCliente) VALUES (?, ?, ?)', [total, tipo, req.body.idCliente || null]);
+      const [venta] = await connection.query(
+        'INSERT INTO venta (idTienda, total, tipo, idCliente) VALUES (?, ?, ?, ?)',
+        [idTienda, total, tipo, req.body.idCliente || null]
+      );
       for (const item of items) {
         await connection.query(
           `INSERT INTO detalleVenta
-           (idVenta, idProducto, cantidad, precioVenta, costoUnitario, subtotal, subtotalCosto, ganancia, presentacionVenta, cantidadEquivalenteUnidades)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-          [venta.insertId, item.product.idProducto, item.cantidad, item.precio, item.costoUnitario, item.subtotal, item.subtotalCosto, item.ganancia, item.presentation, item.unidades]
+           (idTienda, idVenta, idProducto, cantidad, precioVenta, costoUnitario, subtotal, subtotalCosto, ganancia, presentacionVenta, cantidadEquivalenteUnidades)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          [idTienda, venta.insertId, item.product.idProducto, item.cantidad, item.precio, item.costoUnitario, item.subtotal, item.subtotalCosto, item.ganancia, item.presentation, item.unidades]
         );
-        await connection.query('UPDATE producto SET stockUnidadesTotal = stockUnidadesTotal - ?, stock = stock - ? WHERE idProducto=?', [item.unidades, item.unidades, item.product.idProducto]);
+        const [stockUpdate] = await connection.query(
+          `UPDATE producto
+           SET stockUnidadesTotal=stockUnidadesTotal-?, stock=stock-?
+           WHERE idProducto=? AND idTienda=? AND stockUnidadesTotal>=?`,
+          [item.unidades, item.unidades, item.product.idProducto, idTienda, item.unidades]
+        );
+        if (!stockUpdate.affectedRows) throw notFound('Producto no encontrado o stock insuficiente.');
       }
       let idFiado = null;
       if (tipo === 'fiada') {
         const [fiado] = await connection.query(
-          'INSERT INTO fiado (idCliente, idVenta, fechaInicio, totalFiado, totalPagado, saldoPendiente, estado) VALUES (?, ?, CURDATE(), ?, 0, ?, ?)',
-          [req.body.idCliente, venta.insertId, total, total, 'pendiente']
+          'INSERT INTO fiado (idTienda, idCliente, idVenta, fechaInicio, totalFiado, totalPagado, saldoPendiente, estado) VALUES (?, ?, ?, CURDATE(), ?, 0, ?, ?)',
+          [idTienda, req.body.idCliente, venta.insertId, total, total, 'pendiente']
         );
         idFiado = fiado.insertId;
       }
@@ -454,11 +544,12 @@ router.get('/ventas', async (req, res, next) => {
       SELECT v.*, COALESCE(c.nombre, 'CLIENTE OCASIONAL') AS cliente,
         f.idFiado, f.saldoPendiente, f.estado AS estadoFiado
       FROM venta v
-      LEFT JOIN cliente c ON c.idCliente = v.idCliente
-      LEFT JOIN fiado f ON f.idVenta = v.idVenta
+      LEFT JOIN cliente c ON c.idCliente=v.idCliente AND c.idTienda=v.idTienda
+      LEFT JOIN fiado f ON f.idVenta=v.idVenta AND f.idTienda=v.idTienda
+      WHERE v.idTienda=?
       ORDER BY v.fecha DESC
       LIMIT 300
-    `);
+    `, [tenantId(req)]);
     res.json(rows);
   } catch (error) {
     next(error);
@@ -467,28 +558,29 @@ router.get('/ventas', async (req, res, next) => {
 
 router.get('/ventas/:id', async (req, res, next) => {
   try {
+    const idTienda = tenantId(req);
     const [[ventas], [detalle], [pagos]] = await Promise.all([
       pool.query(`
         SELECT v.*, COALESCE(c.nombre, 'CLIENTE OCASIONAL') AS cliente,
           f.idFiado, f.totalFiado, f.totalPagado, f.saldoPendiente, f.estado AS estadoFiado
         FROM venta v
-        LEFT JOIN cliente c ON c.idCliente = v.idCliente
-        LEFT JOIN fiado f ON f.idVenta = v.idVenta
-        WHERE v.idVenta=?
-      `, [req.params.id]),
+        LEFT JOIN cliente c ON c.idCliente=v.idCliente AND c.idTienda=v.idTienda
+        LEFT JOIN fiado f ON f.idVenta=v.idVenta AND f.idTienda=v.idTienda
+        WHERE v.idVenta=? AND v.idTienda=?
+      `, [req.params.id, idTienda]),
       pool.query(`
         SELECT d.*, p.nombre, p.unidadMedida, p.categoria
         FROM detalleVenta d
-        JOIN producto p ON p.idProducto=d.idProducto
-        WHERE d.idVenta=?
-      `, [req.params.id]),
+        JOIN producto p ON p.idProducto=d.idProducto AND p.idTienda=d.idTienda
+        WHERE d.idVenta=? AND d.idTienda=?
+      `, [req.params.id, idTienda]),
       pool.query(`
         SELECT pf.*
         FROM pagoFiado pf
-        JOIN fiado f ON f.idFiado=pf.idFiado
-        WHERE f.idVenta=?
+        JOIN fiado f ON f.idFiado=pf.idFiado AND f.idTienda=pf.idTienda
+        WHERE f.idVenta=? AND f.idTienda=? AND pf.idTienda=?
         ORDER BY pf.fechaPago DESC
-      `, [req.params.id])
+      `, [req.params.id, idTienda, idTienda])
     ]);
     if (!ventas.length) return res.status(404).json({ error: 'Venta no encontrada.' });
     res.json({ venta: ventas[0], detalle, pagos });
@@ -499,22 +591,30 @@ router.get('/ventas/:id', async (req, res, next) => {
 
 router.post('/compras', async (req, res, next) => {
   try {
+    const idTienda = tenantId(req);
     const result = await runTransaction(async (connection) => {
-      const items = await validateItems(connection, req.body.items, 'compra');
+      if (req.body.idProveedor) {
+        await requireTenantRecord(connection, 'proveedor', 'idProveedor', req.body.idProveedor, idTienda);
+      }
+      const items = await validateItems(connection, req.body.items, 'compra', idTienda);
       const total = items.reduce((sum, item) => sum + item.subtotal, 0);
-      const [compra] = await connection.query('INSERT INTO compra (total, idProveedor) VALUES (?, ?)', [total, req.body.idProveedor || null]);
+      const [compra] = await connection.query(
+        'INSERT INTO compra (idTienda, total, idProveedor) VALUES (?, ?, ?)',
+        [idTienda, total, req.body.idProveedor || null]
+      );
       for (const item of items) {
         const costoUnitario = item.unidades > 0 ? item.subtotal / item.unidades : 0;
         await connection.query(
           `INSERT INTO detalleCompra
-           (idCompra, idProducto, cantidad, precioCompra, subtotal, presentacionCompra, cantidadEquivalenteUnidades)
-           VALUES (?, ?, ?, ?, ?, ?, ?)`,
-          [compra.insertId, item.product.idProducto, item.cantidad, item.price || item.precio, item.subtotal, item.presentation, item.unidades]
+           (idTienda, idCompra, idProducto, cantidad, precioCompra, subtotal, presentacionCompra, cantidadEquivalenteUnidades)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+          [idTienda, compra.insertId, item.product.idProducto, item.cantidad, item.price || item.precio, item.subtotal, item.presentation, item.unidades]
         );
-        await connection.query(
-          'UPDATE producto SET stockUnidadesTotal = stockUnidadesTotal + ?, stock = stock + ?, ultimoPrecioCompra=? WHERE idProducto=?',
-          [item.unidades, item.unidades, costoUnitario, item.product.idProducto]
+        const [stockUpdate] = await connection.query(
+          'UPDATE producto SET stockUnidadesTotal=stockUnidadesTotal+?, stock=stock+?, ultimoPrecioCompra=? WHERE idProducto=? AND idTienda=?',
+          [item.unidades, item.unidades, costoUnitario, item.product.idProducto, idTienda]
         );
+        if (!stockUpdate.affectedRows) throw notFound('Producto no encontrado.');
       }
       return { idCompra: compra.insertId, total };
     });
@@ -531,8 +631,8 @@ router.post('/fiados', (req, res) => {
 router.get('/fiados', async (req, res, next) => {
   try {
     const { estado, idCliente, desde, hasta } = req.query;
-    const conditions = ['f.activo = 1'];
-    const params = [];
+    const conditions = ['f.idTienda=?', 'f.activo=1'];
+    const params = [tenantId(req)];
     if (estado) {
       conditions.push('f.estado=?');
       params.push(estado);
@@ -553,8 +653,8 @@ router.get('/fiados', async (req, res, next) => {
     const [rows] = await pool.query(`
       SELECT f.*, c.nombre AS cliente, v.fecha AS fechaVenta, v.total AS totalVenta
       FROM fiado f
-      JOIN cliente c ON c.idCliente=f.idCliente
-      LEFT JOIN venta v ON v.idVenta=f.idVenta
+      JOIN cliente c ON c.idCliente=f.idCliente AND c.idTienda=f.idTienda
+      LEFT JOIN venta v ON v.idVenta=f.idVenta AND v.idTienda=f.idTienda
       ${where}
       ORDER BY f.idFiado DESC
     `, params);
@@ -569,11 +669,11 @@ router.get('/fiados/activos', async (req, res, next) => {
     const [rows] = await pool.query(`
       SELECT f.*, c.nombre AS cliente, v.fecha AS fechaVenta
       FROM fiado f
-      JOIN cliente c ON c.idCliente=f.idCliente
-      LEFT JOIN venta v ON v.idVenta=f.idVenta
-      WHERE f.activo = 1 AND f.estado IN ('pendiente','parcial')
+      JOIN cliente c ON c.idCliente=f.idCliente AND c.idTienda=f.idTienda
+      LEFT JOIN venta v ON v.idVenta=f.idVenta AND v.idTienda=f.idTienda
+      WHERE f.idTienda=? AND f.activo=1 AND f.estado IN ('pendiente','parcial')
       ORDER BY f.idFiado DESC
-    `);
+    `, [tenantId(req)]);
     res.json(rows);
   } catch (error) {
     next(error);
@@ -585,11 +685,11 @@ router.get('/fiados/ocultos', async (req, res, next) => {
     const [rows] = await pool.query(`
       SELECT f.*, c.nombre AS cliente, v.fecha AS fechaVenta, v.total AS totalVenta
       FROM fiado f
-      JOIN cliente c ON c.idCliente=f.idCliente
-      LEFT JOIN venta v ON v.idVenta=f.idVenta
-      WHERE f.activo = 0
+      JOIN cliente c ON c.idCliente=f.idCliente AND c.idTienda=f.idTienda
+      LEFT JOIN venta v ON v.idVenta=f.idVenta AND v.idTienda=f.idTienda
+      WHERE f.idTienda=? AND f.activo=0
       ORDER BY f.eliminadoEn DESC, f.idFiado DESC
-    `);
+    `, [tenantId(req)]);
     res.json(rows);
   } catch (error) {
     next(error);
@@ -598,28 +698,32 @@ router.get('/fiados/ocultos', async (req, res, next) => {
 
 router.get('/fiados/:id', async (req, res, next) => {
   try {
+    const idTienda = tenantId(req);
     const [[fiados], [pagos], [detalleVenta], [detalleFiado]] = await Promise.all([
       pool.query(`
         SELECT f.*, c.nombre AS cliente, v.fecha AS fechaVenta, v.total AS totalVenta
         FROM fiado f
-        JOIN cliente c ON c.idCliente=f.idCliente
-        LEFT JOIN venta v ON v.idVenta=f.idVenta
-        WHERE f.idFiado=?
-      `, [req.params.id]),
-      pool.query('SELECT * FROM pagoFiado WHERE idFiado=? ORDER BY fechaPago DESC', [req.params.id]),
+        JOIN cliente c ON c.idCliente=f.idCliente AND c.idTienda=f.idTienda
+        LEFT JOIN venta v ON v.idVenta=f.idVenta AND v.idTienda=f.idTienda
+        WHERE f.idFiado=? AND f.idTienda=?
+      `, [req.params.id, idTienda]),
+      pool.query(
+        'SELECT * FROM pagoFiado WHERE idFiado=? AND idTienda=? ORDER BY fechaPago DESC',
+        [req.params.id, idTienda]
+      ),
       pool.query(`
         SELECT d.*, p.nombre, p.unidadMedida
         FROM detalleVenta d
-        JOIN fiado f ON f.idVenta=d.idVenta
-        JOIN producto p ON p.idProducto=d.idProducto
-        WHERE f.idFiado=?
-      `, [req.params.id]),
+        JOIN fiado f ON f.idVenta=d.idVenta AND f.idTienda=d.idTienda
+        JOIN producto p ON p.idProducto=d.idProducto AND p.idTienda=d.idTienda
+        WHERE f.idFiado=? AND f.idTienda=? AND d.idTienda=?
+      `, [req.params.id, idTienda, idTienda]),
       pool.query(`
         SELECT d.*, p.nombre, p.unidadMedida
         FROM detalleFiado d
-        JOIN producto p ON p.idProducto=d.idProducto
-        WHERE d.idFiado=?
-      `, [req.params.id])
+        JOIN producto p ON p.idProducto=d.idProducto AND p.idTienda=d.idTienda
+        WHERE d.idFiado=? AND d.idTienda=?
+      `, [req.params.id, idTienda])
     ]);
     if (!fiados.length) return res.status(404).json({ error: 'Fiado no encontrado.' });
     res.json({ fiado: fiados[0], pagos, detalle: detalleVenta.length ? detalleVenta : detalleFiado });
@@ -632,8 +736,8 @@ router.patch('/fiados/:id/restaurar', async (req, res, next) => {
   try {
     await requireAdminPassword(req);
     const [result] = await pool.query(
-      'UPDATE fiado SET activo=1, eliminadoEn=NULL WHERE idFiado=? AND activo=0',
-      [req.params.id]
+      'UPDATE fiado SET activo=1, eliminadoEn=NULL WHERE idFiado=? AND idTienda=? AND activo=0',
+      [req.params.id, tenantId(req)]
     );
     if (!result.affectedRows) return res.status(404).json({ error: 'Fiado oculto no encontrado.' });
     res.json({ message: 'Fiado restaurado.' });
@@ -647,8 +751,8 @@ router.delete('/fiados/:id', async (req, res, next) => {
   try {
     await requireAdminPassword(req);
     const [result] = await pool.query(
-      'UPDATE fiado SET activo=0, eliminadoEn=NOW() WHERE idFiado=? AND activo=1',
-      [req.params.id]
+      'UPDATE fiado SET activo=0, eliminadoEn=NOW() WHERE idFiado=? AND idTienda=? AND activo=1',
+      [req.params.id, tenantId(req)]
     );
     if (!result.affectedRows) return res.status(404).json({ error: 'Fiado no encontrado o ya está oculto.' });
     res.json({ message: 'Fiado ocultado. Los pagos e historial se conservan.' });
@@ -662,9 +766,13 @@ router.post('/pagos-fiado', async (req, res, next) => {
   try {
     requireFields(req.body, ['idFiado', 'monto']);
     const monto = asNumber(req.body.monto);
+    const idTienda = tenantId(req);
     if (monto <= 0) return res.status(400).json({ error: 'El pago debe ser mayor a cero.' });
     await runTransaction(async (connection) => {
-      const [rows] = await connection.query('SELECT * FROM fiado WHERE idFiado=? AND activo=1 FOR UPDATE', [req.body.idFiado]);
+      const [rows] = await connection.query(
+        'SELECT * FROM fiado WHERE idFiado=? AND idTienda=? AND activo=1 FOR UPDATE',
+        [req.body.idFiado, idTienda]
+      );
       if (rows.length === 0) {
         const error = new Error('Fiado no encontrado.');
         error.status = 404;
@@ -676,11 +784,17 @@ router.post('/pagos-fiado', async (req, res, next) => {
         error.status = 400;
         throw error;
       }
-      await connection.query('INSERT INTO pagoFiado (idFiado, monto, observacion) VALUES (?, ?, ?)', [req.body.idFiado, monto, nullableText(req.body.observacion)]);
+      await connection.query(
+        'INSERT INTO pagoFiado (idTienda, idFiado, monto, observacion) VALUES (?, ?, ?, ?)',
+        [idTienda, req.body.idFiado, monto, nullableText(req.body.observacion)]
+      );
       const totalPagado = asNumber(fiado.totalPagado) + monto;
       const saldo = Math.max(0, asNumber(fiado.totalFiado) - totalPagado);
       const estado = saldo === 0 ? 'pagado' : 'parcial';
-      await connection.query('UPDATE fiado SET totalPagado=?, saldoPendiente=?, estado=? WHERE idFiado=?', [totalPagado, saldo, estado, req.body.idFiado]);
+      await connection.query(
+        'UPDATE fiado SET totalPagado=?, saldoPendiente=?, estado=? WHERE idFiado=? AND idTienda=?',
+        [totalPagado, saldo, estado, req.body.idFiado, idTienda]
+      );
     });
     res.status(201).json({ message: 'Pago registrado.' });
   } catch (error) {
@@ -692,16 +806,18 @@ router.post('/pagos-fiado/cliente', async (req, res, next) => {
   try {
     requireFields(req.body, ['idCliente', 'monto']);
     const monto = asNumber(req.body.monto);
+    const idTienda = tenantId(req);
     if (monto <= 0) return res.status(400).json({ error: 'El pago debe ser mayor a cero.' });
 
     const result = await runTransaction(async (connection) => {
+      await requireTenantRecord(connection, 'cliente', 'idCliente', req.body.idCliente, idTienda);
       const [fiados] = await connection.query(
         `SELECT *
          FROM fiado
-         WHERE idCliente=? AND activo=1 AND estado IN ('pendiente','parcial')
+         WHERE idCliente=? AND idTienda=? AND activo=1 AND estado IN ('pendiente','parcial')
          ORDER BY fechaInicio ASC, idFiado ASC
          FOR UPDATE`,
-        [req.body.idCliente]
+        [req.body.idCliente, idTienda]
       );
       if (!fiados.length) {
         const error = new Error('El cliente no tiene deudas pendientes.');
@@ -727,16 +843,16 @@ router.post('/pagos-fiado/cliente', async (req, res, next) => {
         if (aplicado <= 0) continue;
 
         await connection.query(
-          'INSERT INTO pagoFiado (idFiado, monto, observacion) VALUES (?, ?, ?)',
-          [fiado.idFiado, aplicado, observacion]
+          'INSERT INTO pagoFiado (idTienda, idFiado, monto, observacion) VALUES (?, ?, ?, ?)',
+          [idTienda, fiado.idFiado, aplicado, observacion]
         );
 
         const totalPagado = asNumber(fiado.totalPagado) + aplicado;
         const saldo = Math.max(0, asNumber(fiado.totalFiado) - totalPagado);
         const estado = saldo === 0 ? 'pagado' : 'parcial';
         await connection.query(
-          'UPDATE fiado SET totalPagado=?, saldoPendiente=?, estado=? WHERE idFiado=?',
-          [totalPagado, saldo, estado, fiado.idFiado]
+          'UPDATE fiado SET totalPagado=?, saldoPendiente=?, estado=? WHERE idFiado=? AND idTienda=?',
+          [totalPagado, saldo, estado, fiado.idFiado, idTienda]
         );
 
         aplicaciones.push({ idFiado: fiado.idFiado, monto: aplicado, saldoPendiente: saldo, estado });
@@ -763,6 +879,7 @@ function gainRange(period, desde, hasta) {
 
 router.get('/reportes/:tipo', async (req, res, next) => {
   try {
+    const idTienda = tenantId(req);
     const { tipo } = req.params;
     const { desde, hasta, idProveedor, idCliente, estado, periodo } = req.query;
     const range = [desde || '1000-01-01', hasta || '9999-12-31'];
@@ -772,33 +889,37 @@ router.get('/reportes/:tipo', async (req, res, next) => {
 
     if (tipo === 'ventasDia' || tipo === 'ventasRango') {
       const dateWhere = tipo === 'ventasDia' ? 'DATE(v.fecha)=CURDATE()' : 'DATE(v.fecha) BETWEEN ? AND ?';
-      const params = tipo === 'ventasDia' ? [] : range;
+      const params = tipo === 'ventasDia' ? [idTienda] : [idTienda, ...range];
       [rows] = await pool.query(`
         SELECT v.idVenta, v.fecha, COALESCE(c.nombre, 'CLIENTE OCASIONAL') cliente, v.tipo, v.total, COALESCE(f.estado, 'pagado') estado
         FROM venta v
-        LEFT JOIN cliente c ON c.idCliente=v.idCliente
-        LEFT JOIN fiado f ON f.idVenta=v.idVenta
-        WHERE ${dateWhere}
+        LEFT JOIN cliente c ON c.idCliente=v.idCliente AND c.idTienda=v.idTienda
+        LEFT JOIN fiado f ON f.idVenta=v.idVenta AND f.idTienda=v.idTienda
+        WHERE v.idTienda=? AND ${dateWhere}
         ORDER BY v.fecha DESC
       `, params);
       chart = { type: 'bar', labels: rows.map((r) => r.fecha), values: rows.map((r) => Number(r.total)) };
     } else if (tipo === 'bajoStock') {
-      [rows] = await pool.query(`${productSelect('WHERE p.stockUnidadesTotal < p.stockMinimo')} ORDER BY p.nombre`);
+      [rows] = await pool.query(
+        `${productSelect('WHERE p.idTienda=? AND p.stockUnidadesTotal < p.stockMinimo')} ORDER BY p.nombre`,
+        [idTienda]
+      );
       chart = { type: 'bar', labels: rows.map((r) => r.nombre), values: rows.map((r) => Number(r.stockUnidadesTotal)) };
     } else if (tipo === 'masVendidos') {
       [rows] = await pool.query(`
         SELECT p.nombre, p.categoria, SUM(d.cantidadEquivalenteUnidades) unidadesVendidas, SUM(d.subtotal) totalVendido
         FROM detalleVenta d
-        JOIN producto p ON p.idProducto=d.idProducto
-        GROUP BY p.idProducto
+        JOIN producto p ON p.idProducto=d.idProducto AND p.idTienda=d.idTienda
+        WHERE d.idTienda=?
+        GROUP BY p.idTienda, p.idProducto
         ORDER BY unidadesVendidas DESC
         LIMIT 20
-      `);
+      `, [idTienda]);
       chart = { type: 'bar', labels: rows.map((r) => r.nombre), values: rows.map((r) => Number(r.unidadesVendidas)) };
     } else if (['fiadosPendientes', 'fiadosParciales', 'fiadosPagados', 'fiados'].includes(tipo)) {
       const requestedState = tipo === 'fiadosPendientes' ? 'pendiente' : tipo === 'fiadosParciales' ? 'parcial' : tipo === 'fiadosPagados' ? 'pagado' : estado;
-      const conditions = [];
-      const params = [];
+      const conditions = ['f.idTienda=?'];
+      const params = [idTienda];
       if (requestedState) { conditions.push('f.estado=?'); params.push(requestedState); }
       if (idCliente) { conditions.push('f.idCliente=?'); params.push(idCliente); }
       if (desde) { conditions.push('DATE(COALESCE(v.fecha, f.fechaInicio)) >= ?'); params.push(desde); }
@@ -807,8 +928,8 @@ router.get('/reportes/:tipo', async (req, res, next) => {
       [rows] = await pool.query(`
         SELECT f.*, c.nombre cliente, v.fecha fechaVenta
         FROM fiado f
-        JOIN cliente c ON c.idCliente=f.idCliente
-        LEFT JOIN venta v ON v.idVenta=f.idVenta
+        JOIN cliente c ON c.idCliente=f.idCliente AND c.idTienda=f.idTienda
+        LEFT JOIN venta v ON v.idVenta=f.idVenta AND v.idTienda=f.idTienda
         ${where}
         ORDER BY f.fechaInicio DESC
       `, params);
@@ -819,19 +940,20 @@ router.get('/reportes/:tipo', async (req, res, next) => {
       [rows] = await pool.query(`
         SELECT p.idPagoFiado, p.fechaPago, c.nombre cliente, p.monto, p.observacion, f.estado, f.saldoPendiente
         FROM pagoFiado p
-        JOIN fiado f ON f.idFiado=p.idFiado
-        JOIN cliente c ON c.idCliente=f.idCliente
+        JOIN fiado f ON f.idFiado=p.idFiado AND f.idTienda=p.idTienda
+        JOIN cliente c ON c.idCliente=f.idCliente AND c.idTienda=f.idTienda
+        WHERE p.idTienda=?
         ORDER BY p.fechaPago DESC
-      `);
+      `, [idTienda]);
       chart = { type: 'bar', labels: rows.map((r) => r.fechaPago), values: rows.map((r) => Number(r.monto)) };
     } else if (tipo === 'compras' || tipo === 'comprasProveedor') {
-      const conditions = ['DATE(co.fecha) BETWEEN ? AND ?'];
-      const params = [...range];
+      const conditions = ['co.idTienda=?', 'DATE(co.fecha) BETWEEN ? AND ?'];
+      const params = [idTienda, ...range];
       if (tipo === 'comprasProveedor' && idProveedor) { conditions.push('co.idProveedor=?'); params.push(idProveedor); }
       [rows] = await pool.query(`
         SELECT co.idCompra, co.fecha, COALESCE(pr.nombre, 'SIN PROVEEDOR') proveedor, co.total
         FROM compra co
-        LEFT JOIN proveedor pr ON pr.idProveedor=co.idProveedor
+        LEFT JOIN proveedor pr ON pr.idProveedor=co.idProveedor AND pr.idTienda=co.idTienda
         WHERE ${conditions.join(' AND ')}
         ORDER BY co.fecha DESC
       `, params);
@@ -841,11 +963,11 @@ router.get('/reportes/:tipo', async (req, res, next) => {
       [rows] = await pool.query(`
         SELECT DATE(v.fecha) fecha, SUM(d.subtotal) totalVendido, SUM(d.subtotalCosto) totalCosto, SUM(d.ganancia) gananciaNeta
         FROM detalleVenta d
-        JOIN venta v ON v.idVenta=d.idVenta
-        WHERE ${where}
+        JOIN venta v ON v.idVenta=d.idVenta AND v.idTienda=d.idTienda
+        WHERE d.idTienda=? AND v.idTienda=? AND ${where}
         GROUP BY DATE(v.fecha)
         ORDER BY fecha
-      `, params);
+      `, [idTienda, idTienda, ...params]);
       summary = rows.reduce((acc, row) => {
         acc.totalVendido += Number(row.totalVendido || 0);
         acc.totalCosto += Number(row.totalCosto || 0);
@@ -864,7 +986,11 @@ router.get('/reportes/:tipo', async (req, res, next) => {
 });
 
 router.use((err, req, res, next) => {
-  res.status(err.status || 500).json({ error: err.message || 'Ocurrio un error.' });
+  const status = err.status || 500;
+  if (status >= 500) console.error(err);
+  res.status(status).json({
+    error: status >= 500 ? 'Ocurrio un error interno.' : err.message
+  });
 });
 
 module.exports = router;

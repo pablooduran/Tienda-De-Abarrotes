@@ -18,6 +18,7 @@ try {
 
 const pool = require('./config/db');
 const { requireAuth } = require('./middleware/auth');
+const { requireTenant } = require('./middleware/tenant');
 const apiRoutes = require('./routes/api');
 const authRoutes = require('./routes/auth');
 
@@ -60,7 +61,7 @@ app.use(session({
 }));
 
 app.use('/auth', authRoutes);
-app.use('/api', requireAuth, apiRoutes);
+app.use('/api', requireAuth, requireTenant, apiRoutes);
 
 app.get('/app.html', requireAuth, (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'app.html'));
@@ -68,9 +69,8 @@ app.get('/app.html', requireAuth, (req, res) => {
 
 app.use(express.static(path.join(__dirname, 'public')));
 
-app.get('/', (req, res) => {
-  if (!req.session.admin) return res.redirect('/login.html');
-  return res.sendFile(path.join(__dirname, 'public', 'app.html'));
+app.get('/', requireAuth, (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'app.html'));
 });
 
 app.use((req, res) => {

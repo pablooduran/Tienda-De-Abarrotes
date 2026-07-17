@@ -140,4 +140,17 @@ No ejecute `db:init`, `db:migrate`, `db:create-admin` ni `db:seed-demo` contra p
 
 ## Preparacion multi-tienda
 
-La migracion `004` prepara la estructura y asocia los datos existentes a "Tienda Deisy". Las columnas `idTienda` permanecen temporalmente anulables para no romper el backend actual. Hasta adaptar el backend en la fase siguiente, evite crear ventas, compras, productos, clientes, proveedores, fiados o pagos nuevos despues de aplicar `004`, porque esas escrituras aun no envian la tienda. El aislamiento en autenticacion, consultas, transacciones y reportes corresponde a la fase siguiente; planes y catalogo maestro aun no estan implementados.
+La migracion `004` prepara la estructura y asocia los datos existentes a "Tienda Deisy". El backend obtiene `idTienda` exclusivamente desde la sesion y lo aplica a productos, clientes, proveedores, ventas, compras, fiados, pagos, dashboard y reportes. El navegador no envia ni recibe `idTienda`.
+
+Las APIs operativas aceptan solamente sesiones con rol `dueno_tienda` y una tienda valida. El rol `superadmin` queda reservado y bloqueado hasta que exista un flujo explicito para seleccionar tienda. Planes y catalogo maestro aun no estan implementados.
+
+### Prueba local de aislamiento
+
+Con el servidor local iniciado en otra terminal, ejecute:
+
+```powershell
+$env:APP_ENV='local'
+npm.cmd run test:tenant-isolation
+```
+
+La prueba exige una base local cuyo nombre contenga `prueba` o `test`. Crea temporalmente una segunda tienda, verifica sesiones independientes, IDs cruzados, ventas, compras, fiados, pagos, dashboard y reportes, y elimina solamente los datos de prueba que genero.
