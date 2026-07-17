@@ -1,4 +1,13 @@
 .env
+.env.*
+!.env.example
 node_modules/
 database/backups/
 *.log
+.DS_Store
+Thumbs.db
+*.tmp
+*.bak
+*.swp
+tmp/
+coverage/

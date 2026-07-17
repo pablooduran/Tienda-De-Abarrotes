@@ -3,8 +3,18 @@ const express = require('express');
 const session = require('express-session');
 const MySQLSessionStore = require('express-mysql-session')(session);
 const helmet = require('helmet');
-const bcrypt = require('bcryptjs');
-require('dotenv').config();
+
+const { databaseConfig, sessionSecret } = require('./config/env');
+let appDatabaseConfig;
+let appSessionSecret;
+try {
+  appDatabaseConfig = databaseConfig();
+  appSessionSecret = sessionSecret();
+} catch (error) {
+  console.error('No se pudo iniciar la aplicacion por una configuracion incompleta.');
+  console.error(error.message);
+  process.exit(1);
+}
 
 const pool = require('./config/db');
 const { requireAuth } = require('./middleware/auth');
@@ -13,15 +23,8 @@ const authRoutes = require('./routes/auth');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
-const useSsl = String(process.env.DB_SSL || '').toLowerCase() === 'true'
-  || /aivencloud\.com$/i.test(process.env.DB_HOST || '');
 const sessionStore = new MySQLSessionStore({
-  host: process.env.DB_HOST,
-  port: Number(process.env.DB_PORT || 3306),
-  user: process.env.DB_USER,
-  password: process.env.DB_PASSWORD,
-  database: process.env.DB_NAME,
-  ssl: useSsl ? { rejectUnauthorized: false } : undefined,
+  ...appDatabaseConfig,
   createDatabaseTable: true,
   schema: {
     tableName: 'sessions',
@@ -45,7 +48,7 @@ app.use(express.json());
 app.use(session({
   store: sessionStore,
   name: 'tienda.sid',
-  secret: process.env.SESSION_SECRET || 'cambia_esta_clave',
+  secret: appSessionSecret,
   resave: false,
   saveUninitialized: false,
   cookie: {
@@ -79,31 +82,14 @@ app.use((err, req, res, next) => {
   res.status(500).json({ error: 'Ocurrio un error interno.' });
 });
 
-async function ensureDefaultAdmin() {
-  const [rows] = await pool.query('SELECT idAdministrador, password FROM administrador WHERE usuario = ?', ['admin']);
-  const hash = await bcrypt.hash('admin123', 10);
-
-  if (rows.length === 0) {
-    await pool.query('INSERT INTO administrador (usuario, password) VALUES (?, ?)', ['admin', hash]);
-    return;
-  }
-
-  // Mantiene util el usuario inicial aunque el SQL se importe con un hash de ejemplo.
-  const validDefaultPassword = await bcrypt.compare('admin123', rows[0].password).catch(() => false);
-  if (!validDefaultPassword) {
-    await pool.query('UPDATE administrador SET password = ? WHERE usuario = ?', [hash, 'admin']);
-  }
-}
-
 async function startServer() {
   try {
     await pool.query('SELECT 1');
-    await ensureDefaultAdmin();
     app.listen(PORT, () => {
       console.log(`Sistema iniciado en puerto ${PORT}`);
     });
   } catch (error) {
-    console.error('No se pudo conectar a MySQL. Revise el archivo .env y la base de datos.');
+    console.error('No se pudo iniciar la aplicacion. Revise la configuracion y la base de datos.');
     console.error(error.message);
     process.exit(1);
   }

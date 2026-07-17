@@ -13,7 +13,9 @@ CREATE TABLE IF NOT EXISTS administrador (
 CREATE TABLE IF NOT EXISTS cliente (
   idCliente INT AUTO_INCREMENT PRIMARY KEY,
   nombre VARCHAR(100) NOT NULL,
-  telefono VARCHAR(30) NULL
+  telefono VARCHAR(30) NULL,
+  activo TINYINT(1) NOT NULL DEFAULT 1,
+  eliminadoEn DATETIME NULL
 );
 
 CREATE TABLE IF NOT EXISTS proveedor (
@@ -96,6 +98,8 @@ CREATE TABLE IF NOT EXISTS fiado (
   totalPagado DECIMAL(10,2) NOT NULL DEFAULT 0,
   saldoPendiente DECIMAL(10,2) NOT NULL DEFAULT 0,
   estado ENUM('pendiente','parcial','pagado') NOT NULL DEFAULT 'pendiente',
+  activo TINYINT(1) NOT NULL DEFAULT 1,
+  eliminadoEn DATETIME NULL,
   FOREIGN KEY (idCliente) REFERENCES cliente(idCliente),
   FOREIGN KEY (idVenta) REFERENCES venta(idVenta)
 );
@@ -120,19 +124,4 @@ CREATE TABLE IF NOT EXISTS pagoFiado (
   FOREIGN KEY (idFiado) REFERENCES fiado(idFiado)
 );
 
-INSERT INTO administrador (usuario, password)
-VALUES ('admin', '$2a$10$7EqJtq98hPqEX7fNZaFWoOeQ332zUhl4WumDsN9JYXl4q4E9vE9h2')
-ON DUPLICATE KEY UPDATE usuario = usuario;
-
-INSERT INTO proveedor (nombre, telefono, direccion) VALUES
-('Proveedor general', NULL, NULL)
-ON DUPLICATE KEY UPDATE nombre = nombre;
-
-INSERT INTO producto (nombre, idProveedor, categoria, unidadMedida, unidadesPorPaquete, paquetesPorCaja, precioVenta, stock, stockMinimo, stockUnidadesTotal, ultimoPrecioCompra, permiteVentaPorPaquete, permiteVentaPorUnidad) VALUES
-('ARROZ', 1, 'ABARROTES', 'gramo', 1, 1, 0.01, 25000, 5000, 25000, 0.008, FALSE, TRUE),
-('ACEITE', 1, 'ABARROTES', 'mililitro', 1, 1, 0.02, 12000, 3000, 12000, 0.015, FALSE, TRUE),
-('SHAMPOO', 1, 'ASEO PERSONAL', 'unidad', 1, 1, 18.00, 8, 2, 8, 12.00, FALSE, TRUE),
-('BEBIDA GASEOSA', 1, 'BEBIDAS', 'unidad', 1, 1, 10.00, 24, 6, 24, 7.00, FALSE, TRUE),
-('PAPEL HIGIENICO', 1, 'ASEO PERSONAL', 'unidad', 12, 4, 2.00, 120, 24, 120, 1.20, TRUE, TRUE),
-('SNACKS', 1, 'SNACKS', 'bolsa', 1, 1, 5.00, 30, 8, 30, 3.00, FALSE, TRUE)
-ON DUPLICATE KEY UPDATE nombre = nombre;
+-- Este archivo crea solamente la estructura. No crea administradores ni datos demo.

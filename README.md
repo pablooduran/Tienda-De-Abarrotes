@@ -1,162 +1,119 @@
-# Sistema web para tienda de abarrotes familiar
+# Sistema web para tienda de abarrotes
 
-Sistema con Node.js, Express, MySQL y frontend en HTML, CSS y JavaScript puro. Permite administrar productos, clientes, proveedores, compras, ventas pagadas, ventas fiadas, pagos parciales, historiales y reportes.
+Sistema con Node.js, Express, MySQL y frontend en HTML, CSS y JavaScript. Administra productos, clientes, proveedores, compras, ventas pagadas o fiadas, pagos parciales, stock, historiales, dashboard y reportes.
 
-## Estructura
+## Estructura principal
 
-- `server.js`: inicio del servidor Express, sesiones y rutas principales.
-- `config/db.js`: conexion a MySQL usando variables de entorno.
-- `middleware/auth.js`: valida que el administrador haya iniciado sesion.
-- `routes/auth.js`: login, estado de sesion y cierre de sesion.
-- `routes/api.js`: API de productos, clientes, proveedores, ventas, compras, fiados, pagos y reportes.
+- `server.js`: servidor Express, sesiones y rutas principales.
+- `config/`: validacion de configuracion y conexion MySQL.
+- `middleware/`: proteccion de rutas autenticadas.
+- `routes/`: autenticacion y API del negocio.
 - `public/`: interfaz web.
-- `database/tienda_abarrotes.sql`: instalacion completa de la base de datos.
-- `database/migrations/001_mejoras_tienda.sql`: migracion segura para bases existentes.
-- `database/migrations/002_mejoras_stock_reportes.sql`: stock avanzado, ganancias, filtros y graficos.
-- `.env.example`: ejemplo de configuracion.
+- `scripts/`: inicializacion, migraciones y cargas opcionales.
+- `database/tienda_abarrotes.sql`: estructura completa para una base nueva.
+- `database/migrations/`: cambios incrementales para bases existentes.
 
 ## Requisitos
 
 - Node.js 18 o superior.
 - MySQL 5.7/8.0 o MariaDB compatible.
+- Una base local o de prueba para validar cambios antes de produccion.
 
-## Instalacion
+## Configuracion local
 
-1. Instalar dependencias:
+1. Instale dependencias:
 
 ```bash
 npm install
 ```
 
-2. Crear `.env` desde `.env.example` y configurar MySQL:
+2. Cree su configuracion local tomando `.env.example` como referencia. Use valores propios y no publique ese archivo.
 
-```env
-DB_HOST=localhost
-DB_USER=usuario_mysql
-DB_PASSWORD=clave_mysql
-DB_NAME=tienda_abarrotes
-DB_PORT=3306
-SESSION_SECRET=una_clave_larga_y_segura
-PORT=3000
-```
+Variables obligatorias para iniciar la aplicacion:
 
-## Base de datos nueva
+- `DB_HOST`
+- `DB_USER`
+- `DB_PASSWORD`
+- `DB_NAME`
+- `DB_PORT`
+- `SESSION_SECRET`
 
-Importar el archivo completo:
+`SESSION_SECRET` debe tener al menos 32 caracteres. `DB_SSL=true` habilita SSL y los hosts de Aiven tambien se detectan automaticamente. La aplicacion se detiene con un mensaje claro si falta una variable obligatoria y nunca imprime contrasenas ni hashes.
 
-```bash
-mysql -u usuario_mysql -p < database/tienda_abarrotes.sql
-```
+## Comandos de base de datos
 
-## Actualizar una base existente
+Cada accion esta separada para evitar cambios inesperados.
 
-Antes de modificar la base, haga un respaldo:
-
-```bash
-mysqldump -u usuario_mysql -p tienda_abarrotes > backup_tienda_abarrotes_antes_mejoras.sql
-```
-
-Si usa phpMyAdmin, entre a la base, use **Exportar**, seleccione formato SQL y guarde el archivo.
-
-Luego ejecute las migraciones en orden:
-
-```bash
-mysql -u usuario_mysql -p tienda_abarrotes < database/migrations/001_mejoras_tienda.sql
-mysql -u usuario_mysql -p tienda_abarrotes < database/migrations/002_mejoras_stock_reportes.sql
-```
-
-La migracion conserva `detalleFiado` para consultar fiados antiguos. Los nuevos fiados se crean desde una venta fiada y se relacionan con `venta`.
-
-## Inicializar base en Render/Aiven
-
-Si la base esta vacia o faltan tablas como `administrador`, configure las variables `DB_HOST`, `DB_USER`, `DB_PASSWORD`, `DB_NAME` y `DB_PORT`, y ejecute:
+### Crear estructura inicial
 
 ```bash
 npm run db:init
 ```
 
-El script crea tablas con `CREATE TABLE IF NOT EXISTS`, aplica migraciones disponibles, crea el administrador inicial si no existe y no borra datos existentes. Para Aiven, el script intenta usar SSL automaticamente cuando el host termina en `aivencloud.com`. Tambien puede forzarlo con:
+Este comando usa `CREATE TABLE IF NOT EXISTS`, verifica la estructura actual y no ejecuta migraciones, no crea administradores, no carga demostraciones y no modifica registros comerciales. Debe usarse sobre una base local o nueva. Si una base antigua necesita columnas, el comando se detiene e indica que deben aplicarse migraciones.
 
-```env
-DB_SSL=true
-```
-
-Usuario inicial por defecto:
-
-- Usuario: `admin`
-- Contrasena: `admin123`
-
-Puede cambiar esos valores antes de ejecutar el inicializador usando:
-
-```env
-ADMIN_USER=admin
-ADMIN_PASSWORD=una_clave_temporal_segura
-```
-
-## Administrador inicial
-
-- Usuario: `admin`
-- Contrasena: `admin123`
-
-El servidor verifica este usuario al iniciar y lo crea o corrige si hace falta.
-
-## Ejecutar
-
-Desarrollo:
+### Aplicar migraciones
 
 ```bash
-npm run dev
+npm run db:migrate
 ```
 
-Produccion o prueba simple:
+Este comando es independiente y explicito. Registra migraciones aplicadas en `schema_migrations` para no repetirlas. Antes de usarlo sobre una base con datos, haga un respaldo y pruebe primero sobre una copia local.
+
+Migraciones actuales, en orden:
+
+1. `001_mejoras_tienda.sql`: proveedor por producto, categorias, stock entero y ventas fiadas.
+2. `002_mejoras_stock_reportes.sql`: presentaciones, stock avanzado, costos y ganancias.
+3. `003_borrado_logico.sql`: borrado logico de clientes y fiados.
+
+### Crear el primer administrador
+
+Defina temporalmente `ADMIN_USER` y `ADMIN_PASSWORD` en su entorno local. La contrasena debe tener al menos 12 caracteres. Luego ejecute:
+
+```bash
+npm run db:create-admin
+```
+
+El script solo crea el administrador si el usuario no existe. Nunca reemplaza una contrasena existente y no imprime contrasenas ni hashes. El servidor no crea ni restablece administradores al arrancar.
+
+### Cargar datos de demostracion
+
+La carga demo es opcional y solo funciona en una base sin datos comerciales. Requiere habilitar expresamente `ALLOW_DEMO_SEED=true` y ejecutar:
+
+```bash
+npm run db:seed-demo
+```
+
+No use este comando en una base real. Si detecta clientes, proveedores, productos, ventas, compras o fiados, se cancela sin cargar datos.
+
+## Ejecutar localmente
 
 ```bash
 npm start
 ```
 
-Abrir:
+Abra `http://localhost:3000`. Para desarrollo con recarga automatica puede usar `npm run dev`.
 
-```text
-http://localhost:3000
+## Respaldo antes de migrar
+
+Use una base local o una copia de prueba. Ejemplo general:
+
+```bash
+mysqldump -u usuario -p nombre_base > backup_antes_de_migrar.sql
 ```
 
-## Cambios principales
+No ejecute `db:init`, `db:migrate`, `db:create-admin` ni `db:seed-demo` contra produccion sin revisar la configuracion, tener un respaldo y probar previamente sobre una copia.
 
-- Productos con proveedor, categoria y unidades por paquete.
-- Productos con paquetes por caja, unidades por paquete y venta configurable por paquete o unidad.
-- Stock y stock minimo como enteros.
-- Para kilo y litro se usa unidad minima:
-  - kilo se controla como gramos.
-  - litro se controla como mililitros.
-  - unidad, paquete, caja y bolsa se controlan como unidades.
-- Compra por caja: el stock aumenta por `cantidad * paquetesPorCaja * unidadesPorPaquete`.
-- Compra por paquete: el stock aumenta por `cantidad * unidadesPorPaquete`.
-- Compra por unidad: el stock aumenta por `cantidad`.
-- Venta por paquete: descuenta `cantidad * unidadesPorPaquete`.
-- Venta por unidad: descuenta `cantidad`.
-- La caja nunca aparece como opcion de venta.
-- Venta pagada o fiada desde el mismo modulo de ventas.
-- Venta fiada exige cliente registrado y crea la deuda asociada.
-- Modulo **Fiados / Pagos** para pendientes, parciales, pagados, pagos parciales e historial.
-- Historial completo de ventas con detalle de productos.
-- Reportes de ventas, compras, bajo stock, mas vendidos, fiados y pagos.
-- Reporte de ganancias con total vendido, costo y ganancia neta.
-- Dashboard con graficos simples sin depender de internet.
-- Buscador dinamico de productos en ventas y compras.
-- Productos con modal de alta/edicion, filtros y orden por precio.
-- Validacion de telefonos numericos en clientes y proveedores.
-- Textos de registros guardados en mayusculas.
-- Modales propios para confirmaciones, errores y mensajes de exito.
+## Reglas actuales del negocio
 
-## Reglas de uso
+- Una compra aumenta stock y una venta lo disminuye.
+- `stockUnidadesTotal` es el stock usado para los calculos; `stock` se mantiene sincronizado por compatibilidad.
+- La caja se usa solo para compras. Las ventas permiten paquete o unidad segun el producto.
+- Una venta fiada requiere cliente y crea el fiado asociado.
+- Los pagos no pueden superar el saldo pendiente.
+- Clientes y fiados usan borrado logico y pueden restaurarse.
+- Los productos y proveedores todavia no tienen columnas de borrado logico. Su eliminacion fisica debe reemplazarse en una migracion futura antes de la conversion multi-tienda.
 
-- Una compra aumenta stock.
-- Una venta disminuye stock.
-- No se puede vender mas que el stock disponible.
-- El stock real para calculos es `stockUnidadesTotal`; `stock` se mantiene sincronizado por compatibilidad.
-- Una venta pagada puede registrarse sin cliente.
-- Una venta fiada siempre requiere cliente.
-- Un pago parcial no puede superar el saldo pendiente.
-- Los fiados pagados no desaparecen; quedan en historial con estado `pagado`.
-- Producto bajo stock significa `stockUnidadesTotal < stockMinimo`.
-- La ganancia historica se guarda en `detalleVenta` usando el costo unitario del momento de la venta.
+## Preparacion multi-tienda
+
+La version actual sigue siendo de una sola tienda. Todavia no existen `tienda`, `idTienda`, planes ni catalogo maestro. La siguiente fase debe crear una migracion segura que asocie los datos actuales a "Tienda Deisy" y luego aplique aislamiento por tienda en autenticacion, consultas, transacciones y reportes.
