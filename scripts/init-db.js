@@ -60,7 +60,7 @@ async function createBaseTables(connection) {
       idProducto INT AUTO_INCREMENT PRIMARY KEY,
       nombre VARCHAR(100) NOT NULL,
       idProveedor INT NULL,
-      categoria VARCHAR(50) NOT NULL DEFAULT 'OTROS',
+      categoria VARCHAR(50) NOT NULL DEFAULT 'otros',
       unidadMedida ENUM('unidad','paquete','kilo','gramo','litro','mililitro','caja','docena','bolsa') NOT NULL DEFAULT 'unidad',
       unidadesPorPaquete INT NOT NULL DEFAULT 1,
       paquetesPorCaja INT NOT NULL DEFAULT 1,

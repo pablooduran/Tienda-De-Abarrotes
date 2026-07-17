@@ -77,6 +77,18 @@ Migraciones actuales, en orden:
 1. `001_mejoras_tienda.sql`: proveedor por producto, categorias, stock entero y ventas fiadas.
 2. `002_mejoras_stock_reportes.sql`: presentaciones, stock avanzado, costos y ganancias.
 3. `003_borrado_logico.sql`: borrado logico de clientes y fiados.
+4. `004_multitienda_base.sql`: tienda inicial, asociacion de datos e indices de aislamiento.
+
+Antes y despues de aplicar la migracion multi-tienda sobre una base local, puede obtener una comprobacion de solo lectura:
+
+```powershell
+$env:APP_ENV='local'
+npm.cmd run db:check-multitenant
+```
+
+La salida informa conteos, registros sin `idTienda`, ventas, compras, fiados, stock y pagos. Tambien declara `pre-migracion`, `post-migracion` o `estructura-incompleta-o-migracion-parcial` sin asumir que `tienda` o `idTienda` ya existen. Compare las sumas antes y despues: deben mantenerse iguales y, despues de `004`, los registros existentes deben mostrar cero filas sin tienda.
+
+La migracion `004` es reintentable. Antes de cada `ADD COLUMN`, `ADD INDEX` o `ADD CONSTRAINT`, `db:migrate` consulta `INFORMATION_SCHEMA` y omite solamente el elemento que ya existe. Si una ejecucion se interrumpe, no se registra como aplicada hasta completar y verificar toda la estructura.
 
 ### Crear el primer administrador
 
@@ -128,4 +140,4 @@ No ejecute `db:init`, `db:migrate`, `db:create-admin` ni `db:seed-demo` contra p
 
 ## Preparacion multi-tienda
 
-La version actual sigue siendo de una sola tienda. Todavia no existen `tienda`, `idTienda`, planes ni catalogo maestro. La siguiente fase debe crear una migracion segura que asocie los datos actuales a "Tienda Deisy" y luego aplique aislamiento por tienda en autenticacion, consultas, transacciones y reportes.
+La migracion `004` prepara la estructura y asocia los datos existentes a "Tienda Deisy". Las columnas `idTienda` permanecen temporalmente anulables para no romper el backend actual. Hasta adaptar el backend en la fase siguiente, evite crear ventas, compras, productos, clientes, proveedores, fiados o pagos nuevos despues de aplicar `004`, porque esas escrituras aun no envian la tienda. El aislamiento en autenticacion, consultas, transacciones y reportes corresponde a la fase siguiente; planes y catalogo maestro aun no estan implementados.

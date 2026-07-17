@@ -31,6 +31,16 @@ async function hasColumns(connection, table, columns) {
   return columns.every((column) => existing.has(column));
 }
 
+async function hasTable(connection, table) {
+  const [[row]] = await connection.query(
+    `SELECT COUNT(*) total
+     FROM information_schema.TABLES
+     WHERE TABLE_SCHEMA=? AND TABLE_NAME=?`,
+    [process.env.DB_NAME, table]
+  );
+  return Number(row.total) > 0;
+}
+
 async function hasColumnTypes(connection, table, expectedTypes) {
   const [rows] = await connection.query(
     `SELECT COLUMN_NAME, DATA_TYPE
@@ -53,4 +63,74 @@ async function hasForeignKey(connection, table, column, referencedTable, referen
   return Number(rows[0].total) > 0;
 }
 
-module.exports = { createConnection, hasColumns, hasColumnTypes, hasForeignKey, readSqlStatements };
+async function hasForeignKeyConstraint(connection, table, constraintName, columns, referencedTable, referencedColumns) {
+  const [rows] = await connection.query(
+    `SELECT COLUMN_NAME, REFERENCED_TABLE_NAME, REFERENCED_COLUMN_NAME
+     FROM information_schema.KEY_COLUMN_USAGE
+     WHERE TABLE_SCHEMA=? AND TABLE_NAME=? AND CONSTRAINT_NAME=?
+     ORDER BY ORDINAL_POSITION`,
+    [process.env.DB_NAME, table, constraintName]
+  );
+  if (rows.length !== columns.length) return false;
+  return rows.every((row, index) => row.COLUMN_NAME === columns[index]
+    && row.REFERENCED_TABLE_NAME === referencedTable
+    && row.REFERENCED_COLUMN_NAME === referencedColumns[index]);
+}
+
+async function hasIndex(connection, table, indexName, columns, unique = false) {
+  const [rows] = await connection.query(
+    `SELECT COLUMN_NAME, NON_UNIQUE
+     FROM information_schema.STATISTICS
+     WHERE TABLE_SCHEMA=? AND TABLE_NAME=? AND INDEX_NAME=?
+     ORDER BY SEQ_IN_INDEX`,
+    [process.env.DB_NAME, table, indexName]
+  );
+  if (rows.length !== columns.length) return false;
+  return rows.every((row, index) => row.COLUMN_NAME === columns[index]
+    && (!unique || Number(row.NON_UNIQUE) === 0));
+}
+
+async function hasIndexNamed(connection, table, indexName) {
+  const [[row]] = await connection.query(
+    `SELECT COUNT(*) total
+     FROM information_schema.STATISTICS
+     WHERE TABLE_SCHEMA=? AND TABLE_NAME=? AND INDEX_NAME=?`,
+    [process.env.DB_NAME, table, indexName]
+  );
+  return Number(row.total) > 0;
+}
+
+async function hasConstraint(connection, table, constraintName) {
+  const [[row]] = await connection.query(
+    `SELECT COUNT(*) total
+     FROM information_schema.TABLE_CONSTRAINTS
+     WHERE CONSTRAINT_SCHEMA=? AND TABLE_NAME=? AND CONSTRAINT_NAME=?`,
+    [process.env.DB_NAME, table, constraintName]
+  );
+  return Number(row.total) > 0;
+}
+
+async function hasCheckConstraint(connection, table, constraintName) {
+  const [[row]] = await connection.query(
+    `SELECT COUNT(*) total
+     FROM information_schema.TABLE_CONSTRAINTS
+     WHERE CONSTRAINT_SCHEMA=? AND TABLE_NAME=? AND CONSTRAINT_NAME=?
+       AND CONSTRAINT_TYPE='CHECK'`,
+    [process.env.DB_NAME, table, constraintName]
+  );
+  return Number(row.total) > 0;
+}
+
+module.exports = {
+  createConnection,
+  hasTable,
+  hasColumns,
+  hasColumnTypes,
+  hasForeignKey,
+  hasForeignKeyConstraint,
+  hasIndex,
+  hasIndexNamed,
+  hasConstraint,
+  hasCheckConstraint,
+  readSqlStatements
+};
