@@ -1,5 +1,5 @@
 const bcrypt = require('bcryptjs');
-const { requireEnvironment } = require('../config/env');
+const { logDatabaseTarget, requireEnvironment } = require('../config/env');
 const { createConnection } = require('./db-utils');
 
 async function main() {
@@ -8,6 +8,7 @@ async function main() {
     throw new Error('ADMIN_PASSWORD debe tener al menos 12 caracteres.');
   }
 
+  logDatabaseTarget('Creacion de administrador');
   const connection = await createConnection();
   try {
     const [existing] = await connection.query(

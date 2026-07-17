@@ -4,7 +4,7 @@ const session = require('express-session');
 const MySQLSessionStore = require('express-mysql-session')(session);
 const helmet = require('helmet');
 
-const { databaseConfig, sessionSecret } = require('./config/env');
+const { databaseConfig, isLocalEnvironment, logDatabaseTarget, sessionSecret } = require('./config/env');
 let appDatabaseConfig;
 let appSessionSecret;
 try {
@@ -84,6 +84,7 @@ app.use((err, req, res, next) => {
 
 async function startServer() {
   try {
+    if (isLocalEnvironment) logDatabaseTarget('Servidor local', appDatabaseConfig);
     await pool.query('SELECT 1');
     app.listen(PORT, () => {
       console.log(`Sistema iniciado en puerto ${PORT}`);

@@ -40,6 +40,18 @@ Variables obligatorias para iniciar la aplicacion:
 
 `SESSION_SECRET` debe tener al menos 32 caracteres. `DB_SSL=true` habilita SSL y los hosts de Aiven tambien se detectan automaticamente. La aplicacion se detiene con un mensaje claro si falta una variable obligatoria y nunca imprime contrasenas ni hashes.
 
+## Entorno local aislado
+
+Para probar sin usar la configuracion habitual, cree `.env.local` tomando como referencia `.env.local.example`. No publique ese archivo.
+
+El entorno local se activa desde la terminal antes de ejecutar un comando:
+
+```powershell
+$env:APP_ENV='local'
+```
+
+Con `APP_ENV=local`, la aplicacion carga solamente `.env.local`; en cualquier otro caso conserva el uso de `.env`. Los comandos locales muestran el host, puerto y base seleccionados, sin mostrar usuario, contrasena ni secretos.
+
 ## Comandos de base de datos
 
 Cada accion esta separada para evitar cambios inesperados.

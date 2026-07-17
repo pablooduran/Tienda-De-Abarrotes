@@ -1,12 +1,15 @@
 const { createConnection } = require('./db-utils');
+const { logDatabaseTarget, requireLocalhostDatabase } = require('../config/env');
 
 const protectedTables = ['cliente', 'proveedor', 'producto', 'venta', 'detalleVenta', 'compra', 'detalleCompra', 'fiado', 'detalleFiado', 'pagoFiado'];
 
 async function main() {
+  const config = requireLocalhostDatabase('La carga demo');
   if (String(process.env.ALLOW_DEMO_SEED || '').toLowerCase() !== 'true') {
     throw new Error('La carga demo esta deshabilitada. Use ALLOW_DEMO_SEED=true solo en una base local vacia.');
   }
 
+  logDatabaseTarget('Carga de datos de demostracion', config);
   const connection = await createConnection();
   let transactionStarted = false;
   try {

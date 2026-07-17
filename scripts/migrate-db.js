@@ -1,5 +1,6 @@
 const fs = require('fs');
 const path = require('path');
+const { logDatabaseTarget } = require('../config/env');
 const { createConnection, hasColumns, hasColumnTypes, hasForeignKey, readSqlStatements } = require('./db-utils');
 
 const migrationRequirements = {
@@ -46,6 +47,7 @@ async function requirementsSatisfied(connection, file) {
 }
 
 async function main() {
+  logDatabaseTarget('Aplicacion de migraciones');
   const connection = await createConnection();
   try {
     await connection.query(`
