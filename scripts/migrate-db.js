@@ -209,6 +209,43 @@ const migrationRequirements = {
       ['movimientoStock', 'fk_movimiento_detalleVenta', ['idTienda', 'idDetalleVenta'], 'detalleVenta', ['idTienda', 'idDetalleVenta'], 'RESTRICT', 'RESTRICT'],
       ['movimientoStock', 'fk_movimiento_detalleCompra', ['idTienda', 'idDetalleCompra'], 'detalleCompra', ['idTienda', 'idDetalleCompra'], 'RESTRICT', 'RESTRICT']
     ]
+  },
+  '008_punto_venta_pagos.sql': {
+    columns: {
+      producto: ['codigoBarras', 'precioVentaPaquete', 'favoritoPos'],
+      venta: ['subtotal', 'descuento', 'montoPagado', 'saldoPendiente', 'estadoPago', 'codigoComprobante'],
+      pagoVenta: [
+        'idPagoVenta', 'idTienda', 'idVenta', 'idPagoFiado', 'metodoPago', 'monto', 'montoRecibido', 'cambio',
+        'referencia', 'claveOperacion', 'idAdministrador', 'creadoEn'
+      ]
+    },
+    indexes: [
+      ['pagoFiado', 'uq_pagoFiado_tienda_id', ['idTienda', 'idPagoFiado'], true],
+      ['fiado', 'uq_fiado_tienda_venta_unica', ['idTienda', 'idVenta'], true],
+      ['producto', 'uq_producto_tienda_codigoBarras', ['idTienda', 'codigoBarras'], true],
+      ['producto', 'idx_producto_tienda_favorito_nombre', ['idTienda', 'favoritoPos', 'activo', 'nombre'], false],
+      ['venta', 'uq_venta_tienda_comprobante', ['idTienda', 'codigoComprobante'], true],
+      ['venta', 'idx_venta_tienda_estado_fecha', ['idTienda', 'estadoPago', 'fecha'], false],
+      ['pagoVenta', 'uq_pagoVenta_tienda_clave', ['idTienda', 'claveOperacion'], true],
+      ['pagoVenta', 'uq_pagoVenta_tienda_pagoFiado', ['idTienda', 'idPagoFiado'], true],
+      ['pagoVenta', 'idx_pagoVenta_tienda_venta', ['idTienda', 'idVenta', 'creadoEn'], false],
+      ['pagoVenta', 'idx_pagoVenta_tienda_metodo_fecha', ['idTienda', 'metodoPago', 'creadoEn'], false],
+      ['pagoVenta', 'idx_pagoVenta_tienda_admin_fecha', ['idTienda', 'idAdministrador', 'creadoEn'], false]
+    ],
+    checks: [
+      ['pagoVenta', 'chk_pagoVenta_monto'],
+      ['pagoVenta', 'chk_pagoVenta_metodo'],
+      ['pagoVenta', 'chk_pagoVenta_efectivo'],
+      ['venta', 'chk_venta_totales_pos'],
+      ['venta', 'chk_venta_saldo_pos'],
+      ['venta', 'chk_venta_estado_pos']
+    ],
+    foreignKeyConstraints: [
+      ['pagoVenta', 'fk_pagoVenta_tienda', ['idTienda'], 'tienda', ['idTienda'], 'RESTRICT', 'RESTRICT'],
+      ['pagoVenta', 'fk_pagoVenta_venta', ['idTienda', 'idVenta'], 'venta', ['idTienda', 'idVenta'], 'RESTRICT', 'RESTRICT'],
+      ['pagoVenta', 'fk_pagoVenta_pagoFiado', ['idTienda', 'idPagoFiado'], 'pagoFiado', ['idTienda', 'idPagoFiado'], 'RESTRICT', 'RESTRICT'],
+      ['pagoVenta', 'fk_pagoVenta_administrador', ['idTienda', 'idAdministrador'], 'administrador', ['idTienda', 'idAdministrador'], 'RESTRICT', 'RESTRICT']
+    ]
   }
 };
 
@@ -331,7 +368,107 @@ async function requirementsSatisfied(connection, file) {
     );
     if (Number(reconciliation.total) > 0) return false;
   }
+  if (file === '008_punto_venta_pagos.sql') {
+    const [[features]] = await connection.query(
+      "SELECT COUNT(DISTINCT codigo) total FROM funcionalidad WHERE codigo IN ('punto_venta','pagos_multiples','recibos_whatsapp') AND activo=1"
+    );
+    if (Number(features.total) !== 3) return false;
+    const [[planAccess]] = await connection.query(
+      `SELECT COUNT(DISTINCT CONCAT(p.codigo, ':', f.codigo)) total
+       FROM planFuncionalidad pf
+       JOIN plan p ON p.idPlan=pf.idPlan
+       JOIN funcionalidad f ON f.idFuncionalidad=pf.idFuncionalidad
+       WHERE p.codigo IN ('basico','avanzado')
+         AND f.codigo IN ('punto_venta','pagos_multiples','recibos_whatsapp')
+         AND p.activo=1 AND f.activo=1 AND pf.habilitada=1`
+    );
+    if (Number(planAccess.total) !== 6) return false;
+    const [[invalidSales]] = await connection.query(
+      `SELECT COUNT(*) total FROM venta v
+       WHERE v.subtotal<0 OR v.descuento<0 OR v.total<0 OR v.montoPagado<0 OR v.saldoPendiente<0
+          OR v.descuento>v.subtotal OR ABS((v.subtotal-v.descuento)-v.total)>=0.01
+          OR (v.estadoPago<>'legado' AND ABS((v.montoPagado+v.saldoPendiente)-v.total)>=0.01)
+          OR (v.estadoPago='pagada' AND (v.saldoPendiente<>0 OR v.montoPagado<>v.total))
+          OR (v.estadoPago='parcial' AND (v.montoPagado<=0 OR v.saldoPendiente<=0 OR v.idCliente IS NULL))
+          OR (v.estadoPago='pendiente' AND (v.montoPagado<>0 OR v.saldoPendiente<>v.total OR v.saldoPendiente<=0 OR v.idCliente IS NULL))
+          OR (v.estadoPago IN ('pendiente','parcial') AND v.tipo<>'fiada')
+          OR v.codigoComprobante IS NULL OR v.codigoComprobante=''`
+    );
+    if (Number(invalidSales.total) > 0) return false;
+    const [[invalidPayments]] = await connection.query(
+      `SELECT COUNT(*) total FROM pagoVenta pv
+       LEFT JOIN venta v ON v.idTienda=pv.idTienda AND v.idVenta=pv.idVenta
+       LEFT JOIN pagoFiado pf ON pf.idTienda=pv.idTienda AND pf.idPagoFiado=pv.idPagoFiado
+       LEFT JOIN fiado f ON f.idTienda=pf.idTienda AND f.idFiado=pf.idFiado
+       LEFT JOIN administrador a ON a.idTienda=pv.idTienda AND a.idAdministrador=pv.idAdministrador
+       WHERE pv.monto<=0 OR pv.metodoPago NOT IN ('efectivo','qr','no_especificado')
+          OR (pv.metodoPago='efectivo' AND (pv.montoRecibido IS NULL OR pv.montoRecibido<pv.monto OR pv.cambio<0 OR ABS((pv.montoRecibido-pv.monto)-pv.cambio)>=0.01))
+          OR (pv.metodoPago<>'efectivo' AND (pv.montoRecibido IS NOT NULL OR pv.cambio<>0))
+          OR v.idVenta IS NULL
+          OR (pv.idPagoFiado IS NOT NULL AND (pf.idPagoFiado IS NULL OR f.idVenta IS NULL OR f.idVenta<>pv.idVenta))
+          OR (pv.idAdministrador IS NOT NULL AND a.idAdministrador IS NULL)`
+    );
+    if (Number(invalidPayments.total) > 0) return false;
+    const [[paymentDifferences]] = await connection.query(
+      `SELECT COUNT(*) total FROM (
+         SELECT v.idTienda, v.idVenta, v.montoPagado, COALESCE(SUM(pv.monto),0) pagos
+         FROM venta v
+         LEFT JOIN pagoVenta pv ON pv.idTienda=v.idTienda AND pv.idVenta=v.idVenta
+         WHERE v.estadoPago<>'legado'
+         GROUP BY v.idTienda, v.idVenta, v.montoPagado
+         HAVING ABS(pagos-v.montoPagado)>=0.01
+       ) diferencias`
+    );
+    if (Number(paymentDifferences.total) > 0) return false;
+    const [[duplicateDebts]] = await connection.query(
+      `SELECT COUNT(*) total FROM (
+         SELECT idTienda, idVenta FROM fiado
+         WHERE idVenta IS NOT NULL GROUP BY idTienda, idVenta HAVING COUNT(*)>1
+       ) duplicados`
+    );
+    if (Number(duplicateDebts.total) > 0) return false;
+    const [[invalidDebtLinks]] = await connection.query(
+      `SELECT COUNT(*) total FROM venta v
+       LEFT JOIN fiado f ON f.idTienda=v.idTienda AND f.idVenta=v.idVenta
+       WHERE v.estadoPago IN ('pendiente','parcial')
+         AND (f.idFiado IS NULL OR ABS(f.saldoPendiente-v.saldoPendiente)>=0.01)`
+    );
+    if (Number(invalidDebtLinks.total) > 0) return false;
+  }
   return true;
+}
+
+async function validatePosMigrationData(connection) {
+  const [[duplicateDebts]] = await connection.query(
+    `SELECT COUNT(*) total FROM (
+       SELECT idTienda, idVenta FROM fiado
+       WHERE idVenta IS NOT NULL GROUP BY idTienda, idVenta HAVING COUNT(*)>1
+     ) duplicados`
+  );
+  if (Number(duplicateDebts.total) > 0) {
+    throw new Error(`La migracion 008 no puede continuar: existen ${duplicateDebts.total} ventas con mas de un fiado asociado.`);
+  }
+  const [[inconsistentDebts]] = await connection.query(
+    `SELECT COUNT(*) total
+     FROM fiado f
+     JOIN venta v ON v.idTienda=f.idTienda AND v.idVenta=f.idVenta
+     WHERE ABS((f.totalPagado+f.saldoPendiente)-v.total)>=0.01`
+  );
+  if (Number(inconsistentDebts.total) > 0) {
+    throw new Error(`La migracion 008 no puede continuar: existen ${inconsistentDebts.total} fiados cuyo pago y saldo no coinciden con la venta original.`);
+  }
+  if (await hasColumns(connection, 'producto', ['codigoBarras'])) {
+    const [[duplicateBarcodes]] = await connection.query(
+      `SELECT COUNT(*) total FROM (
+         SELECT idTienda, codigoBarras FROM producto
+         WHERE codigoBarras IS NOT NULL AND codigoBarras<>''
+         GROUP BY idTienda, codigoBarras HAVING COUNT(*)>1
+       ) duplicados`
+    );
+    if (Number(duplicateBarcodes.total) > 0) {
+      throw new Error(`La migracion 008 no puede continuar: existen ${duplicateBarcodes.total} codigos de barras locales duplicados por tienda.`);
+    }
+  }
 }
 
 const multitenantTables = [
@@ -724,6 +861,41 @@ async function missingRequirementElements(connection, file) {
   return missing;
 }
 
+async function inspect008State(connection, recorded) {
+  const requirements = migrationRequirements['008_punto_venta_pagos.sql'];
+  const state = {
+    migracion008Registrada: Boolean(recorded),
+    tablaPagoVenta: await hasTable(connection, 'pagoVenta'),
+    columnas: {},
+    indices: {},
+    checks: {},
+    clavesForaneas: {},
+    estructuraCompleta: false,
+    datosValidos: false
+  };
+  for (const [table, columns] of Object.entries(requirements.columns)) {
+    state.columnas[table] = await hasTable(connection, table) && await hasColumns(connection, table, columns);
+  }
+  for (const [table, name, columns, unique] of requirements.indexes) {
+    state.indices[`${table}.${name}`] = await hasIndex(connection, table, name, columns, unique);
+  }
+  for (const [table, name] of requirements.checks) {
+    state.checks[`${table}.${name}`] = await hasCheckConstraint(connection, table, name);
+  }
+  for (const relation of requirements.foreignKeyConstraints) {
+    state.clavesForaneas[`${relation[0]}.${relation[1]}`] = await hasForeignKeyConstraint(connection, ...relation);
+  }
+  state.estructuraCompleta = state.tablaPagoVenta
+    && Object.values(state.columnas).every(Boolean)
+    && Object.values(state.indices).every(Boolean)
+    && Object.values(state.checks).every(Boolean)
+    && Object.values(state.clavesForaneas).every(Boolean);
+  if (state.estructuraCompleta) state.datosValidos = await requirementsSatisfied(connection, '008_punto_venta_pagos.sql');
+  console.log('Estado previo detectado para 008_punto_venta_pagos.sql:');
+  console.log(JSON.stringify(state, null, 2));
+  return state;
+}
+
 function isExistingStructureError(error) {
   return [
     'ER_DUP_FIELDNAME',
@@ -759,10 +931,13 @@ async function main() {
         inspect006State(estado006);
         console.log(`Decision para 006_catalogo_maestro.sql: ${decide006Action(estado006)}.`);
       }
+      if (file === '008_punto_venta_pagos.sql') {
+        await inspect008State(connection, recorded.length > 0);
+      }
       if (recorded.length) {
         const registeredMigrationIsIncomplete = file === '006_catalogo_maestro.sql'
           ? decide006Action(estado006) === 'detener'
-          : ['004_multitienda_base.sql', '005_planes_suscripciones.sql', '007_movimientos_stock.sql'].includes(file)
+          : ['004_multitienda_base.sql', '005_planes_suscripciones.sql', '007_movimientos_stock.sql', '008_punto_venta_pagos.sql'].includes(file)
             && !await requirementsSatisfied(connection, file);
         if (registeredMigrationIsIncomplete) {
           throw new Error(`La migracion ${file} figura en schema_migrations, pero su estructura o sus datos estan incompletos. No se aplicaron cambios adicionales.`);
@@ -782,6 +957,10 @@ async function main() {
 
       const statements = readSqlStatements(path.join(migrationsDir, file));
       let multitenantDataValidated = false;
+      if (file === '008_punto_venta_pagos.sql') {
+        await validatePosMigrationData(connection);
+        console.log('Datos existentes validados antes de recuperar la estructura POS y sus pagos.');
+      }
       for (let index = 0; index < statements.length; index += 1) {
         const statement = statements[index];
         if (file === '004_multitienda_base.sql'
@@ -792,7 +971,7 @@ async function main() {
           console.log('Datos multi-tienda validados antes de crear indices y restricciones.');
         }
 
-        const element = ['004_multitienda_base.sql', '006_catalogo_maestro.sql', '007_movimientos_stock.sql'].includes(file)
+        const element = ['004_multitienda_base.sql', '006_catalogo_maestro.sql', '007_movimientos_stock.sql', '008_punto_venta_pagos.sql'].includes(file)
           ? structureElementFromStatement(statement)
           : null;
         if (element && await structureElementExists(connection, element)) {

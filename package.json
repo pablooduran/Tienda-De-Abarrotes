@@ -15,11 +15,13 @@
     "db:check-subscriptions": "node scripts/check-subscriptions.js",
     "db:check-master-catalog": "node scripts/check-master-catalog.js",
     "db:check-stock-movements": "node scripts/check-stock-movements.js",
+    "db:check-pos-payments": "node scripts/check-pos-payments.js",
     "test:tenant-isolation": "node scripts/test-tenant-isolation.js",
     "test:admin-management": "node scripts/test-admin-management.js",
     "test:subscriptions": "node scripts/test-subscriptions.js",
     "test:master-catalog": "node scripts/test-master-catalog.js",
-    "test:stock-movements": "node scripts/test-stock-movements.js"
+    "test:stock-movements": "node scripts/test-stock-movements.js",
+    "test:pos-payments": "node scripts/test-pos-payments.js"
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",

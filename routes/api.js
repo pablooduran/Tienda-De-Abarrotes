@@ -7,6 +7,7 @@ const {
   movementKey,
   operationKey
 } = require('../services/stock-movement-service');
+const { normalizeBarcode, recordDebtPaymentForSale, registerSale } = require('../services/pos-sale-service');
 
 const router = express.Router();
 
@@ -210,14 +211,30 @@ function validateProductPayload(body, editing = false) {
   const stockUnidadesTotal = editing
     ? null
     : asPositiveInteger(Number(body.stockUnidadesTotal ?? body.stock ?? 0), 'Stock total', true);
+  const precioVentaPaquete = body.precioVentaPaquete === undefined || body.precioVentaPaquete === ''
+    ? null
+    : asNumber(body.precioVentaPaquete);
+  if (precioVentaPaquete !== null && precioVentaPaquete <= 0) {
+    const error = new Error('El precio de venta por paquete debe ser mayor a cero.');
+    error.status = 400;
+    throw error;
+  }
+  const precioVenta = asNumber(body.precioVenta);
+  if (precioVenta <= 0) {
+    const error = new Error('El precio de venta por unidad debe ser mayor a cero.');
+    error.status = 400;
+    throw error;
+  }
   return {
     nombre: cleanText(body.nombre),
+    codigoBarras: normalizeBarcode(body.codigoBarras),
     idProveedor: body.idProveedor || null,
     categoria,
     unidadMedida: body.unidadMedida,
     unidadesPorPaquete,
     paquetesPorCaja,
-    precioVenta: asNumber(body.precioVenta),
+    precioVenta,
+    precioVentaPaquete,
     stockUnidadesTotal,
     stockMinimo: asPositiveInteger(Number(body.stockMinimo), 'Stock minimo'),
     ultimoPrecioCompra: editing ? null : asNumber(body.ultimoPrecioCompra || 0),
@@ -308,9 +325,14 @@ router.post('/productos', async (req, res, next) => {
     }
     const [result] = await connection.query(
       `INSERT INTO producto
-       (idTienda, nombre, idProveedor, categoria, unidadMedida, unidadesPorPaquete, paquetesPorCaja, precioVenta, stock, stockMinimo, stockUnidadesTotal, ultimoPrecioCompra, permiteVentaPorPaquete, permiteVentaPorUnidad)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [idTienda, data.nombre, data.idProveedor, data.categoria, data.unidadMedida, data.unidadesPorPaquete, data.paquetesPorCaja, data.precioVenta, data.stockUnidadesTotal, data.stockMinimo, data.stockUnidadesTotal, data.ultimoPrecioCompra, data.permiteVentaPorPaquete, data.permiteVentaPorUnidad]
+       (idTienda, nombre, idProveedor, codigoBarras, categoria, unidadMedida, unidadesPorPaquete,
+        paquetesPorCaja, precioVenta, precioVentaPaquete, stock, stockMinimo, stockUnidadesTotal,
+        ultimoPrecioCompra, permiteVentaPorPaquete, permiteVentaPorUnidad)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [idTienda, data.nombre, data.idProveedor, data.codigoBarras, data.categoria, data.unidadMedida,
+        data.unidadesPorPaquete, data.paquetesPorCaja, data.precioVenta, data.precioVentaPaquete,
+        data.stockUnidadesTotal, data.stockMinimo, data.stockUnidadesTotal, data.ultimoPrecioCompra,
+        data.permiteVentaPorPaquete, data.permiteVentaPorUnidad]
     );
     if (data.stockUnidadesTotal > 0) {
       await insertStockMovement(connection, {
@@ -334,6 +356,10 @@ router.post('/productos', async (req, res, next) => {
     res.status(201).json({ message: 'Producto guardado.', idProducto: result.insertId });
   } catch (error) {
     if (connection) await connection.rollback();
+    if (error.code === 'ER_DUP_ENTRY' && String(error.message).includes('uq_producto_tienda_codigoBarras')) {
+      error.status = 409;
+      error.message = 'El codigo de barras ya esta asociado a otro producto de la tienda.';
+    }
     next(error);
   } finally {
     if (connection) connection.release();
@@ -349,16 +375,20 @@ router.put('/productos/:id', async (req, res, next) => {
     }
     const [result] = await pool.query(
       `UPDATE producto
-       SET nombre=?, idProveedor=?, categoria=?, unidadMedida=?, unidadesPorPaquete=?, paquetesPorCaja=?,
-           precioVenta=?, stockMinimo=?, permiteVentaPorPaquete=?, permiteVentaPorUnidad=?
+       SET nombre=?, idProveedor=?, codigoBarras=?, categoria=?, unidadMedida=?, unidadesPorPaquete=?, paquetesPorCaja=?,
+           precioVenta=?, precioVentaPaquete=?, stockMinimo=?, permiteVentaPorPaquete=?, permiteVentaPorUnidad=?
        WHERE idProducto=? AND idTienda=? AND activo=1`,
-      [data.nombre, data.idProveedor, data.categoria, data.unidadMedida, data.unidadesPorPaquete,
-        data.paquetesPorCaja, data.precioVenta, data.stockMinimo, data.permiteVentaPorPaquete,
+      [data.nombre, data.idProveedor, data.codigoBarras, data.categoria, data.unidadMedida, data.unidadesPorPaquete,
+        data.paquetesPorCaja, data.precioVenta, data.precioVentaPaquete, data.stockMinimo, data.permiteVentaPorPaquete,
         data.permiteVentaPorUnidad, req.params.id, idTienda]
     );
     if (!result.affectedRows) return res.status(404).json({ error: 'Producto no encontrado.' });
     res.json({ message: 'Producto actualizado.' });
   } catch (error) {
+    if (error.code === 'ER_DUP_ENTRY' && String(error.message).includes('uq_producto_tienda_codigoBarras')) {
+      error.status = 409;
+      error.message = 'El codigo de barras ya esta asociado a otro producto de la tienda.';
+    }
     next(error);
   }
 });
@@ -618,76 +648,16 @@ async function validateItems(connection, items, type, idTienda) {
 
 router.post('/ventas', async (req, res, next) => {
   try {
-    const idTienda = tenantId(req);
-    const tipo = req.body.tipo === 'fiada' ? 'fiada' : 'pagada';
-    const requestKey = operationKey(req.body.claveOperacion);
-    if (tipo === 'fiada' && !req.body.idCliente) return res.status(400).json({ error: 'Una venta fiada debe tener cliente registrado.' });
-    const result = await runTransaction(async (connection) => {
-      if (req.body.idCliente) {
-        await requireTenantRecord(connection, 'cliente', 'idCliente', req.body.idCliente, idTienda, 'AND activo=1');
-      }
-      const [venta] = await connection.query(
-        `INSERT INTO venta (idTienda, total, tipo, idCliente, claveOperacion)
-         VALUES (?, 0, ?, ?, ?)
-         ON DUPLICATE KEY UPDATE idVenta=LAST_INSERT_ID(idVenta)`,
-        [idTienda, tipo, req.body.idCliente || null, requestKey]
-      );
-      const [existing] = await connection.query(
-        `SELECT v.idVenta, v.total, v.tipo, f.idFiado
-         FROM venta v LEFT JOIN fiado f ON f.idVenta=v.idVenta AND f.idTienda=v.idTienda
-         WHERE v.idVenta=? AND v.idTienda=?`,
-        [venta.insertId, idTienda]
-      );
-      if (Number(existing[0].total) > 0) return { ...existing[0], repetida: true };
-      const items = await validateItems(connection, req.body.items, 'venta', idTienda);
-      const total = items.reduce((sum, item) => sum + item.subtotal, 0);
-      await connection.query(
-        'UPDATE venta SET total=? WHERE idVenta=? AND idTienda=?',
-        [total, venta.insertId, idTienda]
-      );
-      for (const item of items) {
-        const [detail] = await connection.query(
-          `INSERT INTO detalleVenta
-           (idTienda, idVenta, idProducto, cantidad, precioVenta, costoUnitario, subtotal, subtotalCosto, ganancia, presentacionVenta, cantidadEquivalenteUnidades)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-          [idTienda, venta.insertId, item.product.idProducto, item.cantidad, item.precio, item.costoUnitario, item.subtotal, item.subtotalCosto, item.ganancia, item.presentation, item.unidades]
-        );
-        const stockAnterior = Number(item.product.stockUnidadesTotal);
-        const stockPosterior = stockAnterior - item.unidades;
-        const [stockUpdate] = await connection.query(
-          `UPDATE producto
-           SET stockUnidadesTotal=?, stock=?
-           WHERE idProducto=? AND idTienda=? AND activo=1 AND stockUnidadesTotal=?`,
-          [stockPosterior, stockPosterior, item.product.idProducto, idTienda, stockAnterior]
-        );
-        if (!stockUpdate.affectedRows) throw notFound('Producto no encontrado o stock insuficiente.');
-        await insertStockMovement(connection, {
-          idTienda,
-          idProducto: item.product.idProducto,
-          tipoMovimiento: 'salida',
-          origen: 'venta',
-          cantidad: -item.unidades,
-          stockAnterior,
-          stockPosterior,
-          cantidadOperacion: item.cantidad,
-          unidadOperacion: item.presentation,
-          motivo: tipo === 'fiada' ? 'Salida por venta fiada.' : 'Salida por venta pagada.',
-          idDetalleVenta: detail.insertId,
-          claveOperacion: movementKey('detalle-venta', detail.insertId),
-          idAdministrador: req.session.admin.id
-        });
-      }
-      let idFiado = null;
-      if (tipo === 'fiada') {
-        const [fiado] = await connection.query(
-          'INSERT INTO fiado (idTienda, idCliente, idVenta, fechaInicio, totalFiado, totalPagado, saldoPendiente, estado) VALUES (?, ?, ?, CURDATE(), ?, 0, ?, ?)',
-          [idTienda, req.body.idCliente, venta.insertId, total, total, 'pendiente']
-        );
-        idFiado = fiado.insertId;
-      }
-      return { idVenta: venta.insertId, idFiado, total, tipo };
+    const result = await registerSale({
+      idTienda: tenantId(req),
+      idAdministrador: req.session.admin.id,
+      body: req.body,
+      legacyMode: true
     });
-    res.status(201).json({ message: 'Venta registrada.', ...result });
+    res.status(201).json({
+      message: result.repetida ? 'La venta ya habia sido registrada.' : 'Venta registrada.',
+      ...result
+    });
   } catch (error) {
     next(error);
   }
@@ -697,14 +667,19 @@ router.get('/ventas', async (req, res, next) => {
   try {
     const [rows] = await pool.query(`
       SELECT v.*, COALESCE(c.nombre, 'CLIENTE OCASIONAL') AS cliente,
-        f.idFiado, f.saldoPendiente, f.estado AS estadoFiado
+        f.idFiado, f.saldoPendiente AS saldoActualFiado, f.estado AS estadoFiado,
+        COALESCE(pm.metodosPago, '') AS metodosPago
       FROM venta v
       LEFT JOIN cliente c ON c.idCliente=v.idCliente AND c.idTienda=v.idTienda
       LEFT JOIN fiado f ON f.idVenta=v.idVenta AND f.idTienda=v.idTienda
+      LEFT JOIN (
+        SELECT idTienda, idVenta, GROUP_CONCAT(DISTINCT metodoPago ORDER BY metodoPago SEPARATOR ',') metodosPago
+        FROM pagoVenta WHERE idTienda=? GROUP BY idTienda, idVenta
+      ) pm ON pm.idTienda=v.idTienda AND pm.idVenta=v.idVenta
       WHERE v.idTienda=?
       ORDER BY v.fecha DESC
       LIMIT 300
-    `, [tenantId(req)]);
+    `, [tenantId(req), tenantId(req)]);
     res.json(rows);
   } catch (error) {
     next(error);
@@ -714,10 +689,11 @@ router.get('/ventas', async (req, res, next) => {
 router.get('/ventas/:id', async (req, res, next) => {
   try {
     const idTienda = tenantId(req);
-    const [[ventas], [detalle], [pagos]] = await Promise.all([
+    const [[ventas], [detalle], [pagos], [pagosFiado]] = await Promise.all([
       pool.query(`
         SELECT v.*, COALESCE(c.nombre, 'CLIENTE OCASIONAL') AS cliente,
-          f.idFiado, f.totalFiado, f.totalPagado, f.saldoPendiente, f.estado AS estadoFiado
+          f.idFiado, f.totalFiado, f.totalPagado AS totalPagadoFiado,
+          f.saldoPendiente AS saldoActualFiado, f.estado AS estadoFiado
         FROM venta v
         LEFT JOIN cliente c ON c.idCliente=v.idCliente AND c.idTienda=v.idTienda
         LEFT JOIN fiado f ON f.idVenta=v.idVenta AND f.idTienda=v.idTienda
@@ -730,6 +706,12 @@ router.get('/ventas/:id', async (req, res, next) => {
         WHERE d.idVenta=? AND d.idTienda=?
       `, [req.params.id, idTienda]),
       pool.query(`
+        SELECT pv.idPagoVenta, pv.metodoPago, pv.monto, pv.montoRecibido, pv.cambio, pv.referencia, pv.creadoEn
+        FROM pagoVenta pv
+        WHERE pv.idVenta=? AND pv.idTienda=?
+        ORDER BY pv.creadoEn, pv.idPagoVenta
+      `, [req.params.id, idTienda]),
+      pool.query(`
         SELECT pf.*
         FROM pagoFiado pf
         JOIN fiado f ON f.idFiado=pf.idFiado AND f.idTienda=pf.idTienda
@@ -738,7 +720,7 @@ router.get('/ventas/:id', async (req, res, next) => {
       `, [req.params.id, idTienda, idTienda])
     ]);
     if (!ventas.length) return res.status(404).json({ error: 'Venta no encontrada.' });
-    res.json({ venta: ventas[0], detalle, pagos });
+    res.json({ venta: ventas[0], detalle, pagos, pagosFiado });
   } catch (error) {
     next(error);
   }
@@ -969,7 +951,7 @@ router.post('/pagos-fiado', async (req, res, next) => {
         error.status = 400;
         throw error;
       }
-      await connection.query(
+      const [payment] = await connection.query(
         'INSERT INTO pagoFiado (idTienda, idFiado, monto, observacion) VALUES (?, ?, ?, ?)',
         [idTienda, req.body.idFiado, monto, nullableText(req.body.observacion)]
       );
@@ -980,6 +962,15 @@ router.post('/pagos-fiado', async (req, res, next) => {
         'UPDATE fiado SET totalPagado=?, saldoPendiente=?, estado=? WHERE idFiado=? AND idTienda=?',
         [totalPagado, saldo, estado, req.body.idFiado, idTienda]
       );
+      await recordDebtPaymentForSale(connection, {
+        idTienda,
+        idVenta: fiado.idVenta,
+        idPagoFiado: payment.insertId,
+        monto,
+        metodoPago: req.body.metodoPago || 'no_especificado',
+        referencia: req.body.referencia,
+        idAdministrador: req.session.admin.id
+      });
     });
     res.status(201).json({ message: 'Pago registrado.' });
   } catch (error) {
@@ -1027,7 +1018,7 @@ router.post('/pagos-fiado/cliente', async (req, res, next) => {
         const aplicado = Math.min(restante, saldoActual);
         if (aplicado <= 0) continue;
 
-        await connection.query(
+        const [payment] = await connection.query(
           'INSERT INTO pagoFiado (idTienda, idFiado, monto, observacion) VALUES (?, ?, ?, ?)',
           [idTienda, fiado.idFiado, aplicado, observacion]
         );
@@ -1039,6 +1030,15 @@ router.post('/pagos-fiado/cliente', async (req, res, next) => {
           'UPDATE fiado SET totalPagado=?, saldoPendiente=?, estado=? WHERE idFiado=? AND idTienda=?',
           [totalPagado, saldo, estado, fiado.idFiado, idTienda]
         );
+        await recordDebtPaymentForSale(connection, {
+          idTienda,
+          idVenta: fiado.idVenta,
+          idPagoFiado: payment.insertId,
+          monto: aplicado,
+          metodoPago: req.body.metodoPago || 'no_especificado',
+          referencia: req.body.referencia,
+          idAdministrador: req.session.admin.id
+        });
 
         aplicaciones.push({ idFiado: fiado.idFiado, monto: aplicado, saldoPendiente: saldo, estado });
         restante = Number((restante - aplicado).toFixed(2));

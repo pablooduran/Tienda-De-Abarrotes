@@ -3,6 +3,7 @@ const pool = require('../config/db');
 const { requirePlanFeature } = require('../middleware/subscription');
 const { enforcePlanLimit } = require('../services/subscription-service');
 const { insertStockMovement, movementKey } = require('../services/stock-movement-service');
+const { normalizeBarcode } = require('../services/pos-sale-service');
 const {
   LOCAL_CATEGORIES,
   booleanValue,
@@ -193,6 +194,10 @@ router.post('/agregar', asyncRoute(async (req, res) => {
       if (!nombre) throw catalogError(400, `El nombre local del producto ${index + 1} es obligatorio.`);
       const precioCompra = nonNegativeNumber(item.precioCompra ?? 0, `El precio de compra de ${nombre}`);
       const precioVenta = positiveMoney(item.precioVenta, `El precio de venta de ${nombre}`);
+      const precioVentaPaquete = item.precioVentaPaquete === undefined || item.precioVentaPaquete === ''
+        ? null
+        : positiveMoney(item.precioVentaPaquete, `El precio por paquete de ${nombre}`);
+      const codigoBarras = normalizeBarcode(item.codigoBarras || master.codigoBarras);
       const stock = nonNegativeInteger(item.stockInicial ?? 0, `El stock inicial de ${nombre}`);
       const stockMinimo = positiveInteger(item.stockMinimo, `El stock minimo de ${nombre}`, 5);
       if (!booleanValue(item.activo, true)) {
@@ -200,13 +205,13 @@ router.post('/agregar', asyncRoute(async (req, res) => {
       }
       const [result] = await connection.query(
         `INSERT INTO producto
-          (idTienda, nombre, idProveedor, idProductoMaestro, categoria, unidadMedida,
-           unidadesPorPaquete, paquetesPorCaja, precioVenta, stock, stockMinimo,
+          (idTienda, nombre, idProveedor, idProductoMaestro, codigoBarras, categoria, unidadMedida,
+           unidadesPorPaquete, paquetesPorCaja, precioVenta, precioVentaPaquete, stock, stockMinimo,
            stockUnidadesTotal, ultimoPrecioCompra, permiteVentaPorPaquete, permiteVentaPorUnidad)
-         VALUES (?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?, ?, ?, ?)`,
-        [idTienda, nombre, idProveedor, master.idProductoMaestro,
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [idTienda, nombre, idProveedor, master.idProductoMaestro, codigoBarras,
           localCategory(item.categoriaLocal, master.categoriaMaestra), unidadMedida,
-          unidadesPorPaquete, precioVenta, stock, stockMinimo, stock, precioCompra,
+          unidadesPorPaquete, precioVenta, precioVentaPaquete, stock, stockMinimo, stock, precioCompra,
           permiteVentaPorPaquete, permiteVentaPorUnidad]
       );
       if (stock > 0) {
@@ -233,6 +238,9 @@ router.post('/agregar', asyncRoute(async (req, res) => {
     res.status(201).json({ message: `${created.length} producto(s) agregado(s) al inventario.`, creados: created });
   } catch (error) {
     await connection.rollback();
+    if (error.code === 'ER_DUP_ENTRY' && String(error.message).includes('uq_producto_tienda_codigoBarras')) {
+      throw catalogError(409, 'El codigo de barras ya esta asociado a otro producto de la tienda.');
+    }
     if (error.code === 'ER_DUP_ENTRY') throw catalogError(409, 'Un producto maestro ya esta vinculado a esta tienda.');
     throw error;
   } finally {

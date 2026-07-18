@@ -16,7 +16,7 @@ Sistema con Node.js, Express, MySQL y frontend en HTML, CSS y JavaScript. Admini
 ## Requisitos
 
 - Node.js 18 o superior.
-- MySQL 8.0.16 o superior. La migracion 007 fue disenada para MySQL 8.0.46.
+- MySQL 8.0.16 o superior. Las migraciones 007 y 008 fueron disenadas para MySQL 8.0.46.
 - Una base local o de prueba para validar cambios antes de produccion.
 
 ## Configuracion local
@@ -81,6 +81,7 @@ Migraciones actuales, en orden:
 5. `005_planes_suscripciones.sql`: planes, funcionalidades, historial de suscripciones y acceso de solo lectura.
 6. `006_catalogo_maestro.sql`: categorias y marcas globales, productos maestros, auditoria y vinculo opcional con el inventario local.
 7. `007_movimientos_stock.sql`: historial inmutable de inventario, stock inicial, ajustes protegidos e idempotencia de ventas y compras.
+8. `008_punto_venta_pagos.sql`: punto de venta, pagos por metodo, comprobantes, codigo de barras local y compatibilidad con fiados.
 
 Antes y despues de aplicar la migracion multi-tienda sobre una base local, puede obtener una comprobacion de solo lectura:
 
@@ -119,6 +120,15 @@ npm.cmd run db:check-stock-movements
 ```
 
 El comprobador es de solo lectura y funciona antes de la migracion, con una estructura parcial y despues de completarla. La migracion no cambia el stock comercial existente: crea una entrada inicial por cada producto cuyo stock actual sea mayor que cero. Las claves de operacion y las referencias de detalle evitan duplicar movimientos al reintentar ventas o compras. `db:migrate` no registra `007` hasta verificar toda la estructura, las funciones de ambos planes y la reconciliacion completa.
+
+Antes y despues de aplicar `008`, compruebe pagos, saldos, estados, fiados, claves de operacion y movimientos de venta:
+
+```powershell
+$env:APP_ENV='local'
+npm.cmd run db:check-pos-payments
+```
+
+La migracion conserva ventas antiguas sin inventar su medio de pago. Las ventas pagadas cuyo metodo historico no puede demostrarse quedan identificadas como `legado`; los pagos de fiado existentes se vinculan usando `no_especificado`. No se vuelve a descontar stock ni se crean fiados o movimientos para ventas antiguas. El punto de venta, pagos multiples y recibos por WhatsApp quedan disponibles en los planes basico y avanzado.
 
 ### Crear el primer administrador
 
@@ -186,6 +196,10 @@ No ejecute `db:init`, `db:migrate`, `db:create-admin` ni `db:seed-demo` contra p
 - Los movimientos se guardan en unidades base enteras. Una operacion por paquete conserva tambien la cantidad y presentacion original para facilitar su lectura.
 - Los ajustes manuales usan el nuevo stock contado, calculan la diferencia en el backend y exigen la contrasena actual del propietario autenticado.
 - Una venta fiada descuenta stock una sola vez al registrar la venta. Los pagos posteriores no cambian inventario.
+- El POS calcula precios, descuentos, pagos, cambio y saldo en el backend. El efectivo recibido se conserva para el comprobante, pero solo el monto aplicado se registra como ingreso.
+- El descuento disponible en esta fase es un monto fijo general; no se implementaron promociones ni porcentajes combinables.
+- Efectivo, QR y pagos mixtos pueden dejar un saldo parcial. Todo saldo pendiente exige un cliente y genera un unico fiado asociado a la venta.
+- El codigo de barras local es opcional, se conserva como texto y debe ser unico dentro de cada tienda. Los lectores que actuan como teclado pueden buscar y agregar con Enter.
 
 ## Preparacion multi-tienda
 
@@ -255,3 +269,14 @@ npm.cmd run test:stock-movements
 ```
 
 La prueba comprueba altas iniciales, compras, ventas pagadas y fiadas, pagos sin impacto en stock, ajustes protegidos, ocultar/restaurar, idempotencia, aislamiento, solo lectura, rollback, concurrencia y reconciliacion. Solo funciona en localhost y en una base cuyo nombre contenga `prueba` o `test`; crea dos tiendas con credenciales aleatorias y elimina sus datos temporales al finalizar.
+
+### Prueba local del punto de venta
+
+Con `008` aplicada y el servidor local iniciado, ejecute:
+
+```powershell
+$env:APP_ENV='local'
+npm.cmd run test:pos-payments
+```
+
+La prueba cubre busqueda por nombre y codigo, favoritos, unidad y paquete, efectivo, QR, pago mixto, cambio, saldos parciales, fiado completo, idempotencia, rollback, concurrencia, comprobantes, aislamiento y modo de solo lectura. Solo funciona en localhost y en una base cuyo nombre contenga `prueba` o `test`; limpia las tiendas, usuarios y operaciones temporales que crea.

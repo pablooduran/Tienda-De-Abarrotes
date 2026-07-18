@@ -139,6 +139,12 @@ WHERE NOT EXISTS (SELECT 1 FROM funcionalidad WHERE codigo='portal_clientes');
 INSERT INTO funcionalidad (codigo, nombre, descripcion)
 SELECT 'catalogo_maestro', 'Catalogo maestro', 'Busqueda y alta guiada de productos desde el catalogo de plataforma.'
 WHERE NOT EXISTS (SELECT 1 FROM funcionalidad WHERE codigo='catalogo_maestro');
+INSERT INTO funcionalidad (codigo, nombre, descripcion)
+SELECT 'punto_venta', 'Punto de venta', 'Venta rapida con carrito, cobro y comprobante.'
+WHERE NOT EXISTS (SELECT 1 FROM funcionalidad WHERE codigo='punto_venta');
+INSERT INTO funcionalidad (codigo, nombre, descripcion)
+SELECT 'pagos_multiples', 'Pagos multiples', 'Cobros mediante efectivo, QR o combinacion de ambos.'
+WHERE NOT EXISTS (SELECT 1 FROM funcionalidad WHERE codigo='pagos_multiples');
 
 INSERT INTO planFuncionalidad (idPlan, idFuncionalidad, habilitada)
 SELECT p.idPlan, f.idFuncionalidad, 1
@@ -164,6 +170,16 @@ INSERT INTO planFuncionalidad (idPlan, idFuncionalidad, habilitada)
 SELECT p.idPlan, f.idFuncionalidad, 1
 FROM plan p
 JOIN funcionalidad f ON f.codigo IN ('historial_stock','ajuste_stock')
+WHERE p.codigo IN ('basico','avanzado')
+  AND NOT EXISTS (
+    SELECT 1 FROM planFuncionalidad pf
+    WHERE pf.idPlan=p.idPlan AND pf.idFuncionalidad=f.idFuncionalidad
+  );
+
+INSERT INTO planFuncionalidad (idPlan, idFuncionalidad, habilitada)
+SELECT p.idPlan, f.idFuncionalidad, 1
+FROM plan p
+JOIN funcionalidad f ON f.codigo IN ('punto_venta','pagos_multiples','recibos_whatsapp')
 WHERE p.codigo IN ('basico','avanzado')
   AND NOT EXISTS (
     SELECT 1 FROM planFuncionalidad pf
@@ -275,23 +291,28 @@ CREATE TABLE IF NOT EXISTS producto (
   nombre VARCHAR(100) NOT NULL,
   idProveedor INT NULL,
   idProductoMaestro INT NULL,
+  codigoBarras VARCHAR(64) NULL,
   categoria VARCHAR(50) NOT NULL DEFAULT 'otros',
   unidadMedida ENUM('unidad','paquete','kilo','gramo','litro','mililitro','caja','docena','bolsa') NOT NULL DEFAULT 'unidad',
   unidadesPorPaquete INT NOT NULL DEFAULT 1,
   paquetesPorCaja INT NOT NULL DEFAULT 1,
   precioVenta DECIMAL(10,2) NOT NULL,
+  precioVentaPaquete DECIMAL(10,2) NULL,
   stock INT NOT NULL DEFAULT 0,
   stockMinimo INT NOT NULL DEFAULT 5,
   stockUnidadesTotal INT NOT NULL DEFAULT 0,
   ultimoPrecioCompra DECIMAL(10,2) NOT NULL DEFAULT 0,
   permiteVentaPorPaquete BOOLEAN NOT NULL DEFAULT TRUE,
   permiteVentaPorUnidad BOOLEAN NOT NULL DEFAULT TRUE,
+  favoritoPos TINYINT(1) NOT NULL DEFAULT 0,
   activo TINYINT(1) NOT NULL DEFAULT 1,
   eliminadoEn DATETIME NULL,
   UNIQUE KEY uq_producto_tienda_id (idTienda, idProducto),
   KEY idx_producto_tienda_proveedor (idTienda, idProveedor),
   KEY idx_producto_tienda_categoria_nombre (idTienda, categoria, nombre),
   KEY idx_producto_tienda_activo_nombre (idTienda, activo, nombre),
+  UNIQUE KEY uq_producto_tienda_codigoBarras (idTienda, codigoBarras),
+  KEY idx_producto_tienda_favorito_nombre (idTienda, favoritoPos, activo, nombre),
   KEY idx_producto_productoMaestro (idProductoMaestro),
   UNIQUE KEY uq_producto_tienda_maestro (idTienda, idProductoMaestro),
   CONSTRAINT fk_producto_tienda FOREIGN KEY (idTienda) REFERENCES tienda(idTienda),
@@ -305,14 +326,36 @@ CREATE TABLE IF NOT EXISTS venta (
   idVenta INT AUTO_INCREMENT PRIMARY KEY,
   idTienda INT NULL,
   fecha DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  subtotal DECIMAL(10,2) NOT NULL DEFAULT 0,
+  descuento DECIMAL(10,2) NOT NULL DEFAULT 0,
   total DECIMAL(10,2) NOT NULL,
+  montoPagado DECIMAL(10,2) NOT NULL DEFAULT 0,
+  saldoPendiente DECIMAL(10,2) NOT NULL DEFAULT 0,
+  estadoPago ENUM('pagada','parcial','pendiente','legado') NOT NULL DEFAULT 'legado',
   tipo ENUM('pagada','fiada') NOT NULL DEFAULT 'pagada',
   idCliente INT NULL,
   claveOperacion VARCHAR(64) NULL,
+  codigoComprobante VARCHAR(40) NULL,
   UNIQUE KEY uq_venta_tienda_id (idTienda, idVenta),
   UNIQUE KEY uq_venta_tienda_claveOperacion (idTienda, claveOperacion),
+  UNIQUE KEY uq_venta_tienda_comprobante (idTienda, codigoComprobante),
   KEY idx_venta_tienda_fecha (idTienda, fecha),
   KEY idx_venta_tienda_cliente (idTienda, idCliente),
+  KEY idx_venta_tienda_estado_fecha (idTienda, estadoPago, fecha),
+  CONSTRAINT chk_venta_totales_pos CHECK (
+    subtotal >= 0 AND descuento >= 0 AND total >= 0 AND descuento <= subtotal
+    AND ABS((subtotal - descuento) - total) < 0.01
+  ),
+  CONSTRAINT chk_venta_saldo_pos CHECK (
+    montoPagado >= 0 AND saldoPendiente >= 0
+    AND (estadoPago = 'legado' OR ABS((montoPagado + saldoPendiente) - total) < 0.01)
+  ),
+  CONSTRAINT chk_venta_estado_pos CHECK (
+    estadoPago = 'legado'
+    OR (estadoPago = 'pagada' AND saldoPendiente = 0 AND montoPagado = total)
+    OR (estadoPago = 'parcial' AND montoPagado > 0 AND saldoPendiente > 0)
+    OR (estadoPago = 'pendiente' AND montoPagado = 0 AND saldoPendiente = total AND total > 0)
+  ),
   CONSTRAINT fk_venta_tienda FOREIGN KEY (idTienda) REFERENCES tienda(idTienda),
   CONSTRAINT fk_venta_cliente FOREIGN KEY (idCliente) REFERENCES cliente(idCliente),
   CONSTRAINT fk_venta_tienda_cliente FOREIGN KEY (idTienda, idCliente) REFERENCES cliente(idTienda, idCliente)
@@ -390,6 +433,7 @@ CREATE TABLE IF NOT EXISTS fiado (
   activo TINYINT(1) NOT NULL DEFAULT 1,
   eliminadoEn DATETIME NULL,
   UNIQUE KEY uq_fiado_tienda_id (idTienda, idFiado),
+  UNIQUE KEY uq_fiado_tienda_venta_unica (idTienda, idVenta),
   KEY idx_fiado_tienda_estado_fecha (idTienda, activo, estado, fechaInicio),
   KEY idx_fiado_tienda_cliente (idTienda, idCliente),
   KEY idx_fiado_tienda_venta (idTienda, idVenta),
@@ -424,11 +468,46 @@ CREATE TABLE IF NOT EXISTS pagoFiado (
   fechaPago DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   monto DECIMAL(10,2) NOT NULL,
   observacion VARCHAR(150) NULL,
+  UNIQUE KEY uq_pagoFiado_tienda_id (idTienda, idPagoFiado),
   KEY idx_pagoFiado_tienda_fiado (idTienda, idFiado),
   CONSTRAINT fk_pagoFiado_tienda FOREIGN KEY (idTienda) REFERENCES tienda(idTienda),
   CONSTRAINT fk_pagoFiado_fiado FOREIGN KEY (idFiado) REFERENCES fiado(idFiado),
   CONSTRAINT fk_pagoFiado_tienda_fiado FOREIGN KEY (idTienda, idFiado) REFERENCES fiado(idTienda, idFiado)
 );
+
+CREATE TABLE IF NOT EXISTS pagoVenta (
+  idPagoVenta BIGINT AUTO_INCREMENT PRIMARY KEY,
+  idTienda INT NOT NULL,
+  idVenta INT NOT NULL,
+  idPagoFiado INT NULL,
+  metodoPago ENUM('efectivo','qr','no_especificado') NOT NULL,
+  monto DECIMAL(10,2) NOT NULL,
+  montoRecibido DECIMAL(10,2) NULL,
+  cambio DECIMAL(10,2) NOT NULL DEFAULT 0,
+  referencia VARCHAR(120) NULL,
+  claveOperacion VARCHAR(160) NOT NULL,
+  idAdministrador INT NULL,
+  creadoEn DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE KEY uq_pagoVenta_tienda_clave (idTienda, claveOperacion),
+  UNIQUE KEY uq_pagoVenta_tienda_pagoFiado (idTienda, idPagoFiado),
+  KEY idx_pagoVenta_tienda_venta (idTienda, idVenta, creadoEn),
+  KEY idx_pagoVenta_tienda_metodo_fecha (idTienda, metodoPago, creadoEn),
+  KEY idx_pagoVenta_tienda_admin_fecha (idTienda, idAdministrador, creadoEn),
+  CONSTRAINT chk_pagoVenta_monto CHECK (monto > 0),
+  CONSTRAINT chk_pagoVenta_metodo CHECK (metodoPago IN ('efectivo','qr','no_especificado')),
+  CONSTRAINT chk_pagoVenta_efectivo CHECK (
+    (metodoPago='efectivo' AND montoRecibido IS NOT NULL AND montoRecibido>=monto AND ABS((montoRecibido-monto)-cambio)<0.01)
+    OR (metodoPago<>'efectivo' AND montoRecibido IS NULL AND cambio=0)
+  ),
+  CONSTRAINT fk_pagoVenta_tienda FOREIGN KEY (idTienda)
+    REFERENCES tienda(idTienda) ON UPDATE RESTRICT ON DELETE RESTRICT,
+  CONSTRAINT fk_pagoVenta_venta FOREIGN KEY (idTienda, idVenta)
+    REFERENCES venta(idTienda, idVenta) ON UPDATE RESTRICT ON DELETE RESTRICT,
+  CONSTRAINT fk_pagoVenta_pagoFiado FOREIGN KEY (idTienda, idPagoFiado)
+    REFERENCES pagoFiado(idTienda, idPagoFiado) ON UPDATE RESTRICT ON DELETE RESTRICT,
+  CONSTRAINT fk_pagoVenta_administrador FOREIGN KEY (idTienda, idAdministrador)
+    REFERENCES administrador(idTienda, idAdministrador) ON UPDATE RESTRICT ON DELETE RESTRICT
+) ENGINE=InnoDB;
 
 CREATE TABLE IF NOT EXISTS movimientoStock (
   idMovimientoStock BIGINT AUTO_INCREMENT PRIMARY KEY,

@@ -7,6 +7,10 @@ const modalRoot = document.getElementById('modalRoot');
 
 let state = { productos: [], clientes: [], proveedores: [], fiados: [], ventas: [], categorias: [], context: null };
 let debtFocus = null;
+let posCart = [];
+let posOperationKey = null;
+let posSearchTimer = null;
+let lastBarcodeScan = { value: '', at: 0 };
 
 const sections = [
   ['inicio', 'Inicio', 'Resumen general del negocio'],
@@ -14,7 +18,7 @@ const sections = [
   ['movimientosStock', 'Movimientos de stock', 'Entradas, salidas y ajustes del inventario'],
   ['clientes', 'Clientes', 'Registro de clientes'],
   ['proveedores', 'Proveedores', 'Registro de proveedores'],
-  ['ventas', 'Ventas', 'Venta pagada o fiada con buscador'],
+  ['ventas', 'Punto de venta', 'Cobro rápido, pagos mixtos y comprobantes'],
   ['compras', 'Compras / stock', 'Abastecimiento por paquete o unidad'],
   ['historialVentas', 'Historial de ventas', 'Ventas realizadas y detalle'],
   ['pagos', 'Fiados / Pagos', 'Deudas, pagos parciales e historial'],
@@ -201,6 +205,7 @@ function applyReadOnlyUi() {
     '[data-restore-debt]',
     '[data-delete-fiado]',
     '[data-product]',
+    '[data-pos-favorite]',
     '#payClientTotal'
   ];
   document.querySelectorAll(selectors.join(',')).forEach((control) => {
@@ -691,9 +696,10 @@ async function proveedores() {
 }
 
 function productForm(row = {}) {
+  const isEdit = Boolean(row.idProducto);
   const checked = (value) => value ? 'checked' : '';
   const isPackagePurchase = Number(row.unidadesPorPaquete || 1) > 1 || row.permiteVentaPorPaquete;
-  const packagePrice = Number(row.precioVenta || 0) * Number(row.unidadesPorPaquete || 1);
+  const packagePrice = row.precioVentaPaquete ?? (Number(row.precioVenta || 0) * Number(row.unidadesPorPaquete || 1));
   return `
     <form class="grid product-form" id="productoForm" data-id="${row.idProducto || ''}">
       <input type="hidden" name="unidadMedida" value="${escapeHtml(row.unidadMedida || 'unidad')}">
@@ -704,6 +710,7 @@ function productForm(row = {}) {
         <p class="hint">Registra lo que se ve en mostrador. El precio de compra se coloca después al registrar una compra.</p>
       </div>
       <label>Nombre del producto<input name="nombre" required value="${escapeHtml(row.nombre || '')}"></label>
+      <label>Código de barras (opcional)<input name="codigoBarras" maxlength="64" value="${escapeHtml(row.codigoBarras || '')}"></label>
       <label>Proveedor<select name="idProveedor">${options(state.proveedores, 'idProveedor', 'nombre', 'Sin proveedor', row.idProveedor)}</select></label>
       <label>Categoría<select name="categoria" required>${categoryOptions(row.categoria || 'OTROS')}</select></label>
       <label>Tipo de compra<select id="tipoCompraProducto">
@@ -715,8 +722,8 @@ function productForm(row = {}) {
         <h4>Precios y stock</h4>
       </div>
       <label id="unitsPerPackageField">Unidades por paquete<input name="unidadesPorPaquete" type="number" step="1" min="1" required value="${row.unidadesPorPaquete || 1}"></label>
-      <label>Precio venta por unidad<input name="precioVenta" type="number" step="0.01" min="0" required value="${row.precioVenta || ''}"></label>
-      <label id="packagePriceField">Precio venta por paquete<input id="precioVentaPaquete" type="number" step="0.01" min="0" value="${packagePrice ? money(packagePrice) : ''}"></label>
+      <label>Precio venta por unidad<input name="precioVenta" type="number" step="0.01" min="0.01" required value="${row.precioVenta || ''}"></label>
+      <label id="packagePriceField">Precio venta por paquete<input name="precioVentaPaquete" id="precioVentaPaquete" data-price-mode="${row.precioVentaPaquete == null ? 'auto' : 'manual'}" type="number" step="0.01" min="0.01" value="${packagePrice ? money(packagePrice) : ''}"></label>
       <label>Stock mínimo<input name="stockMinimo" type="number" step="1" min="1" required value="${row.stockMinimo || 5}"></label>
       ${isEdit
         ? `<label>Stock actual<input type="number" readonly value="${Number(row.stockUnidadesTotal ?? row.stock ?? 0)}"></label>`
@@ -740,6 +747,7 @@ function wireProductForm() {
   const unitPrice = form.querySelector('[name="precioVenta"]');
   const packagePrice = form.querySelector('#precioVentaPaquete');
   const packageSale = form.querySelector('[name="permiteVentaPorPaquete"]');
+  let autoPackagePrice = packagePrice.dataset.priceMode === 'auto';
   const toggle = () => {
     const isPackage = type.value === 'paquete';
     form.querySelector('#unitsPerPackageField').classList.toggle('is-hidden', !isPackage);
@@ -749,22 +757,22 @@ function wireProductForm() {
       units.value = 1;
       packagePrice.value = '';
       packageSale.checked = false;
+      autoPackagePrice = true;
     }
   };
   const syncPackagePrice = () => {
-    if (type.value !== 'paquete') return;
+    if (type.value !== 'paquete' || !autoPackagePrice) return;
     const value = Number(unitPrice.value || 0) * Number(units.value || 1);
     packagePrice.value = value ? money(value) : '';
   };
-  const syncUnitPrice = () => {
-    if (type.value !== 'paquete') return;
-    const value = Number(packagePrice.value || 0) / Math.max(1, Number(units.value || 1));
-    if (value) unitPrice.value = money(value);
-  };
-  type.addEventListener('change', () => { toggle(); syncPackagePrice(); });
+  type.addEventListener('change', () => {
+    toggle();
+    if (type.value === 'paquete' && !packagePrice.value) autoPackagePrice = true;
+    syncPackagePrice();
+  });
   units.addEventListener('input', syncPackagePrice);
   unitPrice.addEventListener('input', syncPackagePrice);
-  packagePrice.addEventListener('input', syncUnitPrice);
+  packagePrice.addEventListener('input', () => { autoPackagePrice = false; });
   toggle();
 }
 
@@ -1428,15 +1436,428 @@ async function saveOperation(event, kind) {
   } catch (error) { showError(error.message); }
 }
 
-async function ventas() { operationView('ventas'); }
+function posLinePrice(line) {
+  if (line.presentacion === 'paquete') {
+    return Number(line.producto.precioVentaPaquete ?? (Number(line.producto.precioVenta) * Number(line.producto.unidadesPorPaquete || 1)));
+  }
+  return Number(line.producto.precioVenta || 0);
+}
+
+function posLineUnits(line) {
+  return Number(line.cantidad || 0) * (line.presentacion === 'paquete' ? Number(line.producto.unidadesPorPaquete || 1) : 1);
+}
+
+function posSubtotal() {
+  return posCart.reduce((sum, line) => sum + Number(line.cantidad || 0) * posLinePrice(line), 0);
+}
+
+function posTotals() {
+  const subtotal = posSubtotal();
+  const discount = Math.min(subtotal, Math.max(0, Number(document.getElementById('posDiscount')?.value || 0)));
+  return { subtotal, discount, total: Math.max(0, subtotal - discount) };
+}
+
+function posProductCard(product) {
+  const packagePrice = Number(product.precioVentaPaquete ?? (Number(product.precioVenta) * Number(product.unidadesPorPaquete || 1)));
+  const presentations = [
+    product.permiteVentaPorUnidad ? `Unidad Bs ${money(product.precioVenta)}` : '',
+    product.permiteVentaPorPaquete && Number(product.unidadesPorPaquete) > 1
+      ? `Paquete Bs ${money(packagePrice)} (${product.unidadesPorPaquete} u.)`
+      : ''
+  ].filter(Boolean).join(' · ');
+  return `
+    <article class="pos-product" data-pos-product="${product.idProducto}">
+      <button type="button" class="pos-favorite ${product.favoritoPos ? 'is-favorite' : ''}" data-pos-favorite="${product.idProducto}" title="${product.favoritoPos ? 'Quitar de favoritos' : 'Agregar a favoritos'}" aria-label="Favorito">★</button>
+      <div>
+        <strong>${escapeHtml(product.nombre)}</strong>
+        <span>${escapeHtml(product.categoria)} · ${escapeHtml(product.proveedor || 'Sin proveedor')}</span>
+        <small>${escapeHtml(stockLabel(product))}</small>
+        <small>${escapeHtml(presentations)}</small>
+      </div>
+      <button type="button" data-pos-add="${product.idProducto}">Agregar</button>
+    </article>`;
+}
+
+async function loadPosProducts(viewMode = '') {
+  const results = document.getElementById('posResults');
+  if (!results) return;
+  const search = document.getElementById('posSearch').value.trim();
+  const category = document.getElementById('posCategory').value;
+  const query = new URLSearchParams({ limit: '30' });
+  if (search) query.set('q', search);
+  if (category) query.set('categoria', category);
+  const path = viewMode === 'recientes'
+    ? '/api/pos/recientes'
+    : viewMode === 'mas_vendidos'
+      ? '/api/pos/mas-vendidos'
+      : viewMode === 'favoritos'
+        ? '/api/pos/favoritos'
+        : '/api/pos/productos';
+  try {
+    const data = await api(`${path}?${query}`);
+    results.dataset.products = JSON.stringify(data.productos);
+    results.innerHTML = data.productos.length
+      ? data.productos.map(posProductCard).join('')
+      : '<p class="muted empty-state">No se encontraron productos disponibles.</p>';
+    results.querySelectorAll('[data-pos-add]').forEach((button) => button.addEventListener('click', () => {
+      const product = data.productos.find((item) => String(item.idProducto) === button.dataset.posAdd);
+      addPosProduct(product);
+    }));
+    results.querySelectorAll('[data-pos-favorite]').forEach((button) => button.addEventListener('click', async () => {
+      const product = data.productos.find((item) => String(item.idProducto) === button.dataset.posFavorite);
+      try {
+        await api(`/api/pos/favoritos/${product.idProducto}`, { method: product.favoritoPos ? 'DELETE' : 'POST' });
+        await loadPosProducts(viewMode);
+      } catch (error) { showError(error.message); }
+    }));
+  } catch (error) {
+    results.innerHTML = `<p class="text-danger">${escapeHtml(error.message)}</p>`;
+  }
+}
+
+function addPosProduct(product) {
+  if (!product) return;
+  const existing = posCart.find((line) => Number(line.producto.idProducto) === Number(product.idProducto));
+  if (existing) existing.cantidad += 1;
+  else {
+    const presentacion = product.permiteVentaPorUnidad ? 'unidad' : 'paquete';
+    posCart.push({ producto: product, cantidad: 1, presentacion });
+  }
+  renderPosCart();
+}
+
+function renderPosCart() {
+  const container = document.getElementById('posCartItems');
+  if (!container) return;
+  container.innerHTML = posCart.length ? posCart.map((line, index) => {
+    const units = posLineUnits(line);
+    const insufficient = units > Number(line.producto.stockUnidadesTotal || 0);
+    const packageOption = line.producto.permiteVentaPorPaquete && Number(line.producto.unidadesPorPaquete || 1) > 1
+      ? `<option value="paquete" ${line.presentacion === 'paquete' ? 'selected' : ''}>Paquete</option>` : '';
+    const unitOption = line.producto.permiteVentaPorUnidad
+      ? `<option value="unidad" ${line.presentacion === 'unidad' ? 'selected' : ''}>Unidad</option>` : '';
+    return `
+      <article class="pos-cart-line ${insufficient ? 'has-warning' : ''}" data-pos-line="${index}">
+        <div class="pos-cart-line-head">
+          <strong>${escapeHtml(line.producto.nombre)}</strong>
+          <button type="button" class="icon-button danger" data-pos-remove="${index}" title="Quitar producto" aria-label="Quitar">×</button>
+        </div>
+        <div class="pos-line-controls">
+          <label>Presentación<select data-pos-presentation="${index}">${unitOption}${packageOption}</select></label>
+          <label>Cantidad<span class="pos-stepper"><button type="button" data-pos-minus="${index}" title="Disminuir">−</button><input data-pos-quantity="${index}" type="number" min="1" step="1" value="${line.cantidad}"><button type="button" data-pos-plus="${index}" title="Aumentar">+</button></span></label>
+        </div>
+        <div class="pos-line-summary">
+          <span>${units} unidades · Bs ${money(posLinePrice(line))} c/u</span>
+          <strong>Bs ${money(Number(line.cantidad) * posLinePrice(line))}</strong>
+        </div>
+        ${insufficient ? `<p class="text-danger">Requiere ${units}; disponibles ${line.producto.stockUnidadesTotal}.</p>` : ''}
+      </article>`;
+  }).join('') : '<p class="muted empty-state">El carrito esta vacio.</p>';
+  container.querySelectorAll('[data-pos-remove]').forEach((button) => button.addEventListener('click', () => {
+    posCart.splice(Number(button.dataset.posRemove), 1);
+    renderPosCart();
+  }));
+  container.querySelectorAll('[data-pos-minus]').forEach((button) => button.addEventListener('click', () => {
+    const line = posCart[Number(button.dataset.posMinus)];
+    line.cantidad = Math.max(1, Number(line.cantidad) - 1);
+    renderPosCart();
+  }));
+  container.querySelectorAll('[data-pos-plus]').forEach((button) => button.addEventListener('click', () => {
+    posCart[Number(button.dataset.posPlus)].cantidad += 1;
+    renderPosCart();
+  }));
+  container.querySelectorAll('[data-pos-quantity]').forEach((input) => input.addEventListener('change', () => {
+    posCart[Number(input.dataset.posQuantity)].cantidad = Math.max(1, Number.parseInt(input.value, 10) || 1);
+    renderPosCart();
+  }));
+  container.querySelectorAll('[data-pos-presentation]').forEach((select) => select.addEventListener('change', () => {
+    posCart[Number(select.dataset.posPresentation)].presentacion = select.value;
+    renderPosCart();
+  }));
+  document.getElementById('posCartCount').textContent = `${posCart.length} producto${posCart.length === 1 ? '' : 's'}`;
+  renderPosPaymentSummary();
+}
+
+function renderPosPaymentFields() {
+  const mode = document.getElementById('posPaymentMode')?.value || 'efectivo';
+  const fields = document.getElementById('posPaymentFields');
+  if (!fields) return;
+  const { total } = posTotals();
+  if (mode === 'efectivo') {
+    fields.innerHTML = `<label>Efectivo recibido<input id="posCashReceived" data-auto-cash="true" type="number" min="0" step="0.01" value="${money(total)}"></label>`;
+  } else if (mode === 'qr') {
+    fields.innerHTML = `<label>Referencia QR (opcional)<input id="posQrReference" maxlength="120" placeholder="Número o nota del pago"></label>`;
+  } else if (mode === 'mixto') {
+    fields.innerHTML = `
+      <label>Monto en efectivo<input id="posCashApplied" type="number" min="0" step="0.01" value="0"></label>
+      <label>Efectivo recibido<input id="posCashReceived" type="number" min="0" step="0.01" value="0"></label>
+      <label>Monto por QR<input id="posQrApplied" type="number" min="0" step="0.01" value="0"></label>
+      <label>Referencia QR (opcional)<input id="posQrReference" maxlength="120"></label>`;
+  } else {
+    fields.innerHTML = '<p class="pos-credit-note">El total quedara pendiente. Debes seleccionar un cliente registrado.</p>';
+  }
+  fields.querySelectorAll('input').forEach((input) => input.addEventListener('input', () => {
+    if (input.id === 'posCashReceived') input.dataset.autoCash = 'false';
+    renderPosPaymentSummary();
+  }));
+  renderPosPaymentSummary();
+}
+
+function posPaymentDraft() {
+  const { total } = posTotals();
+  const mode = document.getElementById('posPaymentMode')?.value || 'efectivo';
+  const payments = [];
+  let cashReceived = 0;
+  if (mode === 'efectivo') {
+    if (total > 0) payments.push({ metodoPago: 'efectivo', monto: total });
+    cashReceived = Number(document.getElementById('posCashReceived')?.value || 0);
+  } else if (mode === 'qr') {
+    if (total > 0) payments.push({ metodoPago: 'qr', monto: total, referencia: document.getElementById('posQrReference')?.value || '' });
+  } else if (mode === 'mixto') {
+    const cash = Math.max(0, Number(document.getElementById('posCashApplied')?.value || 0));
+    const qr = Math.max(0, Number(document.getElementById('posQrApplied')?.value || 0));
+    if (cash > 0) payments.push({ metodoPago: 'efectivo', monto: cash });
+    if (qr > 0) payments.push({ metodoPago: 'qr', monto: qr, referencia: document.getElementById('posQrReference')?.value || '' });
+    cashReceived = Number(document.getElementById('posCashReceived')?.value || 0);
+  }
+  const paid = payments.reduce((sum, payment) => sum + Number(payment.monto), 0);
+  return { payments, paid, balance: Math.max(0, total - paid), cashReceived, change: Math.max(0, cashReceived - (payments.find((payment) => payment.metodoPago === 'efectivo')?.monto || 0)) };
+}
+
+function renderPosPaymentSummary() {
+  const summary = document.getElementById('posPaymentSummary');
+  if (!summary) return;
+  const totals = posTotals();
+  const automaticCash = document.querySelector('#posCashReceived[data-auto-cash="true"]');
+  if (automaticCash) automaticCash.value = money(totals.total);
+  const payment = posPaymentDraft();
+  document.getElementById('posSubtotal').textContent = `Bs ${money(totals.subtotal)}`;
+  document.getElementById('posTotal').textContent = `Bs ${money(totals.total)}`;
+  summary.innerHTML = `
+    <span>Pagado <strong>Bs ${money(payment.paid)}</strong></span>
+    <span>Saldo <strong class="${payment.balance > 0 ? 'text-danger' : 'text-ok'}">Bs ${money(payment.balance)}</strong></span>
+    <span>Cambio <strong>Bs ${money(payment.change)}</strong></span>`;
+}
+
+function receiptText(receipt) {
+  const sale = receipt.venta;
+  const lines = [
+    sale.tienda,
+    `Comprobante ${sale.codigoComprobante || `Venta #${sale.idVenta}`}`,
+    formatDate(sale.fecha),
+    sale.idCliente ? `Cliente: ${sale.cliente}` : 'Cliente ocasional',
+    ''
+  ];
+  receipt.detalle.forEach((item) => {
+    lines.push(`${item.nombre} - ${intValue(item.cantidad)} ${item.presentacionVenta} x Bs ${money(item.precioVenta)} = Bs ${money(item.subtotal)}`);
+  });
+  lines.push('', `Subtotal: Bs ${money(sale.subtotal)}`);
+  if (Number(sale.descuento) > 0) lines.push(`Descuento: Bs ${money(sale.descuento)}`);
+  lines.push(`Total: Bs ${money(sale.total)}`);
+  receipt.pagos.forEach((payment) => {
+    lines.push(`${payment.metodoPago}: Bs ${money(payment.monto)}${payment.referencia ? ` (${payment.referencia})` : ''}`);
+    if (payment.metodoPago === 'efectivo' && Number(payment.cambio) > 0) {
+      lines.push(`Efectivo recibido: Bs ${money(payment.montoRecibido)}`, `Cambio: Bs ${money(payment.cambio)}`);
+    }
+  });
+  lines.push(`Pagado: Bs ${money(sale.montoPagado)}`, `Saldo actual: Bs ${money(sale.saldoActualFiado ?? sale.saldoPendiente)}`);
+  lines.push('', 'Gracias por su compra.', 'Comprobante interno, no fiscal.');
+  return lines.join('\n');
+}
+
+function receiptHtml(receipt) {
+  const sale = receipt.venta;
+  return `
+    <section class="receipt" id="saleReceipt">
+      <header><h2>${escapeHtml(sale.tienda)}</h2><strong>${escapeHtml(sale.codigoComprobante || `Venta #${sale.idVenta}`)}</strong><span>${escapeHtml(formatDate(sale.fecha))}</span></header>
+      <p>${sale.idCliente ? `Cliente: <strong>${escapeHtml(sale.cliente)}</strong>` : 'Cliente ocasional'}</p>
+      <div class="receipt-lines">${receipt.detalle.map((item) => `
+        <div><span>${escapeHtml(item.nombre)}<small>${intValue(item.cantidad)} ${escapeHtml(item.presentacionVenta)} × Bs ${money(item.precioVenta)}</small></span><strong>Bs ${money(item.subtotal)}</strong></div>`).join('')}</div>
+      <div class="receipt-totals">
+        <span>Subtotal <strong>Bs ${money(sale.subtotal)}</strong></span>
+        ${Number(sale.descuento) > 0 ? `<span>Descuento <strong>Bs ${money(sale.descuento)}</strong></span>` : ''}
+        <span class="receipt-grand-total">Total <strong>Bs ${money(sale.total)}</strong></span>
+        ${receipt.pagos.map((payment) => `<span>${escapeHtml(payment.metodoPago)} <strong>Bs ${money(payment.monto)}</strong></span>${payment.metodoPago === 'efectivo' && Number(payment.cambio) > 0 ? `<span>Efectivo recibido <strong>Bs ${money(payment.montoRecibido)}</strong></span><span>Cambio <strong>Bs ${money(payment.cambio)}</strong></span>` : ''}`).join('')}
+        <span>Saldo pendiente <strong class="${Number(sale.saldoActualFiado ?? sale.saldoPendiente) > 0 ? 'text-danger' : 'text-ok'}">Bs ${money(sale.saldoActualFiado ?? sale.saldoPendiente)}</strong></span>
+      </div>
+      <footer>Gracias por su compra.<small>Comprobante interno, no fiscal.</small></footer>
+    </section>`;
+}
+
+async function copyReceiptText(text) {
+  if (navigator.clipboard?.writeText) return navigator.clipboard.writeText(text);
+  const area = document.createElement('textarea');
+  area.value = text;
+  document.body.appendChild(area);
+  area.select();
+  document.execCommand('copy');
+  area.remove();
+}
+
+function showSaleReceipt(receipt) {
+  const text = receiptText(receipt);
+  const phone = String(receipt.venta.telefono || '').replace(/\D/g, '');
+  modalRoot.innerHTML = `
+    <div class="modal-backdrop"><div class="modal receipt-modal">
+      <h3>Venta confirmada</h3>
+      <div class="modal-body">${receiptHtml(receipt)}</div>
+      <div class="modal-actions receipt-actions">
+        <button type="button" class="secondary" data-receipt-copy>Copiar texto</button>
+        <button type="button" class="secondary" data-receipt-print>Imprimir</button>
+        <button type="button" ${phone ? '' : 'disabled'} data-receipt-whatsapp>WhatsApp</button>
+        <button type="button" data-modal-confirm>Cerrar</button>
+      </div>
+    </div></div>`;
+  modalRoot.querySelector('[data-modal-confirm]').addEventListener('click', () => { modalRoot.innerHTML = ''; });
+  modalRoot.querySelector('[data-receipt-copy]').addEventListener('click', async () => {
+    try { await copyReceiptText(text); showMessage('Comprobante copiado.'); } catch { showError('No se pudo copiar el comprobante.'); }
+  });
+  modalRoot.querySelector('[data-receipt-whatsapp]').addEventListener('click', () => {
+    if (phone) window.open(`https://wa.me/${phone}?text=${encodeURIComponent(text)}`, '_blank', 'noopener');
+  });
+  modalRoot.querySelector('[data-receipt-print]').addEventListener('click', () => {
+    const printWindow = window.open('', '_blank', 'width=520,height=720');
+    if (!printWindow) return showError('El navegador bloqueó la ventana de impresión.');
+    printWindow.opener = null;
+    printWindow.document.write(`<html><head><title>${escapeHtml(receipt.venta.codigoComprobante)}</title><style>body{font-family:Arial,sans-serif;max-width:420px;margin:20px auto}.receipt header,.receipt footer{text-align:center}.receipt header>*{display:block;margin:4px}.receipt-lines>div,.receipt-totals span{display:flex;justify-content:space-between;gap:12px;padding:6px 0;border-bottom:1px solid #ddd}.receipt-lines small{display:block;color:#555}.receipt-grand-total{font-size:1.2rem;font-weight:bold}</style></head><body>${receiptHtml(receipt)}</body></html>`);
+    printWindow.document.close();
+    printWindow.focus();
+    printWindow.print();
+  });
+}
+
+async function submitPosSale(event) {
+  event.preventDefault();
+  if (!posCart.length) return showError('Debe agregar al menos un producto.');
+  if (posCart.some((line) => posLineUnits(line) > Number(line.producto.stockUnidadesTotal || 0))) {
+    return showError('Hay productos con stock insuficiente.');
+  }
+  const totals = posTotals();
+  const payment = posPaymentDraft();
+  if (payment.paid > totals.total + 0.001) return showError('Los pagos no pueden superar el total.');
+  if (payment.payments.some((item) => item.metodoPago === 'efectivo') && payment.cashReceived < (payment.payments.find((item) => item.metodoPago === 'efectivo')?.monto || 0)) {
+    return showError('El efectivo recibido no alcanza para el monto aplicado.');
+  }
+  const idCliente = document.getElementById('posClient').value;
+  if (payment.balance > 0 && !idCliente) return showError('Selecciona un cliente para dejar saldo pendiente.');
+  if (!await confirmAction(`Registrar venta por Bs ${money(totals.total)}${payment.balance > 0 ? ` con saldo Bs ${money(payment.balance)}` : ''}?`)) return;
+  const button = document.getElementById('posSubmit');
+  button.disabled = true;
+  try {
+    const data = await api('/api/pos/ventas', {
+      method: 'POST',
+      body: JSON.stringify({
+        claveOperacion: posOperationKey,
+        idCliente: idCliente || null,
+        descuento: totals.discount,
+        pagos: payment.payments,
+        efectivoRecibido: payment.cashReceived,
+        saldoFiado: payment.balance,
+        items: posCart.map((line) => ({ idProducto: line.producto.idProducto, cantidad: line.cantidad, presentacion: line.presentacion }))
+      })
+    });
+    posCart = [];
+    posOperationKey = newOperationKey();
+    renderPosCart();
+    showSaleReceipt(data.comprobante);
+    refreshCatalogs().catch(() => {});
+  } catch (error) {
+    showError(error.message);
+  } finally {
+    button.disabled = Boolean(state.context?.soloLectura);
+  }
+}
+
+async function ventas() {
+  posOperationKey = posOperationKey || newOperationKey();
+  view.innerHTML = `
+    <form id="posForm" class="pos-layout">
+      <section class="panel pos-picker">
+        <div class="pos-search-row">
+          <label class="pos-search-label">Buscar o escanear producto<input id="posSearch" autocomplete="off" placeholder="Nombre o código de barras"></label>
+          <label>Categoría<select id="posCategory"><option value="">Todas</option>${categoryOptions()}</select></label>
+        </div>
+        <div class="pos-quick-tabs" role="group" aria-label="Vistas rapidas">
+          <button type="button" class="secondary" data-pos-view="">Buscar</button>
+          <button type="button" class="secondary" data-pos-view="recientes">Recientes</button>
+          <button type="button" class="secondary" data-pos-view="mas_vendidos">Más vendidos</button>
+          <button type="button" class="secondary" data-pos-view="favoritos">Favoritos</button>
+        </div>
+        <div id="posResults" class="pos-results"></div>
+      </section>
+      <aside class="panel pos-cart-panel">
+        <div class="cart-head"><div><h3>Venta actual</h3><p class="muted" id="posCartCount">0 productos</p></div></div>
+        <div id="posCartItems" class="pos-cart-items"></div>
+        <div class="pos-customer-grid">
+          <label>Buscar cliente<input id="posClientSearch" placeholder="Nombre o teléfono"></label>
+          <label>Cliente<select id="posClient"><option value="">Cliente ocasional</option>${state.clientes.map((client) => `<option value="${client.idCliente}">${escapeHtml(client.nombre)}</option>`).join('')}</select></label>
+        </div>
+        <div class="pos-charge-box">
+          <label>Descuento general (Bs)<input id="posDiscount" type="number" min="0" step="0.01" value="0"></label>
+          <label>Forma de cobro<select id="posPaymentMode">
+            <option value="efectivo">Efectivo</option><option value="qr">QR</option>
+            <option value="mixto">Mixto o parcial</option><option value="fiado">Totalmente fiado</option>
+          </select></label>
+          <div id="posPaymentFields" class="pos-payment-fields"></div>
+          <div class="pos-total-grid"><span>Subtotal <strong id="posSubtotal">Bs 0.00</strong></span><span>Total <strong id="posTotal">Bs 0.00</strong></span></div>
+          <div id="posPaymentSummary" class="pos-payment-summary"></div>
+        </div>
+        <button type="submit" id="posSubmit" class="wide-button">Registrar y cobrar</button>
+      </aside>
+    </form>`;
+  const search = document.getElementById('posSearch');
+  search.focus();
+  search.addEventListener('input', () => {
+    clearTimeout(posSearchTimer);
+    posSearchTimer = setTimeout(() => loadPosProducts(), 180);
+  });
+  search.addEventListener('keydown', async (event) => {
+    if (event.key !== 'Enter') return;
+    event.preventDefault();
+    const code = search.value.trim();
+    if (!code) return;
+    const now = Date.now();
+    if (lastBarcodeScan.value === code && now - lastBarcodeScan.at < 500) return;
+    lastBarcodeScan = { value: code, at: now };
+    try {
+      const data = await api(`/api/pos/productos?q=${encodeURIComponent(code)}&limit=20`);
+      const exact = data.productos.find((product) => String(product.codigoBarrasDisponible || product.codigoBarras || '') === code);
+      if (exact) {
+        addPosProduct(exact);
+        search.value = '';
+        loadPosProducts();
+      } else if (data.productos.length === 1) addPosProduct(data.productos[0]);
+      else showError('No se encontró un producto con ese código.');
+    } catch (error) { showError(error.message); }
+  });
+  document.getElementById('posCategory').addEventListener('change', () => loadPosProducts());
+  view.querySelectorAll('[data-pos-view]').forEach((button) => button.addEventListener('click', () => loadPosProducts(button.dataset.posView)));
+  document.getElementById('posPaymentMode').addEventListener('change', renderPosPaymentFields);
+  document.getElementById('posDiscount').addEventListener('input', renderPosPaymentSummary);
+  document.getElementById('posClientSearch').addEventListener('input', async (event) => {
+    try {
+      const clients = await api(`/api/pos/clientes?q=${encodeURIComponent(event.target.value)}`);
+      const select = document.getElementById('posClient');
+      const selected = select.value;
+      select.innerHTML = `<option value="">Cliente ocasional</option>${clients.map((client) => `<option value="${client.idCliente}" ${String(client.idCliente) === selected ? 'selected' : ''}>${escapeHtml(client.nombre)}${client.telefono ? ` · ${escapeHtml(client.telefono)}` : ''}</option>`).join('')}`;
+    } catch (error) { showMessage(error.message, true); }
+  });
+  document.getElementById('posForm').addEventListener('submit', submitPosSale);
+  renderPosCart();
+  renderPosPaymentFields();
+  await loadPosProducts('recientes');
+}
 async function compras() { operationView('compras'); }
 
 async function historialVentas() {
   view.innerHTML = `<div class="panel table-wrap"><table>
-    <thead><tr><th>Fecha</th><th>Cliente</th><th>Tipo</th><th>Total</th><th>Estado</th><th>Acciones</th></tr></thead>
-    <tbody>${state.ventas.map((v) => `<tr><td>${formatDate(v.fecha)}</td><td>${escapeHtml(v.cliente)}</td><td>${v.tipo === 'fiada' ? 'FIADA' : 'PAGADA'}</td><td>Bs ${money(v.total)}</td><td>${v.tipo === 'fiada' ? statusBadge(v.estadoFiado) : statusBadge('pagado')}</td><td><button class="small secondary" data-detail="${v.idVenta}">Detalle</button></td></tr>`).join('')}</tbody>
+    <thead><tr><th>Comprobante</th><th>Fecha</th><th>Cliente</th><th>Total</th><th>Pagado</th><th>Saldo</th><th>Métodos</th><th>Estado</th><th>Acciones</th></tr></thead>
+    <tbody>${state.ventas.map((v) => `<tr><td>${escapeHtml(v.codigoComprobante || `Venta #${v.idVenta}`)}</td><td>${formatDate(v.fecha)}</td><td>${escapeHtml(v.cliente)}</td><td>Bs ${money(v.total)}</td><td>Bs ${money(v.montoPagado)}</td><td class="${Number(v.saldoActualFiado ?? v.saldoPendiente) > 0 ? 'text-danger' : 'text-ok'}">Bs ${money(v.saldoActualFiado ?? v.saldoPendiente)}</td><td>${escapeHtml(String(v.metodosPago || 'No especificado').replaceAll(',', ', '))}</td><td>${statusBadge(v.estadoPago === 'pagada' ? 'pagado' : v.estadoPago)}</td><td><div class="actions"><button class="small secondary" data-detail="${v.idVenta}">Detalle</button><button class="small" data-receipt="${v.idVenta}">Comprobante</button></div></td></tr>`).join('')}</tbody>
   </table></div>`;
   view.querySelectorAll('[data-detail]').forEach((btn) => btn.addEventListener('click', () => showSaleDetail(btn.dataset.detail)));
+  view.querySelectorAll('[data-receipt]').forEach((btn) => btn.addEventListener('click', async () => {
+    try { showSaleReceipt(await api(`/api/ventas/${btn.dataset.receipt}/comprobante`)); } catch (error) { showError(error.message); }
+  }));
 }
 
 async function showSaleDetailLegacy(idVenta) {
@@ -1460,15 +1881,16 @@ async function showSaleDetail(idVenta) {
       wide: true,
       confirmText: 'Cerrar',
       body: `
-        <p>${formatDate(v.fecha)} - ${escapeHtml(v.cliente)} - Bs ${money(v.total)}</p>
-        ${v.tipo === 'fiada' ? `<p>Saldo: <strong class="${Number(v.saldoPendiente) > 0 ? 'text-danger' : 'text-ok'}">Bs ${money(v.saldoPendiente)}</strong> ${statusBadge(v.estadoFiado)}</p>` : ''}
+        <p>${escapeHtml(v.codigoComprobante || `Venta #${v.idVenta}`)} · ${formatDate(v.fecha)} · ${escapeHtml(v.cliente)} · Bs ${money(v.total)}</p>
+        <p>Pagado: <strong>Bs ${money(v.montoPagado)}</strong> · Saldo actual: <strong class="${Number(v.saldoActualFiado ?? v.saldoPendiente) > 0 ? 'text-danger' : 'text-ok'}">Bs ${money(v.saldoActualFiado ?? v.saldoPendiente)}</strong> ${statusBadge(v.estadoPago === 'pagada' ? 'pagado' : v.estadoPago)}</p>
+        <p>${data.pagos.length ? data.pagos.map((payment) => `${escapeHtml(payment.metodoPago)}: <strong>Bs ${money(payment.monto)}</strong>${payment.referencia ? ` (${escapeHtml(payment.referencia)})` : ''}`).join(' · ') : 'Sin desglose de pagos para esta venta histórica.'}</p>
         ${v.idFiado ? `<p><button type="button" class="secondary" data-open-debt="${v.idFiado}" data-client="${v.idCliente || ''}" data-client-name="${escapeHtml(v.cliente)}">Ver en Fiados/Pagos</button></p>` : ''}
+        <p><button type="button" class="secondary" data-open-receipt="${v.idVenta}">Ver comprobante</button></p>
         <div class="table-wrap"><table><thead><tr><th>Producto</th><th>Cantidad</th><th>Presentación</th><th>Unidades</th><th>Precio</th><th>Costo</th><th>Ganancia</th></tr></thead>
         <tbody>${data.detalle.map((d) => `<tr><td>${escapeHtml(d.nombre)}</td><td>${intValue(d.cantidad)}</td><td>${escapeHtml(d.presentacionVenta)}</td><td>${intValue(d.cantidadEquivalenteUnidades)}</td><td>Bs ${money(d.subtotal)}</td><td>Bs ${money(d.subtotalCosto)}</td><td>Bs ${money(d.ganancia)}</td></tr>`).join('')}</tbody></table></div>`,
       onOpen: (root) => {
         const button = root.querySelector('[data-open-debt]');
-        if (!button) return;
-        button.addEventListener('click', () => {
+        if (button) button.addEventListener('click', () => {
           debtFocus = {
             idFiado: button.dataset.openDebt,
             idCliente: button.dataset.client,
@@ -1476,6 +1898,9 @@ async function showSaleDetail(idVenta) {
           };
           modalRoot.innerHTML = '';
           loadView('pagos').catch((error) => showError(error.message));
+        });
+        root.querySelector('[data-open-receipt]').addEventListener('click', async () => {
+          try { showSaleReceipt(await api(`/api/ventas/${v.idVenta}/comprobante`)); } catch (error) { showError(error.message); }
         });
       }
     });
