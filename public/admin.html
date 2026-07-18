@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Administración de tiendas</title>
+  <link rel="stylesheet" href="/css/admin.css">
+</head>
+<body>
+  <div class="admin-shell">
+    <aside class="admin-sidebar">
+      <div class="brand-block">
+        <span class="brand-mark" aria-hidden="true">T</span>
+        <div>
+          <strong>Plataforma de tiendas</strong>
+          <span>Administración general</span>
+        </div>
+      </div>
+
+      <nav aria-label="Navegación administrativa">
+        <a class="nav-link active" href="#tiendas">Tiendas</a>
+      </nav>
+
+      <div class="session-block">
+        <span>Sesión iniciada como</span>
+        <strong id="currentAdmin">Superadmin</strong>
+        <button id="logoutButton" class="button button-quiet" type="button">Cerrar sesión</button>
+      </div>
+    </aside>
+
+    <main class="admin-main" id="tiendas">
+      <header class="page-header">
+        <div>
+          <p class="eyebrow">Control de plataforma</p>
+          <h1>Tiendas registradas</h1>
+          <p>Administra el acceso de cada tienda sin intervenir en sus datos comerciales.</p>
+        </div>
+        <button id="createStoreButton" class="button button-primary" type="button">Nueva tienda</button>
+      </header>
+
+      <section class="summary-grid" aria-label="Resumen de tiendas">
+        <article class="summary-item">
+          <span>Total de tiendas</span>
+          <strong id="storeCount">0</strong>
+        </article>
+        <article class="summary-item summary-success">
+          <span>Tiendas activas</span>
+          <strong id="activeStoreCount">0</strong>
+        </article>
+        <article class="summary-item summary-warning">
+          <span>Suspendidas o inactivas</span>
+          <strong id="inactiveStoreCount">0</strong>
+        </article>
+        <article class="summary-item">
+          <span>Propietarios</span>
+          <strong id="ownerCount">0</strong>
+        </article>
+      </section>
+
+      <section class="content-section" aria-labelledby="storesHeading">
+        <div class="section-heading">
+          <div>
+            <h2 id="storesHeading">Directorio de tiendas</h2>
+            <p>Selecciona una tienda para revisar su estado y propietarios.</p>
+          </div>
+          <label class="search-field">
+            <span>Buscar</span>
+            <input id="storeSearch" type="search" placeholder="Nombre o slug" autocomplete="off">
+          </label>
+        </div>
+
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Tienda</th>
+                <th>Estado</th>
+                <th>Propietarios</th>
+                <th>Productos</th>
+                <th>Clientes</th>
+                <th>Última actividad</th>
+                <th><span class="sr-only">Acciones</span></th>
+              </tr>
+            </thead>
+            <tbody id="storesTableBody"></tbody>
+          </table>
+          <p id="emptyStores" class="empty-state" hidden>No hay tiendas que coincidan con la búsqueda.</p>
+        </div>
+      </section>
+
+      <section id="storeDetail" class="content-section detail-section" aria-labelledby="storeDetailTitle" hidden>
+        <div class="section-heading detail-heading">
+          <div>
+            <p class="eyebrow">Detalle de tienda</p>
+            <h2 id="storeDetailTitle"></h2>
+            <p id="storeDetailMeta"></p>
+          </div>
+          <div class="button-row">
+            <button id="editStoreButton" class="button button-secondary" type="button">Editar tienda</button>
+            <button id="toggleStoreButton" class="button button-danger" type="button"></button>
+          </div>
+        </div>
+
+        <div class="detail-facts">
+          <div><span>Estado</span><strong id="detailStoreStatus"></strong></div>
+          <div><span>Productos</span><strong id="detailProductCount"></strong></div>
+          <div><span>Clientes</span><strong id="detailClientCount"></strong></div>
+          <div><span>Última actividad</span><strong id="detailLastActivity"></strong></div>
+        </div>
+
+        <div class="owners-heading">
+          <div>
+            <h3>Propietarios</h3>
+            <p>Usuarios autorizados para administrar esta tienda.</p>
+          </div>
+          <button id="addOwnerButton" class="button button-primary" type="button">Agregar propietario</button>
+        </div>
+
+        <div class="table-wrap compact-table">
+          <table>
+            <thead>
+              <tr>
+                <th>Usuario</th>
+                <th>Acceso</th>
+                <th>Acciones</th>
+              </tr>
+            </thead>
+            <tbody id="ownersTableBody"></tbody>
+          </table>
+          <p id="emptyOwners" class="empty-state" hidden>Esta tienda todavía no tiene propietarios.</p>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <dialog id="formDialog" class="modal">
+    <form id="dynamicForm" method="dialog">
+      <header>
+        <div>
+          <p class="eyebrow">Administración</p>
+          <h2 id="formDialogTitle"></h2>
+        </div>
+        <button class="icon-button" type="button" data-close-dialog aria-label="Cerrar">×</button>
+      </header>
+      <div id="formFields" class="form-grid"></div>
+      <p id="formError" class="form-error" role="alert" hidden></p>
+      <footer>
+        <button class="button button-secondary" type="button" data-close-dialog>Cancelar</button>
+        <button id="formSubmitButton" class="button button-primary" type="submit">Guardar</button>
+      </footer>
+    </form>
+  </dialog>
+
+  <dialog id="confirmDialog" class="modal modal-small">
+    <div class="confirm-content">
+      <h2 id="confirmTitle">Confirmar acción</h2>
+      <p id="confirmMessage"></p>
+      <div class="button-row end">
+        <button id="confirmCancel" class="button button-secondary" type="button">Cancelar</button>
+        <button id="confirmAccept" class="button button-danger" type="button">Confirmar</button>
+      </div>
+    </div>
+  </dialog>
+
+  <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
+  <script src="/js/admin.js" defer></script>
+</body>
+</html>

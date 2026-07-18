@@ -18,7 +18,9 @@ try {
 
 const pool = require('./config/db');
 const { requireAuth } = require('./middleware/auth');
+const { requireRole } = require('./middleware/roles');
 const { requireTenant } = require('./middleware/tenant');
+const adminRoutes = require('./routes/admin');
 const apiRoutes = require('./routes/api');
 const authRoutes = require('./routes/auth');
 
@@ -61,16 +63,24 @@ app.use(session({
 }));
 
 app.use('/auth', authRoutes);
+app.use('/api/admin', requireAuth, requireRole('superadmin'), adminRoutes);
 app.use('/api', requireAuth, requireTenant, apiRoutes);
 
 app.get('/app.html', requireAuth, (req, res) => {
+  if (req.session.admin.rol !== 'dueno_tienda') return res.redirect('/admin.html');
   res.sendFile(path.join(__dirname, 'public', 'app.html'));
+});
+
+app.get('/admin.html', requireAuth, (req, res) => {
+  if (req.session.admin.rol !== 'superadmin') return res.redirect('/app.html');
+  return res.sendFile(path.join(__dirname, 'public', 'admin.html'));
 });
 
 app.use(express.static(path.join(__dirname, 'public')));
 
 app.get('/', requireAuth, (req, res) => {
-  res.sendFile(path.join(__dirname, 'public', 'app.html'));
+  const destination = req.session.admin.rol === 'superadmin' ? '/admin.html' : '/app.html';
+  res.redirect(destination);
 });
 
 app.use((req, res) => {

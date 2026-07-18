@@ -14,6 +14,7 @@ const tenantTables = [
   'detalleFiado',
   'pagoFiado'
 ];
+const commercialTenantTables = tenantTables.filter((table) => table !== 'administrador');
 
 async function tableExists(connection, table) {
   const [[row]] = await connection.query(
@@ -36,15 +37,60 @@ async function columnExists(connection, table, column) {
 }
 
 async function tableSummary(connection, table) {
-  if (!await tableExists(connection, table)) return { existe: false, registros: 0, sinIdTienda: null };
+  if (!await tableExists(connection, table)) {
+    return { existe: false, registros: 0, tieneIdTienda: false, sinIdTienda: null };
+  }
   const [[count]] = await connection.query(`SELECT COUNT(*) total FROM ${table}`);
   const hasTenant = await columnExists(connection, table, 'idTienda');
   let withoutTenant = null;
-  if (hasTenant) {
+  if (hasTenant && table !== 'administrador') {
     const [[missing]] = await connection.query(`SELECT COUNT(*) total FROM ${table} WHERE idTienda IS NULL`);
     withoutTenant = Number(missing.total);
   }
-  return { existe: true, registros: Number(count.total), sinIdTienda: withoutTenant };
+  return {
+    existe: true,
+    registros: Number(count.total),
+    tieneIdTienda: hasTenant,
+    sinIdTienda: withoutTenant
+  };
+}
+
+async function administratorValidation(connection) {
+  if (!await tableExists(connection, 'administrador')) {
+    return {
+      validacionDisponible: false,
+      propietariosSinTienda: null,
+      superadminConTienda: null,
+      administradoresConRolInvalido: null
+    };
+  }
+
+  const [hasTenant, hasRole] = await Promise.all([
+    columnExists(connection, 'administrador', 'idTienda'),
+    columnExists(connection, 'administrador', 'rol')
+  ]);
+  if (!hasTenant || !hasRole) {
+    return {
+      validacionDisponible: false,
+      propietariosSinTienda: null,
+      superadminConTienda: null,
+      administradoresConRolInvalido: null
+    };
+  }
+
+  const [[row]] = await connection.query(
+    `SELECT
+       SUM(CASE WHEN rol='dueno_tienda' AND idTienda IS NULL THEN 1 ELSE 0 END) AS propietariosSinTienda,
+       SUM(CASE WHEN rol='superadmin' AND idTienda IS NOT NULL THEN 1 ELSE 0 END) AS superadminConTienda,
+       SUM(CASE WHEN rol IS NULL OR rol NOT IN ('dueno_tienda', 'superadmin') THEN 1 ELSE 0 END) AS administradoresConRolInvalido
+     FROM administrador`
+  );
+  return {
+    validacionDisponible: true,
+    propietariosSinTienda: Number(row.propietariosSinTienda || 0),
+    superadminConTienda: Number(row.superadminConTienda || 0),
+    administradoresConRolInvalido: Number(row.administradoresConRolInvalido || 0)
+  };
 }
 
 async function aggregate(connection, table, sumColumn) {
@@ -105,20 +151,30 @@ async function main() {
 
     const hasStoreTable = await tableExists(connection, 'tienda');
     const existingTables = Object.values(tables).filter((table) => table.existe).length;
-    const tablesWithTenant = Object.values(tables).filter((table) => table.sinIdTienda !== null).length;
-    const recordsWithoutTenant = Object.values(tables)
-      .reduce((total, table) => total + (table.sinIdTienda || 0), 0);
+    const tablesWithTenant = Object.values(tables).filter((table) => table.tieneIdTienda).length;
+    const commercialRecordsWithoutTenant = commercialTenantTables
+      .reduce((total, table) => total + (tables[table].sinIdTienda || 0), 0);
+    const administradores = await administratorValidation(connection);
+    const recordsWithoutTenant = commercialRecordsWithoutTenant + (administradores.propietariosSinTienda || 0);
     const shops = hasStoreTable
       ? Number((await connection.query('SELECT COUNT(*) total FROM tienda'))[0][0].total)
       : 0;
+    const migration004 = await migration004Structure(connection, hasStoreTable);
+    const administratorRulesValid = administradores.validacionDisponible
+      && administradores.propietariosSinTienda === 0
+      && administradores.superadminConTienda === 0
+      && administradores.administradoresConRolInvalido === 0;
     const migrationState = !hasStoreTable
       && existingTables === tenantTables.length
       && tablesWithTenant === 0
       ? 'pre-migracion'
-      : hasStoreTable
+        : hasStoreTable
           && shops > 0
           && tablesWithTenant === tenantTables.length
+          && migration004.registradaEnSchemaMigrations
+          && migration004.tiendasConSlugDeisy === 1
           && recordsWithoutTenant === 0
+          && administratorRulesValid
         ? 'post-migracion'
         : 'estructura-incompleta-o-migracion-parcial';
 
@@ -130,9 +186,11 @@ async function main() {
         tablasExistentes: existingTables,
         tablasConIdTienda: tablesWithTenant,
         tablasEsperadas: tenantTables.length,
-        registrosSinIdTienda: recordsWithoutTenant
+        registrosSinIdTienda: recordsWithoutTenant,
+        registrosComercialesSinIdTienda: commercialRecordsWithoutTenant
       },
-      migracion004: await migration004Structure(connection, hasStoreTable),
+      administradores,
+      migracion004: migration004,
       tiendas: shops,
       tablas: tables,
       ventas: await aggregate(connection, 'venta', 'total'),

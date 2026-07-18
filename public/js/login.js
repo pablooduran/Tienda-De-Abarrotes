@@ -19,5 +19,5 @@ form.addEventListener('submit', async (event) => {
     return;
   }
 
-  window.location.href = '/';
+  window.location.href = result.admin?.rol === 'superadmin' ? '/admin.html' : '/app.html';
 });

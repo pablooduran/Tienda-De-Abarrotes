@@ -86,7 +86,7 @@ $env:APP_ENV='local'
 npm.cmd run db:check-multitenant
 ```
 
-La salida informa conteos, registros sin `idTienda`, ventas, compras, fiados, stock y pagos. Tambien declara `pre-migracion`, `post-migracion` o `estructura-incompleta-o-migracion-parcial` sin asumir que `tienda` o `idTienda` ya existen. Compare las sumas antes y despues: deben mantenerse iguales y, despues de `004`, los registros existentes deben mostrar cero filas sin tienda.
+La salida informa conteos, registros sin `idTienda`, ventas, compras, fiados, stock y pagos. Tambien declara `pre-migracion`, `post-migracion` o `estructura-incompleta-o-migracion-parcial` sin asumir que `tienda` o `idTienda` ya existen. Compare las sumas antes y despues: deben mantenerse iguales y, despues de `004`, los registros comerciales y los propietarios deben mostrar cero filas sin tienda. Un `superadmin` valido conserva `idTienda=NULL`; el informe lo valida por separado y no lo cuenta como registro sin tienda.
 
 La migracion `004` es reintentable. Antes de cada `ADD COLUMN`, `ADD INDEX` o `ADD CONSTRAINT`, `db:migrate` consulta `INFORMATION_SCHEMA` y omite solamente el elemento que ya existe. Si una ejecucion se interrumpe, no se registra como aplicada hasta completar y verificar toda la estructura.
 
@@ -99,6 +99,21 @@ npm run db:create-admin
 ```
 
 El script solo crea el administrador si el usuario no existe. Nunca reemplaza una contrasena existente y no imprime contrasenas ni hashes. El servidor no crea ni restablece administradores al arrancar.
+
+### Crear un superadmin local de pruebas
+
+La creacion de un superadmin es una accion separada y explicita. Solo esta permitida con `APP_ENV=local`, `DB_HOST=localhost` y una base cuyo nombre contenga `prueba` o `test`.
+
+Defina temporalmente `SUPERADMIN_USER` y `SUPERADMIN_PASSWORD` en la terminal. No existen valores predeterminados y la contrasena debe tener al menos 12 caracteres. Luego ejecute:
+
+```powershell
+$env:APP_ENV='local'
+$env:SUPERADMIN_USER='<USUARIO_SUPERADMIN_LOCAL>'
+$env:SUPERADMIN_PASSWORD='<CONTRASENA_LOCAL_DE_12_O_MAS_CARACTERES>'
+npm.cmd run db:create-superadmin
+```
+
+El script crea unicamente una cuenta con rol `superadmin`, `idTienda=NULL` y estado activo. No crea tiendas, no modifica usuarios existentes y no imprime la contrasena ni su hash.
 
 ### Cargar datos de demostracion
 
@@ -142,7 +157,9 @@ No ejecute `db:init`, `db:migrate`, `db:create-admin` ni `db:seed-demo` contra p
 
 La migracion `004` prepara la estructura y asocia los datos existentes a "Tienda Deisy". El backend obtiene `idTienda` exclusivamente desde la sesion y lo aplica a productos, clientes, proveedores, ventas, compras, fiados, pagos, dashboard y reportes. El navegador no envia ni recibe `idTienda`.
 
-Las APIs operativas aceptan solamente sesiones con rol `dueno_tienda` y una tienda valida. El rol `superadmin` queda reservado y bloqueado hasta que exista un flujo explicito para seleccionar tienda. Planes y catalogo maestro aun no estan implementados.
+Las APIs operativas aceptan solamente sesiones con rol `dueno_tienda` y una tienda valida. El rol `superadmin` permanece bloqueado en las APIs comerciales y utiliza exclusivamente el panel `/admin.html` y las rutas `/api/admin` para administrar tiendas y propietarios. Planes y catalogo maestro aun no estan implementados.
+
+El superadmin puede crear una tienda junto con su primer propietario en una sola transaccion, agregar propietarios adicionales, actualizar los datos de la tienda, suspender o reactivar accesos y restablecer contrasenas. Estas acciones no borran ni modifican los datos comerciales de una tienda.
 
 ### Prueba local de aislamiento
 
@@ -154,3 +171,14 @@ npm.cmd run test:tenant-isolation
 ```
 
 La prueba exige una base local cuyo nombre contenga `prueba` o `test`. Crea temporalmente una segunda tienda, verifica sesiones independientes, IDs cruzados, ventas, compras, fiados, pagos, dashboard y reportes, y elimina solamente los datos de prueba que genero.
+
+### Prueba local del panel administrativo
+
+Con el servidor local iniciado en otra terminal, ejecute:
+
+```powershell
+$env:APP_ENV='local'
+npm.cmd run test:admin-management
+```
+
+La prueba tiene las mismas protecciones de host y nombre de base. Crea credenciales y una tienda con identificadores aleatorios, comprueba permisos, duplicados, aislamiento, activacion, desactivacion y restablecimiento de contrasena, y finalmente elimina solo los registros temporales que genero.
