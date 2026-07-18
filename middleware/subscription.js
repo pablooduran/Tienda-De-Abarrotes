@@ -1,5 +1,6 @@
 const pool = require('../config/db');
 const { enforcePlanLimit, resolveSubscriptionContext } = require('../services/subscription-service');
+const { logRejectedStockAction } = require('../services/stock-movement-service');
 
 async function resolveSubscription(req, res, next) {
   try {
@@ -14,6 +15,15 @@ function requireActiveSubscription(req, res, next) {
   if (['GET', 'HEAD', 'OPTIONS'].includes(req.method)) return next();
   const context = req.subscriptionContext;
   if (context && !context.soloLectura) return next();
+  const adjustmentMatch = req.originalUrl.match(/\/productos\/(\d+)\/ajustar-stock(?:\?|$)/);
+  if (adjustmentMatch) {
+    logRejectedStockAction('ajuste_manual', {
+      idTienda: req.tenant?.idTienda,
+      idAdministrador: req.session?.admin?.id,
+      idProducto: adjustmentMatch[1],
+      codigo: 'SUSCRIPCION_SOLO_LECTURA'
+    });
+  }
   return res.status(403).json({
     error: 'La suscripcion no permite realizar cambios. Los datos siguen disponibles en modo de solo lectura.',
     code: 'SUBSCRIPTION_READ_ONLY',

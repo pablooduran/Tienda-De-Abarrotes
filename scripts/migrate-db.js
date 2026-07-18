@@ -165,6 +165,50 @@ const migrationRequirements = {
       ['auditoriaCatalogo', 'fk_auditoriaCatalogo_admin', ['idAdministrador'], 'administrador', ['idAdministrador'], 'CASCADE', 'RESTRICT'],
       ['producto', 'fk_producto_productoMaestro', ['idProductoMaestro'], 'productoMaestro', ['idProductoMaestro'], 'CASCADE', 'RESTRICT']
     ]
+  },
+  '007_movimientos_stock.sql': {
+    columns: {
+      producto: ['activo', 'eliminadoEn'],
+      venta: ['claveOperacion'],
+      compra: ['claveOperacion'],
+      movimientoStock: [
+        'idMovimientoStock', 'idTienda', 'idProducto', 'tipoMovimiento', 'origen', 'cantidad',
+        'stockAnterior', 'stockPosterior', 'cantidadOperacion', 'unidadOperacion', 'motivo',
+        'observacion', 'idDetalleVenta', 'idDetalleCompra', 'referenciaTipo', 'referenciaId',
+        'claveOperacion', 'idAdministrador', 'creadoEn'
+      ]
+    },
+    indexes: [
+      ['administrador', 'uq_administrador_tienda_id', ['idTienda', 'idAdministrador'], true],
+      ['producto', 'idx_producto_tienda_activo_nombre', ['idTienda', 'activo', 'nombre'], false],
+      ['venta', 'uq_venta_tienda_claveOperacion', ['idTienda', 'claveOperacion'], true],
+      ['compra', 'uq_compra_tienda_claveOperacion', ['idTienda', 'claveOperacion'], true],
+      ['detalleVenta', 'uq_detalleVenta_tienda_id', ['idTienda', 'idDetalleVenta'], true],
+      ['detalleCompra', 'uq_detalleCompra_tienda_id', ['idTienda', 'idDetalleCompra'], true],
+      ['movimientoStock', 'uq_movimiento_tienda_clave', ['idTienda', 'claveOperacion'], true],
+      ['movimientoStock', 'uq_movimiento_tienda_detalleVenta', ['idTienda', 'idDetalleVenta'], true],
+      ['movimientoStock', 'uq_movimiento_tienda_detalleCompra', ['idTienda', 'idDetalleCompra'], true],
+      ['movimientoStock', 'idx_movimiento_tienda_fecha', ['idTienda', 'creadoEn', 'idMovimientoStock'], false],
+      ['movimientoStock', 'idx_movimiento_tienda_producto_fecha', ['idTienda', 'idProducto', 'creadoEn', 'idMovimientoStock'], false],
+      ['movimientoStock', 'idx_movimiento_tienda_tipo_origen', ['idTienda', 'tipoMovimiento', 'origen'], false],
+      ['movimientoStock', 'idx_movimiento_tienda_responsable', ['idTienda', 'idAdministrador', 'creadoEn'], false]
+    ],
+    checks: [
+      ['movimientoStock', 'chk_movimiento_cantidad'],
+      ['movimientoStock', 'chk_movimiento_stock_no_negativo'],
+      ['movimientoStock', 'chk_movimiento_balance'],
+      ['movimientoStock', 'chk_movimiento_tipo'],
+      ['movimientoStock', 'chk_movimiento_origen'],
+      ['movimientoStock', 'chk_movimiento_signo'],
+      ['movimientoStock', 'chk_movimiento_cantidad_operacion']
+    ],
+    foreignKeyConstraints: [
+      ['movimientoStock', 'fk_movimiento_tienda', ['idTienda'], 'tienda', ['idTienda'], 'RESTRICT', 'RESTRICT'],
+      ['movimientoStock', 'fk_movimiento_producto', ['idTienda', 'idProducto'], 'producto', ['idTienda', 'idProducto'], 'RESTRICT', 'RESTRICT'],
+      ['movimientoStock', 'fk_movimiento_administrador', ['idTienda', 'idAdministrador'], 'administrador', ['idTienda', 'idAdministrador'], 'RESTRICT', 'RESTRICT'],
+      ['movimientoStock', 'fk_movimiento_detalleVenta', ['idTienda', 'idDetalleVenta'], 'detalleVenta', ['idTienda', 'idDetalleVenta'], 'RESTRICT', 'RESTRICT'],
+      ['movimientoStock', 'fk_movimiento_detalleCompra', ['idTienda', 'idDetalleCompra'], 'detalleCompra', ['idTienda', 'idDetalleCompra'], 'RESTRICT', 'RESTRICT']
+    ]
   }
 };
 
@@ -238,6 +282,54 @@ async function requirementsSatisfied(connection, file) {
          AND a.fechaInicio < b.fechaFin AND b.fechaInicio < a.fechaFin`
     );
     if (Number(overlaps.total) > 0) return false;
+  }
+  if (file === '007_movimientos_stock.sql') {
+    const [[features]] = await connection.query(
+      "SELECT COUNT(DISTINCT codigo) total FROM funcionalidad WHERE codigo IN ('historial_stock','ajuste_stock') AND activo=1"
+    );
+    if (Number(features.total) !== 2) return false;
+    const [[planAccess]] = await connection.query(
+      `SELECT COUNT(DISTINCT CONCAT(p.codigo, ':', f.codigo)) total
+       FROM planFuncionalidad pf
+       JOIN plan p ON p.idPlan=pf.idPlan
+       JOIN funcionalidad f ON f.idFuncionalidad=pf.idFuncionalidad
+       WHERE p.codigo IN ('basico','avanzado')
+         AND f.codigo IN ('historial_stock','ajuste_stock')
+         AND p.activo=1 AND f.activo=1 AND pf.habilitada=1`
+    );
+    if (Number(planAccess.total) !== 4) return false;
+    const [[negativeStock]] = await connection.query(
+      'SELECT COUNT(*) total FROM producto WHERE stockUnidadesTotal<0'
+    );
+    if (Number(negativeStock.total) > 0) return false;
+    const [[invalidMovements]] = await connection.query(
+      `SELECT COUNT(*) total FROM movimientoStock
+       WHERE cantidad=0 OR stockAnterior<0 OR stockPosterior<0
+          OR stockPosterior<>stockAnterior+cantidad
+          OR tipoMovimiento NOT IN ('entrada','salida','ajuste_positivo','ajuste_negativo','inventario_inicial')
+          OR origen NOT IN ('compra','venta','ajuste_manual','alta_producto','migracion_inicial','correccion_sistema','otro')
+          OR (tipoMovimiento IN ('entrada','ajuste_positivo','inventario_inicial') AND cantidad<0)
+          OR (tipoMovimiento IN ('salida','ajuste_negativo') AND cantidad>0)`
+    );
+    if (Number(invalidMovements.total) > 0) return false;
+    const [[invalidMovementReferences]] = await connection.query(
+      `SELECT COUNT(*) total FROM movimientoStock
+       WHERE (idDetalleVenta IS NOT NULL AND idDetalleCompra IS NOT NULL)
+          OR (origen='compra' AND (idDetalleCompra IS NULL OR idDetalleVenta IS NOT NULL))
+          OR (origen='venta' AND (idDetalleVenta IS NULL OR idDetalleCompra IS NOT NULL))
+          OR (origen NOT IN ('compra','venta') AND (idDetalleVenta IS NOT NULL OR idDetalleCompra IS NOT NULL))`
+    );
+    if (Number(invalidMovementReferences.total) > 0) return false;
+    const [[reconciliation]] = await connection.query(
+      `SELECT COUNT(*) total FROM (
+         SELECT p.idTienda, p.idProducto
+         FROM producto p
+         LEFT JOIN movimientoStock ms ON ms.idTienda=p.idTienda AND ms.idProducto=p.idProducto
+         GROUP BY p.idTienda, p.idProducto, p.stockUnidadesTotal
+         HAVING COALESCE(SUM(ms.cantidad),0)<>p.stockUnidadesTotal
+       ) diferencias`
+    );
+    if (Number(reconciliation.total) > 0) return false;
   }
   return true;
 }
@@ -620,6 +712,9 @@ async function missingRequirementElements(connection, file) {
   for (const [table, name, columns, unique] of requirements.indexes || []) {
     if (!await hasIndex(connection, table, name, columns, unique)) missing.push(`indice ${table}.${name}`);
   }
+  for (const [table, name] of requirements.checks || []) {
+    if (!await hasCheckConstraint(connection, table, name)) missing.push(`check ${table}.${name}`);
+  }
   for (const relation of requirements.foreignKeyConstraints || []) {
     const [table, name] = relation;
     if (!await hasForeignKeyConstraint(connection, ...relation)) {
@@ -667,7 +762,7 @@ async function main() {
       if (recorded.length) {
         const registeredMigrationIsIncomplete = file === '006_catalogo_maestro.sql'
           ? decide006Action(estado006) === 'detener'
-          : ['004_multitienda_base.sql', '005_planes_suscripciones.sql'].includes(file)
+          : ['004_multitienda_base.sql', '005_planes_suscripciones.sql', '007_movimientos_stock.sql'].includes(file)
             && !await requirementsSatisfied(connection, file);
         if (registeredMigrationIsIncomplete) {
           throw new Error(`La migracion ${file} figura en schema_migrations, pero su estructura o sus datos estan incompletos. No se aplicaron cambios adicionales.`);
@@ -697,7 +792,7 @@ async function main() {
           console.log('Datos multi-tienda validados antes de crear indices y restricciones.');
         }
 
-        const element = ['004_multitienda_base.sql', '006_catalogo_maestro.sql'].includes(file)
+        const element = ['004_multitienda_base.sql', '006_catalogo_maestro.sql', '007_movimientos_stock.sql'].includes(file)
           ? structureElementFromStatement(statement)
           : null;
         if (element && await structureElementExists(connection, element)) {

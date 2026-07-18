@@ -56,6 +56,7 @@ async function cleanup(connection, fixture) {
   );
   for (const store of stores) {
     const idTienda = store.idTienda;
+    await connection.query('DELETE FROM movimientoStock WHERE idTienda=?', [idTienda]);
     await connection.query('DELETE FROM pagoFiado WHERE idTienda=?', [idTienda]);
     await connection.query('DELETE FROM detalleFiado WHERE idTienda=?', [idTienda]);
     await connection.query('DELETE FROM detalleVenta WHERE idTienda=?', [idTienda]);

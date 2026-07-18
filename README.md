@@ -16,7 +16,7 @@ Sistema con Node.js, Express, MySQL y frontend en HTML, CSS y JavaScript. Admini
 ## Requisitos
 
 - Node.js 18 o superior.
-- MySQL 5.7/8.0 o MariaDB compatible.
+- MySQL 8.0.16 o superior. La migracion 007 fue disenada para MySQL 8.0.46.
 - Una base local o de prueba para validar cambios antes de produccion.
 
 ## Configuracion local
@@ -80,6 +80,7 @@ Migraciones actuales, en orden:
 4. `004_multitienda_base.sql`: tienda inicial, asociacion de datos e indices de aislamiento.
 5. `005_planes_suscripciones.sql`: planes, funcionalidades, historial de suscripciones y acceso de solo lectura.
 6. `006_catalogo_maestro.sql`: categorias y marcas globales, productos maestros, auditoria y vinculo opcional con el inventario local.
+7. `007_movimientos_stock.sql`: historial inmutable de inventario, stock inicial, ajustes protegidos e idempotencia de ventas y compras.
 
 Antes y despues de aplicar la migracion multi-tienda sobre una base local, puede obtener una comprobacion de solo lectura:
 
@@ -109,6 +110,15 @@ npm.cmd run db:check-master-catalog
 ```
 
 El comprobador es de solo lectura y distingue los estados `pre-migracion`, `estructura-parcial` y `post-migracion`. La migracion inicia el catalogo vacio: no vincula productos locales por similitud ni carga productos arbitrarios. Agrega la funcionalidad `catalogo_maestro` a los planes basico y avanzado.
+
+Antes y despues de aplicar `007`, compruebe la estructura, referencias, stock negativo y reconciliacion del inventario:
+
+```powershell
+$env:APP_ENV='local'
+npm.cmd run db:check-stock-movements
+```
+
+El comprobador es de solo lectura y funciona antes de la migracion, con una estructura parcial y despues de completarla. La migracion no cambia el stock comercial existente: crea una entrada inicial por cada producto cuyo stock actual sea mayor que cero. Las claves de operacion y las referencias de detalle evitan duplicar movimientos al reintentar ventas o compras. `db:migrate` no registra `007` hasta verificar toda la estructura, las funciones de ambos planes y la reconciliacion completa.
 
 ### Crear el primer administrador
 
@@ -171,7 +181,11 @@ No ejecute `db:init`, `db:migrate`, `db:create-admin` ni `db:seed-demo` contra p
 - Una venta fiada requiere cliente y crea el fiado asociado.
 - Los pagos no pueden superar el saldo pendiente.
 - Clientes y fiados usan borrado logico y pueden restaurarse.
-- Los productos y proveedores todavia requieren una futura revision integral de borrado logico; esta fase no cambia su flujo historico de eliminacion.
+- Los productos usan borrado logico: ocultarlos o restaurarlos conserva stock y movimientos. Los proveedores todavia requieren una futura revision integral de borrado logico.
+- El stock solo cambia mediante alta inicial, compra, venta o ajuste manual. La edicion general del producto muestra el stock como solo lectura.
+- Los movimientos se guardan en unidades base enteras. Una operacion por paquete conserva tambien la cantidad y presentacion original para facilitar su lectura.
+- Los ajustes manuales usan el nuevo stock contado, calculan la diferencia en el backend y exigen la contrasena actual del propietario autenticado.
+- Una venta fiada descuenta stock una sola vez al registrar la venta. Los pagos posteriores no cambian inventario.
 
 ## Preparacion multi-tienda
 
@@ -230,3 +244,14 @@ npm.cmd run test:master-catalog
 ```
 
 La prueba verifica permisos administrativos, duplicados, busqueda para ambos planes, aislamiento entre tiendas, alta manual y desde catalogo, limites, solo lectura, importacion Excel y limpieza. Solo se habilita para `localhost` y una base cuyo nombre contenga `prueba` o `test`; usa credenciales temporales aleatorias y elimina los registros que crea.
+
+### Prueba local de movimientos de stock
+
+Con `007` aplicada y el servidor local iniciado, ejecute:
+
+```powershell
+$env:APP_ENV='local'
+npm.cmd run test:stock-movements
+```
+
+La prueba comprueba altas iniciales, compras, ventas pagadas y fiadas, pagos sin impacto en stock, ajustes protegidos, ocultar/restaurar, idempotencia, aislamiento, solo lectura, rollback, concurrencia y reconciliacion. Solo funciona en localhost y en una base cuyo nombre contenga `prueba` o `test`; crea dos tiendas con credenciales aleatorias y elimina sus datos temporales al finalizar.

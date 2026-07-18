@@ -58,6 +58,7 @@ async function cleanup(connection, fixture) {
   if (!connection) return;
   if (fixture.idTiendaSecundaria) {
     const id = fixture.idTiendaSecundaria;
+    await connection.query('DELETE FROM movimientoStock WHERE idTienda=?', [id]);
     await connection.query('DELETE FROM pagoFiado WHERE idTienda=?', [id]);
     await connection.query('DELETE FROM detalleFiado WHERE idTienda=?', [id]);
     await connection.query('DELETE FROM detalleVenta WHERE idTienda=?', [id]);
@@ -73,6 +74,12 @@ async function cleanup(connection, fixture) {
     await connection.query('DELETE FROM tienda WHERE idTienda=?', [id]);
   }
   if (fixture.idTiendaDeisy) {
+    await connection.query(
+      `DELETE ms FROM movimientoStock ms
+       JOIN producto p ON p.idProducto=ms.idProducto AND p.idTienda=ms.idTienda
+       WHERE p.idTienda=? AND p.nombre=?`,
+      [fixture.idTiendaDeisy, fixture.nombreProductoDeisy]
+    );
     await connection.query('DELETE FROM producto WHERE idTienda=? AND nombre=?', [fixture.idTiendaDeisy, fixture.nombreProductoDeisy]);
     await connection.query('DELETE FROM cliente WHERE idTienda=? AND nombre=?', [fixture.idTiendaDeisy, fixture.nombreClienteDeisy]);
     await connection.query('DELETE FROM proveedor WHERE idTienda=? AND nombre=?', [fixture.idTiendaDeisy, fixture.nombreProveedorDeisy]);

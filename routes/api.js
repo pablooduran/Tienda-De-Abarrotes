@@ -2,6 +2,11 @@ const express = require('express');
 const bcrypt = require('bcryptjs');
 const pool = require('../config/db');
 const { enforcePlanLimit } = require('../services/subscription-service');
+const {
+  insertStockMovement,
+  movementKey,
+  operationKey
+} = require('../services/stock-movement-service');
 
 const router = express.Router();
 
@@ -177,9 +182,6 @@ function equivalentUnits(product, cantidad, presentation, isPurchase) {
 
 function validateProductPayload(body, editing = false) {
   requireFields(body, ['nombre', 'unidadMedida', 'precioVenta', 'categoria', 'unidadesPorPaquete', 'paquetesPorCaja', 'stockMinimo']);
-  if (editing && body.stockUnidadesTotal === undefined && body.stock === undefined) {
-    requireFields(body, ['stockUnidadesTotal']);
-  }
   const categoria = upper(body.categoria || 'OTROS');
   if (!units.includes(body.unidadMedida)) {
     const error = new Error('Unidad de medida invalida.');
@@ -206,8 +208,8 @@ function validateProductPayload(body, editing = false) {
     throw error;
   }
   const stockUnidadesTotal = editing
-    ? asPositiveInteger(Number(body.stockUnidadesTotal), 'Stock total', true)
-    : asPositiveInteger(Number(body.stockUnidadesTotal || body.stock || 0), 'Stock total', true);
+    ? null
+    : asPositiveInteger(Number(body.stockUnidadesTotal ?? body.stock ?? 0), 'Stock total', true);
   return {
     nombre: cleanText(body.nombre),
     idProveedor: body.idProveedor || null,
@@ -218,7 +220,7 @@ function validateProductPayload(body, editing = false) {
     precioVenta: asNumber(body.precioVenta),
     stockUnidadesTotal,
     stockMinimo: asPositiveInteger(Number(body.stockMinimo), 'Stock minimo'),
-    ultimoPrecioCompra: asNumber(body.ultimoPrecioCompra || 0),
+    ultimoPrecioCompra: editing ? null : asNumber(body.ultimoPrecioCompra || 0),
     permiteVentaPorPaquete,
     permiteVentaPorUnidad
   };
@@ -236,7 +238,7 @@ router.get('/dashboard', async (req, res, next) => {
       pool.query('SELECT COALESCE(SUM(total), 0) total FROM venta WHERE idTienda=? AND YEARWEEK(fecha, 1) = YEARWEEK(DATE_SUB(CURDATE(), INTERVAL 1 WEEK), 1)', [idTienda]),
       pool.query('SELECT COALESCE(SUM(d.ganancia), 0) total FROM detalleVenta d JOIN venta v ON v.idVenta=d.idVenta AND v.idTienda=d.idTienda WHERE d.idTienda=? AND DATE(v.fecha)=CURDATE()', [idTienda]),
       pool.query('SELECT COALESCE(SUM(d.ganancia), 0) total FROM detalleVenta d JOIN venta v ON v.idVenta=d.idVenta AND v.idTienda=d.idTienda WHERE d.idTienda=? AND YEAR(v.fecha)=YEAR(CURDATE()) AND MONTH(v.fecha)=MONTH(CURDATE())', [idTienda]),
-      pool.query('SELECT COUNT(*) total FROM producto WHERE idTienda=? AND stockUnidadesTotal < stockMinimo', [idTienda]),
+      pool.query('SELECT COUNT(*) total FROM producto WHERE idTienda=? AND activo=1 AND stockUnidadesTotal < stockMinimo', [idTienda]),
       pool.query('SELECT estado, COUNT(*) total FROM fiado WHERE idTienda=? GROUP BY estado', [idTienda]),
       pool.query('SELECT DATE(fecha) dia, COALESCE(SUM(total),0) total FROM venta WHERE idTienda=? AND fecha >= DATE_SUB(CURDATE(), INTERVAL 6 DAY) GROUP BY DATE(fecha) ORDER BY dia', [idTienda])
     ]);
@@ -268,7 +270,7 @@ router.get('/categorias', (req, res) => {
 router.get('/productos', async (req, res, next) => {
   try {
     const { q, idProveedor, categoria, bajoStock, sort } = req.query;
-    const conditions = ['p.idTienda=?'];
+    const conditions = ['p.idTienda=?', 'p.activo=1'];
     const params = [tenantId(req)];
     if (q) {
       conditions.push('UPPER(p.nombre) LIKE ?');
@@ -304,14 +306,32 @@ router.post('/productos', async (req, res, next) => {
     if (data.idProveedor) {
       await requireTenantRecord(connection, 'proveedor', 'idProveedor', data.idProveedor, idTienda);
     }
-    await connection.query(
+    const [result] = await connection.query(
       `INSERT INTO producto
        (idTienda, nombre, idProveedor, categoria, unidadMedida, unidadesPorPaquete, paquetesPorCaja, precioVenta, stock, stockMinimo, stockUnidadesTotal, ultimoPrecioCompra, permiteVentaPorPaquete, permiteVentaPorUnidad)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [idTienda, data.nombre, data.idProveedor, data.categoria, data.unidadMedida, data.unidadesPorPaquete, data.paquetesPorCaja, data.precioVenta, data.stockUnidadesTotal, data.stockMinimo, data.stockUnidadesTotal, data.ultimoPrecioCompra, data.permiteVentaPorPaquete, data.permiteVentaPorUnidad]
     );
+    if (data.stockUnidadesTotal > 0) {
+      await insertStockMovement(connection, {
+        idTienda,
+        idProducto: result.insertId,
+        tipoMovimiento: 'inventario_inicial',
+        origen: 'alta_producto',
+        cantidad: data.stockUnidadesTotal,
+        stockAnterior: 0,
+        stockPosterior: data.stockUnidadesTotal,
+        cantidadOperacion: data.stockUnidadesTotal,
+        unidadOperacion: 'unidad_base',
+        motivo: 'Stock inicial al crear el producto.',
+        referenciaTipo: 'producto',
+        referenciaId: result.insertId,
+        claveOperacion: movementKey('alta-producto', result.insertId),
+        idAdministrador: req.session.admin.id
+      });
+    }
     await connection.commit();
-    res.status(201).json({ message: 'Producto guardado.' });
+    res.status(201).json({ message: 'Producto guardado.', idProducto: result.insertId });
   } catch (error) {
     if (connection) await connection.rollback();
     next(error);
@@ -329,9 +349,12 @@ router.put('/productos/:id', async (req, res, next) => {
     }
     const [result] = await pool.query(
       `UPDATE producto
-       SET nombre=?, idProveedor=?, categoria=?, unidadMedida=?, unidadesPorPaquete=?, paquetesPorCaja=?, precioVenta=?, stock=?, stockMinimo=?, stockUnidadesTotal=?, ultimoPrecioCompra=?, permiteVentaPorPaquete=?, permiteVentaPorUnidad=?
-       WHERE idProducto=? AND idTienda=?`,
-      [data.nombre, data.idProveedor, data.categoria, data.unidadMedida, data.unidadesPorPaquete, data.paquetesPorCaja, data.precioVenta, data.stockUnidadesTotal, data.stockMinimo, data.stockUnidadesTotal, data.ultimoPrecioCompra, data.permiteVentaPorPaquete, data.permiteVentaPorUnidad, req.params.id, idTienda]
+       SET nombre=?, idProveedor=?, categoria=?, unidadMedida=?, unidadesPorPaquete=?, paquetesPorCaja=?,
+           precioVenta=?, stockMinimo=?, permiteVentaPorPaquete=?, permiteVentaPorUnidad=?
+       WHERE idProducto=? AND idTienda=? AND activo=1`,
+      [data.nombre, data.idProveedor, data.categoria, data.unidadMedida, data.unidadesPorPaquete,
+        data.paquetesPorCaja, data.precioVenta, data.stockMinimo, data.permiteVentaPorPaquete,
+        data.permiteVentaPorUnidad, req.params.id, idTienda]
     );
     if (!result.affectedRows) return res.status(404).json({ error: 'Producto no encontrado.' });
     res.json({ message: 'Producto actualizado.' });
@@ -340,13 +363,49 @@ router.put('/productos/:id', async (req, res, next) => {
   }
 });
 
+router.get('/productos/ocultos', async (req, res, next) => {
+  try {
+    const [rows] = await pool.query(
+      `${productSelect('WHERE p.idTienda=? AND p.activo=0')} ORDER BY p.eliminadoEn DESC, p.nombre`,
+      [tenantId(req)]
+    );
+    res.json(rows);
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.patch('/productos/:id/restaurar', async (req, res, next) => {
+  try {
+    const idTienda = tenantId(req);
+    await runTransaction(async (connection) => {
+      await lockTenantForLimit(connection, idTienda);
+      const [rows] = await connection.query(
+        'SELECT idProducto FROM producto WHERE idProducto=? AND idTienda=? AND activo=0 FOR UPDATE',
+        [req.params.id, idTienda]
+      );
+      if (!rows.length) throw notFound('Producto oculto no encontrado.');
+      await enforcePlanLimit(connection, idTienda, 'productos');
+      await connection.query(
+        'UPDATE producto SET activo=1, eliminadoEn=NULL WHERE idProducto=? AND idTienda=? AND activo=0',
+        [req.params.id, idTienda]
+      );
+    });
+    res.json({ message: 'Producto restaurado. Su stock no fue modificado.' });
+  } catch (error) {
+    next(error);
+  }
+});
+
 router.delete('/productos/:id', async (req, res, next) => {
   try {
-    const [result] = await pool.query('DELETE FROM producto WHERE idProducto=? AND idTienda=?', [req.params.id, tenantId(req)]);
+    const [result] = await pool.query(
+      'UPDATE producto SET activo=0, eliminadoEn=NOW() WHERE idProducto=? AND idTienda=? AND activo=1',
+      [req.params.id, tenantId(req)]
+    );
     if (!result.affectedRows) return res.status(404).json({ error: 'Producto no encontrado.' });
-    res.json({ message: 'Producto eliminado.' });
+    res.json({ message: 'Producto ocultado. Su stock e historial se conservaron.' });
   } catch (error) {
-    if (error.code === 'ER_ROW_IS_REFERENCED_2') return res.status(409).json({ error: 'No se puede eliminar porque tiene registros asociados.' });
     next(error);
   }
 });
@@ -496,24 +555,30 @@ async function validateItems(connection, items, type, idTienda) {
     throw error;
   }
   const isPurchase = type === 'compra';
-  const normalized = [];
-  for (const item of items) {
+  const prepared = items.map((item, originalIndex) => {
     const cantidad = asPositiveInteger(Number(item.cantidad), 'Cantidad');
-    if (!item.idProducto) {
-      const error = new Error('Cada producto debe tener un producto seleccionado.');
-      error.status = 400;
-      throw error;
-    }
-    const presentation = item.presentacion || item.modoCompra || (isPurchase ? 'unidad' : 'unidad');
+    const idProducto = asPositiveInteger(Number(item.idProducto), 'Producto');
+    const presentation = item.presentacion || item.modoCompra || 'unidad';
     const validPresentations = isPurchase ? purchasePresentations : salePresentations;
     if (!validPresentations.includes(presentation)) {
       const error = new Error(isPurchase ? 'Presentacion de compra invalida.' : 'Presentacion de venta invalida.');
       error.status = 400;
       throw error;
     }
+    return { item, originalIndex, cantidad, idProducto, presentation };
+  });
+  if (new Set(prepared.map((entry) => entry.idProducto)).size !== prepared.length) {
+    const error = new Error('Cada producto debe aparecer una sola vez en la operacion.');
+    error.status = 400;
+    throw error;
+  }
+
+  const normalized = [];
+  for (const entry of [...prepared].sort((a, b) => a.idProducto - b.idProducto)) {
+    const { item, originalIndex, cantidad, idProducto, presentation } = entry;
     const [rows] = await connection.query(
-      `${productSelect('WHERE p.idProducto=? AND p.idTienda=?')} FOR UPDATE`,
-      [item.idProducto, idTienda]
+      `${productSelect('WHERE p.idProducto=? AND p.idTienda=? AND p.activo=1')} FOR UPDATE`,
+      [idProducto, idTienda]
     );
     if (rows.length === 0) {
       const error = new Error('Producto no encontrado.');
@@ -538,43 +603,79 @@ async function validateItems(connection, items, type, idTienda) {
       throw error;
     }
     const precio = isPurchase ? asNumber(item.precioCompra) : asNumber(product.precioVenta) * (presentation === 'paquete' ? product.unidadesPorPaquete : 1);
+    if (precio <= 0) {
+      const error = new Error(isPurchase ? 'El precio de compra debe ser mayor a cero.' : `El precio de venta de ${product.nombre} no es valido.`);
+      error.status = 400;
+      throw error;
+    }
     const costoUnitario = asNumber(product.ultimoPrecioCompra);
     const subtotal = cantidad * precio;
     const subtotalCosto = isPurchase ? 0 : unidades * costoUnitario;
-    normalized.push({ product, cantidad, presentation, unidades, precio, costoUnitario, subtotal, subtotalCosto, ganancia: subtotal - subtotalCosto });
+    normalized.push({ originalIndex, product, cantidad, presentation, unidades, precio, costoUnitario, subtotal, subtotalCosto, ganancia: subtotal - subtotalCosto });
   }
-  return normalized;
+  return normalized.sort((a, b) => a.originalIndex - b.originalIndex);
 }
 
 router.post('/ventas', async (req, res, next) => {
   try {
     const idTienda = tenantId(req);
     const tipo = req.body.tipo === 'fiada' ? 'fiada' : 'pagada';
+    const requestKey = operationKey(req.body.claveOperacion);
     if (tipo === 'fiada' && !req.body.idCliente) return res.status(400).json({ error: 'Una venta fiada debe tener cliente registrado.' });
     const result = await runTransaction(async (connection) => {
       if (req.body.idCliente) {
         await requireTenantRecord(connection, 'cliente', 'idCliente', req.body.idCliente, idTienda, 'AND activo=1');
       }
+      const [venta] = await connection.query(
+        `INSERT INTO venta (idTienda, total, tipo, idCliente, claveOperacion)
+         VALUES (?, 0, ?, ?, ?)
+         ON DUPLICATE KEY UPDATE idVenta=LAST_INSERT_ID(idVenta)`,
+        [idTienda, tipo, req.body.idCliente || null, requestKey]
+      );
+      const [existing] = await connection.query(
+        `SELECT v.idVenta, v.total, v.tipo, f.idFiado
+         FROM venta v LEFT JOIN fiado f ON f.idVenta=v.idVenta AND f.idTienda=v.idTienda
+         WHERE v.idVenta=? AND v.idTienda=?`,
+        [venta.insertId, idTienda]
+      );
+      if (Number(existing[0].total) > 0) return { ...existing[0], repetida: true };
       const items = await validateItems(connection, req.body.items, 'venta', idTienda);
       const total = items.reduce((sum, item) => sum + item.subtotal, 0);
-      const [venta] = await connection.query(
-        'INSERT INTO venta (idTienda, total, tipo, idCliente) VALUES (?, ?, ?, ?)',
-        [idTienda, total, tipo, req.body.idCliente || null]
+      await connection.query(
+        'UPDATE venta SET total=? WHERE idVenta=? AND idTienda=?',
+        [total, venta.insertId, idTienda]
       );
       for (const item of items) {
-        await connection.query(
+        const [detail] = await connection.query(
           `INSERT INTO detalleVenta
            (idTienda, idVenta, idProducto, cantidad, precioVenta, costoUnitario, subtotal, subtotalCosto, ganancia, presentacionVenta, cantidadEquivalenteUnidades)
            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
           [idTienda, venta.insertId, item.product.idProducto, item.cantidad, item.precio, item.costoUnitario, item.subtotal, item.subtotalCosto, item.ganancia, item.presentation, item.unidades]
         );
+        const stockAnterior = Number(item.product.stockUnidadesTotal);
+        const stockPosterior = stockAnterior - item.unidades;
         const [stockUpdate] = await connection.query(
           `UPDATE producto
-           SET stockUnidadesTotal=stockUnidadesTotal-?, stock=stock-?
-           WHERE idProducto=? AND idTienda=? AND stockUnidadesTotal>=?`,
-          [item.unidades, item.unidades, item.product.idProducto, idTienda, item.unidades]
+           SET stockUnidadesTotal=?, stock=?
+           WHERE idProducto=? AND idTienda=? AND activo=1 AND stockUnidadesTotal=?`,
+          [stockPosterior, stockPosterior, item.product.idProducto, idTienda, stockAnterior]
         );
         if (!stockUpdate.affectedRows) throw notFound('Producto no encontrado o stock insuficiente.');
+        await insertStockMovement(connection, {
+          idTienda,
+          idProducto: item.product.idProducto,
+          tipoMovimiento: 'salida',
+          origen: 'venta',
+          cantidad: -item.unidades,
+          stockAnterior,
+          stockPosterior,
+          cantidadOperacion: item.cantidad,
+          unidadOperacion: item.presentation,
+          motivo: tipo === 'fiada' ? 'Salida por venta fiada.' : 'Salida por venta pagada.',
+          idDetalleVenta: detail.insertId,
+          claveOperacion: movementKey('detalle-venta', detail.insertId),
+          idAdministrador: req.session.admin.id
+        });
       }
       let idFiado = null;
       if (tipo === 'fiada') {
@@ -646,29 +747,59 @@ router.get('/ventas/:id', async (req, res, next) => {
 router.post('/compras', async (req, res, next) => {
   try {
     const idTienda = tenantId(req);
+    const requestKey = operationKey(req.body.claveOperacion);
     const result = await runTransaction(async (connection) => {
       if (req.body.idProveedor) {
         await requireTenantRecord(connection, 'proveedor', 'idProveedor', req.body.idProveedor, idTienda);
       }
+      const [compra] = await connection.query(
+        `INSERT INTO compra (idTienda, total, idProveedor, claveOperacion)
+         VALUES (?, 0, ?, ?)
+         ON DUPLICATE KEY UPDATE idCompra=LAST_INSERT_ID(idCompra)`,
+        [idTienda, req.body.idProveedor || null, requestKey]
+      );
+      const [existing] = await connection.query(
+        'SELECT idCompra, total FROM compra WHERE idCompra=? AND idTienda=?',
+        [compra.insertId, idTienda]
+      );
+      if (Number(existing[0].total) > 0) return { ...existing[0], repetida: true };
       const items = await validateItems(connection, req.body.items, 'compra', idTienda);
       const total = items.reduce((sum, item) => sum + item.subtotal, 0);
-      const [compra] = await connection.query(
-        'INSERT INTO compra (idTienda, total, idProveedor) VALUES (?, ?, ?)',
-        [idTienda, total, req.body.idProveedor || null]
+      await connection.query(
+        'UPDATE compra SET total=? WHERE idCompra=? AND idTienda=?',
+        [total, compra.insertId, idTienda]
       );
       for (const item of items) {
         const costoUnitario = item.unidades > 0 ? item.subtotal / item.unidades : 0;
-        await connection.query(
+        const [detail] = await connection.query(
           `INSERT INTO detalleCompra
            (idTienda, idCompra, idProducto, cantidad, precioCompra, subtotal, presentacionCompra, cantidadEquivalenteUnidades)
            VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
           [idTienda, compra.insertId, item.product.idProducto, item.cantidad, item.price || item.precio, item.subtotal, item.presentation, item.unidades]
         );
+        const stockAnterior = Number(item.product.stockUnidadesTotal);
+        const stockPosterior = stockAnterior + item.unidades;
         const [stockUpdate] = await connection.query(
-          'UPDATE producto SET stockUnidadesTotal=stockUnidadesTotal+?, stock=stock+?, ultimoPrecioCompra=? WHERE idProducto=? AND idTienda=?',
-          [item.unidades, item.unidades, costoUnitario, item.product.idProducto, idTienda]
+          `UPDATE producto SET stockUnidadesTotal=?, stock=?, ultimoPrecioCompra=?
+           WHERE idProducto=? AND idTienda=? AND activo=1 AND stockUnidadesTotal=?`,
+          [stockPosterior, stockPosterior, costoUnitario, item.product.idProducto, idTienda, stockAnterior]
         );
         if (!stockUpdate.affectedRows) throw notFound('Producto no encontrado.');
+        await insertStockMovement(connection, {
+          idTienda,
+          idProducto: item.product.idProducto,
+          tipoMovimiento: 'entrada',
+          origen: 'compra',
+          cantidad: item.unidades,
+          stockAnterior,
+          stockPosterior,
+          cantidadOperacion: item.cantidad,
+          unidadOperacion: item.presentation,
+          motivo: 'Entrada por compra.',
+          idDetalleCompra: detail.insertId,
+          claveOperacion: movementKey('detalle-compra', detail.insertId),
+          idAdministrador: req.session.admin.id
+        });
       }
       return { idCompra: compra.insertId, total };
     });
@@ -955,7 +1086,7 @@ router.get('/reportes/:tipo', async (req, res, next) => {
       chart = { type: 'bar', labels: rows.map((r) => r.fecha), values: rows.map((r) => Number(r.total)) };
     } else if (tipo === 'bajoStock') {
       [rows] = await pool.query(
-        `${productSelect('WHERE p.idTienda=? AND p.stockUnidadesTotal < p.stockMinimo')} ORDER BY p.nombre`,
+        `${productSelect('WHERE p.idTienda=? AND p.activo=1 AND p.stockUnidadesTotal < p.stockMinimo')} ORDER BY p.nombre`,
         [idTienda]
       );
       chart = { type: 'bar', labels: rows.map((r) => r.nombre), values: rows.map((r) => Number(r.stockUnidadesTotal)) };

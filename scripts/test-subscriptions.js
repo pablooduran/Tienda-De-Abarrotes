@@ -83,7 +83,6 @@ function containsPassword(value) {
 const ADVANCED_FEATURES = Object.freeze([
   'reportes_avanzados',
   'compras_sugeridas',
-  'historial_stock',
   'recibos_whatsapp',
   'recordatorios_fiado',
   'gastos',
@@ -185,6 +184,7 @@ async function bulkInsert(connection, table, columns, rows) {
 }
 
 async function cleanupStore(connection, idTienda) {
+  await connection.query('DELETE FROM movimientoStock WHERE idTienda=?', [idTienda]);
   await connection.query('DELETE FROM pagoFiado WHERE idTienda=?', [idTienda]);
   await connection.query('DELETE FROM detalleFiado WHERE idTienda=?', [idTienda]);
   await connection.query('DELETE FROM detalleVenta WHERE idTienda=?', [idTienda]);

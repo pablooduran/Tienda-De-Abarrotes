@@ -11,6 +11,7 @@ let debtFocus = null;
 const sections = [
   ['inicio', 'Inicio', 'Resumen general del negocio'],
   ['productos', 'Productos', 'Catálogo, stock y presentaciones'],
+  ['movimientosStock', 'Movimientos de stock', 'Entradas, salidas y ajustes del inventario'],
   ['clientes', 'Clientes', 'Registro de clientes'],
   ['proveedores', 'Proveedores', 'Registro de proveedores'],
   ['ventas', 'Ventas', 'Venta pagada o fiada con buscador'],
@@ -22,6 +23,9 @@ const sections = [
 
 function money(value) { return Number(value || 0).toFixed(2); }
 function intValue(value) { return Number(value || 0).toFixed(0); }
+function newOperationKey() {
+  return window.crypto?.randomUUID?.() || `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+}
 function normalizeSearch(value) { return String(value || '').trim().toLocaleLowerCase(); }
 function escapeHtml(value) {
   return String(value ?? '').replace(/[&<>"']/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char]));
@@ -191,6 +195,8 @@ function applyReadOnlyUi() {
     '#addFromCatalog',
     '[data-edit]',
     '[data-delete]',
+    '[data-adjust-stock]',
+    '[data-restore-product]',
     '[data-restore-client]',
     '[data-restore-debt]',
     '[data-delete-fiado]',
@@ -250,7 +256,7 @@ async function loadView(id) {
   title.textContent = section[1];
   subtitle.textContent = section[2];
   await refreshCatalogs();
-  const handlers = { inicio, productos, clientes, proveedores, ventas, compras, historialVentas, pagos, reportes };
+  const handlers = { inicio, productos, movimientosStock, clientes, proveedores, ventas, compras, historialVentas, pagos, reportes };
   await handlers[id]();
   applyReadOnlyUi();
 }
@@ -692,8 +698,6 @@ function productForm(row = {}) {
     <form class="grid product-form" id="productoForm" data-id="${row.idProducto || ''}">
       <input type="hidden" name="unidadMedida" value="${escapeHtml(row.unidadMedida || 'unidad')}">
       <input type="hidden" name="paquetesPorCaja" value="${row.paquetesPorCaja || 1}">
-      <input type="hidden" name="stockUnidadesTotal" value="${row.stockUnidadesTotal ?? row.stock ?? 0}">
-      <input type="hidden" name="ultimoPrecioCompra" value="${row.ultimoPrecioCompra || 0}">
 
       <div class="form-section wide">
         <h4>Datos principales</h4>
@@ -714,6 +718,9 @@ function productForm(row = {}) {
       <label>Precio venta por unidad<input name="precioVenta" type="number" step="0.01" min="0" required value="${row.precioVenta || ''}"></label>
       <label id="packagePriceField">Precio venta por paquete<input id="precioVentaPaquete" type="number" step="0.01" min="0" value="${packagePrice ? money(packagePrice) : ''}"></label>
       <label>Stock mínimo<input name="stockMinimo" type="number" step="1" min="1" required value="${row.stockMinimo || 5}"></label>
+      ${isEdit
+        ? `<label>Stock actual<input type="number" readonly value="${Number(row.stockUnidadesTotal ?? row.stock ?? 0)}"></label>`
+        : '<label>Stock inicial<input name="stockUnidadesTotal" type="number" step="1" min="0" required value="0"></label>'}
 
       <div class="form-section wide">
         <h4>Venta permitida</h4>
@@ -721,7 +728,7 @@ function productForm(row = {}) {
       </div>
       <label class="check"><input name="permiteVentaPorUnidad" type="checkbox" ${checked(row.permiteVentaPorUnidad ?? true)}> Vender por unidad</label>
       <label class="check" id="salePackageField"><input name="permiteVentaPorPaquete" type="checkbox" ${checked(row.permiteVentaPorPaquete)}> Vender por paquete</label>
-      <p class="hint wide">Los campos técnicos de stock se mantienen internamente para conservar la lógica actual.</p>
+      <p class="hint wide">Después de crear el producto, el stock solo cambia mediante compras, ventas o un ajuste manual.</p>
     </form>`;
 }
 
@@ -995,14 +1002,16 @@ function renderProductTable(rows) {
       <td>${escapeHtml(p.nombre)}</td><td>${escapeHtml(p.proveedor || 'SIN PROVEEDOR')}</td><td>${escapeHtml(p.categoria)}</td>
       <td>Bs ${money(p.precioVenta)}</td><td>${stockLabel(p)}</td><td>${packageText(p)}</td>
       <td>${p.bajoStock ? '<span class="badge pendiente">Bajo stock</span>' : '<span class="badge pagado">Normal</span>'}</td>
-      <td class="actions"><button class="small secondary" data-edit="${p.idProducto}">Editar</button><button class="small danger" data-delete="${p.idProducto}">Eliminar</button></td>
+      <td class="actions"><button class="small secondary" data-edit="${p.idProducto}">Editar</button><button class="small" data-adjust-stock="${p.idProducto}">Ajustar stock</button><button class="small secondary" data-product-movements="${p.idProducto}">Ver movimientos</button><button class="small danger" data-delete="${p.idProducto}">Ocultar</button></td>
     </tr>`).join('')}</tbody></table></div>`;
   target.querySelectorAll('[data-edit]').forEach((btn) => btn.addEventListener('click', () => openProductModal(state.productos.find((p) => String(p.idProducto) === btn.dataset.edit))));
+  target.querySelectorAll('[data-adjust-stock]').forEach((btn) => btn.addEventListener('click', () => openStockAdjustment(state.productos.find((p) => String(p.idProducto) === btn.dataset.adjustStock))));
+  target.querySelectorAll('[data-product-movements]').forEach((btn) => btn.addEventListener('click', () => openProductMovements(btn.dataset.productMovements)));
   target.querySelectorAll('[data-delete]').forEach((btn) => btn.addEventListener('click', async () => {
-    if (!await confirmAction('¿Deseas eliminar este producto?', true)) return;
+    if (!await confirmAction('¿Deseas ocultar este producto? Su stock y movimientos se conservarán.', true)) return;
     try {
       await api(`/api/productos/${btn.dataset.delete}`, { method: 'DELETE' });
-      await showSuccess('Producto eliminado.');
+      await showSuccess('Producto ocultado.');
       loadView('productos');
     } catch (error) { showError(error.message); }
   }));
@@ -1013,6 +1022,7 @@ async function productos() {
     <div class="panel toolbar">
       <button id="addProduct">Añadir producto</button>
       <button id="addFromCatalog" class="secondary">Agregar desde catálogo</button>
+      <button id="showHiddenProducts" class="secondary">Ver productos ocultos</button>
       <label>Buscar<input id="productSearch" placeholder="Buscar producto"></label>
       <label>Categoría<select id="productCategory"><option value="">Todas</option>${categoryOptions()}</select></label>
       <label>Proveedor<select id="productProvider">${options(state.proveedores, 'idProveedor', 'nombre', 'Todos')}</select></label>
@@ -1023,11 +1033,175 @@ async function productos() {
   wireUppercase(view);
   document.getElementById('addProduct').addEventListener('click', () => openProductModal());
   document.getElementById('addFromCatalog').addEventListener('click', openMasterCatalogPicker);
+  document.getElementById('showHiddenProducts').addEventListener('click', openHiddenProducts);
   ['productSearch', 'productCategory', 'productProvider', 'productLowStock', 'productSort'].forEach((id) => {
     document.getElementById(id).addEventListener('input', filterProductsLocal);
     document.getElementById(id).addEventListener('change', filterProductsLocal);
   });
   renderProductTable(state.productos);
+}
+
+function movementTypeLabel(value) {
+  return ({
+    entrada: 'Entrada', salida: 'Salida', ajuste_positivo: 'Ajuste positivo',
+    ajuste_negativo: 'Ajuste negativo', inventario_inicial: 'Inventario inicial'
+  })[value] || value;
+}
+
+function movementOriginLabel(value) {
+  return ({
+    compra: 'Compra', venta: 'Venta', ajuste_manual: 'Ajuste manual', alta_producto: 'Alta de producto',
+    migracion_inicial: 'Migración inicial', correccion_sistema: 'Corrección del sistema', otro: 'Otro'
+  })[value] || value;
+}
+
+function movementReference(row) {
+  if (row.idVenta) return `Venta #${row.idVenta}`;
+  if (row.idCompra) return `Compra #${row.idCompra}`;
+  if (row.referenciaTipo === 'producto') return `Producto #${row.referenciaId}`;
+  return 'Sin documento';
+}
+
+function movementTable(rows, { includeProduct = true } = {}) {
+  if (!rows.length) return '<p class="muted">No hay movimientos para mostrar.</p>';
+  return `<div class="table-wrap"><table class="movement-table">
+    <thead><tr><th>Fecha</th>${includeProduct ? '<th>Producto</th>' : ''}<th>Movimiento</th><th>Cantidad</th><th>Stock</th><th>Motivo</th><th>Referencia</th><th>Responsable</th></tr></thead>
+    <tbody>${rows.map((row) => {
+      const positive = Number(row.cantidad) > 0;
+      return `<tr class="movement-row ${positive ? 'movement-positive' : 'movement-negative'}">
+        <td>${formatDate(row.creadoEn)}</td>${includeProduct ? `<td><strong>${escapeHtml(row.producto)}</strong></td>` : ''}
+        <td><span class="movement-badge ${positive ? 'positive' : 'negative'}">${escapeHtml(movementTypeLabel(row.tipoMovimiento))}</span><small>${escapeHtml(movementOriginLabel(row.origen))}</small></td>
+        <td><strong>${positive ? '+' : ''}${intValue(row.cantidad)}</strong>${row.cantidadOperacion ? `<small>${escapeHtml(row.cantidadOperacion)} ${escapeHtml(row.unidadOperacion || '')}</small>` : ''}</td>
+        <td>${intValue(row.stockAnterior)} → <strong>${intValue(row.stockPosterior)}</strong></td>
+        <td>${escapeHtml(row.motivo)}${row.observacion ? `<small>${escapeHtml(row.observacion)}</small>` : ''}</td>
+        <td>${escapeHtml(movementReference(row))}</td><td>${escapeHtml(row.responsable || 'Sistema')}</td>
+      </tr>`;
+    }).join('')}</tbody></table></div>`;
+}
+
+function requestStockAdjustment(product) {
+  return new Promise((resolve) => {
+    modalRoot.innerHTML = `<div class="modal-backdrop"><div class="modal">
+      <h3>Ajustar stock de ${escapeHtml(product.nombre)}</h3>
+      <div class="modal-body"><form id="stockAdjustmentForm" class="grid">
+        <p class="wide stock-adjustment-summary">Stock actual: <strong>${intValue(product.stockUnidadesTotal)} unidades base</strong></p>
+        <label>Nuevo stock contado<input name="nuevoStock" type="number" min="0" step="1" required value="${Number(product.stockUnidadesTotal || 0)}"></label>
+        <label>Motivo<input name="motivo" minlength="5" maxlength="160" required placeholder="Ej. Conteo físico de inventario"></label>
+        <label class="wide">Observación<textarea name="observacion" maxlength="500" rows="3"></textarea></label>
+        <label class="wide">Tu contraseña actual<input name="password" type="password" autocomplete="current-password" required></label>
+        <p class="hint wide">El sistema calculará la diferencia y conservará un registro permanente del ajuste.</p>
+      </form></div>
+      <div class="modal-actions"><button type="button" class="secondary" data-modal-cancel>Cancelar</button><button type="button" data-modal-confirm>Registrar ajuste</button></div>
+    </div></div>`;
+    const form = document.getElementById('stockAdjustmentForm');
+    const passwordInput = form.querySelector('[name="password"]');
+    const close = (value) => {
+      passwordInput.value = '';
+      modalRoot.innerHTML = '';
+      resolve(value);
+    };
+    modalRoot.querySelector('[data-modal-cancel]').addEventListener('click', () => close(null));
+    modalRoot.querySelector('[data-modal-confirm]').addEventListener('click', () => {
+      if (!form.reportValidity()) return;
+      close(formData(form));
+    });
+  });
+}
+
+async function openStockAdjustment(product) {
+  if (!product) return;
+  const data = await requestStockAdjustment(product);
+  if (!data) return;
+  data.nuevoStock = Number(data.nuevoStock);
+  data.claveOperacion = newOperationKey();
+  try {
+    const result = await api(`/api/productos/${product.idProducto}/ajustar-stock`, {
+      method: 'POST', body: JSON.stringify(data)
+    });
+    await showSuccess(`${result.message} Stock: ${result.stockAnterior} → ${result.stockPosterior}.`);
+    await loadView('productos');
+  } catch (error) {
+    await showError(error.message);
+  }
+}
+
+async function openProductMovements(idProducto) {
+  try {
+    const data = await api(`/api/productos/${idProducto}/movimientos?limit=50`);
+    await modal({
+      title: `Movimientos de ${data.producto.nombre}`,
+      confirmText: 'Cerrar',
+      wide: true,
+      body: `<p>Stock actual: <strong>${intValue(data.producto.stockUnidadesTotal)} unidades base</strong></p>${movementTable(data.rows, { includeProduct: false })}`
+    });
+  } catch (error) { showError(error.message); }
+}
+
+async function openHiddenProducts() {
+  try {
+    const rows = await api('/api/productos/ocultos');
+    await modal({
+      title: 'Productos ocultos',
+      confirmText: 'Cerrar',
+      wide: true,
+      body: rows.length ? `<div class="hidden-product-list">${rows.map((product) => `
+        <article class="hidden-product-item"><div><strong>${escapeHtml(product.nombre)}</strong><span>${stockLabel(product)}</span></div><button type="button" class="secondary small" data-restore-product="${product.idProducto}">Restaurar</button></article>`).join('')}</div>` : '<p class="muted">No hay productos ocultos.</p>',
+      onOpen: (root) => root.querySelectorAll('[data-restore-product]').forEach((button) => button.addEventListener('click', async () => {
+        try {
+          await api(`/api/productos/${button.dataset.restoreProduct}/restaurar`, { method: 'PATCH' });
+          modalRoot.innerHTML = '';
+          await showSuccess('Producto restaurado sin modificar su stock.');
+          await loadView('productos');
+        } catch (error) { showError(error.message); }
+      }))
+    });
+  } catch (error) { showError(error.message); }
+}
+
+async function movimientosStock() {
+  view.innerHTML = `
+    <div class="panel movement-filters">
+      <label>Producto<input id="movementSearch" type="search" placeholder="Buscar producto"></label>
+      <label>Tipo<select id="movementType"><option value="">Todos</option><option value="entrada">Entrada</option><option value="salida">Salida</option><option value="ajuste_positivo">Ajuste positivo</option><option value="ajuste_negativo">Ajuste negativo</option><option value="inventario_inicial">Inventario inicial</option></select></label>
+      <label>Origen<select id="movementOrigin"><option value="">Todos</option><option value="compra">Compra</option><option value="venta">Venta</option><option value="ajuste_manual">Ajuste manual</option><option value="alta_producto">Alta de producto</option><option value="migracion_inicial">Migración inicial</option></select></label>
+      <label>Desde<input id="movementFrom" type="date"></label><label>Hasta<input id="movementTo" type="date"></label>
+      <label>Responsable<select id="movementOwner"><option value="">Todos</option></select></label>
+    </div>
+    <div class="panel" id="movementResults"><p class="muted">Cargando movimientos...</p></div>
+    <div class="movement-pagination"><button id="movementPrevious" class="secondary">Anterior</button><span id="movementPage">Página 1</span><button id="movementNext" class="secondary">Siguiente</button></div>`;
+  let currentPage = 1;
+  let searchTimer;
+  const load = async (page = 1) => {
+    const query = new URLSearchParams({ page: String(page), limit: '25' });
+    const values = {
+      q: document.getElementById('movementSearch').value.trim(),
+      tipo: document.getElementById('movementType').value,
+      origen: document.getElementById('movementOrigin').value,
+      desde: document.getElementById('movementFrom').value,
+      hasta: document.getElementById('movementTo').value,
+      idAdministrador: document.getElementById('movementOwner').value
+    };
+    Object.entries(values).forEach(([key, value]) => { if (value) query.set(key, value); });
+    const data = await api(`/api/movimientos-stock?${query}`);
+    currentPage = data.page;
+    document.getElementById('movementResults').innerHTML = movementTable(data.rows);
+    const owner = document.getElementById('movementOwner');
+    const selected = owner.value;
+    owner.innerHTML = options(data.responsables, 'idAdministrador', 'usuario', 'Todos', selected);
+    document.getElementById('movementPage').textContent = `Página ${data.page} de ${data.pages}`;
+    document.getElementById('movementPrevious').disabled = data.page <= 1;
+    document.getElementById('movementNext').disabled = data.page >= data.pages;
+  };
+  document.getElementById('movementSearch').addEventListener('input', () => {
+    window.clearTimeout(searchTimer);
+    searchTimer = window.setTimeout(() => load(1).catch((error) => showError(error.message)), 250);
+  });
+  ['movementType', 'movementOrigin', 'movementFrom', 'movementTo', 'movementOwner'].forEach((id) => {
+    document.getElementById(id).addEventListener('change', () => load(1).catch((error) => showError(error.message)));
+  });
+  document.getElementById('movementPrevious').addEventListener('click', () => load(currentPage - 1).catch((error) => showError(error.message)));
+  document.getElementById('movementNext').addEventListener('click', () => load(currentPage + 1).catch((error) => showError(error.message)));
+  await load(1);
 }
 
 function autocompleteBox(kind) {
@@ -1080,7 +1254,7 @@ function renderAutocomplete(kind) {
 function operationView(kind) {
   const isSale = kind === 'ventas';
   view.innerHTML = `
-    <form id="${kind}Form" class="cart-layout">
+    <form id="${kind}Form" class="cart-layout" data-operation-key="${newOperationKey()}">
       <section class="panel product-picker">
         <div class="form-grid compact-fields">
           ${isSale ? `
@@ -1239,6 +1413,7 @@ async function saveOperation(event, kind) {
   const form = event.target;
   const body = formData(form);
   body.items = collectItems(kind);
+  body.claveOperacion = form.dataset.operationKey;
   if (body.items.length === 0) return showError('Debe agregar al menos un producto.');
   const invalidItem = body.items.some((item) => Number(item.cantidad) <= 0 || (kind === 'compras' && Number(item.precioCompra) <= 0));
   if (invalidItem) return showError('Revise cantidades y precios. Deben ser mayores a cero.');

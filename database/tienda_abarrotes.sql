@@ -26,6 +26,7 @@ CREATE TABLE IF NOT EXISTS administrador (
   password VARCHAR(255) NOT NULL,
   rol ENUM('superadmin','dueno_tienda') NOT NULL DEFAULT 'dueno_tienda',
   activo TINYINT(1) NOT NULL DEFAULT 1,
+  UNIQUE KEY uq_administrador_tienda_id (idTienda, idAdministrador),
   KEY idx_administrador_tienda_activo (idTienda, activo),
   CONSTRAINT fk_administrador_tienda FOREIGN KEY (idTienda) REFERENCES tienda(idTienda),
   CONSTRAINT chk_administrador_rol_tienda CHECK (
@@ -113,6 +114,10 @@ WHERE NOT EXISTS (SELECT 1 FROM funcionalidad WHERE codigo='compras_sugeridas');
 INSERT INTO funcionalidad (codigo, nombre, descripcion)
 SELECT 'historial_stock', 'Historial de stock', 'Movimientos y ajustes detallados de inventario.'
 WHERE NOT EXISTS (SELECT 1 FROM funcionalidad WHERE codigo='historial_stock');
+
+INSERT INTO funcionalidad (codigo, nombre, descripcion)
+SELECT 'ajuste_stock', 'Ajuste de stock', 'Conteo fisico y ajuste manual protegido del inventario.'
+WHERE NOT EXISTS (SELECT 1 FROM funcionalidad WHERE codigo='ajuste_stock');
 INSERT INTO funcionalidad (codigo, nombre, descripcion)
 SELECT 'recibos_whatsapp', 'Recibos por WhatsApp', 'Envio de recibos por WhatsApp.'
 WHERE NOT EXISTS (SELECT 1 FROM funcionalidad WHERE codigo='recibos_whatsapp');
@@ -150,6 +155,16 @@ SELECT p.idPlan, f.idFuncionalidad, 1
 FROM plan p
 JOIN funcionalidad f ON f.codigo='catalogo_maestro'
 WHERE p.codigo='basico'
+  AND NOT EXISTS (
+    SELECT 1 FROM planFuncionalidad pf
+    WHERE pf.idPlan=p.idPlan AND pf.idFuncionalidad=f.idFuncionalidad
+  );
+
+INSERT INTO planFuncionalidad (idPlan, idFuncionalidad, habilitada)
+SELECT p.idPlan, f.idFuncionalidad, 1
+FROM plan p
+JOIN funcionalidad f ON f.codigo IN ('historial_stock','ajuste_stock')
+WHERE p.codigo IN ('basico','avanzado')
   AND NOT EXISTS (
     SELECT 1 FROM planFuncionalidad pf
     WHERE pf.idPlan=p.idPlan AND pf.idFuncionalidad=f.idFuncionalidad
@@ -271,9 +286,12 @@ CREATE TABLE IF NOT EXISTS producto (
   ultimoPrecioCompra DECIMAL(10,2) NOT NULL DEFAULT 0,
   permiteVentaPorPaquete BOOLEAN NOT NULL DEFAULT TRUE,
   permiteVentaPorUnidad BOOLEAN NOT NULL DEFAULT TRUE,
+  activo TINYINT(1) NOT NULL DEFAULT 1,
+  eliminadoEn DATETIME NULL,
   UNIQUE KEY uq_producto_tienda_id (idTienda, idProducto),
   KEY idx_producto_tienda_proveedor (idTienda, idProveedor),
   KEY idx_producto_tienda_categoria_nombre (idTienda, categoria, nombre),
+  KEY idx_producto_tienda_activo_nombre (idTienda, activo, nombre),
   KEY idx_producto_productoMaestro (idProductoMaestro),
   UNIQUE KEY uq_producto_tienda_maestro (idTienda, idProductoMaestro),
   CONSTRAINT fk_producto_tienda FOREIGN KEY (idTienda) REFERENCES tienda(idTienda),
@@ -290,7 +308,9 @@ CREATE TABLE IF NOT EXISTS venta (
   total DECIMAL(10,2) NOT NULL,
   tipo ENUM('pagada','fiada') NOT NULL DEFAULT 'pagada',
   idCliente INT NULL,
+  claveOperacion VARCHAR(64) NULL,
   UNIQUE KEY uq_venta_tienda_id (idTienda, idVenta),
+  UNIQUE KEY uq_venta_tienda_claveOperacion (idTienda, claveOperacion),
   KEY idx_venta_tienda_fecha (idTienda, fecha),
   KEY idx_venta_tienda_cliente (idTienda, idCliente),
   CONSTRAINT fk_venta_tienda FOREIGN KEY (idTienda) REFERENCES tienda(idTienda),
@@ -311,6 +331,7 @@ CREATE TABLE IF NOT EXISTS detalleVenta (
   ganancia DECIMAL(10,2) NOT NULL DEFAULT 0,
   presentacionVenta VARCHAR(30) NOT NULL DEFAULT 'unidad',
   cantidadEquivalenteUnidades INT NOT NULL DEFAULT 0,
+  UNIQUE KEY uq_detalleVenta_tienda_id (idTienda, idDetalleVenta),
   KEY idx_detalleVenta_tienda_venta (idTienda, idVenta),
   KEY idx_detalleVenta_tienda_producto (idTienda, idProducto),
   CONSTRAINT fk_detalleVenta_tienda FOREIGN KEY (idTienda) REFERENCES tienda(idTienda),
@@ -326,7 +347,9 @@ CREATE TABLE IF NOT EXISTS compra (
   fecha DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   total DECIMAL(10,2) NOT NULL,
   idProveedor INT NULL,
+  claveOperacion VARCHAR(64) NULL,
   UNIQUE KEY uq_compra_tienda_id (idTienda, idCompra),
+  UNIQUE KEY uq_compra_tienda_claveOperacion (idTienda, claveOperacion),
   KEY idx_compra_tienda_fecha (idTienda, fecha),
   KEY idx_compra_tienda_proveedor (idTienda, idProveedor),
   CONSTRAINT fk_compra_tienda FOREIGN KEY (idTienda) REFERENCES tienda(idTienda),
@@ -344,6 +367,7 @@ CREATE TABLE IF NOT EXISTS detalleCompra (
   subtotal DECIMAL(10,2) NOT NULL,
   presentacionCompra VARCHAR(30) NOT NULL DEFAULT 'unidad',
   cantidadEquivalenteUnidades INT NOT NULL DEFAULT 0,
+  UNIQUE KEY uq_detalleCompra_tienda_id (idTienda, idDetalleCompra),
   KEY idx_detalleCompra_tienda_compra (idTienda, idCompra),
   KEY idx_detalleCompra_tienda_producto (idTienda, idProducto),
   CONSTRAINT fk_detalleCompra_tienda FOREIGN KEY (idTienda) REFERENCES tienda(idTienda),
@@ -405,6 +429,59 @@ CREATE TABLE IF NOT EXISTS pagoFiado (
   CONSTRAINT fk_pagoFiado_fiado FOREIGN KEY (idFiado) REFERENCES fiado(idFiado),
   CONSTRAINT fk_pagoFiado_tienda_fiado FOREIGN KEY (idTienda, idFiado) REFERENCES fiado(idTienda, idFiado)
 );
+
+CREATE TABLE IF NOT EXISTS movimientoStock (
+  idMovimientoStock BIGINT AUTO_INCREMENT PRIMARY KEY,
+  idTienda INT NOT NULL,
+  idProducto INT NOT NULL,
+  tipoMovimiento ENUM('entrada','salida','ajuste_positivo','ajuste_negativo','inventario_inicial') NOT NULL,
+  origen ENUM('compra','venta','ajuste_manual','alta_producto','migracion_inicial','correccion_sistema','otro') NOT NULL,
+  cantidad INT NOT NULL,
+  stockAnterior INT NOT NULL,
+  stockPosterior INT NOT NULL,
+  cantidadOperacion DECIMAL(10,2) NULL,
+  unidadOperacion VARCHAR(30) NULL,
+  motivo VARCHAR(160) NOT NULL,
+  observacion VARCHAR(500) NULL,
+  idDetalleVenta INT NULL,
+  idDetalleCompra INT NULL,
+  referenciaTipo VARCHAR(40) NULL,
+  referenciaId BIGINT NULL,
+  claveOperacion VARCHAR(160) NOT NULL,
+  idAdministrador INT NULL,
+  creadoEn DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE KEY uq_movimiento_tienda_clave (idTienda, claveOperacion),
+  UNIQUE KEY uq_movimiento_tienda_detalleVenta (idTienda, idDetalleVenta),
+  UNIQUE KEY uq_movimiento_tienda_detalleCompra (idTienda, idDetalleCompra),
+  KEY idx_movimiento_tienda_fecha (idTienda, creadoEn, idMovimientoStock),
+  KEY idx_movimiento_tienda_producto_fecha (idTienda, idProducto, creadoEn, idMovimientoStock),
+  KEY idx_movimiento_tienda_tipo_origen (idTienda, tipoMovimiento, origen),
+  KEY idx_movimiento_tienda_responsable (idTienda, idAdministrador, creadoEn),
+  CONSTRAINT chk_movimiento_cantidad CHECK (cantidad <> 0),
+  CONSTRAINT chk_movimiento_stock_no_negativo CHECK (stockAnterior >= 0 AND stockPosterior >= 0),
+  CONSTRAINT chk_movimiento_balance CHECK (stockPosterior = stockAnterior + cantidad),
+  CONSTRAINT chk_movimiento_tipo CHECK (
+    tipoMovimiento IN ('entrada','salida','ajuste_positivo','ajuste_negativo','inventario_inicial')
+  ),
+  CONSTRAINT chk_movimiento_origen CHECK (
+    origen IN ('compra','venta','ajuste_manual','alta_producto','migracion_inicial','correccion_sistema','otro')
+  ),
+  CONSTRAINT chk_movimiento_signo CHECK (
+    (tipoMovimiento IN ('entrada','ajuste_positivo','inventario_inicial') AND cantidad > 0)
+    OR (tipoMovimiento IN ('salida','ajuste_negativo') AND cantidad < 0)
+  ),
+  CONSTRAINT chk_movimiento_cantidad_operacion CHECK (cantidadOperacion IS NULL OR cantidadOperacion > 0),
+  CONSTRAINT fk_movimiento_tienda FOREIGN KEY (idTienda)
+    REFERENCES tienda(idTienda) ON UPDATE RESTRICT ON DELETE RESTRICT,
+  CONSTRAINT fk_movimiento_producto FOREIGN KEY (idTienda, idProducto)
+    REFERENCES producto(idTienda, idProducto) ON UPDATE RESTRICT ON DELETE RESTRICT,
+  CONSTRAINT fk_movimiento_administrador FOREIGN KEY (idTienda, idAdministrador)
+    REFERENCES administrador(idTienda, idAdministrador) ON UPDATE RESTRICT ON DELETE RESTRICT,
+  CONSTRAINT fk_movimiento_detalleVenta FOREIGN KEY (idTienda, idDetalleVenta)
+    REFERENCES detalleVenta(idTienda, idDetalleVenta) ON UPDATE RESTRICT ON DELETE RESTRICT,
+  CONSTRAINT fk_movimiento_detalleCompra FOREIGN KEY (idTienda, idDetalleCompra)
+    REFERENCES detalleCompra(idTienda, idDetalleCompra) ON UPDATE RESTRICT ON DELETE RESTRICT
+) ENGINE=InnoDB;
 
 -- Esta instalacion crea Tienda Deisy como contexto inicial.
 -- No crea administradores, contrasenas ni datos comerciales de demostracion.

@@ -2,6 +2,7 @@ const express = require('express');
 const pool = require('../config/db');
 const { requirePlanFeature } = require('../middleware/subscription');
 const { enforcePlanLimit } = require('../services/subscription-service');
+const { insertStockMovement, movementKey } = require('../services/stock-movement-service');
 const {
   LOCAL_CATEGORIES,
   booleanValue,
@@ -208,6 +209,24 @@ router.post('/agregar', asyncRoute(async (req, res) => {
           unidadesPorPaquete, precioVenta, stock, stockMinimo, stock, precioCompra,
           permiteVentaPorPaquete, permiteVentaPorUnidad]
       );
+      if (stock > 0) {
+        await insertStockMovement(connection, {
+          idTienda,
+          idProducto: result.insertId,
+          tipoMovimiento: 'inventario_inicial',
+          origen: 'alta_producto',
+          cantidad: stock,
+          stockAnterior: 0,
+          stockPosterior: stock,
+          cantidadOperacion: stock,
+          unidadOperacion: 'unidad_base',
+          motivo: 'Stock inicial al agregar el producto desde el catalogo maestro.',
+          referenciaTipo: 'producto',
+          referenciaId: result.insertId,
+          claveOperacion: movementKey('alta-catalogo', result.insertId),
+          idAdministrador: req.session.admin.id
+        });
+      }
       created.push({ idProductoMaestro: master.idProductoMaestro, idProducto: result.insertId, nombre });
     }
     await connection.commit();

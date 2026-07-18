@@ -6,8 +6,8 @@ const LIMITS = Object.freeze({
   },
   productos: {
     column: 'limiteProductos',
-    label: 'productos',
-    countSql: 'SELECT COUNT(*) total FROM producto WHERE idTienda=?'
+    label: 'productos activos',
+    countSql: 'SELECT COUNT(*) total FROM producto WHERE idTienda=? AND activo=1'
   },
   clientes: {
     column: 'limiteClientes',
