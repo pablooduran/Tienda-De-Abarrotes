@@ -42,6 +42,15 @@ body {
   overflow: hidden;
 }
 .sidebar h1 { font-size: 22px; margin: 0 0 8px; }
+.subscription-summary {
+  margin-top: -10px;
+  padding: 8px 10px;
+  border: 1px solid #526773;
+  border-radius: 6px;
+  color: #d8e5e0;
+  font-size: 12px;
+  line-height: 1.4;
+}
 .sidebar nav {
   display: grid;
   gap: 6px;
@@ -76,6 +85,32 @@ body {
   flex: 0 0 auto;
   margin-top: auto;
   border-color: #526773;
+}
+
+.subscription-banner {
+  margin: 0 0 14px;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  line-height: 1.45;
+}
+
+.subscription-warning {
+  border-color: #e8c65b;
+  color: #6f5000;
+  background: #fff8dc;
+}
+
+.subscription-blocked {
+  border-color: #e7aaa5;
+  color: #842018;
+  background: #fff0ef;
+}
+
+.subscription-readonly button:disabled {
+  cursor: not-allowed;
+  opacity: 0.48;
+  filter: grayscale(0.35);
 }
 
 .content {

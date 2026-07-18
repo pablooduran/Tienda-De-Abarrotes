@@ -2,6 +2,8 @@ const state = {
   stores: [],
   selectedStore: null,
   owners: [],
+  subscriptions: [],
+  plans: [],
   formAction: null,
   formFields: []
 };
@@ -19,12 +21,17 @@ const elements = {
   storeDetailTitle: document.getElementById('storeDetailTitle'),
   storeDetailMeta: document.getElementById('storeDetailMeta'),
   detailStoreStatus: document.getElementById('detailStoreStatus'),
+  detailPlan: document.getElementById('detailPlan'),
+  detailSubscription: document.getElementById('detailSubscription'),
+  detailExpiration: document.getElementById('detailExpiration'),
   detailProductCount: document.getElementById('detailProductCount'),
   detailClientCount: document.getElementById('detailClientCount'),
   detailLastActivity: document.getElementById('detailLastActivity'),
   toggleStoreButton: document.getElementById('toggleStoreButton'),
   ownersTableBody: document.getElementById('ownersTableBody'),
   emptyOwners: document.getElementById('emptyOwners'),
+  subscriptionsTableBody: document.getElementById('subscriptionsTableBody'),
+  emptySubscriptions: document.getElementById('emptySubscriptions'),
   formDialog: document.getElementById('formDialog'),
   dynamicForm: document.getElementById('dynamicForm'),
   formDialogTitle: document.getElementById('formDialogTitle'),
@@ -66,6 +73,18 @@ function statusBadge(status) {
   const badge = document.createElement('span');
   badge.className = `status-badge status-${status === 'activa' ? 'active' : status === 'suspendida' ? 'suspended' : 'inactive'}`;
   badge.textContent = statusLabel(status);
+  return badge;
+}
+
+function subscriptionBadge(status) {
+  const badge = document.createElement('span');
+  const positive = status === 'activa';
+  const warning = status === 'pendiente';
+  badge.className = `status-badge ${positive ? 'status-active' : warning ? 'status-suspended' : 'status-inactive'}`;
+  badge.textContent = {
+    activa: 'Activa', pendiente: 'Pendiente', vencida: 'Vencida', suspendida: 'Suspendida',
+    cancelada: 'Cancelada', sin_suscripcion: 'Sin suscripción'
+  }[status] || status;
   return badge;
 }
 
@@ -147,6 +166,8 @@ function renderStores() {
     row.append(
       tableCell(name, 'store-name-cell'),
       tableCell(statusBadge(store.estado)),
+      tableCell(store.planNombre || 'Sin plan'),
+      tableCell(subscriptionBadge(store.estadoSuscripcionEfectivo || 'sin_suscripcion')),
       tableCell(String(store.cantidadPropietarios || 0)),
       tableCell(String(store.cantidadProductos || 0)),
       tableCell(String(store.cantidadClientes || 0)),
@@ -154,6 +175,32 @@ function renderStores() {
       tableCell(action)
     );
     elements.storesTableBody.appendChild(row);
+  });
+}
+
+function renderSubscriptions() {
+  elements.subscriptionsTableBody.replaceChildren();
+  elements.emptySubscriptions.hidden = state.subscriptions.length > 0;
+  state.subscriptions.forEach((subscription) => {
+    const actions = document.createElement('div');
+    actions.className = 'button-row';
+    if (['activa', 'pendiente'].includes(subscription.estado)) {
+      actions.append(ownerAction('Suspender', 'button-secondary', () => changeSubscriptionStatus(subscription, 'suspender')));
+    }
+    if (subscription.estado !== 'cancelada') {
+      actions.append(ownerAction('Cancelar', 'button-danger', () => changeSubscriptionStatus(subscription, 'cancelar')));
+    }
+    const row = document.createElement('tr');
+    row.append(
+      tableCell(subscription.planNombre),
+      tableCell(subscription.tipo),
+      tableCell(subscriptionBadge(subscription.estadoEfectivo)),
+      tableCell(formatDate(subscription.fechaInicio)),
+      tableCell(formatDate(subscription.fechaFin)),
+      tableCell(subscription.observacion || ''),
+      tableCell(actions)
+    );
+    elements.subscriptionsTableBody.appendChild(row);
   });
 }
 
@@ -199,20 +246,29 @@ async function loadStores(selectedId = state.selectedStore?.idTienda) {
   } else {
     state.selectedStore = null;
     state.owners = [];
+    state.subscriptions = [];
     elements.storeDetail.hidden = true;
   }
 }
 
 async function selectStore(idTienda, scroll = true) {
-  const [store, owners] = await Promise.all([
+  const [store, owners, subscriptions] = await Promise.all([
     api(`/api/admin/tiendas/${idTienda}`),
-    api(`/api/admin/tiendas/${idTienda}/propietarios`)
+    api(`/api/admin/tiendas/${idTienda}/propietarios`),
+    api(`/api/admin/tiendas/${idTienda}/suscripciones`)
   ]);
   state.selectedStore = store;
   state.owners = owners;
+  state.subscriptions = subscriptions;
   elements.storeDetailTitle.textContent = store.nombre;
   elements.storeDetailMeta.textContent = `${store.slug} · Creada ${formatDate(store.creadoEn)}`;
   elements.detailStoreStatus.replaceChildren(statusBadge(store.estado));
+  elements.detailPlan.textContent = store.planNombre || 'Sin plan';
+  elements.detailSubscription.replaceChildren(subscriptionBadge(store.estadoSuscripcionEfectivo || 'sin_suscripcion'));
+  elements.detailExpiration.textContent = store.fechaFinSuscripcion ? formatDate(store.fechaFinSuscripcion) : 'Sin fecha';
+  document.getElementById('manageSubscriptionButton').textContent = store.estadoSuscripcionEfectivo === 'activa'
+    ? 'Renovar o cambiar plan'
+    : 'Reactivar suscripción';
   elements.detailProductCount.textContent = String(store.cantidadProductos || 0);
   elements.detailClientCount.textContent = String(store.cantidadClientes || 0);
   elements.detailLastActivity.textContent = formatDate(store.ultimaActividad);
@@ -220,6 +276,7 @@ async function selectStore(idTienda, scroll = true) {
   elements.toggleStoreButton.className = `button ${isActive(store.activo) ? 'button-danger' : 'button-primary'}`;
   elements.storeDetail.hidden = false;
   renderOwners();
+  renderSubscriptions();
   if (scroll) elements.storeDetail.scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
@@ -245,6 +302,8 @@ function createField(definition) {
     if (definition.autocomplete) input.autocomplete = definition.autocomplete;
     if (definition.placeholder) input.placeholder = definition.placeholder;
     if (definition.minLength) input.minLength = definition.minLength;
+    if (definition.min !== undefined) input.min = definition.min;
+    if (definition.max !== undefined) input.max = definition.max;
   }
 
   const labelText = document.createElement('span');
@@ -295,6 +354,9 @@ function openConfirmation(title, message, acceptLabel = 'Confirmar') {
 }
 
 function createStore() {
+  const planOptions = state.plans.filter((plan) => isActive(plan.activo)).map((plan) => ({
+    value: plan.codigo, label: plan.nombre
+  }));
   openForm({
     title: 'Crear tienda y propietario',
     submitLabel: 'Crear tienda',
@@ -310,6 +372,16 @@ function createStore() {
         ]
       },
       { name: 'propietarioActivo', label: 'Propietario activo', type: 'checkbox', value: true },
+      { name: 'planCodigo', label: 'Plan', type: 'select', value: 'basico', options: planOptions, required: true },
+      {
+        name: 'tipoSuscripcion', label: 'Tipo de suscripción', type: 'select', value: 'prueba',
+        options: [
+          { value: 'prueba', label: 'Prueba gratuita' },
+          { value: 'pagada', label: 'Pagada manualmente' },
+          { value: 'cortesia', label: 'Cortesía' }
+        ]
+      },
+      { name: 'duracionDias', label: 'Duración en días', type: 'number', value: '14', min: 1, max: 3650, required: true },
       { name: 'usuario', label: 'Usuario del propietario', required: true, autocomplete: 'off', full: true },
       { name: 'password', label: 'Contraseña', type: 'password', required: true, minLength: 12, autocomplete: 'new-password' },
       { name: 'confirmacionPassword', label: 'Confirmar contraseña', type: 'password', required: true, minLength: 12, autocomplete: 'new-password' }
@@ -327,6 +399,12 @@ function createStore() {
             password: values.password,
             confirmacionPassword: values.confirmacionPassword,
             activo: values.propietarioActivo
+          },
+          suscripcion: {
+            planCodigo: values.planCodigo,
+            tipo: values.tipoSuscripcion,
+            duracionDias: Number(values.duracionDias),
+            observacion: 'Alta inicial de tienda.'
           }
         }
       });
@@ -334,6 +412,53 @@ function createStore() {
       await loadStores(result.tienda.idTienda);
     }
   });
+}
+
+function manageSubscription() {
+  const store = state.selectedStore;
+  if (!store) return;
+  const planOptions = state.plans.filter((plan) => isActive(plan.activo)).map((plan) => ({
+    value: plan.codigo, label: plan.nombre
+  }));
+  openForm({
+    title: `Nueva suscripción para ${store.nombre}`,
+    submitLabel: 'Registrar suscripción',
+    fields: [
+      { name: 'planCodigo', label: 'Plan', type: 'select', value: store.planCodigo || 'basico', options: planOptions, required: true },
+      {
+        name: 'tipo', label: 'Tipo', type: 'select', value: 'pagada',
+        options: [
+          { value: 'pagada', label: 'Pagada manualmente' },
+          { value: 'prueba', label: 'Prueba gratuita' },
+          { value: 'cortesia', label: 'Cortesía' }
+        ]
+      },
+      { name: 'duracionDias', label: 'Duración en días', type: 'number', value: '30', min: 1, max: 3650, required: true },
+      { name: 'fechaInicio', label: 'Inicio personalizado (opcional)', type: 'datetime-local' },
+      { name: 'fechaFin', label: 'Vencimiento personalizado (opcional)', type: 'datetime-local' },
+      { name: 'observacion', label: 'Observación administrativa', full: true }
+    ],
+    action: async (values) => {
+      const result = await api(`/api/admin/tiendas/${store.idTienda}/suscripciones`, {
+        method: 'POST',
+        body: { ...values, duracionDias: Number(values.duracionDias) }
+      });
+      showToast(result.message);
+      await loadStores(store.idTienda);
+    }
+  });
+}
+
+async function changeSubscriptionStatus(subscription, action) {
+  const confirmed = await openConfirmation(
+    action === 'suspender' ? 'Suspender suscripción' : 'Cancelar suscripción',
+    'La tienda conservará sus datos y podrá consultarlos en modo de solo lectura.',
+    action === 'suspender' ? 'Suspender' : 'Cancelar'
+  );
+  if (!confirmed) return;
+  const result = await api(`/api/admin/suscripciones/${subscription.idSuscripcion}/${action}`, { method: 'PATCH' });
+  showToast(result.message);
+  await loadStores(state.selectedStore.idTienda);
 }
 
 function editStore() {
@@ -489,6 +614,7 @@ document.querySelectorAll('[data-close-dialog]').forEach((button) => {
 elements.storeSearch.addEventListener('input', renderStores);
 document.getElementById('createStoreButton').addEventListener('click', createStore);
 document.getElementById('editStoreButton').addEventListener('click', editStore);
+document.getElementById('manageSubscriptionButton').addEventListener('click', manageSubscription);
 document.getElementById('addOwnerButton').addEventListener('click', addOwner);
 document.getElementById('toggleStoreButton').addEventListener('click', toggleStore);
 document.getElementById('logoutButton').addEventListener('click', logout);
@@ -506,6 +632,7 @@ async function initialize() {
       return;
     }
     elements.currentAdmin.textContent = status.admin.usuario;
+    state.plans = await api('/api/admin/planes');
     await loadStores();
   } catch (error) {
     showToast(error.message || 'No se pudo cargar la administración.', 'error');

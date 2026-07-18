@@ -5,7 +5,7 @@ const menu = document.getElementById('menu');
 const message = document.getElementById('message');
 const modalRoot = document.getElementById('modalRoot');
 
-let state = { productos: [], clientes: [], proveedores: [], fiados: [], ventas: [], categorias: [] };
+let state = { productos: [], clientes: [], proveedores: [], fiados: [], ventas: [], categorias: [], context: null };
 let debtFocus = null;
 
 const sections = [
@@ -139,6 +139,12 @@ function requestAdminPassword(actionText) {
 }
 
 async function api(url, options = {}) {
+  const method = String(options.method || 'GET').toUpperCase();
+  if (url.startsWith('/api/')
+    && state.context?.soloLectura
+    && !['GET', 'HEAD', 'OPTIONS'].includes(method)) {
+    throw new Error('La suscripción está en modo de solo lectura. Puedes consultar los datos, pero no realizar cambios.');
+  }
   const response = await fetch(url, {
     headers: { 'Content-Type': 'application/json', ...(options.headers || {}) },
     ...options
@@ -149,6 +155,59 @@ async function api(url, options = {}) {
   return data;
 }
 function formData(form) { return Object.fromEntries(new FormData(form).entries()); }
+
+function renderSubscriptionContext() {
+  const context = state.context;
+  if (!context) return;
+  document.getElementById('storeName').textContent = context.tienda?.nombre || 'Mi tienda';
+  const summary = document.getElementById('subscriptionSummary');
+  const banner = document.getElementById('subscriptionBanner');
+  const planName = context.plan?.nombre || 'Sin plan';
+  const expiration = context.suscripcion?.fechaFin ? formatDate(context.suscripcion.fechaFin) : 'Sin fecha';
+  summary.textContent = `${planName} · vence ${expiration}`;
+  summary.hidden = false;
+
+  if (context.soloLectura) {
+    const status = context.suscripcion?.estadoEfectivo || 'sin suscripción';
+    banner.innerHTML = `<strong>Cuenta en modo de solo lectura.</strong> Estado de suscripción: ${escapeHtml(status)}. Puedes consultar tus datos, pero las operaciones y cambios están temporalmente deshabilitados.`;
+    banner.className = 'subscription-banner subscription-blocked';
+    banner.hidden = false;
+    document.body.classList.add('subscription-readonly');
+  } else if (context.suscripcion?.diasRestantes !== null && context.suscripcion.diasRestantes <= 7) {
+    banner.innerHTML = `<strong>Tu suscripción vence pronto.</strong> Quedan ${context.suscripcion.diasRestantes} días. Vencimiento: ${escapeHtml(expiration)}.`;
+    banner.className = 'subscription-banner subscription-warning';
+    banner.hidden = false;
+  } else {
+    banner.hidden = true;
+  }
+}
+
+function applyReadOnlyUi() {
+  if (!state.context?.soloLectura) return;
+  const selectors = [
+    '#view form:not(#reportForm) button[type="submit"]',
+    '#modalRoot form button[type="submit"]',
+    '#addProduct',
+    '[data-edit]',
+    '[data-delete]',
+    '[data-restore-client]',
+    '[data-restore-debt]',
+    '[data-delete-fiado]',
+    '[data-product]',
+    '#payClientTotal'
+  ];
+  document.querySelectorAll(selectors.join(',')).forEach((control) => {
+    if (!control.disabled) {
+      control.disabled = true;
+      control.title = 'Acción deshabilitada mientras la cuenta está en modo de solo lectura.';
+    }
+  });
+}
+
+async function loadContext() {
+  state.context = await api('/api/contexto');
+  renderSubscriptionContext();
+}
 
 sections.forEach(([id, label]) => {
   const btn = document.createElement('button');
@@ -173,7 +232,7 @@ async function refreshCatalogs() {
     api('/api/ventas'),
     api('/api/categorias')
   ]);
-  state = { productos, clientes, proveedores, fiados, ventas, categorias };
+  state = { ...state, productos, clientes, proveedores, fiados, ventas, categorias };
 }
 
 function options(rows, id, label, empty = 'Seleccione', selected = '') {
@@ -192,6 +251,7 @@ async function loadView(id) {
   await refreshCatalogs();
   const handlers = { inicio, productos, clientes, proveedores, ventas, compras, historialVentas, pagos, reportes };
   await handlers[id]();
+  applyReadOnlyUi();
 }
 
 function chartTooltip(canvas) {
@@ -1502,4 +1562,13 @@ async function loadReport(event) {
   } catch (error) { showError(error.message); }
 }
 
-loadView('inicio').catch((error) => showError(error.message));
+const readOnlyObserver = new MutationObserver(() => applyReadOnlyUi());
+readOnlyObserver.observe(view, { childList: true, subtree: true });
+readOnlyObserver.observe(modalRoot, { childList: true, subtree: true });
+
+async function initializeApp() {
+  await loadContext();
+  await loadView('inicio');
+}
+
+initializeApp().catch((error) => showError(error.message));

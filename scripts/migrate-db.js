@@ -112,6 +112,29 @@ const migrationRequirements = {
       ['detalleFiado', 'fk_detalleFiado_tienda_producto', ['idTienda', 'idProducto'], 'producto', ['idTienda', 'idProducto']],
       ['pagoFiado', 'fk_pagoFiado_tienda_fiado', ['idTienda', 'idFiado'], 'fiado', ['idTienda', 'idFiado']]
     ]
+  },
+  '005_planes_suscripciones.sql': {
+    columns: {
+      plan: ['idPlan', 'codigo', 'nombre', 'activo', 'precioMensual', 'duracionDias', 'limitePropietarios', 'limiteProductos', 'limiteClientes', 'limiteProveedores', 'creadoEn', 'actualizadoEn'],
+      funcionalidad: ['idFuncionalidad', 'codigo', 'nombre', 'activo', 'creadoEn', 'actualizadoEn'],
+      planFuncionalidad: ['idPlan', 'idFuncionalidad', 'habilitada', 'creadoEn'],
+      suscripcionTienda: ['idSuscripcion', 'idTienda', 'idPlan', 'tipo', 'estado', 'fechaInicio', 'fechaFin', 'renovacionAutomatica', 'observacion', 'creadoPor', 'creadoEn', 'actualizadoEn']
+    },
+    indexes: [
+      ['plan', 'uq_plan_codigo', ['codigo'], true],
+      ['funcionalidad', 'uq_funcionalidad_codigo', ['codigo'], true],
+      ['planFuncionalidad', 'idx_planFuncionalidad_funcionalidad', ['idFuncionalidad'], false],
+      ['suscripcionTienda', 'idx_suscripcion_tienda_estado_fechas', ['idTienda', 'estado', 'fechaInicio', 'fechaFin'], false],
+      ['suscripcionTienda', 'idx_suscripcion_plan', ['idPlan'], false],
+      ['suscripcionTienda', 'idx_suscripcion_creadoPor', ['creadoPor'], false]
+    ],
+    foreignKeyConstraints: [
+      ['planFuncionalidad', 'fk_planFuncionalidad_plan', ['idPlan'], 'plan', ['idPlan']],
+      ['planFuncionalidad', 'fk_planFuncionalidad_funcionalidad', ['idFuncionalidad'], 'funcionalidad', ['idFuncionalidad']],
+      ['suscripcionTienda', 'fk_suscripcion_tienda', ['idTienda'], 'tienda', ['idTienda']],
+      ['suscripcionTienda', 'fk_suscripcion_plan', ['idPlan'], 'plan', ['idPlan']],
+      ['suscripcionTienda', 'fk_suscripcion_creadoPor', ['creadoPor'], 'administrador', ['idAdministrador']]
+    ]
   }
 };
 
@@ -148,6 +171,43 @@ async function requirementsSatisfied(connection, file) {
       "SELECT COUNT(*) total FROM administrador WHERE rol='dueno_tienda' AND idTienda IS NULL"
     );
     if (Number(ownersWithoutShop.total) > 0) return false;
+  }
+  if (file === '005_planes_suscripciones.sql') {
+    const [[plans]] = await connection.query(
+      "SELECT COUNT(DISTINCT codigo) total FROM plan WHERE codigo IN ('basico','avanzado')"
+    );
+    if (Number(plans.total) !== 2) return false;
+    const [[features]] = await connection.query(
+      `SELECT COUNT(DISTINCT codigo) total FROM funcionalidad
+       WHERE codigo IN ('reportes_avanzados','compras_sugeridas','historial_stock','recibos_whatsapp','recordatorios_fiado','gastos','cierre_caja','vencimientos_lote','portal_clientes')`
+    );
+    if (Number(features.total) !== 9) return false;
+    const [[advancedFeatures]] = await connection.query(
+      `SELECT COUNT(*) total
+       FROM planFuncionalidad pf
+       JOIN plan p ON p.idPlan=pf.idPlan
+       JOIN funcionalidad f ON f.idFuncionalidad=pf.idFuncionalidad
+       WHERE p.codigo='avanzado' AND pf.habilitada=1 AND f.activo=1`
+    );
+    if (Number(advancedFeatures.total) < 9) return false;
+    const [[storesWithoutSubscription]] = await connection.query(
+      `SELECT COUNT(*) total FROM tienda t
+       WHERE NOT EXISTS (SELECT 1 FROM suscripcionTienda s WHERE s.idTienda=t.idTienda)`
+    );
+    if (Number(storesWithoutSubscription.total) > 0) return false;
+    const [[invalidDates]] = await connection.query(
+      'SELECT COUNT(*) total FROM suscripcionTienda WHERE fechaFin <= fechaInicio'
+    );
+    if (Number(invalidDates.total) > 0) return false;
+    const [[overlaps]] = await connection.query(
+      `SELECT COUNT(*) total
+       FROM suscripcionTienda a
+       JOIN suscripcionTienda b ON b.idTienda=a.idTienda AND b.idSuscripcion>a.idSuscripcion
+       WHERE a.estado IN ('pendiente','activa')
+         AND b.estado IN ('pendiente','activa')
+         AND a.fechaInicio < b.fechaFin AND b.fechaInicio < a.fechaFin`
+    );
+    if (Number(overlaps.total) > 0) return false;
   }
   return true;
 }
@@ -329,8 +389,9 @@ async function main() {
         await inspect004State(connection, recorded.length > 0);
       }
       if (recorded.length) {
-        if (file === '004_multitienda_base.sql' && !await requirementsSatisfied(connection, file)) {
-          throw new Error('La migracion 004 figura en schema_migrations, pero su estructura o sus datos estan incompletos. No se aplicaron cambios adicionales.');
+        if (['004_multitienda_base.sql', '005_planes_suscripciones.sql'].includes(file)
+          && !await requirementsSatisfied(connection, file)) {
+          throw new Error(`La migracion ${file} figura en schema_migrations, pero su estructura o sus datos estan incompletos. No se aplicaron cambios adicionales.`);
         }
         console.log(`Migracion ya registrada: ${file}`);
         continue;

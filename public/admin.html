@@ -74,7 +74,9 @@
             <thead>
               <tr>
                 <th>Tienda</th>
-                <th>Estado</th>
+                <th>Estado administrativo</th>
+                <th>Plan</th>
+                <th>Suscripción</th>
                 <th>Propietarios</th>
                 <th>Productos</th>
                 <th>Clientes</th>
@@ -96,13 +98,17 @@
             <p id="storeDetailMeta"></p>
           </div>
           <div class="button-row">
+            <button id="manageSubscriptionButton" class="button button-primary" type="button">Gestionar suscripción</button>
             <button id="editStoreButton" class="button button-secondary" type="button">Editar tienda</button>
             <button id="toggleStoreButton" class="button button-danger" type="button"></button>
           </div>
         </div>
 
         <div class="detail-facts">
-          <div><span>Estado</span><strong id="detailStoreStatus"></strong></div>
+          <div><span>Estado administrativo</span><strong id="detailStoreStatus"></strong></div>
+          <div><span>Plan</span><strong id="detailPlan"></strong></div>
+          <div><span>Suscripción</span><strong id="detailSubscription"></strong></div>
+          <div><span>Vencimiento</span><strong id="detailExpiration"></strong></div>
           <div><span>Productos</span><strong id="detailProductCount"></strong></div>
           <div><span>Clientes</span><strong id="detailClientCount"></strong></div>
           <div><span>Última actividad</span><strong id="detailLastActivity"></strong></div>
@@ -128,6 +134,31 @@
             <tbody id="ownersTableBody"></tbody>
           </table>
           <p id="emptyOwners" class="empty-state" hidden>Esta tienda todavía no tiene propietarios.</p>
+        </div>
+
+        <div class="owners-heading subscription-heading">
+          <div>
+            <h3>Historial de suscripciones</h3>
+            <p>Los cambios de plan y renovaciones anteriores se conservan.</p>
+          </div>
+        </div>
+
+        <div class="table-wrap compact-table">
+          <table>
+            <thead>
+              <tr>
+                <th>Plan</th>
+                <th>Tipo</th>
+                <th>Estado</th>
+                <th>Inicio</th>
+                <th>Vencimiento</th>
+                <th>Observación</th>
+                <th>Acciones</th>
+              </tr>
+            </thead>
+            <tbody id="subscriptionsTableBody"></tbody>
+          </table>
+          <p id="emptySubscriptions" class="empty-state" hidden>No hay suscripciones registradas.</p>
         </div>
       </section>
     </main>

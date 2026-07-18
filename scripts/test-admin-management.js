@@ -66,6 +66,7 @@ async function cleanup(connection, fixture) {
     await connection.query('DELETE FROM producto WHERE idTienda=?', [idTienda]);
     await connection.query('DELETE FROM cliente WHERE idTienda=?', [idTienda]);
     await connection.query('DELETE FROM proveedor WHERE idTienda=?', [idTienda]);
+    await connection.query('DELETE FROM suscripcionTienda WHERE idTienda=?', [idTienda]);
     await connection.query('DELETE FROM administrador WHERE idTienda=?', [idTienda]);
     await connection.query('DELETE FROM tienda WHERE idTienda=?', [idTienda]);
   }
@@ -129,6 +130,11 @@ async function main() {
           password: ownerPassword,
           confirmacionPassword: ownerPassword,
           activo: true
+        },
+        suscripcion: {
+          planCodigo: 'avanzado',
+          tipo: 'prueba',
+          duracionDias: 14
         }
       }
     }, 201, 'Creacion transaccional de tienda');
@@ -145,6 +151,11 @@ async function main() {
           usuario: `otro_${marker}`,
           password: ownerPassword,
           confirmacionPassword: ownerPassword
+        },
+        suscripcion: {
+          planCodigo: 'avanzado',
+          tipo: 'prueba',
+          duracionDias: 14
         }
       }
     }, 409, 'Rechazo de slug duplicado');
@@ -157,6 +168,11 @@ async function main() {
           usuario: fixture.ownerUser,
           password: ownerPassword,
           confirmacionPassword: ownerPassword
+        },
+        suscripcion: {
+          planCodigo: 'avanzado',
+          tipo: 'prueba',
+          duracionDias: 14
         }
       }
     }, 409, 'Rechazo de usuario duplicado');

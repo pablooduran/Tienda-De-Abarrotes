@@ -19,6 +19,7 @@ try {
 const pool = require('./config/db');
 const { requireAuth } = require('./middleware/auth');
 const { requireRole } = require('./middleware/roles');
+const { requireActiveSubscription, resolveSubscription } = require('./middleware/subscription');
 const { requireTenant } = require('./middleware/tenant');
 const adminRoutes = require('./routes/admin');
 const apiRoutes = require('./routes/api');
@@ -64,7 +65,7 @@ app.use(session({
 
 app.use('/auth', authRoutes);
 app.use('/api/admin', requireAuth, requireRole('superadmin'), adminRoutes);
-app.use('/api', requireAuth, requireTenant, apiRoutes);
+app.use('/api', requireAuth, requireTenant, resolveSubscription, requireActiveSubscription, apiRoutes);
 
 app.get('/app.html', requireAuth, (req, res) => {
   if (req.session.admin.rol !== 'dueno_tienda') return res.redirect('/admin.html');
@@ -88,8 +89,11 @@ app.use((req, res) => {
 });
 
 app.use((err, req, res, next) => {
+  if (err.status) {
+    return res.status(err.status).json({ error: err.message, ...(err.code ? { code: err.code } : {}) });
+  }
   console.error(err);
-  res.status(500).json({ error: 'Ocurrio un error interno.' });
+  return res.status(500).json({ error: 'Ocurrio un error interno.' });
 });
 
 async function startServer() {

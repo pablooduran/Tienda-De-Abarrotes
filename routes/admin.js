@@ -1,6 +1,10 @@
 const express = require('express');
 const bcrypt = require('bcryptjs');
 const pool = require('../config/db');
+const {
+  createSubscription,
+  enforcePlanLimit
+} = require('../services/subscription-service');
 
 const router = express.Router();
 const STORE_STATES = new Set(['activa', 'suspendida', 'inactiva']);
@@ -118,8 +122,33 @@ function storeSummaryQuery(whereClause = '') {
         COALESCE((SELECT MAX(v.fecha) FROM venta v WHERE v.idTienda=t.idTienda), '1000-01-01 00:00:00'),
         COALESCE((SELECT MAX(co.fecha) FROM compra co WHERE co.idTienda=t.idTienda), '1000-01-01 00:00:00'),
         COALESCE((SELECT MAX(pf.fechaPago) FROM pagoFiado pf WHERE pf.idTienda=t.idTienda), '1000-01-01 00:00:00')
-      ), '1000-01-01 00:00:00') AS ultimaActividad
+      ), '1000-01-01 00:00:00') AS ultimaActividad,
+      p.codigo AS planCodigo, p.nombre AS planNombre,
+      s.idSuscripcion, s.tipo AS tipoSuscripcion, s.estado AS estadoSuscripcion,
+      CASE
+        WHEN s.idSuscripcion IS NULL THEN 'sin_suscripcion'
+        WHEN s.estado IN ('activa','pendiente') AND CURRENT_TIMESTAMP>=s.fechaFin THEN 'vencida'
+        WHEN s.estado IN ('activa','pendiente') AND CURRENT_TIMESTAMP<s.fechaInicio THEN 'pendiente'
+        WHEN s.estado='pendiente' THEN 'activa'
+        ELSE s.estado
+      END AS estadoSuscripcionEfectivo,
+      s.fechaInicio AS fechaInicioSuscripcion, s.fechaFin AS fechaFinSuscripcion
     FROM tienda t
+    LEFT JOIN suscripcionTienda s ON s.idSuscripcion=(
+      SELECT s2.idSuscripcion FROM suscripcionTienda s2
+      WHERE s2.idTienda=t.idTienda
+      ORDER BY
+        CASE
+          WHEN s2.estado IN ('activa','pendiente') AND CURRENT_TIMESTAMP>=s2.fechaInicio AND CURRENT_TIMESTAMP<s2.fechaFin THEN 0
+          WHEN s2.estado='pendiente' AND s2.fechaInicio>CURRENT_TIMESTAMP THEN 1
+          WHEN s2.estado='suspendida' THEN 2
+          ELSE 3
+        END,
+        CASE WHEN s2.fechaInicio>CURRENT_TIMESTAMP THEN s2.fechaInicio END ASC,
+        s2.idSuscripcion DESC
+      LIMIT 1
+    )
+    LEFT JOIN plan p ON p.idPlan=s.idPlan
     ${whereClause}`;
 }
 
@@ -139,9 +168,19 @@ router.get('/tiendas/:idTienda', asyncRoute(async (req, res) => {
   res.json(rows[0]);
 }));
 
+router.get('/planes', asyncRoute(async (req, res) => {
+  const [rows] = await pool.query(
+    `SELECT idPlan, codigo, nombre, descripcion, activo, precioMensual, duracionDias,
+       limitePropietarios, limiteProductos, limiteClientes, limiteProveedores
+     FROM plan ORDER BY idPlan`
+  );
+  res.json(rows);
+}));
+
 router.post('/tiendas', asyncRoute(async (req, res) => {
   const tienda = validateStorePayload(req.body || {});
   const propietario = validateOwnerPayload(req.body?.propietario || {});
+  const subscriptionInput = req.body?.suscripcion || {};
   const connection = await pool.getConnection();
   try {
     await connection.beginTransaction();
@@ -160,11 +199,20 @@ router.post('/tiendas', asyncRoute(async (req, res) => {
        VALUES (?, ?, ?, 'dueno_tienda', ?)`,
       [storeResult.insertId, propietario.usuario, passwordHash, propietario.activo]
     );
+    const suscripcion = await createSubscription(connection, {
+      ...subscriptionInput,
+      idTienda: storeResult.insertId,
+      creadoPor: req.session.admin.id
+    });
+    if (propietario.activo) {
+      await enforcePlanLimit(connection, storeResult.insertId, 'propietarios', 0);
+    }
     await connection.commit();
     res.status(201).json({
       message: 'Tienda y propietario creados correctamente.',
       tienda: { idTienda: storeResult.insertId, ...tienda },
-      propietario: { idAdministrador: ownerResult.insertId, usuario: propietario.usuario, activo: propietario.activo }
+      propietario: { idAdministrador: ownerResult.insertId, usuario: propietario.usuario, activo: propietario.activo },
+      suscripcion
     });
   } catch (error) {
     await connection.rollback();
@@ -232,6 +280,7 @@ router.post('/tiendas/:idTienda/propietarios', asyncRoute(async (req, res) => {
     await connection.beginTransaction();
     const store = await findStore(connection, idTienda, true);
     if (!store) throw httpError(404, 'La tienda no existe.');
+    if (propietario.activo) await enforcePlanLimit(connection, idTienda, 'propietarios');
     const [userRows] = await connection.query('SELECT idAdministrador FROM administrador WHERE usuario=? LIMIT 1', [propietario.usuario]);
     if (userRows.length) throw httpError(409, 'El usuario indicado ya existe.');
     const passwordHash = await bcrypt.hash(propietario.password, 12);
@@ -267,14 +316,108 @@ router.put('/propietarios/:idAdministrador', asyncRoute(async (req, res) => {
 
 router.patch('/propietarios/:idAdministrador/activar', asyncRoute(async (req, res) => {
   const idAdministrador = parseId(req.params.idAdministrador, 'El propietario');
-  const [result] = await pool.query(
-    `UPDATE administrador SET activo=1
-     WHERE idAdministrador=? AND rol='dueno_tienda' AND idTienda IS NOT NULL`,
-    [idAdministrador]
-  );
-  if (!result.affectedRows) throw httpError(404, 'El propietario no existe.');
-  res.json({ message: 'Propietario activado correctamente.' });
+  const connection = await pool.getConnection();
+  try {
+    await connection.beginTransaction();
+    const [owners] = await connection.query(
+      `SELECT idTienda, activo FROM administrador
+       WHERE idAdministrador=? AND rol='dueno_tienda' AND idTienda IS NOT NULL FOR UPDATE`,
+      [idAdministrador]
+    );
+    if (!owners.length) throw httpError(404, 'El propietario no existe.');
+    if (!Number(owners[0].activo)) {
+      await findStore(connection, owners[0].idTienda, true);
+      await enforcePlanLimit(connection, owners[0].idTienda, 'propietarios');
+      await connection.query('UPDATE administrador SET activo=1 WHERE idAdministrador=?', [idAdministrador]);
+    }
+    await connection.commit();
+    res.json({ message: 'Propietario activado correctamente.' });
+  } catch (error) {
+    await connection.rollback();
+    throw error;
+  } finally {
+    connection.release();
+  }
 }));
+
+router.get('/tiendas/:idTienda/suscripciones', asyncRoute(async (req, res) => {
+  const idTienda = parseId(req.params.idTienda, 'La tienda');
+  if (!await findStore(pool, idTienda)) throw httpError(404, 'La tienda no existe.');
+  const [rows] = await pool.query(
+    `SELECT s.idSuscripcion, s.tipo, s.estado, s.fechaInicio, s.fechaFin,
+       s.renovacionAutomatica, s.observacion, s.creadoEn, s.actualizadoEn,
+       p.codigo AS planCodigo, p.nombre AS planNombre,
+       a.usuario AS creadoPorUsuario,
+       CASE
+         WHEN s.estado IN ('activa','pendiente') AND CURRENT_TIMESTAMP>=s.fechaFin THEN 'vencida'
+         WHEN s.estado IN ('activa','pendiente') AND CURRENT_TIMESTAMP<s.fechaInicio THEN 'pendiente'
+         WHEN s.estado='pendiente' THEN 'activa'
+         ELSE s.estado
+       END AS estadoEfectivo
+     FROM suscripcionTienda s
+     JOIN plan p ON p.idPlan=s.idPlan
+     LEFT JOIN administrador a ON a.idAdministrador=s.creadoPor
+     WHERE s.idTienda=?
+     ORDER BY s.idSuscripcion DESC`,
+    [idTienda]
+  );
+  res.json(rows);
+}));
+
+router.post('/tiendas/:idTienda/suscripciones', asyncRoute(async (req, res) => {
+  const idTienda = parseId(req.params.idTienda, 'La tienda');
+  const connection = await pool.getConnection();
+  try {
+    await connection.beginTransaction();
+    const suscripcion = await createSubscription(connection, {
+      ...(req.body || {}),
+      idTienda,
+      creadoPor: req.session.admin.id
+    });
+    await connection.commit();
+    res.status(201).json({ message: 'Suscripcion registrada correctamente.', suscripcion });
+  } catch (error) {
+    await connection.rollback();
+    throw error;
+  } finally {
+    connection.release();
+  }
+}));
+
+async function changeSubscriptionStatus(req, res, targetStatus) {
+  const idSuscripcion = parseId(req.params.idSuscripcion, 'La suscripcion');
+  const connection = await pool.getConnection();
+  try {
+    await connection.beginTransaction();
+    const [rows] = await connection.query(
+      `SELECT s.idSuscripcion, s.idTienda
+       FROM suscripcionTienda s
+       WHERE s.idSuscripcion=? FOR UPDATE`,
+      [idSuscripcion]
+    );
+    if (!rows.length) throw httpError(404, 'La suscripcion no existe.');
+    await findStore(connection, rows[0].idTienda, true);
+    await connection.query(
+      'UPDATE suscripcionTienda SET estado=?, actualizadoEn=CURRENT_TIMESTAMP WHERE idSuscripcion=?',
+      [targetStatus, idSuscripcion]
+    );
+    await connection.commit();
+    res.json({ message: `Suscripcion ${targetStatus === 'suspendida' ? 'suspendida' : 'cancelada'} correctamente.` });
+  } catch (error) {
+    await connection.rollback();
+    throw error;
+  } finally {
+    connection.release();
+  }
+}
+
+router.patch('/suscripciones/:idSuscripcion/suspender', asyncRoute(
+  (req, res) => changeSubscriptionStatus(req, res, 'suspendida')
+));
+
+router.patch('/suscripciones/:idSuscripcion/cancelar', asyncRoute(
+  (req, res) => changeSubscriptionStatus(req, res, 'cancelada')
+));
 
 router.patch('/propietarios/:idAdministrador/desactivar', asyncRoute(async (req, res) => {
   const idAdministrador = parseId(req.params.idAdministrador, 'El propietario');

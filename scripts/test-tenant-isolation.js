@@ -68,6 +68,7 @@ async function cleanup(connection, fixture) {
     await connection.query('DELETE FROM producto WHERE idTienda=?', [id]);
     await connection.query('DELETE FROM cliente WHERE idTienda=?', [id]);
     await connection.query('DELETE FROM proveedor WHERE idTienda=?', [id]);
+    await connection.query('DELETE FROM suscripcionTienda WHERE idTienda=?', [id]);
     await connection.query('DELETE FROM administrador WHERE idTienda=?', [id]);
     await connection.query('DELETE FROM tienda WHERE idTienda=?', [id]);
   }
@@ -111,6 +112,14 @@ async function main() {
       [`TIENDA PRUEBA ${marker}`, slug]
     );
     fixture.idTiendaSecundaria = store.insertId;
+    const [[advancedPlan]] = await connection.query("SELECT idPlan FROM plan WHERE codigo='avanzado' LIMIT 1");
+    assert(advancedPlan, 'No existe el plan avanzado. Ejecute primero la migracion 005.');
+    await connection.query(
+      `INSERT INTO suscripcionTienda
+       (idTienda, idPlan, tipo, estado, fechaInicio, fechaFin, renovacionAutomatica, observacion)
+       VALUES (?, ?, 'cortesia', 'activa', CURRENT_TIMESTAMP, DATE_ADD(CURRENT_TIMESTAMP, INTERVAL 30 DAY), 0, 'Prueba de aislamiento')`,
+      [fixture.idTiendaSecundaria, advancedPlan.idPlan]
+    );
 
     const ownerUser = `owner_test_${marker}`;
     const ownerPassword = `Owner-${crypto.randomBytes(12).toString('hex')}!`;

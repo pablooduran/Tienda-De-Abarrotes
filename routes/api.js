@@ -1,6 +1,7 @@
 const express = require('express');
 const bcrypt = require('bcryptjs');
 const pool = require('../config/db');
+const { enforcePlanLimit } = require('../services/subscription-service');
 
 const router = express.Router();
 
@@ -18,6 +19,21 @@ router.use((req, res, next) => {
   const sendJson = res.json.bind(res);
   res.json = (body) => sendJson(omitTenant(body));
   next();
+});
+
+router.get('/contexto', (req, res) => {
+  const context = req.subscriptionContext;
+  res.json({
+    usuario: req.session.admin.usuario,
+    rol: req.session.admin.rol,
+    tienda: context.tienda,
+    plan: context.plan ? { codigo: context.plan.codigo, nombre: context.plan.nombre } : null,
+    suscripcion: context.suscripcion,
+    soloLectura: context.soloLectura,
+    caracteristicas: context.caracteristicas,
+    limites: context.limites,
+    uso: context.uso
+  });
 });
 
 const units = ['unidad', 'paquete', 'kilo', 'gramo', 'litro', 'mililitro', 'caja', 'docena', 'bolsa'];
@@ -86,6 +102,11 @@ function notFound(message) {
   const error = new Error(message);
   error.status = 404;
   return error;
+}
+
+async function lockTenantForLimit(connection, idTienda) {
+  const [rows] = await connection.query('SELECT idTienda FROM tienda WHERE idTienda=? FOR UPDATE', [idTienda]);
+  if (!rows.length) throw notFound('Tienda no encontrada.');
 }
 
 async function requireTenantRecord(connection, table, idField, id, idTienda, extraWhere = '') {
@@ -272,21 +293,30 @@ router.get('/productos', async (req, res, next) => {
 });
 
 router.post('/productos', async (req, res, next) => {
+  let connection;
   try {
     const data = validateProductPayload(req.body);
     const idTienda = tenantId(req);
+    connection = await pool.getConnection();
+    await connection.beginTransaction();
+    await lockTenantForLimit(connection, idTienda);
+    await enforcePlanLimit(connection, idTienda, 'productos');
     if (data.idProveedor) {
-      await requireTenantRecord(pool, 'proveedor', 'idProveedor', data.idProveedor, idTienda);
+      await requireTenantRecord(connection, 'proveedor', 'idProveedor', data.idProveedor, idTienda);
     }
-    await pool.query(
+    await connection.query(
       `INSERT INTO producto
        (idTienda, nombre, idProveedor, categoria, unidadMedida, unidadesPorPaquete, paquetesPorCaja, precioVenta, stock, stockMinimo, stockUnidadesTotal, ultimoPrecioCompra, permiteVentaPorPaquete, permiteVentaPorUnidad)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [idTienda, data.nombre, data.idProveedor, data.categoria, data.unidadMedida, data.unidadesPorPaquete, data.paquetesPorCaja, data.precioVenta, data.stockUnidadesTotal, data.stockMinimo, data.stockUnidadesTotal, data.ultimoPrecioCompra, data.permiteVentaPorPaquete, data.permiteVentaPorUnidad]
     );
+    await connection.commit();
     res.status(201).json({ message: 'Producto guardado.' });
   } catch (error) {
+    if (connection) await connection.rollback();
     next(error);
+  } finally {
+    if (connection) connection.release();
   }
 });
 
@@ -336,22 +366,31 @@ function crudRoutes(base, table, idField, protectedDeleteMessage) {
   });
 
   router.post(`/${base}`, async (req, res, next) => {
+    let connection;
     try {
       requireFields(req.body, ['nombre']);
       const nombre = cleanText(req.body.nombre);
       const telefono = validatePhone(req.body.telefono);
       const idTienda = tenantId(req);
+      connection = await pool.getConnection();
+      await connection.beginTransaction();
+      await lockTenantForLimit(connection, idTienda);
+      await enforcePlanLimit(connection, idTienda, table === 'proveedor' ? 'proveedores' : 'clientes');
       if (table === 'proveedor') {
-        await pool.query(
+        await connection.query(
           'INSERT INTO proveedor (idTienda, nombre, telefono, direccion) VALUES (?, ?, ?, ?)',
           [idTienda, nombre, telefono, nullableText(req.body.direccion)]
         );
       } else {
-        await pool.query('INSERT INTO cliente (idTienda, nombre, telefono) VALUES (?, ?, ?)', [idTienda, nombre, telefono]);
+        await connection.query('INSERT INTO cliente (idTienda, nombre, telefono) VALUES (?, ?, ?)', [idTienda, nombre, telefono]);
       }
+      await connection.commit();
       res.status(201).json({ message: 'Registro guardado.' });
     } catch (error) {
+      if (connection) await connection.rollback();
       next(error);
+    } finally {
+      if (connection) connection.release();
     }
   });
 
@@ -418,17 +457,32 @@ router.get('/clientes/ocultos', async (req, res, next) => {
 });
 
 router.patch('/clientes/:id/restaurar', async (req, res, next) => {
+  let connection;
   try {
     await requireAdminPassword(req);
-    const [result] = await pool.query(
-      'UPDATE cliente SET activo=1, eliminadoEn=NULL WHERE idCliente=? AND idTienda=? AND activo=0',
-      [req.params.id, tenantId(req)]
+    const idTienda = tenantId(req);
+    connection = await pool.getConnection();
+    await connection.beginTransaction();
+    await lockTenantForLimit(connection, idTienda);
+    const [hidden] = await connection.query(
+      'SELECT idCliente FROM cliente WHERE idCliente=? AND idTienda=? AND activo=0 FOR UPDATE',
+      [req.params.id, idTienda]
     );
-    if (!result.affectedRows) return res.status(404).json({ error: 'Cliente oculto no encontrado.' });
+    if (!hidden.length) throw notFound('Cliente oculto no encontrado.');
+    await enforcePlanLimit(connection, idTienda, 'clientes');
+    const [result] = await connection.query(
+      'UPDATE cliente SET activo=1, eliminadoEn=NULL WHERE idCliente=? AND idTienda=? AND activo=0',
+      [req.params.id, idTienda]
+    );
+    if (!result.affectedRows) throw notFound('Cliente oculto no encontrado.');
+    await connection.commit();
     res.json({ message: 'Cliente restaurado.' });
   } catch (error) {
+    if (connection) await connection.rollback();
     if (error.status) return res.status(error.status).json({ error: error.message });
     next(error);
+  } finally {
+    if (connection) connection.release();
   }
 });
 

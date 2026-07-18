@@ -452,6 +452,12 @@ tbody tr:hover {
   margin-bottom: 12px;
 }
 
+.subscription-heading {
+  margin-top: 30px;
+  padding-top: 24px;
+  border-top: 1px solid var(--line);
+}
+
 .compact-table .button {
   min-height: 34px;
   padding: 6px 9px;

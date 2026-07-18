@@ -78,6 +78,7 @@ Migraciones actuales, en orden:
 2. `002_mejoras_stock_reportes.sql`: presentaciones, stock avanzado, costos y ganancias.
 3. `003_borrado_logico.sql`: borrado logico de clientes y fiados.
 4. `004_multitienda_base.sql`: tienda inicial, asociacion de datos e indices de aislamiento.
+5. `005_planes_suscripciones.sql`: planes, funcionalidades, historial de suscripciones y acceso de solo lectura.
 
 Antes y despues de aplicar la migracion multi-tienda sobre una base local, puede obtener una comprobacion de solo lectura:
 
@@ -89,6 +90,15 @@ npm.cmd run db:check-multitenant
 La salida informa conteos, registros sin `idTienda`, ventas, compras, fiados, stock y pagos. Tambien declara `pre-migracion`, `post-migracion` o `estructura-incompleta-o-migracion-parcial` sin asumir que `tienda` o `idTienda` ya existen. Compare las sumas antes y despues: deben mantenerse iguales y, despues de `004`, los registros comerciales y los propietarios deben mostrar cero filas sin tienda. Un `superadmin` valido conserva `idTienda=NULL`; el informe lo valida por separado y no lo cuenta como registro sin tienda.
 
 La migracion `004` es reintentable. Antes de cada `ADD COLUMN`, `ADD INDEX` o `ADD CONSTRAINT`, `db:migrate` consulta `INFORMATION_SCHEMA` y omite solamente el elemento que ya existe. Si una ejecucion se interrumpe, no se registra como aplicada hasta completar y verificar toda la estructura.
+
+Despues de aplicar `005`, compruebe planes, tiendas sin suscripcion, fechas y posibles periodos superpuestos:
+
+```powershell
+$env:APP_ENV='local'
+npm.cmd run db:check-subscriptions
+```
+
+La migracion crea los planes `basico` y `avanzado`. Las tiendas existentes reciben una suscripcion avanzada de cortesia por 3650 dias para conservar el acceso durante la transicion; el superadmin puede reemplazarla desde el panel sin borrar su historial.
 
 ### Crear el primer administrador
 
@@ -161,6 +171,8 @@ Las APIs operativas aceptan solamente sesiones con rol `dueno_tienda` y una tien
 
 El superadmin puede crear una tienda junto con su primer propietario en una sola transaccion, agregar propietarios adicionales, actualizar los datos de la tienda, suspender o reactivar accesos y restablecer contrasenas. Estas acciones no borran ni modifican los datos comerciales de una tienda.
 
+Cada tienda tiene un plan y un historial de suscripciones. El plan basico permite un propietario activo, 500 productos, 500 clientes activos y 100 proveedores. El avanzado permite cinco propietarios activos y no limita esas tres entidades. Una suscripcion vencida, suspendida o cancelada mantiene login, consultas, dashboard y reportes, pero bloquea cambios y operaciones comerciales hasta su renovacion.
+
 ### Prueba local de aislamiento
 
 Con el servidor local iniciado en otra terminal, ejecute:
@@ -182,3 +194,14 @@ npm.cmd run test:admin-management
 ```
 
 La prueba tiene las mismas protecciones de host y nombre de base. Crea credenciales y una tienda con identificadores aleatorios, comprueba permisos, duplicados, aislamiento, activacion, desactivacion y restablecimiento de contrasena, y finalmente elimina solo los registros temporales que genero.
+
+### Prueba local de planes y suscripciones
+
+Con `005` aplicada y el servidor local iniciado, ejecute:
+
+```powershell
+$env:APP_ENV='local'
+npm.cmd run test:subscriptions
+```
+
+La prueba valida altas basicas, avanzadas y de prueba, limites, modo de solo lectura, renovaciones, historial y permisos. Solo funciona en localhost y en una base cuyo nombre contenga `prueba` o `test`; elimina los datos temporales que crea.
