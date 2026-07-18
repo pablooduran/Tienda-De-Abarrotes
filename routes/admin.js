@@ -5,6 +5,7 @@ const {
   createSubscription,
   enforcePlanLimit
 } = require('../services/subscription-service');
+const { ensureDefaultExpenseCategories } = require('../services/financial-service');
 
 const router = express.Router();
 const STORE_STATES = new Set(['activa', 'suspendida', 'inactiva']);
@@ -193,6 +194,7 @@ router.post('/tiendas', asyncRoute(async (req, res) => {
       'INSERT INTO tienda (nombre, slug, estado, activo) VALUES (?, ?, ?, ?)',
       [tienda.nombre, tienda.slug, tienda.estado, tienda.activo]
     );
+    await ensureDefaultExpenseCategories(connection, storeResult.insertId);
     const passwordHash = await bcrypt.hash(propietario.password, 12);
     const [ownerResult] = await connection.query(
       `INSERT INTO administrador (idTienda, usuario, password, rol, activo)

@@ -58,6 +58,9 @@ async function cleanup(connection, fixture) {
   if (!connection) return;
   if (fixture.idTiendaSecundaria) {
     const id = fixture.idTiendaSecundaria;
+    await connection.query('DELETE FROM cierreCaja WHERE idTienda=?', [id]);
+    await connection.query('DELETE FROM gasto WHERE idTienda=?', [id]);
+    await connection.query('DELETE FROM categoriaGasto WHERE idTienda=?', [id]);
     await connection.query('DELETE FROM movimientoStock WHERE idTienda=?', [id]);
     await connection.query('DELETE FROM pagoVenta WHERE idTienda=?', [id]);
     await connection.query('DELETE FROM pagoFiado WHERE idTienda=?', [id]);

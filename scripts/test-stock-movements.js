@@ -103,6 +103,9 @@ async function movementCount(connection, idTienda, idProducto = null) {
 }
 
 async function cleanupStore(connection, idTienda) {
+  await connection.query('DELETE FROM cierreCaja WHERE idTienda=?', [idTienda]);
+  await connection.query('DELETE FROM gasto WHERE idTienda=?', [idTienda]);
+  await connection.query('DELETE FROM categoriaGasto WHERE idTienda=?', [idTienda]);
   await connection.query('DELETE FROM movimientoStock WHERE idTienda=?', [idTienda]);
   await connection.query('DELETE FROM pagoVenta WHERE idTienda=?', [idTienda]);
   await connection.query('DELETE FROM pagoFiado WHERE idTienda=?', [idTienda]);

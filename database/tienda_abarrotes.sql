@@ -145,6 +145,18 @@ WHERE NOT EXISTS (SELECT 1 FROM funcionalidad WHERE codigo='punto_venta');
 INSERT INTO funcionalidad (codigo, nombre, descripcion)
 SELECT 'pagos_multiples', 'Pagos multiples', 'Cobros mediante efectivo, QR o combinacion de ambos.'
 WHERE NOT EXISTS (SELECT 1 FROM funcionalidad WHERE codigo='pagos_multiples');
+INSERT INTO funcionalidad (codigo, nombre, descripcion)
+SELECT 'reportes_financieros', 'Reportes financieros', 'Resumen de ventas, cobros, costos, gastos y ganancias.'
+WHERE NOT EXISTS (SELECT 1 FROM funcionalidad WHERE codigo='reportes_financieros');
+INSERT INTO funcionalidad (codigo, nombre, descripcion)
+SELECT 'rentabilidad_producto', 'Rentabilidad por producto', 'Analisis detallado de costo, margen y ganancia por producto.'
+WHERE NOT EXISTS (SELECT 1 FROM funcionalidad WHERE codigo='rentabilidad_producto');
+INSERT INTO funcionalidad (codigo, nombre, descripcion)
+SELECT 'exportacion_reportes', 'Exportacion de reportes', 'Exportacion segura de reportes financieros en Excel.'
+WHERE NOT EXISTS (SELECT 1 FROM funcionalidad WHERE codigo='exportacion_reportes');
+INSERT INTO funcionalidad (codigo, nombre, descripcion)
+SELECT 'dashboard_financiero', 'Dashboard financiero', 'Indicadores de ventas, cobros, costos y gastos.'
+WHERE NOT EXISTS (SELECT 1 FROM funcionalidad WHERE codigo='dashboard_financiero');
 
 INSERT INTO planFuncionalidad (idPlan, idFuncionalidad, habilitada)
 SELECT p.idPlan, f.idFuncionalidad, 1
@@ -181,6 +193,26 @@ SELECT p.idPlan, f.idFuncionalidad, 1
 FROM plan p
 JOIN funcionalidad f ON f.codigo IN ('punto_venta','pagos_multiples','recibos_whatsapp')
 WHERE p.codigo IN ('basico','avanzado')
+  AND NOT EXISTS (
+    SELECT 1 FROM planFuncionalidad pf
+    WHERE pf.idPlan=p.idPlan AND pf.idFuncionalidad=f.idFuncionalidad
+  );
+
+INSERT INTO planFuncionalidad (idPlan, idFuncionalidad, habilitada)
+SELECT p.idPlan, f.idFuncionalidad, 1
+FROM plan p
+JOIN funcionalidad f ON f.codigo IN ('gastos','reportes_financieros','exportacion_reportes','dashboard_financiero')
+WHERE p.codigo IN ('basico','avanzado')
+  AND NOT EXISTS (
+    SELECT 1 FROM planFuncionalidad pf
+    WHERE pf.idPlan=p.idPlan AND pf.idFuncionalidad=f.idFuncionalidad
+  );
+
+INSERT INTO planFuncionalidad (idPlan, idFuncionalidad, habilitada)
+SELECT p.idPlan, f.idFuncionalidad, 1
+FROM plan p
+JOIN funcionalidad f ON f.codigo IN ('rentabilidad_producto','cierre_caja')
+WHERE p.codigo='avanzado'
   AND NOT EXISTS (
     SELECT 1 FROM planFuncionalidad pf
     WHERE pf.idPlan=p.idPlan AND pf.idFuncionalidad=f.idFuncionalidad
@@ -372,6 +404,7 @@ CREATE TABLE IF NOT EXISTS detalleVenta (
   subtotal DECIMAL(10,2) NOT NULL,
   subtotalCosto DECIMAL(10,2) NOT NULL DEFAULT 0,
   ganancia DECIMAL(10,2) NOT NULL DEFAULT 0,
+  origenCosto ENUM('real','estimado','desconocido') NOT NULL DEFAULT 'desconocido',
   presentacionVenta VARCHAR(30) NOT NULL DEFAULT 'unidad',
   cantidadEquivalenteUnidades INT NOT NULL DEFAULT 0,
   UNIQUE KEY uq_detalleVenta_tienda_id (idTienda, idDetalleVenta),
@@ -508,6 +541,134 @@ CREATE TABLE IF NOT EXISTS pagoVenta (
   CONSTRAINT fk_pagoVenta_administrador FOREIGN KEY (idTienda, idAdministrador)
     REFERENCES administrador(idTienda, idAdministrador) ON UPDATE RESTRICT ON DELETE RESTRICT
 ) ENGINE=InnoDB;
+
+CREATE TABLE IF NOT EXISTS categoriaGasto (
+  idCategoriaGasto INT AUTO_INCREMENT PRIMARY KEY,
+  idTienda INT NOT NULL,
+  nombre VARCHAR(100) NOT NULL,
+  nombreNormalizado VARCHAR(120) NOT NULL,
+  descripcion VARCHAR(255) NULL,
+  activo TINYINT(1) NOT NULL DEFAULT 1,
+  creadoEn DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  actualizadoEn DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  UNIQUE KEY uq_categoriaGasto_tienda_id (idTienda, idCategoriaGasto),
+  UNIQUE KEY uq_categoriaGasto_tienda_normalizada (idTienda, nombreNormalizado),
+  KEY idx_categoriaGasto_tienda_activo_nombre (idTienda, activo, nombre),
+  CONSTRAINT fk_categoriaGasto_tienda FOREIGN KEY (idTienda)
+    REFERENCES tienda(idTienda) ON UPDATE RESTRICT ON DELETE RESTRICT
+) ENGINE=InnoDB;
+
+CREATE TABLE IF NOT EXISTS gasto (
+  idGasto BIGINT AUTO_INCREMENT PRIMARY KEY,
+  idTienda INT NOT NULL,
+  idCategoriaGasto INT NOT NULL,
+  idAdministrador INT NOT NULL,
+  idAdministradorModifica INT NULL,
+  idAdministradorAnula INT NULL,
+  fechaGasto DATETIME NOT NULL,
+  concepto VARCHAR(160) NOT NULL,
+  monto DECIMAL(12,2) NOT NULL,
+  metodoPago ENUM('efectivo','qr','transferencia','otro') NOT NULL,
+  referencia VARCHAR(120) NULL,
+  observacion VARCHAR(500) NULL,
+  recurrente TINYINT(1) NOT NULL DEFAULT 0,
+  estado ENUM('registrado','anulado') NOT NULL DEFAULT 'registrado',
+  motivoAnulacion VARCHAR(300) NULL,
+  creadoEn DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  actualizadoEn DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  anuladoEn DATETIME NULL,
+  UNIQUE KEY uq_gasto_tienda_id (idTienda, idGasto),
+  KEY idx_gasto_tienda_fecha_estado (idTienda, fechaGasto, estado),
+  KEY idx_gasto_tienda_categoria_fecha (idTienda, idCategoriaGasto, fechaGasto),
+  KEY idx_gasto_tienda_metodo_fecha (idTienda, metodoPago, fechaGasto),
+  CONSTRAINT chk_gasto_monto CHECK (monto > 0),
+  CONSTRAINT chk_gasto_estado CHECK (
+    (estado='registrado' AND anuladoEn IS NULL AND idAdministradorAnula IS NULL AND motivoAnulacion IS NULL)
+    OR (estado='anulado' AND anuladoEn IS NOT NULL AND idAdministradorAnula IS NOT NULL AND motivoAnulacion IS NOT NULL)
+  ),
+  CONSTRAINT fk_gasto_tienda FOREIGN KEY (idTienda)
+    REFERENCES tienda(idTienda) ON UPDATE RESTRICT ON DELETE RESTRICT,
+  CONSTRAINT fk_gasto_categoria FOREIGN KEY (idTienda, idCategoriaGasto)
+    REFERENCES categoriaGasto(idTienda, idCategoriaGasto) ON UPDATE RESTRICT ON DELETE RESTRICT,
+  CONSTRAINT fk_gasto_creador FOREIGN KEY (idTienda, idAdministrador)
+    REFERENCES administrador(idTienda, idAdministrador) ON UPDATE RESTRICT ON DELETE RESTRICT,
+  CONSTRAINT fk_gasto_modificador FOREIGN KEY (idTienda, idAdministradorModifica)
+    REFERENCES administrador(idTienda, idAdministrador) ON UPDATE RESTRICT ON DELETE RESTRICT,
+  CONSTRAINT fk_gasto_anulador FOREIGN KEY (idTienda, idAdministradorAnula)
+    REFERENCES administrador(idTienda, idAdministrador) ON UPDATE RESTRICT ON DELETE RESTRICT
+) ENGINE=InnoDB;
+
+CREATE TABLE IF NOT EXISTS cierreCaja (
+  idCierreCaja BIGINT AUTO_INCREMENT PRIMARY KEY,
+  idTienda INT NOT NULL,
+  idAdministrador INT NOT NULL,
+  idAdministradorAnula INT NULL,
+  fechaInicio DATETIME NOT NULL,
+  fechaFin DATETIME NOT NULL,
+  efectivoInicial DECIMAL(12,2) NOT NULL DEFAULT 0,
+  efectivoVentasEsperado DECIMAL(12,2) NOT NULL DEFAULT 0,
+  efectivoFiadosCobrado DECIMAL(12,2) NOT NULL DEFAULT 0,
+  gastosEfectivo DECIMAL(12,2) NOT NULL DEFAULT 0,
+  efectivoEsperado DECIMAL(12,2) NOT NULL DEFAULT 0,
+  efectivoContado DECIMAL(12,2) NOT NULL DEFAULT 0,
+  diferencia DECIMAL(12,2) NOT NULL DEFAULT 0,
+  totalQR DECIMAL(12,2) NOT NULL DEFAULT 0,
+  totalNoEspecificado DECIMAL(12,2) NOT NULL DEFAULT 0,
+  totalCobrado DECIMAL(12,2) NOT NULL DEFAULT 0,
+  totalVentas DECIMAL(12,2) NOT NULL DEFAULT 0,
+  totalFiadoGenerado DECIMAL(12,2) NOT NULL DEFAULT 0,
+  totalGastos DECIMAL(12,2) NOT NULL DEFAULT 0,
+  totalCompras DECIMAL(12,2) NOT NULL DEFAULT 0,
+  observacion VARCHAR(500) NULL,
+  estado ENUM('cerrado','anulado') NOT NULL DEFAULT 'cerrado',
+  motivoAnulacion VARCHAR(300) NULL,
+  claveOperacion VARCHAR(64) NOT NULL,
+  creadoEn DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  anuladoEn DATETIME NULL,
+  UNIQUE KEY uq_cierreCaja_tienda_id (idTienda, idCierreCaja),
+  UNIQUE KEY uq_cierreCaja_tienda_clave (idTienda, claveOperacion),
+  KEY idx_cierreCaja_tienda_estado_periodo (idTienda, estado, fechaInicio, fechaFin),
+  KEY idx_cierreCaja_tienda_admin_fecha (idTienda, idAdministrador, creadoEn),
+  CONSTRAINT chk_cierreCaja_periodo CHECK (fechaFin > fechaInicio),
+  CONSTRAINT chk_cierreCaja_montos CHECK (
+    efectivoInicial>=0 AND efectivoVentasEsperado>=0 AND efectivoFiadosCobrado>=0
+    AND gastosEfectivo>=0 AND efectivoEsperado>=0 AND efectivoContado>=0
+    AND totalQR>=0 AND totalNoEspecificado>=0 AND totalCobrado>=0 AND totalVentas>=0
+    AND totalFiadoGenerado>=0 AND totalGastos>=0 AND totalCompras>=0
+  ),
+  CONSTRAINT chk_cierreCaja_balance CHECK (
+    ABS(efectivoEsperado-(efectivoInicial+efectivoVentasEsperado+efectivoFiadosCobrado-gastosEfectivo))<0.01
+    AND ABS(diferencia-(efectivoContado-efectivoEsperado))<0.01
+  ),
+  CONSTRAINT chk_cierreCaja_estado CHECK (
+    (estado='cerrado' AND anuladoEn IS NULL AND idAdministradorAnula IS NULL AND motivoAnulacion IS NULL)
+    OR (estado='anulado' AND anuladoEn IS NOT NULL AND idAdministradorAnula IS NOT NULL AND motivoAnulacion IS NOT NULL)
+  ),
+  CONSTRAINT fk_cierreCaja_tienda FOREIGN KEY (idTienda)
+    REFERENCES tienda(idTienda) ON UPDATE RESTRICT ON DELETE RESTRICT,
+  CONSTRAINT fk_cierreCaja_creador FOREIGN KEY (idTienda, idAdministrador)
+    REFERENCES administrador(idTienda, idAdministrador) ON UPDATE RESTRICT ON DELETE RESTRICT,
+  CONSTRAINT fk_cierreCaja_anulador FOREIGN KEY (idTienda, idAdministradorAnula)
+    REFERENCES administrador(idTienda, idAdministrador) ON UPDATE RESTRICT ON DELETE RESTRICT
+) ENGINE=InnoDB;
+
+INSERT INTO categoriaGasto (idTienda, nombre, nombreNormalizado, descripcion)
+SELECT t.idTienda, c.nombre, c.nombreNormalizado, 'Categoria inicial editable de la tienda.'
+FROM tienda t
+CROSS JOIN (
+  SELECT 'Servicios básicos' nombre, 'servicios basicos' nombreNormalizado
+  UNION ALL SELECT 'Alquiler', 'alquiler'
+  UNION ALL SELECT 'Transporte y delivery', 'transporte y delivery'
+  UNION ALL SELECT 'Empaques y bolsas', 'empaques y bolsas'
+  UNION ALL SELECT 'Mantenimiento', 'mantenimiento'
+  UNION ALL SELECT 'Personal', 'personal'
+  UNION ALL SELECT 'Impuestos', 'impuestos'
+  UNION ALL SELECT 'Otros', 'otros'
+) c
+WHERE NOT EXISTS (
+  SELECT 1 FROM categoriaGasto cg
+  WHERE cg.idTienda=t.idTienda AND cg.nombreNormalizado=c.nombreNormalizado
+);
 
 CREATE TABLE IF NOT EXISTS movimientoStock (
   idMovimientoStock BIGINT AUTO_INCREMENT PRIMARY KEY,

@@ -5,6 +5,7 @@ const {
   operationKey,
   stockError
 } = require('./stock-movement-service');
+const { formatLocalDate, formatLocalDateTime } = require('../utils/local-datetime');
 
 const SALE_PRESENTATIONS = new Set(['unidad', 'paquete']);
 const PAYMENT_METHODS = new Set(['efectivo', 'qr']);
@@ -132,6 +133,7 @@ async function lockAndPriceItems(connection, idTienda, rawItems) {
       product,
       units,
       priceCents,
+      costSource: costUnitCents > 0 ? 'real' : 'desconocido',
       subtotalCents,
       subtotalCostCents
     });
@@ -200,11 +202,13 @@ async function registerSale({ idTienda, idAdministrador, body, legacyMode = fals
   const connection = await pool.getConnection();
   try {
     await connection.beginTransaction();
+    const operationDate = new Date();
+    const operationDateTime = formatLocalDateTime(operationDate);
     const [insert] = await connection.query(
-      `INSERT INTO venta (idTienda, total, tipo, idCliente, claveOperacion)
-       VALUES (?, 0, 'pagada', NULL, ?)
+      `INSERT INTO venta (idTienda, fecha, total, tipo, idCliente, claveOperacion)
+       VALUES (?, ?, 0, 'pagada', NULL, ?)
        ON DUPLICATE KEY UPDATE idVenta=LAST_INSERT_ID(idVenta)`,
-      [idTienda, requestKey]
+      [idTienda, operationDateTime, requestKey]
     );
     const idVenta = insert.insertId;
     const repeated = await existingSale(connection, idTienda, requestKey);
@@ -267,11 +271,11 @@ async function registerSale({ idTienda, idAdministrador, body, legacyMode = fals
       const [detail] = await connection.query(
         `INSERT INTO detalleVenta
          (idTienda, idVenta, idProducto, cantidad, precioVenta, costoUnitario, subtotal,
-          subtotalCosto, ganancia, presentacionVenta, cantidadEquivalenteUnidades)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          subtotalCosto, ganancia, origenCosto, presentacionVenta, cantidadEquivalenteUnidades)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [idTienda, idVenta, item.product.idProducto, item.cantidad, decimal(item.priceCents),
           decimal(cents(item.product.ultimoPrecioCompra, 'Costo del producto')), decimal(item.subtotalCents),
-          decimal(item.subtotalCostCents), decimal(item.gainCents), item.presentacion, item.units]
+          decimal(item.subtotalCostCents), decimal(item.gainCents), item.costSource, item.presentacion, item.units]
       );
       const stockAnterior = Number(item.product.stockUnidadesTotal);
       const stockPosterior = stockAnterior - item.units;
@@ -302,12 +306,12 @@ async function registerSale({ idTienda, idAdministrador, body, legacyMode = fals
       const payment = payments[index];
       await connection.query(
         `INSERT INTO pagoVenta
-         (idTienda, idVenta, metodoPago, monto, montoRecibido, cambio, referencia, claveOperacion, idAdministrador)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+         (idTienda, idVenta, metodoPago, monto, montoRecibido, cambio, referencia, claveOperacion, idAdministrador, creadoEn)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [idTienda, idVenta, payment.metodoPago, decimal(payment.montoCents),
           payment.metodoPago === 'efectivo' ? decimal(cashReceivedCents) : null,
           payment.metodoPago === 'efectivo' ? decimal(changeCents) : '0.00', payment.referencia,
-          `pos:${idVenta}:pago:${index + 1}`, idAdministrador]
+          `pos:${idVenta}:pago:${index + 1}`, idAdministrador, operationDateTime]
       );
     }
 
@@ -316,8 +320,8 @@ async function registerSale({ idTienda, idAdministrador, body, legacyMode = fals
       const [debt] = await connection.query(
         `INSERT INTO fiado
          (idTienda, idCliente, idVenta, fechaInicio, totalFiado, totalPagado, saldoPendiente, estado)
-         VALUES (?, ?, ?, CURDATE(), ?, 0, ?, ?)`,
-        [idTienda, idCliente, idVenta, decimal(balanceCents), decimal(balanceCents),
+         VALUES (?, ?, ?, ?, ?, 0, ?, ?)`,
+        [idTienda, idCliente, idVenta, formatLocalDate(operationDate), decimal(balanceCents), decimal(balanceCents),
           'pendiente']
       );
       idFiado = debt.insertId;
@@ -352,14 +356,16 @@ async function recordDebtPaymentForSale(connection, input) {
     throw stockError(400, 'El metodo de pago del fiado no es valido.');
   }
   const paymentCents = cents(input.monto, 'El pago de fiado', { allowZero: false });
+  const paymentDateTime = input.fechaPago || formatLocalDateTime();
   await connection.query(
     `INSERT INTO pagoVenta
-     (idTienda, idVenta, idPagoFiado, metodoPago, monto, montoRecibido, cambio, referencia, claveOperacion, idAdministrador)
-     VALUES (?, ?, ?, ?, ?, ?, 0, ?, ?, ?)
+     (idTienda, idVenta, idPagoFiado, metodoPago, monto, montoRecibido, cambio, referencia, claveOperacion, idAdministrador, creadoEn)
+     VALUES (?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?)
      ON DUPLICATE KEY UPDATE idPagoVenta=idPagoVenta`,
     [input.idTienda, input.idVenta, input.idPagoFiado, method, decimal(paymentCents),
       method === 'efectivo' ? decimal(paymentCents) : null,
-      cleanText(input.referencia, 120), `fiado:${input.idPagoFiado}`, input.idAdministrador || null]
+      cleanText(input.referencia, 120), `fiado:${input.idPagoFiado}`, input.idAdministrador || null,
+      paymentDateTime]
   );
   const [[sale]] = await connection.query(
     'SELECT total FROM venta WHERE idTienda=? AND idVenta=? FOR UPDATE',

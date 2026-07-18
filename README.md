@@ -16,7 +16,7 @@ Sistema con Node.js, Express, MySQL y frontend en HTML, CSS y JavaScript. Admini
 ## Requisitos
 
 - Node.js 18 o superior.
-- MySQL 8.0.16 o superior. Las migraciones 007 y 008 fueron disenadas para MySQL 8.0.46.
+- MySQL 8.0.16 o superior. Las migraciones 007, 008 y 009 fueron disenadas para MySQL 8.0.46.
 - Una base local o de prueba para validar cambios antes de produccion.
 
 ## Configuracion local
@@ -82,6 +82,7 @@ Migraciones actuales, en orden:
 6. `006_catalogo_maestro.sql`: categorias y marcas globales, productos maestros, auditoria y vinculo opcional con el inventario local.
 7. `007_movimientos_stock.sql`: historial inmutable de inventario, stock inicial, ajustes protegidos e idempotencia de ventas y compras.
 8. `008_punto_venta_pagos.sql`: punto de venta, pagos por metodo, comprobantes, codigo de barras local y compatibilidad con fiados.
+9. `009_finanzas_reportes_caja.sql`: gastos, origen del costo historico, reportes financieros, exportaciones y cierres de caja opcionales.
 
 Antes y despues de aplicar la migracion multi-tienda sobre una base local, puede obtener una comprobacion de solo lectura:
 
@@ -129,6 +130,15 @@ npm.cmd run db:check-pos-payments
 ```
 
 La migracion conserva ventas antiguas sin inventar su medio de pago. Las ventas pagadas cuyo metodo historico no puede demostrarse quedan identificadas como `legado`; los pagos de fiado existentes se vinculan usando `no_especificado`. No se vuelve a descontar stock ni se crean fiados o movimientos para ventas antiguas. El punto de venta, pagos multiples y recibos por WhatsApp quedan disponibles en los planes basico y avanzado.
+
+Antes y despues de aplicar `009`, compruebe gastos, costos historicos, cierres, permisos por plan y reconciliaciones financieras:
+
+```powershell
+$env:APP_ENV='local'
+npm.cmd run db:check-financial-reports
+```
+
+La migracion crea categorias de gasto editables para cada tienda, sin crear gastos ni cierres. Los costos ya guardados no se recalculan: se marcan como reales cuando existe evidencia del movimiento de venta, estimados cuando provienen de datos anteriores y desconocidos cuando no hay costo disponible. Las ventas nuevas congelan el ultimo costo de compra vigente en `detalleVenta`.
 
 ### Crear el primer administrador
 
@@ -200,6 +210,14 @@ No ejecute `db:init`, `db:migrate`, `db:create-admin` ni `db:seed-demo` contra p
 - El descuento disponible en esta fase es un monto fijo general; no se implementaron promociones ni porcentajes combinables.
 - Efectivo, QR y pagos mixtos pueden dejar un saldo parcial. Todo saldo pendiente exige un cliente y genera un unico fiado asociado a la venta.
 - El codigo de barras local es opcional, se conserva como texto y debe ser unico dentro de cada tienda. Los lectores que actuan como teclado pueden buscar y agregar con Enter.
+- Las compras de mercaderia no son gastos operativos. La ganancia usa solamente el costo de las unidades vendidas; el total comprado se informa por separado.
+- El costo vigente sigue siendo el ultimo costo de compra por unidad base y se congela al vender. Promedio ponderado, FIFO y LIFO quedan fuera de esta fase para no reinterpretar inventario historico.
+- Ganancia bruta es ventas netas menos costo vendido. Ganancia neta es ganancia bruta menos gastos operativos vigentes.
+- Dinero cobrado se obtiene de `pagoVenta` por la fecha real del cobro. Un pago posterior de fiado aumenta cobros, pero no ventas ni stock.
+- El flujo de efectivo conocido resta gastos de los cobros registrados. Las compras no se descuentan de caja mientras no tengan un metodo de pago confiable.
+- El cierre de caja es opcional, no altera operaciones y solo esta disponible en el plan avanzado. QR no forma parte del efectivo fisico esperado.
+- La marca de gasto recurrente es informativa. Esta fase no genera gastos futuros ni realiza cobros automaticos.
+- Los rangos usan fecha y hora local de MySQL/servidor, sin convertir `DATETIME` mediante `toISOString`. Servidor y base deben compartir la zona horaria comercial.
 
 ## Preparacion multi-tienda
 
@@ -280,3 +298,14 @@ npm.cmd run test:pos-payments
 ```
 
 La prueba cubre busqueda por nombre y codigo, favoritos, unidad y paquete, efectivo, QR, pago mixto, cambio, saldos parciales, fiado completo, idempotencia, rollback, concurrencia, comprobantes, aislamiento y modo de solo lectura. Solo funciona en localhost y en una base cuyo nombre contenga `prueba` o `test`; limpia las tiendas, usuarios y operaciones temporales que crea.
+
+### Prueba local de finanzas y caja
+
+Con `009` aplicada y el servidor local iniciado, ejecute:
+
+```powershell
+$env:APP_ENV='local'
+npm.cmd run test:financial-reports
+```
+
+La prueba valida categorias y gastos, anulacion logica, aislamiento, costos congelados por unidad y paquete, fiado y cobro posterior, descuentos, ganancia bruta y neta, compras separadas, reportes, permisos de planes, cierre de caja, exportacion Excel y neutralizacion de formulas. Solo funciona en localhost y en una base cuyo nombre contenga `prueba` o `test`; elimina los datos temporales que crea.

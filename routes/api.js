@@ -8,6 +8,7 @@ const {
   operationKey
 } = require('../services/stock-movement-service');
 const { normalizeBarcode, recordDebtPaymentForSale, registerSale } = require('../services/pos-sale-service');
+const { formatLocalDateTime } = require('../utils/local-datetime');
 
 const router = express.Router();
 
@@ -19,6 +20,34 @@ function omitTenant(value) {
       .filter(([key]) => key !== 'idTienda')
       .map(([key, item]) => [key, omitTenant(item)])
   );
+}
+
+function localDateBoundary(date) {
+  return formatLocalDateTime(new Date(date.getFullYear(), date.getMonth(), date.getDate()));
+}
+
+function localPeriodBoundaries(now = new Date()) {
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const tomorrow = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
+  const yesterday = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1);
+  const month = new Date(now.getFullYear(), now.getMonth(), 1);
+  const nextMonth = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+  const previousMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+  const weekday = today.getDay() || 7;
+  const week = new Date(now.getFullYear(), now.getMonth(), now.getDate() - weekday + 1);
+  const previousWeek = new Date(week.getFullYear(), week.getMonth(), week.getDate() - 7);
+  const lastSevenDays = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 6);
+  return {
+    today: localDateBoundary(today),
+    tomorrow: localDateBoundary(tomorrow),
+    yesterday: localDateBoundary(yesterday),
+    month: localDateBoundary(month),
+    nextMonth: localDateBoundary(nextMonth),
+    previousMonth: localDateBoundary(previousMonth),
+    week: localDateBoundary(week),
+    previousWeek: localDateBoundary(previousWeek),
+    lastSevenDays: localDateBoundary(lastSevenDays)
+  };
 }
 
 router.use((req, res, next) => {
@@ -246,18 +275,19 @@ function validateProductPayload(body, editing = false) {
 router.get('/dashboard', async (req, res, next) => {
   try {
     const idTienda = tenantId(req);
+    const period = localPeriodBoundaries();
     const [[ventasHoy], [ventasAyer], [ventasMes], [ventasMesPasado], [ventasSemana], [ventasSemanaPasada], [gananciaHoy], [gananciaMes], [bajoStock], [fiadosEstado], [ventasDias]] = await Promise.all([
-      pool.query('SELECT COALESCE(SUM(total), 0) total FROM venta WHERE idTienda=? AND DATE(fecha) = CURDATE()', [idTienda]),
-      pool.query('SELECT COALESCE(SUM(total), 0) total FROM venta WHERE idTienda=? AND DATE(fecha) = DATE_SUB(CURDATE(), INTERVAL 1 DAY)', [idTienda]),
-      pool.query('SELECT COALESCE(SUM(total), 0) total FROM venta WHERE idTienda=? AND YEAR(fecha)=YEAR(CURDATE()) AND MONTH(fecha)=MONTH(CURDATE())', [idTienda]),
-      pool.query('SELECT COALESCE(SUM(total), 0) total FROM venta WHERE idTienda=? AND YEAR(fecha)=YEAR(DATE_SUB(CURDATE(), INTERVAL 1 MONTH)) AND MONTH(fecha)=MONTH(DATE_SUB(CURDATE(), INTERVAL 1 MONTH))', [idTienda]),
-      pool.query('SELECT COALESCE(SUM(total), 0) total FROM venta WHERE idTienda=? AND YEARWEEK(fecha, 1) = YEARWEEK(CURDATE(), 1)', [idTienda]),
-      pool.query('SELECT COALESCE(SUM(total), 0) total FROM venta WHERE idTienda=? AND YEARWEEK(fecha, 1) = YEARWEEK(DATE_SUB(CURDATE(), INTERVAL 1 WEEK), 1)', [idTienda]),
-      pool.query('SELECT COALESCE(SUM(d.ganancia), 0) total FROM detalleVenta d JOIN venta v ON v.idVenta=d.idVenta AND v.idTienda=d.idTienda WHERE d.idTienda=? AND DATE(v.fecha)=CURDATE()', [idTienda]),
-      pool.query('SELECT COALESCE(SUM(d.ganancia), 0) total FROM detalleVenta d JOIN venta v ON v.idVenta=d.idVenta AND v.idTienda=d.idTienda WHERE d.idTienda=? AND YEAR(v.fecha)=YEAR(CURDATE()) AND MONTH(v.fecha)=MONTH(CURDATE())', [idTienda]),
+      pool.query('SELECT COALESCE(SUM(total), 0) total FROM venta WHERE idTienda=? AND fecha>=? AND fecha<?', [idTienda, period.today, period.tomorrow]),
+      pool.query('SELECT COALESCE(SUM(total), 0) total FROM venta WHERE idTienda=? AND fecha>=? AND fecha<?', [idTienda, period.yesterday, period.today]),
+      pool.query('SELECT COALESCE(SUM(total), 0) total FROM venta WHERE idTienda=? AND fecha>=? AND fecha<?', [idTienda, period.month, period.nextMonth]),
+      pool.query('SELECT COALESCE(SUM(total), 0) total FROM venta WHERE idTienda=? AND fecha>=? AND fecha<?', [idTienda, period.previousMonth, period.month]),
+      pool.query('SELECT COALESCE(SUM(total), 0) total FROM venta WHERE idTienda=? AND fecha>=? AND fecha<?', [idTienda, period.week, period.tomorrow]),
+      pool.query('SELECT COALESCE(SUM(total), 0) total FROM venta WHERE idTienda=? AND fecha>=? AND fecha<?', [idTienda, period.previousWeek, period.week]),
+      pool.query('SELECT COALESCE(SUM(d.ganancia), 0) total FROM detalleVenta d JOIN venta v ON v.idVenta=d.idVenta AND v.idTienda=d.idTienda WHERE d.idTienda=? AND v.fecha>=? AND v.fecha<?', [idTienda, period.today, period.tomorrow]),
+      pool.query('SELECT COALESCE(SUM(d.ganancia), 0) total FROM detalleVenta d JOIN venta v ON v.idVenta=d.idVenta AND v.idTienda=d.idTienda WHERE d.idTienda=? AND v.fecha>=? AND v.fecha<?', [idTienda, period.month, period.nextMonth]),
       pool.query('SELECT COUNT(*) total FROM producto WHERE idTienda=? AND activo=1 AND stockUnidadesTotal < stockMinimo', [idTienda]),
       pool.query('SELECT estado, COUNT(*) total FROM fiado WHERE idTienda=? GROUP BY estado', [idTienda]),
-      pool.query('SELECT DATE(fecha) dia, COALESCE(SUM(total),0) total FROM venta WHERE idTienda=? AND fecha >= DATE_SUB(CURDATE(), INTERVAL 6 DAY) GROUP BY DATE(fecha) ORDER BY dia', [idTienda])
+      pool.query('SELECT DATE(fecha) dia, COALESCE(SUM(total),0) total FROM venta WHERE idTienda=? AND fecha>=? AND fecha<? GROUP BY DATE(fecha) ORDER BY dia', [idTienda, period.lastSevenDays, period.tomorrow])
     ]);
     const estados = { pendiente: 0, parcial: 0, pagado: 0 };
     fiadosEstado.forEach((row) => { estados[row.estado] = row.total; });
@@ -731,14 +761,15 @@ router.post('/compras', async (req, res, next) => {
     const idTienda = tenantId(req);
     const requestKey = operationKey(req.body.claveOperacion);
     const result = await runTransaction(async (connection) => {
+      const operationDateTime = formatLocalDateTime();
       if (req.body.idProveedor) {
         await requireTenantRecord(connection, 'proveedor', 'idProveedor', req.body.idProveedor, idTienda);
       }
       const [compra] = await connection.query(
-        `INSERT INTO compra (idTienda, total, idProveedor, claveOperacion)
-         VALUES (?, 0, ?, ?)
+        `INSERT INTO compra (idTienda, fecha, total, idProveedor, claveOperacion)
+         VALUES (?, ?, 0, ?, ?)
          ON DUPLICATE KEY UPDATE idCompra=LAST_INSERT_ID(idCompra)`,
-        [idTienda, req.body.idProveedor || null, requestKey]
+        [idTienda, operationDateTime, req.body.idProveedor || null, requestKey]
       );
       const [existing] = await connection.query(
         'SELECT idCompra, total FROM compra WHERE idCompra=? AND idTienda=?',
@@ -951,9 +982,10 @@ router.post('/pagos-fiado', async (req, res, next) => {
         error.status = 400;
         throw error;
       }
+      const paymentDateTime = formatLocalDateTime();
       const [payment] = await connection.query(
-        'INSERT INTO pagoFiado (idTienda, idFiado, monto, observacion) VALUES (?, ?, ?, ?)',
-        [idTienda, req.body.idFiado, monto, nullableText(req.body.observacion)]
+        'INSERT INTO pagoFiado (idTienda, idFiado, fechaPago, monto, observacion) VALUES (?, ?, ?, ?, ?)',
+        [idTienda, req.body.idFiado, paymentDateTime, monto, nullableText(req.body.observacion)]
       );
       const totalPagado = asNumber(fiado.totalPagado) + monto;
       const saldo = Math.max(0, asNumber(fiado.totalFiado) - totalPagado);
@@ -969,7 +1001,8 @@ router.post('/pagos-fiado', async (req, res, next) => {
         monto,
         metodoPago: req.body.metodoPago || 'no_especificado',
         referencia: req.body.referencia,
-        idAdministrador: req.session.admin.id
+        idAdministrador: req.session.admin.id,
+        fechaPago: paymentDateTime
       });
     });
     res.status(201).json({ message: 'Pago registrado.' });
@@ -1018,9 +1051,10 @@ router.post('/pagos-fiado/cliente', async (req, res, next) => {
         const aplicado = Math.min(restante, saldoActual);
         if (aplicado <= 0) continue;
 
+        const paymentDateTime = formatLocalDateTime();
         const [payment] = await connection.query(
-          'INSERT INTO pagoFiado (idTienda, idFiado, monto, observacion) VALUES (?, ?, ?, ?)',
-          [idTienda, fiado.idFiado, aplicado, observacion]
+          'INSERT INTO pagoFiado (idTienda, idFiado, fechaPago, monto, observacion) VALUES (?, ?, ?, ?, ?)',
+          [idTienda, fiado.idFiado, paymentDateTime, aplicado, observacion]
         );
 
         const totalPagado = asNumber(fiado.totalPagado) + aplicado;
@@ -1037,7 +1071,8 @@ router.post('/pagos-fiado/cliente', async (req, res, next) => {
           monto: aplicado,
           metodoPago: req.body.metodoPago || 'no_especificado',
           referencia: req.body.referencia,
-          idAdministrador: req.session.admin.id
+          idAdministrador: req.session.admin.id,
+          fechaPago: paymentDateTime
         });
 
         aplicaciones.push({ idFiado: fiado.idFiado, monto: aplicado, saldoPendiente: saldo, estado });
@@ -1055,10 +1090,17 @@ router.post('/pagos-fiado/cliente', async (req, res, next) => {
 });
 
 function gainRange(period, desde, hasta) {
-  if (period === 'dia') return ['DATE(v.fecha)=CURDATE()', []];
-  if (period === 'semana') return ['YEARWEEK(v.fecha, 1)=YEARWEEK(CURDATE(), 1)', []];
-  if (period === 'mes') return ['YEAR(v.fecha)=YEAR(CURDATE()) AND MONTH(v.fecha)=MONTH(CURDATE())', []];
-  if (period === 'anio') return ['YEAR(v.fecha)=YEAR(CURDATE())', []];
+  const current = localPeriodBoundaries();
+  if (period === 'dia') return ['v.fecha>=? AND v.fecha<?', [current.today, current.tomorrow]];
+  if (period === 'semana') return ['v.fecha>=? AND v.fecha<?', [current.week, current.tomorrow]];
+  if (period === 'mes') return ['v.fecha>=? AND v.fecha<?', [current.month, current.nextMonth]];
+  if (period === 'anio') {
+    const now = new Date();
+    return ['v.fecha>=? AND v.fecha<?', [
+      localDateBoundary(new Date(now.getFullYear(), 0, 1)),
+      localDateBoundary(new Date(now.getFullYear() + 1, 0, 1))
+    ]];
+  }
   return ['DATE(v.fecha) BETWEEN ? AND ?', [desde || '1000-01-01', hasta || '9999-12-31']];
 }
 
@@ -1073,8 +1115,9 @@ router.get('/reportes/:tipo', async (req, res, next) => {
     let summary = null;
 
     if (tipo === 'ventasDia' || tipo === 'ventasRango') {
-      const dateWhere = tipo === 'ventasDia' ? 'DATE(v.fecha)=CURDATE()' : 'DATE(v.fecha) BETWEEN ? AND ?';
-      const params = tipo === 'ventasDia' ? [idTienda] : [idTienda, ...range];
+      const current = localPeriodBoundaries();
+      const dateWhere = tipo === 'ventasDia' ? 'v.fecha>=? AND v.fecha<?' : 'DATE(v.fecha) BETWEEN ? AND ?';
+      const params = tipo === 'ventasDia' ? [idTienda, current.today, current.tomorrow] : [idTienda, ...range];
       [rows] = await pool.query(`
         SELECT v.idVenta, v.fecha, COALESCE(c.nombre, 'CLIENTE OCASIONAL') cliente, v.tipo, v.total, COALESCE(f.estado, 'pagado') estado
         FROM venta v

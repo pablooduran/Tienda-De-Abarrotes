@@ -80,12 +80,19 @@ function containsPassword(value) {
   ));
 }
 
-const ADVANCED_FEATURES = Object.freeze([
+const BASIC_REQUIRED_FEATURES = Object.freeze([
+  'gastos',
+  'reportes_financieros',
+  'exportacion_reportes',
+  'dashboard_financiero'
+]);
+
+const ADVANCED_ONLY_FEATURES = Object.freeze([
   'reportes_avanzados',
   'compras_sugeridas',
   'recordatorios_fiado',
-  'gastos',
   'cierre_caja',
+  'rentabilidad_producto',
   'vencimientos_lote',
   'portal_clientes'
 ]);
@@ -108,7 +115,8 @@ function basicContextComparison(context, expectedSlug) {
     limiteProductos: limits.productos === 500,
     limiteClientes: limits.clientes === 500,
     limiteProveedores: limits.proveedores === 100,
-    sinFuncionesAvanzadas: !features.some((code) => ADVANCED_FEATURES.includes(code)),
+    funcionesBasicasPresentes: BASIC_REQUIRED_FEATURES.every((code) => features.includes(code)),
+    sinFuncionesExclusivasAvanzado: !features.some((code) => ADVANCED_ONLY_FEATURES.includes(code)),
     fechasValidas: validDates
   };
   return {
@@ -120,7 +128,8 @@ function basicContextComparison(context, expectedSlug) {
       estadoEfectivo: 'activa',
       soloLectura: false,
       limites: { propietarios: 1, productos: 500, clientes: 500, proveedores: 100 },
-      funcionesAvanzadas: [],
+      funcionesRequeridasBasico: BASIC_REQUIRED_FEATURES,
+      funcionesExclusivasAvanzado: [],
       fechasValidas: true
     },
     received: {
@@ -135,7 +144,8 @@ function basicContextComparison(context, expectedSlug) {
         clientes: limits.clientes ?? null,
         proveedores: limits.proveedores ?? null
       },
-      funcionesAvanzadas: features.filter((code) => ADVANCED_FEATURES.includes(code)),
+      funcionesRequeridasBasicoPresentes: features.filter((code) => BASIC_REQUIRED_FEATURES.includes(code)),
+      funcionesExclusivasAvanzadoPresentes: features.filter((code) => ADVANCED_ONLY_FEATURES.includes(code)),
       fechaInicio: context?.suscripcion?.fechaInicio ?? null,
       fechaFin: context?.suscripcion?.fechaFin ?? null
     }
@@ -183,6 +193,9 @@ async function bulkInsert(connection, table, columns, rows) {
 }
 
 async function cleanupStore(connection, idTienda) {
+  await connection.query('DELETE FROM cierreCaja WHERE idTienda=?', [idTienda]);
+  await connection.query('DELETE FROM gasto WHERE idTienda=?', [idTienda]);
+  await connection.query('DELETE FROM categoriaGasto WHERE idTienda=?', [idTienda]);
   await connection.query('DELETE FROM movimientoStock WHERE idTienda=?', [idTienda]);
   await connection.query('DELETE FROM pagoVenta WHERE idTienda=?', [idTienda]);
   await connection.query('DELETE FROM pagoFiado WHERE idTienda=?', [idTienda]);
@@ -312,6 +325,10 @@ async function main() {
     const deisyContext = await expect(deisySession, '/api/contexto', {}, 200, 'Contexto Tienda Deisy');
     assert(deisyContext.soloLectura === false, 'Tienda Deisy perdio acceso de escritura.');
     assert(deisyContext.plan?.codigo === 'avanzado', 'Tienda Deisy no conserva el plan avanzado inicial.');
+    const missingAdvancedFeatures = ADVANCED_ONLY_FEATURES
+      .filter((code) => !deisyContext.caracteristicas?.includes(code));
+    assert(missingAdvancedFeatures.length === 0,
+      `El plan avanzado no incluye todas sus funciones exclusivas: ${JSON.stringify(missingAdvancedFeatures)}.`);
 
     const basicSession = new HttpSession(baseUrl);
     sessions.push(basicSession);

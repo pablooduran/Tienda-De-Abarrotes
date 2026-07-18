@@ -22,6 +22,9 @@ const sections = [
   ['compras', 'Compras / stock', 'Abastecimiento por paquete o unidad'],
   ['historialVentas', 'Historial de ventas', 'Ventas realizadas y detalle'],
   ['pagos', 'Fiados / Pagos', 'Deudas, pagos parciales e historial'],
+  ['gastos', 'Gastos', 'Egresos operativos y categorias'],
+  ['finanzas', 'Finanzas', 'Ventas, cobros, costos y ganancias'],
+  ['cierreCaja', 'Cierre de caja', 'Control de efectivo por periodo'],
   ['reportes', 'Reportes', 'Consultas, filtros y ganancias']
 ];
 
@@ -206,6 +209,7 @@ function applyReadOnlyUi() {
     '[data-delete-fiado]',
     '[data-product]',
     '[data-pos-favorite]',
+    '[data-finance-write]',
     '#payClientTotal'
   ];
   document.querySelectorAll(selectors.join(',')).forEach((control) => {
@@ -221,13 +225,24 @@ async function loadContext() {
   renderSubscriptionContext();
 }
 
-sections.forEach(([id, label]) => {
-  const btn = document.createElement('button');
-  btn.textContent = label;
-  btn.dataset.view = id;
-  btn.addEventListener('click', () => loadView(id));
-  menu.appendChild(btn);
-});
+function sectionAllowed(id) {
+  const features = state.context?.caracteristicas || [];
+  if (id === 'gastos') return features.includes('gastos');
+  if (id === 'finanzas') return features.includes('reportes_financieros');
+  if (id === 'cierreCaja') return features.includes('cierre_caja');
+  return true;
+}
+
+function renderMenu() {
+  menu.innerHTML = '';
+  sections.filter(([id]) => sectionAllowed(id)).forEach(([id, label]) => {
+    const btn = document.createElement('button');
+    btn.textContent = label;
+    btn.dataset.view = id;
+    btn.addEventListener('click', () => loadView(id));
+    menu.appendChild(btn);
+  });
+}
 
 document.getElementById('logoutBtn').addEventListener('click', async () => {
   if (!await confirmAction('¿Seguro que deseas cerrar sesión?')) return;
@@ -261,7 +276,8 @@ async function loadView(id) {
   title.textContent = section[1];
   subtitle.textContent = section[2];
   await refreshCatalogs();
-  const handlers = { inicio, productos, movimientosStock, clientes, proveedores, ventas, compras, historialVentas, pagos, reportes };
+  const handlers = { inicio, productos, movimientosStock, clientes, proveedores, ventas, compras, historialVentas, pagos, gastos, finanzas, cierreCaja, reportes };
+  if (!handlers[id] || !sectionAllowed(id)) return loadView('inicio');
   await handlers[id]();
   applyReadOnlyUi();
 }
@@ -475,7 +491,19 @@ async function inicioLegacy() {
 }
 
 async function inicio() {
-  const data = await api('/api/dashboard');
+  const [data, financeData] = await Promise.all([
+    api('/api/dashboard'),
+    state.context?.caracteristicas?.includes('dashboard_financiero')
+      ? api('/api/dashboard/financiero?periodo=hoy').catch(() => null)
+      : Promise.resolve(null)
+  ]);
+  const finance = financeData?.resumen || null;
+  const financeNet = finance
+    ? (finance.rentabilidadCompleta ? finance.gananciaNeta : finance.gananciaNetaCalculable)
+    : 0;
+  const financeGross = finance
+    ? (finance.rentabilidadCompleta ? finance.gananciaBruta : finance.gananciaBrutaCalculable)
+    : Number(data.gananciaHoy || 0);
   const debtState = data.fiados || {
     pendiente: data.fiadosPendientes || data.fiadosActivos || 0,
     parcial: data.fiadosParciales || 0,
@@ -504,7 +532,11 @@ async function inicio() {
       <div class="card metric-card"><span>Ventas de ayer</span><strong>Bs ${money(data.ventasAyer)}</strong></div>
       <div class="card metric-card"><span>Semana actual</span><strong>Bs ${money(data.ventasSemana)}</strong></div>
       <div class="card metric-card"><span>Mes actual</span><strong>Bs ${money(data.ventasMes)}</strong></div>
-      <div class="card metric-card"><span>Ganancia hoy</span><strong>Bs ${money(data.gananciaHoy)}</strong></div>
+      <div class="card metric-card"><span>${finance?.rentabilidadCompleta === false ? 'Ganancia bruta calculable' : 'Ganancia bruta hoy'}</span><strong>Bs ${money(financeGross)}</strong></div>
+      ${finance ? `<div class="card metric-card collected"><span>Cobrado hoy</span><strong>Bs ${money(finance.dineroCobrado)}</strong></div>
+      <div class="card metric-card debt"><span>Fiado generado hoy</span><strong>Bs ${money(finance.fiadoGenerado)}</strong></div>
+      <div class="card metric-card expense"><span>Gastos hoy</span><strong>Bs ${money(finance.gastos)}</strong></div>
+      <div class="card metric-card net ${Number(financeNet) < 0 ? 'negative' : ''}"><span>${finance.rentabilidadCompleta ? 'Ganancia neta hoy' : 'Ganancia neta calculable'}</span><strong>Bs ${money(financeNet)}</strong></div>` : ''}
       <div class="card metric-card"><span>Bajo stock</span><strong>${data.bajoStock}</strong></div>
       <div class="card metric-card"><span>Fiados activos</span><strong>${activeDebts}</strong></div>
     </div>
@@ -2306,6 +2338,319 @@ async function pagos() {
   else renderDebtCards(state.fiados);
 }
 
+function localDateValue(value = new Date()) {
+  const date = value instanceof Date ? value : new Date(value);
+  const pad = (number) => String(number).padStart(2, '0');
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
+}
+
+function localDateTimeValue(value = new Date()) {
+  const date = value instanceof Date ? value : new Date(value);
+  const pad = (number) => String(number).padStart(2, '0');
+  return `${localDateValue(date)}T${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`;
+}
+
+function monthStartValue() {
+  const now = new Date();
+  return localDateValue(new Date(now.getFullYear(), now.getMonth(), 1));
+}
+
+function financeQuery(form) {
+  const data = formData(form);
+  const query = new URLSearchParams({ periodo: data.periodo || 'mes' });
+  if (data.periodo === 'rango') {
+    query.set('desde', data.desde || '');
+    query.set('hasta', data.hasta || '');
+  }
+  return query;
+}
+
+async function requestReason(modalTitle, label) {
+  return new Promise((resolve) => {
+    modalRoot.innerHTML = `<div class="modal-backdrop"><form class="modal" id="reasonForm">
+      <h3>${escapeHtml(modalTitle)}</h3>
+      <div class="modal-body"><label>${escapeHtml(label)}<textarea name="motivo" minlength="8" maxlength="300" required></textarea></label></div>
+      <div class="modal-actions"><button type="button" class="secondary" data-cancel>Cancelar</button><button type="submit" class="danger">Confirmar</button></div>
+    </form></div>`;
+    const close = (value) => { modalRoot.innerHTML = ''; resolve(value); };
+    modalRoot.querySelector('[data-cancel]').addEventListener('click', () => close(null));
+    modalRoot.querySelector('#reasonForm').addEventListener('submit', (event) => {
+      event.preventDefault();
+      const reason = new FormData(event.target).get('motivo').trim();
+      if (reason.length >= 8) close(reason);
+    });
+  });
+}
+
+async function expenseEditor(expense = null) {
+  const categories = await api('/api/gastos/categorias');
+  return new Promise((resolve) => {
+    modalRoot.innerHTML = `<div class="modal-backdrop"><form class="modal modal-wide" id="expenseForm">
+      <h3>${expense ? 'Editar gasto' : 'Registrar gasto'}</h3>
+      <div class="modal-body form-grid">
+        <label>Categoría<select name="idCategoriaGasto" required>${options(categories, 'idCategoriaGasto', 'nombre', 'Seleccione', expense?.idCategoriaGasto)}</select></label>
+        <label>Fecha y hora<input name="fechaGasto" type="datetime-local" step="1" required value="${expense ? localDateTimeValue(expense.fechaGasto) : localDateTimeValue()}"></label>
+        <label class="wide">Concepto<input name="concepto" maxlength="160" required value="${escapeHtml(expense?.concepto || '')}"></label>
+        <label>Monto (Bs)<input name="monto" type="number" min="0.01" step="0.01" required value="${expense ? money(expense.monto) : ''}"></label>
+        <label>Método<select name="metodoPago" required>
+          ${['efectivo', 'qr', 'transferencia', 'otro'].map((method) => `<option value="${method}" ${expense?.metodoPago === method ? 'selected' : ''}>${method}</option>`).join('')}
+        </select></label>
+        <label>Referencia<input name="referencia" maxlength="120" value="${escapeHtml(expense?.referencia || '')}"></label>
+        <label class="check"><input name="recurrente" type="checkbox" ${expense?.recurrente ? 'checked' : ''}> Gasto recurrente</label>
+        <label class="wide">Observación<textarea name="observacion" maxlength="500">${escapeHtml(expense?.observacion || '')}</textarea></label>
+        <p class="form-error wide" data-form-error></p>
+      </div>
+      <div class="modal-actions"><button type="button" class="secondary" data-cancel>Cancelar</button><button type="submit">Guardar</button></div>
+    </form></div>`;
+    const close = (value) => { modalRoot.innerHTML = ''; resolve(value); };
+    modalRoot.querySelector('[data-cancel]').addEventListener('click', () => close(false));
+    modalRoot.querySelector('#expenseForm').addEventListener('submit', async (event) => {
+      event.preventDefault();
+      const data = formData(event.target);
+      data.recurrente = event.target.elements.recurrente.checked;
+      try {
+        await api(expense ? `/api/gastos/${expense.idGasto}` : '/api/gastos', {
+          method: expense ? 'PUT' : 'POST', body: JSON.stringify(data)
+        });
+        close(true);
+      } catch (error) { modalRoot.querySelector('[data-form-error]').textContent = error.message; }
+    });
+  });
+}
+
+async function manageExpenseCategories() {
+  return new Promise(async (resolve) => {
+    modalRoot.innerHTML = `<div class="modal-backdrop"><div class="modal modal-wide">
+      <h3>Categorías de gasto</h3><div class="modal-body" id="expenseCategoryBody"></div>
+      <div class="modal-actions"><button type="button" data-close>Listo</button></div>
+    </div></div>`;
+    const body = modalRoot.querySelector('#expenseCategoryBody');
+    const render = async (selected = null) => {
+      const rows = await api('/api/gastos/categorias?incluirInactivas=1');
+      body.innerHTML = `<form id="expenseCategoryForm" class="category-editor">
+        <input type="hidden" name="idCategoriaGasto" value="${selected?.idCategoriaGasto || ''}">
+        <label>Nombre<input name="nombre" maxlength="100" required value="${escapeHtml(selected?.nombre || '')}"></label>
+        <label>Descripción<input name="descripcion" maxlength="255" value="${escapeHtml(selected?.descripcion || '')}"></label>
+        <label class="check"><input name="activo" type="checkbox" ${selected ? (selected.activo ? 'checked' : '') : 'checked'}> Activa</label>
+        <button type="submit" data-finance-write>${selected ? 'Actualizar' : 'Añadir'}</button><p class="form-error" data-category-error></p>
+      </form>
+      <div class="compact-list">${rows.map((row) => `<div><span><strong>${escapeHtml(row.nombre)}</strong><small>${row.activo ? 'Activa' : 'Inactiva'}</small></span><button type="button" class="small secondary" data-category-edit="${row.idCategoriaGasto}">Editar</button></div>`).join('')}</div>`;
+      body.querySelector('#expenseCategoryForm').addEventListener('submit', async (event) => {
+        event.preventDefault();
+        const data = formData(event.target);
+        data.activo = event.target.elements.activo.checked;
+        try {
+          await api(data.idCategoriaGasto ? `/api/gastos/categorias/${data.idCategoriaGasto}` : '/api/gastos/categorias', {
+            method: data.idCategoriaGasto ? 'PUT' : 'POST', body: JSON.stringify(data)
+          });
+          await render();
+        } catch (error) { body.querySelector('[data-category-error]').textContent = error.message; }
+      });
+      body.querySelectorAll('[data-category-edit]').forEach((button) => button.addEventListener('click', () => {
+        render(rows.find((row) => String(row.idCategoriaGasto) === button.dataset.categoryEdit));
+      }));
+      applyReadOnlyUi();
+    };
+    modalRoot.querySelector('[data-close]').addEventListener('click', () => { modalRoot.innerHTML = ''; resolve(); });
+    try { await render(); } catch (error) { modalRoot.innerHTML = ''; resolve(); showError(error.message); }
+  });
+}
+
+async function loadExpenses() {
+  const form = document.getElementById('expenseFilters');
+  const query = new URLSearchParams(formData(form));
+  const data = await api(`/api/gastos?${query}`);
+  const container = document.getElementById('expenseList');
+  container.innerHTML = `<div class="summary-row"><strong>Total vigente: Bs ${money(data.montoVigente)}</strong><span>${data.total} registros</span></div>
+    ${data.gastos.length ? `<div class="table-wrap"><table><thead><tr><th>Fecha</th><th>Categoría</th><th>Concepto</th><th>Método</th><th>Monto</th><th>Estado</th><th>Acciones</th></tr></thead><tbody>
+      ${data.gastos.map((expense) => `<tr class="${expense.estado === 'anulado' ? 'row-muted' : ''}"><td>${formatDate(expense.fechaGasto)}</td><td>${escapeHtml(expense.categoria)}</td><td><strong>${escapeHtml(expense.concepto)}</strong>${expense.recurrente ? '<small>Recurrente</small>' : ''}</td><td>${escapeHtml(expense.metodoPago)}</td><td>Bs ${money(expense.monto)}</td><td>${statusBadge(expense.estado)}</td><td><div class="actions">${expense.estado === 'registrado' ? `<button class="small secondary" data-expense-edit="${expense.idGasto}" data-finance-write>Editar</button><button class="small danger" data-expense-cancel="${expense.idGasto}" data-finance-write>Anular</button>` : ''}</div></td></tr>`).join('')}
+    </tbody></table></div>` : '<p class="muted">No hay gastos en el período seleccionado.</p>'}`;
+  container.querySelectorAll('[data-expense-edit]').forEach((button) => button.addEventListener('click', async () => {
+    const expense = await api(`/api/gastos/${button.dataset.expenseEdit}`);
+    if (await expenseEditor(expense)) { await loadExpenses(); showSuccess('Gasto actualizado.'); }
+  }));
+  container.querySelectorAll('[data-expense-cancel]').forEach((button) => button.addEventListener('click', async () => {
+    const reason = await requestReason('Anular gasto', 'Motivo de la anulación');
+    if (!reason) return;
+    try {
+      await api(`/api/gastos/${button.dataset.expenseCancel}/anular`, { method: 'POST', body: JSON.stringify({ motivo: reason }) });
+      await loadExpenses(); showSuccess('Gasto anulado sin borrar el historial.');
+    } catch (error) { showError(error.message); }
+  }));
+  applyReadOnlyUi();
+}
+
+async function gastos() {
+  const categories = await api('/api/gastos/categorias');
+  view.innerHTML = `<div class="toolbar"><div><h3>Gastos operativos</h3><p class="muted">Compras de mercadería y gastos del negocio se mantienen separados.</p></div><div class="actions"><button id="expenseCategories" class="secondary">Categorías</button><button id="addExpense" data-finance-write>Añadir gasto</button></div></div>
+    <div class="panel"><form id="expenseFilters" class="filter-bar">
+      <label>Desde<input name="desde" type="date" value="${monthStartValue()}"></label><label>Hasta<input name="hasta" type="date" value="${localDateValue()}"></label>
+      <label>Categoría<select name="idCategoriaGasto">${options(categories, 'idCategoriaGasto', 'nombre', 'Todas')}</select></label>
+      <label>Método<select name="metodoPago"><option value="">Todos</option><option value="efectivo">Efectivo</option><option value="qr">QR</option><option value="transferencia">Transferencia</option><option value="otro">Otro</option></select></label>
+      <label>Estado<select name="estado"><option value="">Todos</option><option value="registrado">Registrado</option><option value="anulado">Anulado</option></select></label>
+      <button type="submit">Consultar</button>
+    </form></div><div class="panel" id="expenseList"><p class="muted">Cargando gastos...</p></div>`;
+  document.getElementById('expenseFilters').addEventListener('submit', (event) => { event.preventDefault(); loadExpenses().catch((error) => showError(error.message)); });
+  document.getElementById('addExpense').addEventListener('click', async () => {
+    if (await expenseEditor()) { await loadExpenses(); showSuccess('Gasto registrado.'); }
+  });
+  document.getElementById('expenseCategories').addEventListener('click', async () => { await manageExpenseCategories(); await loadExpenses(); });
+  await loadExpenses();
+}
+
+async function downloadFinancialExport(type, query, button = null) {
+  const originalLabel = button?.textContent;
+  try {
+    if (button) { button.disabled = true; button.textContent = 'Generando...'; }
+    const response = await fetch(`/api/exportaciones/${type}.xlsx?${query}`, { credentials: 'same-origin' });
+    if (response.status === 401) return (window.location.href = '/login.html');
+    if (!response.ok) {
+      const data = await response.json().catch(() => ({}));
+      throw new Error(data.error || 'No se pudo generar la exportación.');
+    }
+    const blob = await response.blob();
+    const disposition = response.headers.get('content-disposition') || '';
+    const fileName = disposition.match(/filename="([^"]+)"/)?.[1] || `${type}.xlsx`;
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url; link.download = fileName; link.click();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  } catch (error) { showError(error.message); }
+  finally {
+    if (button) { button.disabled = false; button.textContent = originalLabel; }
+  }
+}
+
+function financialCards(summary) {
+  const displayedGross = summary.rentabilidadCompleta ? summary.gananciaBruta : summary.gananciaBrutaCalculable;
+  const grossLabel = summary.rentabilidadExacta
+    ? 'Ganancia bruta'
+    : (summary.rentabilidadCompleta ? 'Ganancia bruta estimada' : 'Ganancia bruta calculable');
+  const displayedNet = summary.rentabilidadCompleta ? summary.gananciaNeta : summary.gananciaNetaCalculable;
+  const netLabel = summary.rentabilidadExacta
+    ? 'Ganancia neta'
+    : (summary.rentabilidadCompleta ? 'Ganancia neta estimada' : 'Ganancia neta calculable');
+  return `<div class="cards financial-cards">
+    <div class="card metric-card sales"><span>Ventas netas</span><strong>Bs ${money(summary.ventasNetas)}</strong><small>Descuentos: Bs ${money(summary.descuentos)}</small></div>
+    <div class="card metric-card collected"><span>Dinero cobrado</span><strong>Bs ${money(summary.dineroCobrado)}</strong><small>Fiados cobrados: Bs ${money(summary.cobrosFiado)}</small></div>
+    <div class="card metric-card profit"><span>${grossLabel}</span><strong>Bs ${money(displayedGross)}</strong><small>Costo vendido: Bs ${money(summary.costoVendido)}</small></div>
+    <div class="card metric-card expense"><span>Gastos</span><strong>Bs ${money(summary.gastos)}</strong><small>${summary.cantidadGastos} registros vigentes</small></div>
+    <div class="card metric-card net ${Number(displayedNet) < 0 ? 'negative' : ''}"><span>${netLabel}</span><strong>Bs ${money(displayedNet)}</strong><small>Confirmada: Bs ${money(summary.gananciaBrutaConfirmada)} · Estimada: Bs ${money(summary.gananciaBrutaEstimada)}</small></div>
+    <div class="card metric-card debt"><span>Cuentas por cobrar</span><strong>Bs ${money(summary.cuentasPorCobrar)}</strong><small>Fiado generado: Bs ${money(summary.fiadoGenerado)}</small></div>
+  </div>`;
+}
+
+async function loadFinancialDashboard() {
+  const form = document.getElementById('financeFilters');
+  const query = financeQuery(form);
+  const [data, receivableData, purchaseData] = await Promise.all([
+    api(`/api/dashboard/financiero?${query}`),
+    api('/api/reportes/finanzas/cuentas-por-cobrar'),
+    api(`/api/reportes/finanzas/compras?${query}`)
+  ]);
+  const summary = data.resumen;
+  document.getElementById('financeContent').innerHTML = `${financialCards(summary)}
+    <div class="finance-explain"><span><strong>Ganancia bruta</strong> Venta neta menos costo vendido.</span><span><strong>Ganancia neta</strong> Ganancia bruta menos gastos.</span><span><strong>Flujo conocido</strong> Cobros registrados menos gastos; las compras se muestran aparte.</span></div>
+    ${summary.detallesCostoDesconocido ? `<div class="subscription-banner subscription-warning"><strong>Costos incompletos:</strong> ${summary.detallesCostoDesconocido} detalles, por Bs ${money(summary.ventasSinCosto)}, no tienen costo conocido y se excluyen de la ganancia calculable.</div>` : ''}
+    ${Number(summary.costoEstimado) > 0 ? `<div class="subscription-banner subscription-warning"><strong>Costo estimado:</strong> Bs ${money(summary.costoEstimado)} del costo vendido proviene de datos anteriores a la migración.</div>` : ''}
+    <div class="dashboard-grid financial-dashboard-grid">
+      <div class="panel chart-panel"><h3>Ventas por día</h3><canvas id="financeSalesChart"></canvas></div>
+      <div class="panel chart-panel"><h3>Ganancia calculable por día</h3><canvas id="financeProfitChart"></canvas></div>
+      <div class="panel chart-panel"><h3>Cobros por método</h3><canvas id="financeMethodsChart"></canvas></div>
+      <div class="panel chart-panel"><h3>Gastos por categoría</h3><canvas id="financeExpensesChart"></canvas></div>
+    </div>
+    ${data.productosRentables ? `<div class="panel"><h3>Productos más rentables</h3>${data.productosRentables.length ? `<div class="table-wrap"><table><thead><tr><th>Producto</th><th>Ventas netas</th><th>Costo</th><th>Ganancia conocida</th><th>Margen</th></tr></thead><tbody>${data.productosRentables.map((row) => `<tr><td>${escapeHtml(row.nombre)}</td><td>Bs ${money(row.ventasNetas)}</td><td>Bs ${money(row.costoVendido)}</td><td>Bs ${money(row.gananciaConCosto)}</td><td>${row.margenPorcentaje === null ? 'Costo incompleto' : `${money(row.margenPorcentaje)}%${row.margenEstimado ? ' estimado' : ''}`}</td></tr>`).join('')}</tbody></table></div>` : '<p class="muted">Sin ventas para analizar.</p>'}</div>` : ''}
+    <div class="finance-detail-grid">
+      <div class="panel"><h3>Cuentas por cobrar</h3><strong class="large-number">Bs ${money(receivableData.total)}</strong><p>${receivableData.totalRegistros} cuentas con saldo.</p></div>
+      <div class="panel"><h3>Compras de mercadería</h3><strong class="large-number">Bs ${money(purchaseData.total)}</strong><p>No se restan nuevamente de la ganancia neta.</p></div>
+      <div class="panel"><h3>Flujo de efectivo conocido</h3><strong class="large-number">Bs ${money(summary.flujoEfectivoConocido)}</strong><p>No incluye compras sin método de pago registrado.</p></div>
+    </div>`;
+  drawChart(document.getElementById('financeSalesChart'), data.ventasPorDia.map((row) => row.fecha), data.ventasPorDia.map((row) => row.ventasNetas), '#286a59');
+  drawChart(document.getElementById('financeProfitChart'), data.ventasPorDia.map((row) => row.fecha), data.ventasPorDia.map((row) => row.gananciaCalculable), '#18794e');
+  drawChart(document.getElementById('financeMethodsChart'), data.metodosPago.map((row) => row.metodoPago), data.metodosPago.map((row) => row.total), '#536471');
+  drawChart(document.getElementById('financeExpensesChart'), data.gastosPorCategoria.map((row) => row.categoria), data.gastosPorCategoria.map((row) => row.total), '#b42318');
+}
+
+async function finanzas() {
+  const advanced = state.context?.caracteristicas?.includes('rentabilidad_producto');
+  view.innerHTML = `<div class="panel"><form id="financeFilters" class="finance-filter-bar">
+      <label>Período<select name="periodo"><option value="hoy">Hoy</option><option value="ayer">Ayer</option><option value="semana">Esta semana</option><option value="mes" selected>Este mes</option><option value="mes_anterior">Mes anterior</option><option value="anio">Este año</option><option value="rango">Rango personalizado</option></select></label>
+      <span class="finance-range" hidden><label>Desde<input name="desde" type="date" value="${monthStartValue()}"></label><label>Hasta<input name="hasta" type="date" value="${localDateValue()}"></label></span>
+      <button type="submit">Actualizar</button>
+      <div class="export-menu"><button type="button" class="secondary" data-export="resumen-financiero">Resumen XLSX</button><button type="button" class="secondary" data-export="ventas">Ventas XLSX</button><button type="button" class="secondary" data-export="pagos">Pagos XLSX</button><button type="button" class="secondary" data-export="gastos">Gastos XLSX</button>${advanced ? '<button type="button" class="secondary" data-export="rentabilidad">Rentabilidad XLSX</button>' : ''}</div>
+    </form></div><div id="financeContent"><p class="muted">Cargando información financiera...</p></div>`;
+  const form = document.getElementById('financeFilters');
+  const toggleRange = () => { form.querySelector('.finance-range').hidden = form.elements.periodo.value !== 'rango'; };
+  form.elements.periodo.addEventListener('change', toggleRange);
+  form.addEventListener('submit', (event) => { event.preventDefault(); loadFinancialDashboard().catch((error) => showError(error.message)); });
+  form.querySelectorAll('[data-export]').forEach((button) => button.addEventListener('click', () => downloadFinancialExport(button.dataset.export, financeQuery(form), button)));
+  toggleRange();
+  await loadFinancialDashboard();
+}
+
+async function loadCashClosures() {
+  const data = await api('/api/caja/cierres');
+  const container = document.getElementById('cashClosureHistory');
+  container.innerHTML = data.cierres.length ? `<div class="table-wrap"><table><thead><tr><th>Período</th><th>Esperado</th><th>Contado</th><th>Diferencia</th><th>QR</th><th>Estado</th><th></th></tr></thead><tbody>
+    ${data.cierres.map((row) => `<tr class="${row.estado === 'anulado' ? 'row-muted' : ''}"><td>${formatDate(row.fechaInicio)}<small>hasta ${formatDate(row.fechaFin)}</small></td><td>Bs ${money(row.efectivoEsperado)}</td><td>Bs ${money(row.efectivoContado)}</td><td class="${Number(row.diferencia) === 0 ? 'text-ok' : 'text-danger'}">Bs ${money(row.diferencia)}</td><td>Bs ${money(row.totalQR)}</td><td>${statusBadge(row.estado)}</td><td>${row.estado === 'cerrado' ? `<button class="small danger" data-close-cancel="${row.idCierreCaja}" data-finance-write>Anular</button>` : ''}</td></tr>`).join('')}
+  </tbody></table></div>` : '<p class="muted">Todavía no hay cierres de caja.</p>';
+  container.querySelectorAll('[data-close-cancel]').forEach((button) => button.addEventListener('click', async () => {
+    const reason = await requestReason('Anular cierre de caja', 'Motivo de la anulación');
+    if (!reason) return;
+    try {
+      await api(`/api/caja/cierres/${button.dataset.closeCancel}/anular`, { method: 'POST', body: JSON.stringify({ motivo: reason }) });
+      await loadCashClosures(); showSuccess('Cierre anulado. Puedes registrar un cierre corregido.');
+    } catch (error) { showError(error.message); }
+  }));
+  applyReadOnlyUi();
+}
+
+async function calculateClosurePreview() {
+  const form = document.getElementById('cashClosureForm');
+  const data = formData(form);
+  const query = new URLSearchParams({ fechaInicio: data.fechaInicio, fechaFin: data.fechaFin, efectivoInicial: data.efectivoInicial || 0 });
+  const result = await api(`/api/caja/cierres/calcular?${query}`);
+  const counted = Number(data.efectivoContado || 0);
+  document.getElementById('cashClosurePreview').innerHTML = `<div class="closure-calculation">
+    <span>Efectivo de ventas<strong>Bs ${money(result.efectivoVentasEsperado)}</strong></span><span>Cobros de fiado<strong>Bs ${money(result.efectivoFiadosCobrado)}</strong></span><span>Gastos en efectivo<strong>- Bs ${money(result.gastosEfectivo)}</strong></span><span>Efectivo esperado<strong>Bs ${money(result.efectivoEsperado)}</strong></span><span>QR registrado<strong>Bs ${money(result.totalQR)}</strong></span><span>Diferencia estimada<strong>Bs ${money(counted - Number(result.efectivoEsperado))}</strong></span>
+  </div><p class="muted">Las compras no reducen el efectivo esperado porque todavía no registran un método de pago fiable.</p>`;
+  return result;
+}
+
+async function cierreCaja() {
+  const now = new Date();
+  const start = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  let operationKey = newOperationKey();
+  view.innerHTML = `<div class="panel"><div class="panel-title"><div><h3>Nuevo cierre de caja</h3><p>El cierre es opcional y no modifica ventas, pagos, gastos ni stock.</p></div><button id="exportClosures" class="secondary">Exportar XLSX</button></div>
+    <form id="cashClosureForm" class="form-grid">
+      <label>Desde<input name="fechaInicio" type="datetime-local" step="1" required value="${localDateTimeValue(start)}"></label>
+      <label>Hasta<input name="fechaFin" type="datetime-local" step="1" required value="${localDateTimeValue(now)}"></label>
+      <label>Efectivo inicial<input name="efectivoInicial" type="number" min="0" step="0.01" value="0"></label>
+      <label>Efectivo contado<input name="efectivoContado" type="number" min="0" step="0.01" required value="0"></label>
+      <label class="wide">Observación<textarea name="observacion" maxlength="500"></textarea></label>
+      <div class="actions wide"><button type="button" id="calculateClosure" class="secondary">Calcular</button><button type="submit" data-finance-write>Guardar cierre</button></div>
+    </form><div id="cashClosurePreview"></div></div>
+    <div class="panel"><h3>Historial de cierres</h3><div id="cashClosureHistory"><p class="muted">Cargando cierres...</p></div></div>`;
+  const form = document.getElementById('cashClosureForm');
+  document.getElementById('calculateClosure').addEventListener('click', () => calculateClosurePreview().catch((error) => showError(error.message)));
+  form.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    try {
+      await calculateClosurePreview();
+      const body = { ...formData(form), claveOperacion: operationKey };
+      await api('/api/caja/cierres', { method: 'POST', body: JSON.stringify(body) });
+      operationKey = newOperationKey();
+      await loadCashClosures(); showSuccess('Cierre de caja registrado.');
+    } catch (error) { showError(error.message); }
+  });
+  document.getElementById('exportClosures').addEventListener('click', () => {
+    const data = formData(form);
+    const query = new URLSearchParams({ desde: data.fechaInicio.slice(0, 10), hasta: data.fechaFin.slice(0, 10) });
+    downloadFinancialExport('cierres', query, document.getElementById('exportClosures'));
+  });
+  await loadCashClosures();
+}
+
 function reportFilters(type) {
   const dateRange = '<label>Desde<input name="desde" type="date"></label><label>Hasta<input name="hasta" type="date"></label>';
   if (type === 'ventasRango') return dateRange;
@@ -2365,6 +2710,7 @@ readOnlyObserver.observe(modalRoot, { childList: true, subtree: true });
 
 async function initializeApp() {
   await loadContext();
+  renderMenu();
   await loadView('inicio');
 }
 

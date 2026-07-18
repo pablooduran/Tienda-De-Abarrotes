@@ -246,6 +246,57 @@ const migrationRequirements = {
       ['pagoVenta', 'fk_pagoVenta_pagoFiado', ['idTienda', 'idPagoFiado'], 'pagoFiado', ['idTienda', 'idPagoFiado'], 'RESTRICT', 'RESTRICT'],
       ['pagoVenta', 'fk_pagoVenta_administrador', ['idTienda', 'idAdministrador'], 'administrador', ['idTienda', 'idAdministrador'], 'RESTRICT', 'RESTRICT']
     ]
+  },
+  '009_finanzas_reportes_caja.sql': {
+    columns: {
+      detalleVenta: ['origenCosto'],
+      categoriaGasto: ['idCategoriaGasto', 'idTienda', 'nombre', 'nombreNormalizado', 'descripcion', 'activo', 'creadoEn', 'actualizadoEn'],
+      gasto: [
+        'idGasto', 'idTienda', 'idCategoriaGasto', 'idAdministrador', 'idAdministradorModifica',
+        'idAdministradorAnula', 'fechaGasto', 'concepto', 'monto', 'metodoPago', 'referencia',
+        'observacion', 'recurrente', 'estado', 'motivoAnulacion', 'creadoEn', 'actualizadoEn', 'anuladoEn'
+      ],
+      cierreCaja: [
+        'idCierreCaja', 'idTienda', 'idAdministrador', 'idAdministradorAnula', 'fechaInicio',
+        'fechaFin', 'efectivoInicial', 'efectivoVentasEsperado', 'efectivoFiadosCobrado',
+        'gastosEfectivo', 'efectivoEsperado', 'efectivoContado', 'diferencia', 'totalQR',
+        'totalNoEspecificado', 'totalCobrado', 'totalVentas', 'totalFiadoGenerado',
+        'totalGastos', 'totalCompras', 'observacion', 'estado', 'motivoAnulacion',
+        'claveOperacion', 'creadoEn', 'anuladoEn'
+      ]
+    },
+    indexes: [
+      ['categoriaGasto', 'uq_categoriaGasto_tienda_id', ['idTienda', 'idCategoriaGasto'], true],
+      ['categoriaGasto', 'uq_categoriaGasto_tienda_normalizada', ['idTienda', 'nombreNormalizado'], true],
+      ['categoriaGasto', 'idx_categoriaGasto_tienda_activo_nombre', ['idTienda', 'activo', 'nombre'], false],
+      ['gasto', 'uq_gasto_tienda_id', ['idTienda', 'idGasto'], true],
+      ['gasto', 'idx_gasto_tienda_fecha_estado', ['idTienda', 'fechaGasto', 'estado'], false],
+      ['gasto', 'idx_gasto_tienda_categoria_fecha', ['idTienda', 'idCategoriaGasto', 'fechaGasto'], false],
+      ['gasto', 'idx_gasto_tienda_metodo_fecha', ['idTienda', 'metodoPago', 'fechaGasto'], false],
+      ['cierreCaja', 'uq_cierreCaja_tienda_id', ['idTienda', 'idCierreCaja'], true],
+      ['cierreCaja', 'uq_cierreCaja_tienda_clave', ['idTienda', 'claveOperacion'], true],
+      ['cierreCaja', 'idx_cierreCaja_tienda_estado_periodo', ['idTienda', 'estado', 'fechaInicio', 'fechaFin'], false],
+      ['cierreCaja', 'idx_cierreCaja_tienda_admin_fecha', ['idTienda', 'idAdministrador', 'creadoEn'], false]
+    ],
+    checks: [
+      ['gasto', 'chk_gasto_monto'],
+      ['gasto', 'chk_gasto_estado'],
+      ['cierreCaja', 'chk_cierreCaja_periodo'],
+      ['cierreCaja', 'chk_cierreCaja_montos'],
+      ['cierreCaja', 'chk_cierreCaja_balance'],
+      ['cierreCaja', 'chk_cierreCaja_estado']
+    ],
+    foreignKeyConstraints: [
+      ['categoriaGasto', 'fk_categoriaGasto_tienda', ['idTienda'], 'tienda', ['idTienda'], 'RESTRICT', 'RESTRICT'],
+      ['gasto', 'fk_gasto_tienda', ['idTienda'], 'tienda', ['idTienda'], 'RESTRICT', 'RESTRICT'],
+      ['gasto', 'fk_gasto_categoria', ['idTienda', 'idCategoriaGasto'], 'categoriaGasto', ['idTienda', 'idCategoriaGasto'], 'RESTRICT', 'RESTRICT'],
+      ['gasto', 'fk_gasto_creador', ['idTienda', 'idAdministrador'], 'administrador', ['idTienda', 'idAdministrador'], 'RESTRICT', 'RESTRICT'],
+      ['gasto', 'fk_gasto_modificador', ['idTienda', 'idAdministradorModifica'], 'administrador', ['idTienda', 'idAdministrador'], 'RESTRICT', 'RESTRICT'],
+      ['gasto', 'fk_gasto_anulador', ['idTienda', 'idAdministradorAnula'], 'administrador', ['idTienda', 'idAdministrador'], 'RESTRICT', 'RESTRICT'],
+      ['cierreCaja', 'fk_cierreCaja_tienda', ['idTienda'], 'tienda', ['idTienda'], 'RESTRICT', 'RESTRICT'],
+      ['cierreCaja', 'fk_cierreCaja_creador', ['idTienda', 'idAdministrador'], 'administrador', ['idTienda', 'idAdministrador'], 'RESTRICT', 'RESTRICT'],
+      ['cierreCaja', 'fk_cierreCaja_anulador', ['idTienda', 'idAdministradorAnula'], 'administrador', ['idTienda', 'idAdministrador'], 'RESTRICT', 'RESTRICT']
+    ]
   }
 };
 
@@ -434,6 +485,71 @@ async function requirementsSatisfied(connection, file) {
          AND (f.idFiado IS NULL OR ABS(f.saldoPendiente-v.saldoPendiente)>=0.01)`
     );
     if (Number(invalidDebtLinks.total) > 0) return false;
+  }
+  if (file === '009_finanzas_reportes_caja.sql') {
+    const [[features]] = await connection.query(
+      `SELECT COUNT(DISTINCT codigo) total FROM funcionalidad
+       WHERE codigo IN ('gastos','reportes_financieros','rentabilidad_producto','exportacion_reportes','cierre_caja','dashboard_financiero')
+         AND activo=1`
+    );
+    if (Number(features.total) !== 6) return false;
+    const [[planAccess]] = await connection.query(
+      `SELECT COUNT(DISTINCT CONCAT(p.codigo, ':', f.codigo)) total
+       FROM planFuncionalidad pf
+       JOIN plan p ON p.idPlan=pf.idPlan
+       JOIN funcionalidad f ON f.idFuncionalidad=pf.idFuncionalidad
+       WHERE pf.habilitada=1 AND p.activo=1 AND f.activo=1
+         AND ((p.codigo IN ('basico','avanzado') AND f.codigo IN ('gastos','reportes_financieros','exportacion_reportes','dashboard_financiero'))
+           OR (p.codigo='avanzado' AND f.codigo IN ('rentabilidad_producto','cierre_caja')))`
+    );
+    if (Number(planAccess.total) !== 10) return false;
+    const [[storesWithoutCategories]] = await connection.query(
+      `SELECT COUNT(*) total FROM tienda t
+       WHERE NOT EXISTS (SELECT 1 FROM categoriaGasto cg WHERE cg.idTienda=t.idTienda)`
+    );
+    if (Number(storesWithoutCategories.total) > 0) return false;
+    const [[invalidCosts]] = await connection.query(
+      `SELECT COUNT(*) total FROM detalleVenta
+       WHERE costoUnitario<0 OR subtotalCosto<0
+          OR origenCosto NOT IN ('real','estimado','desconocido')
+          OR (origenCosto IN ('real','estimado') AND costoUnitario<=0)
+          OR (origenCosto='desconocido' AND costoUnitario>0 AND cantidadEquivalenteUnidades>0)
+          OR (cantidadEquivalenteUnidades>0 AND ABS(subtotalCosto-(costoUnitario*cantidadEquivalenteUnidades))>=0.02)`
+    );
+    if (Number(invalidCosts.total) > 0) return false;
+    const [[invalidExpenses]] = await connection.query(
+      `SELECT COUNT(*) total FROM gasto g
+       LEFT JOIN categoriaGasto cg ON cg.idTienda=g.idTienda AND cg.idCategoriaGasto=g.idCategoriaGasto
+       LEFT JOIN administrador a ON a.idTienda=g.idTienda AND a.idAdministrador=g.idAdministrador
+       LEFT JOIN administrador am ON am.idTienda=g.idTienda AND am.idAdministrador=g.idAdministradorModifica
+       LEFT JOIN administrador aa ON aa.idTienda=g.idTienda AND aa.idAdministrador=g.idAdministradorAnula
+       WHERE g.monto<=0 OR cg.idCategoriaGasto IS NULL OR a.idAdministrador IS NULL
+          OR (g.idAdministradorModifica IS NOT NULL AND am.idAdministrador IS NULL)
+          OR (g.idAdministradorAnula IS NOT NULL AND aa.idAdministrador IS NULL)
+          OR (g.estado='registrado' AND (g.anuladoEn IS NOT NULL OR g.idAdministradorAnula IS NOT NULL OR g.motivoAnulacion IS NOT NULL))
+          OR (g.estado='anulado' AND (g.anuladoEn IS NULL OR g.idAdministradorAnula IS NULL OR g.motivoAnulacion IS NULL))`
+    );
+    if (Number(invalidExpenses.total) > 0) return false;
+    const [[invalidClosures]] = await connection.query(
+      `SELECT COUNT(*) total FROM cierreCaja c
+       LEFT JOIN administrador a ON a.idTienda=c.idTienda AND a.idAdministrador=c.idAdministrador
+       LEFT JOIN administrador aa ON aa.idTienda=c.idTienda AND aa.idAdministrador=c.idAdministradorAnula
+       WHERE c.fechaFin<=c.fechaInicio OR a.idAdministrador IS NULL
+          OR c.efectivoInicial<0 OR c.efectivoVentasEsperado<0 OR c.efectivoFiadosCobrado<0
+          OR c.gastosEfectivo<0 OR c.efectivoEsperado<0 OR c.efectivoContado<0
+          OR ABS(c.efectivoEsperado-(c.efectivoInicial+c.efectivoVentasEsperado+c.efectivoFiadosCobrado-c.gastosEfectivo))>=0.01
+          OR ABS(c.diferencia-(c.efectivoContado-c.efectivoEsperado))>=0.01
+          OR (c.estado='cerrado' AND (c.anuladoEn IS NOT NULL OR c.idAdministradorAnula IS NOT NULL OR c.motivoAnulacion IS NOT NULL))
+          OR (c.estado='anulado' AND (c.anuladoEn IS NULL OR c.idAdministradorAnula IS NULL OR c.motivoAnulacion IS NULL OR aa.idAdministrador IS NULL))`
+    );
+    if (Number(invalidClosures.total) > 0) return false;
+    const [[overlappingClosures]] = await connection.query(
+      `SELECT COUNT(*) total FROM cierreCaja a
+       JOIN cierreCaja b ON b.idTienda=a.idTienda AND b.idCierreCaja>a.idCierreCaja
+       WHERE a.estado='cerrado' AND b.estado='cerrado'
+         AND a.fechaInicio<b.fechaFin AND b.fechaInicio<a.fechaFin`
+    );
+    if (Number(overlappingClosures.total) > 0) return false;
   }
   return true;
 }
@@ -896,6 +1012,107 @@ async function inspect008State(connection, recorded) {
   return state;
 }
 
+async function inspect009State(connection, recorded) {
+  const requirements = migrationRequirements['009_finanzas_reportes_caja.sql'];
+  const estado009 = {
+    migracion009Registrada: Boolean(recorded),
+    tablas: {},
+    columnas: {},
+    indices: {},
+    checks: {},
+    clavesForaneas: {},
+    estructuraCompleta: false,
+    datosValidos: false
+  };
+  for (const table of Object.keys(requirements.columns)) {
+    estado009.tablas[table] = await hasTable(connection, table);
+  }
+  for (const [table, columns] of Object.entries(requirements.columns)) {
+    estado009.columnas[table] = estado009.tablas[table] && await hasColumns(connection, table, columns);
+  }
+  for (const [table, name, columns, unique] of requirements.indexes) {
+    estado009.indices[`${table}.${name}`] = await hasIndex(connection, table, name, columns, unique);
+  }
+  for (const [table, name] of requirements.checks) {
+    estado009.checks[`${table}.${name}`] = await hasCheckConstraint(connection, table, name);
+  }
+  for (const relation of requirements.foreignKeyConstraints) {
+    estado009.clavesForaneas[`${relation[0]}.${relation[1]}`] = await hasForeignKeyConstraint(connection, ...relation);
+  }
+  estado009.estructuraCompleta = Object.values(estado009.tablas).every(Boolean)
+    && Object.values(estado009.columnas).every(Boolean)
+    && Object.values(estado009.indices).every(Boolean)
+    && Object.values(estado009.checks).every(Boolean)
+    && Object.values(estado009.clavesForaneas).every(Boolean);
+  if (estado009.estructuraCompleta) {
+    estado009.datosValidos = await requirementsSatisfied(connection, '009_finanzas_reportes_caja.sql');
+  }
+  console.log('Estado previo detectado para 009_finanzas_reportes_caja.sql:');
+  console.log(JSON.stringify(estado009, null, 2));
+  return estado009;
+}
+
+async function validateFinancialMigrationData(connection) {
+  if (await hasColumns(connection, 'detalleVenta', ['origenCosto'])) {
+    const [[invalidCosts]] = await connection.query(
+      `SELECT COUNT(*) total FROM detalleVenta
+       WHERE costoUnitario<0 OR subtotalCosto<0
+          OR origenCosto NOT IN ('real','estimado','desconocido')`
+    );
+    if (Number(invalidCosts.total) > 0) {
+      throw new Error(`La migracion 009 no puede continuar: existen ${invalidCosts.total} detalles con costo invalido.`);
+    }
+  }
+  if (await hasColumns(connection, 'categoriaGasto', ['idTienda', 'nombreNormalizado'])) {
+    const [[duplicates]] = await connection.query(
+      `SELECT COUNT(*) total FROM (
+         SELECT idTienda, nombreNormalizado FROM categoriaGasto
+         GROUP BY idTienda, nombreNormalizado HAVING COUNT(*)>1
+       ) duplicados`
+    );
+    if (Number(duplicates.total) > 0) {
+      throw new Error(`La migracion 009 no puede continuar: existen ${duplicates.total} categorias de gasto duplicadas por tienda.`);
+    }
+    const [[invalidCategoryTenants]] = await connection.query(
+      `SELECT COUNT(*) total FROM categoriaGasto cg
+       LEFT JOIN tienda t ON t.idTienda=cg.idTienda
+       WHERE t.idTienda IS NULL`
+    );
+    if (Number(invalidCategoryTenants.total) > 0) {
+      throw new Error(`La migracion 009 no puede continuar: existen ${invalidCategoryTenants.total} categorias ligadas a tiendas inexistentes.`);
+    }
+  }
+  if (await hasColumns(connection, 'categoriaGasto', ['idTienda', 'idCategoriaGasto'])
+    && await hasColumns(connection, 'gasto', ['idTienda', 'idCategoriaGasto', 'idAdministrador', 'monto'])) {
+    const [[invalidExpenses]] = await connection.query(
+      `SELECT COUNT(*) total FROM gasto g
+       LEFT JOIN categoriaGasto cg ON cg.idTienda=g.idTienda AND cg.idCategoriaGasto=g.idCategoriaGasto
+       LEFT JOIN administrador a ON a.idTienda=g.idTienda AND a.idAdministrador=g.idAdministrador
+       WHERE g.monto<=0 OR cg.idCategoriaGasto IS NULL OR a.idAdministrador IS NULL`
+    );
+    if (Number(invalidExpenses.total) > 0) {
+      throw new Error(`La migracion 009 no puede continuar: existen ${invalidExpenses.total} gastos con relaciones o montos invalidos.`);
+    }
+  }
+  if (await hasColumns(connection, 'cierreCaja', ['idCierreCaja', 'idTienda', 'fechaInicio', 'fechaFin', 'estado'])) {
+    const [[invalidClosures]] = await connection.query(
+      'SELECT COUNT(*) total FROM cierreCaja WHERE fechaFin<=fechaInicio'
+    );
+    if (Number(invalidClosures.total) > 0) {
+      throw new Error(`La migracion 009 no puede continuar: existen ${invalidClosures.total} cierres con periodo invalido.`);
+    }
+    const [[overlaps]] = await connection.query(
+      `SELECT COUNT(*) total FROM cierreCaja a
+       JOIN cierreCaja b ON b.idTienda=a.idTienda AND b.idCierreCaja>a.idCierreCaja
+       WHERE a.estado='cerrado' AND b.estado='cerrado'
+         AND a.fechaInicio<b.fechaFin AND b.fechaInicio<a.fechaFin`
+    );
+    if (Number(overlaps.total) > 0) {
+      throw new Error(`La migracion 009 no puede continuar: existen ${overlaps.total} cierres vigentes superpuestos.`);
+    }
+  }
+}
+
 function isExistingStructureError(error) {
   return [
     'ER_DUP_FIELDNAME',
@@ -934,10 +1151,13 @@ async function main() {
       if (file === '008_punto_venta_pagos.sql') {
         await inspect008State(connection, recorded.length > 0);
       }
+      if (file === '009_finanzas_reportes_caja.sql') {
+        await inspect009State(connection, recorded.length > 0);
+      }
       if (recorded.length) {
         const registeredMigrationIsIncomplete = file === '006_catalogo_maestro.sql'
           ? decide006Action(estado006) === 'detener'
-          : ['004_multitienda_base.sql', '005_planes_suscripciones.sql', '007_movimientos_stock.sql', '008_punto_venta_pagos.sql'].includes(file)
+          : ['004_multitienda_base.sql', '005_planes_suscripciones.sql', '007_movimientos_stock.sql', '008_punto_venta_pagos.sql', '009_finanzas_reportes_caja.sql'].includes(file)
             && !await requirementsSatisfied(connection, file);
         if (registeredMigrationIsIncomplete) {
           throw new Error(`La migracion ${file} figura en schema_migrations, pero su estructura o sus datos estan incompletos. No se aplicaron cambios adicionales.`);
@@ -961,6 +1181,10 @@ async function main() {
         await validatePosMigrationData(connection);
         console.log('Datos existentes validados antes de recuperar la estructura POS y sus pagos.');
       }
+      if (file === '009_finanzas_reportes_caja.sql') {
+        await validateFinancialMigrationData(connection);
+        console.log('Datos financieros existentes validados antes de recuperar la estructura 009.');
+      }
       for (let index = 0; index < statements.length; index += 1) {
         const statement = statements[index];
         if (file === '004_multitienda_base.sql'
@@ -971,7 +1195,7 @@ async function main() {
           console.log('Datos multi-tienda validados antes de crear indices y restricciones.');
         }
 
-        const element = ['004_multitienda_base.sql', '006_catalogo_maestro.sql', '007_movimientos_stock.sql', '008_punto_venta_pagos.sql'].includes(file)
+        const element = ['004_multitienda_base.sql', '006_catalogo_maestro.sql', '007_movimientos_stock.sql', '008_punto_venta_pagos.sql', '009_finanzas_reportes_caja.sql'].includes(file)
           ? structureElementFromStatement(statement)
           : null;
         if (element && await structureElementExists(connection, element)) {
