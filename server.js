@@ -21,9 +21,11 @@ const { requireAuth } = require('./middleware/auth');
 const { requireRole } = require('./middleware/roles');
 const { requireActiveSubscription, resolveSubscription } = require('./middleware/subscription');
 const { requireTenant } = require('./middleware/tenant');
+const adminCatalogRoutes = require('./routes/admin-catalog');
 const adminRoutes = require('./routes/admin');
 const apiRoutes = require('./routes/api');
 const authRoutes = require('./routes/auth');
+const masterCatalogRoutes = require('./routes/master-catalog');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -48,7 +50,7 @@ sessionStore.on('error', (error) => {
 app.set('trust proxy', 1);
 app.use(helmet({ contentSecurityPolicy: false }));
 app.use(express.urlencoded({ extended: true }));
-app.use(express.json());
+app.use(express.json({ limit: '2mb' }));
 app.use(session({
   store: sessionStore,
   name: 'tienda.sid',
@@ -64,7 +66,9 @@ app.use(session({
 }));
 
 app.use('/auth', authRoutes);
+app.use('/api/admin/catalogo', requireAuth, requireRole('superadmin'), adminCatalogRoutes);
 app.use('/api/admin', requireAuth, requireRole('superadmin'), adminRoutes);
+app.use('/api/catalogo-maestro', requireAuth, requireTenant, resolveSubscription, requireActiveSubscription, masterCatalogRoutes);
 app.use('/api', requireAuth, requireTenant, resolveSubscription, requireActiveSubscription, apiRoutes);
 
 app.get('/app.html', requireAuth, (req, res) => {

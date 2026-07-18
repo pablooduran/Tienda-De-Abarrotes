@@ -19,6 +19,7 @@
 
       <nav aria-label="Navegación administrativa">
         <a class="nav-link active" href="#tiendas">Tiendas</a>
+        <a class="nav-link" href="#catalogo">Catálogo maestro</a>
       </nav>
 
       <div class="session-block">
@@ -161,6 +162,54 @@
           <p id="emptySubscriptions" class="empty-state" hidden>No hay suscripciones registradas.</p>
         </div>
       </section>
+
+      <section id="catalogo" class="content-section catalog-section" aria-labelledby="catalogHeading">
+        <div class="section-heading catalog-heading">
+          <div>
+            <p class="eyebrow">Datos globales</p>
+            <h2 id="catalogHeading">Catálogo maestro</h2>
+            <p>Productos sugeridos para acelerar el alta de inventario sin compartir precios ni stock.</p>
+          </div>
+          <div class="button-row">
+            <button id="importCatalogButton" class="button button-secondary" type="button">Importar Excel</button>
+            <button id="addMasterCategoryButton" class="button button-secondary" type="button">Nueva categoría</button>
+            <button id="addMasterBrandButton" class="button button-secondary" type="button">Nueva marca</button>
+            <button id="addMasterProductButton" class="button button-primary" type="button">Nuevo producto maestro</button>
+          </div>
+        </div>
+
+        <div class="summary-grid catalog-summary" aria-label="Resumen del catálogo">
+          <article class="summary-item"><span>Productos maestros</span><strong id="masterProductCount">0</strong></article>
+          <article class="summary-item summary-success"><span>Productos activos</span><strong id="activeMasterProductCount">0</strong></article>
+          <article class="summary-item"><span>Categorías</span><strong id="masterCategoryCount">0</strong></article>
+          <article class="summary-item"><span>Marcas</span><strong id="masterBrandCount">0</strong></article>
+        </div>
+
+        <div class="catalog-toolbar">
+          <label class="search-field"><span>Buscar</span><input id="masterProductSearch" type="search" placeholder="Nombre, marca o código"></label>
+          <label class="search-field"><span>Categoría</span><select id="masterCategoryFilter"><option value="">Todas</option></select></label>
+          <label class="search-field"><span>Marca</span><select id="masterBrandFilter"><option value="">Todas</option></select></label>
+          <label class="search-field"><span>Estado</span><select id="masterStatusFilter"><option value="">Todos</option><option value="true">Activos</option><option value="false">Inactivos</option></select></label>
+        </div>
+
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Producto</th><th>Marca</th><th>Categoría</th><th>Presentación</th><th>Código</th><th>Tiendas</th><th>Estado</th><th>Acciones</th></tr></thead>
+            <tbody id="masterProductsTableBody"></tbody>
+          </table>
+          <p id="emptyMasterProducts" class="empty-state" hidden>No hay productos maestros para estos filtros.</p>
+        </div>
+        <div class="catalog-pagination">
+          <button id="masterPreviousPage" class="button button-secondary" type="button">Anterior</button>
+          <span id="masterPageLabel">Página 1</span>
+          <button id="masterNextPage" class="button button-secondary" type="button">Siguiente</button>
+        </div>
+
+        <div class="taxonomy-grid">
+          <div><div class="owners-heading"><h3>Categorías maestras</h3></div><div id="masterCategoriesList" class="taxonomy-list"></div></div>
+          <div><div class="owners-heading"><h3>Marcas maestras</h3></div><div id="masterBrandsList" class="taxonomy-list"></div></div>
+        </div>
+      </section>
     </main>
   </div>
 
@@ -179,6 +228,22 @@
         <button class="button button-secondary" type="button" data-close-dialog>Cancelar</button>
         <button id="formSubmitButton" class="button button-primary" type="submit">Guardar</button>
       </footer>
+    </form>
+  </dialog>
+
+  <dialog id="catalogImportDialog" class="modal catalog-import-modal">
+    <form id="catalogImportForm" method="dialog">
+      <header><div><p class="eyebrow">Importación administrativa</p><h2>Importar catálogo desde Excel</h2></div><button id="closeCatalogImport" class="icon-button" type="button" aria-label="Cerrar">×</button></header>
+      <div class="import-body">
+        <p>Usa la plantilla oficial. Se validarán las filas antes de crear productos.</p>
+        <a class="button button-secondary inline-button" href="/api/admin/catalogo/importaciones/plantilla.xlsx">Descargar plantilla</a>
+        <label class="form-field full"><span>Archivo .xlsx</span><input id="catalogImportFile" name="archivo" type="file" accept=".xlsx" required></label>
+        <button id="previewCatalogImport" class="button button-primary" type="button">Previsualizar</button>
+        <p id="catalogImportSummary" class="import-summary"></p>
+        <div id="catalogImportPreview" class="table-wrap import-preview"></div>
+        <p id="catalogImportError" class="form-error" hidden></p>
+      </div>
+      <footer><button id="cancelCatalogImport" class="button button-secondary" type="button">Cancelar</button><button id="confirmCatalogImport" class="button button-primary" type="button" disabled>Confirmar importación</button></footer>
     </form>
   </dialog>
 

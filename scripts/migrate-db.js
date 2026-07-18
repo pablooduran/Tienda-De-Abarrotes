@@ -135,6 +135,36 @@ const migrationRequirements = {
       ['suscripcionTienda', 'fk_suscripcion_plan', ['idPlan'], 'plan', ['idPlan']],
       ['suscripcionTienda', 'fk_suscripcion_creadoPor', ['creadoPor'], 'administrador', ['idAdministrador']]
     ]
+  },
+  '006_catalogo_maestro.sql': {
+    columns: {
+      categoriaMaestra: ['idCategoriaMaestra', 'nombre', 'nombreNormalizado', 'activo', 'creadoEn', 'actualizadoEn'],
+      marcaMaestra: ['idMarcaMaestra', 'nombre', 'nombreNormalizado', 'activo', 'creadoEn', 'actualizadoEn'],
+      productoMaestro: ['idProductoMaestro', 'nombre', 'nombreNormalizado', 'descripcion', 'idCategoriaMaestra', 'idMarcaMaestra', 'codigoBarras', 'presentacion', 'contenidoCantidad', 'contenidoUnidad', 'unidadesPorPaquete', 'permiteVentaPorUnidad', 'permiteVentaPorPaquete', 'huellaDuplicado', 'activo', 'creadoEn', 'actualizadoEn'],
+      auditoriaCatalogo: ['idAuditoriaCatalogo', 'idAdministrador', 'accion', 'entidad', 'idEntidad', 'detalle', 'creadoEn'],
+      producto: ['idProductoMaestro']
+    },
+    indexes: [
+      ['categoriaMaestra', 'uq_categoriaMaestra_normalizada', ['nombreNormalizado'], true],
+      ['categoriaMaestra', 'idx_categoriaMaestra_activo_nombre', ['activo', 'nombre'], false],
+      ['marcaMaestra', 'uq_marcaMaestra_normalizada', ['nombreNormalizado'], true],
+      ['marcaMaestra', 'idx_marcaMaestra_activo_nombre', ['activo', 'nombre'], false],
+      ['productoMaestro', 'uq_productoMaestro_codigoBarras', ['codigoBarras'], true],
+      ['productoMaestro', 'idx_productoMaestro_busqueda', ['activo', 'nombreNormalizado'], false],
+      ['productoMaestro', 'idx_productoMaestro_categoria', ['idCategoriaMaestra', 'activo'], false],
+      ['productoMaestro', 'idx_productoMaestro_marca', ['idMarcaMaestra', 'activo'], false],
+      ['productoMaestro', 'idx_productoMaestro_huella', ['huellaDuplicado'], false],
+      ['auditoriaCatalogo', 'idx_auditoriaCatalogo_admin_fecha', ['idAdministrador', 'creadoEn'], false],
+      ['auditoriaCatalogo', 'idx_auditoriaCatalogo_entidad', ['entidad', 'idEntidad', 'creadoEn'], false],
+      ['producto', 'idx_producto_productoMaestro', ['idProductoMaestro'], false],
+      ['producto', 'uq_producto_tienda_maestro', ['idTienda', 'idProductoMaestro'], true]
+    ],
+    foreignKeyConstraints: [
+      ['productoMaestro', 'fk_productoMaestro_categoria', ['idCategoriaMaestra'], 'categoriaMaestra', ['idCategoriaMaestra'], 'CASCADE', 'RESTRICT'],
+      ['productoMaestro', 'fk_productoMaestro_marca', ['idMarcaMaestra'], 'marcaMaestra', ['idMarcaMaestra'], 'CASCADE', 'RESTRICT'],
+      ['auditoriaCatalogo', 'fk_auditoriaCatalogo_admin', ['idAdministrador'], 'administrador', ['idAdministrador'], 'CASCADE', 'RESTRICT'],
+      ['producto', 'fk_producto_productoMaestro', ['idProductoMaestro'], 'productoMaestro', ['idProductoMaestro'], 'CASCADE', 'RESTRICT']
+    ]
   }
 };
 
@@ -239,6 +269,111 @@ const multitenantRelations = [
   ['detalleFiado', 'idProducto', 'producto', 'idProducto'],
   ['pagoFiado', 'idFiado', 'fiado', 'idFiado']
 ];
+
+const catalogForeignKeyDefinitions = {
+  fk_productoMaestro_categoria: {
+    childTable: 'productoMaestro',
+    childColumn: 'idCategoriaMaestra',
+    parentTable: 'categoriaMaestra',
+    parentColumn: 'idCategoriaMaestra'
+  },
+  fk_productoMaestro_marca: {
+    childTable: 'productoMaestro',
+    childColumn: 'idMarcaMaestra',
+    parentTable: 'marcaMaestra',
+    parentColumn: 'idMarcaMaestra'
+  },
+  fk_producto_productoMaestro: {
+    childTable: 'producto',
+    childColumn: 'idProductoMaestro',
+    parentTable: 'productoMaestro',
+    parentColumn: 'idProductoMaestro'
+  },
+  fk_auditoriaCatalogo_admin: {
+    childTable: 'auditoriaCatalogo',
+    childColumn: 'idAdministrador',
+    parentTable: 'administrador',
+    parentColumn: 'idAdministrador'
+  }
+};
+
+async function columnDefinition(connection, table, column) {
+  const [rows] = await connection.query(
+    `SELECT COLUMN_TYPE, IS_NULLABLE, CHARACTER_SET_NAME, COLLATION_NAME
+     FROM information_schema.COLUMNS
+     WHERE TABLE_SCHEMA=? AND TABLE_NAME=? AND COLUMN_NAME=?`,
+    [process.env.DB_NAME, table, column]
+  );
+  return rows[0] || null;
+}
+
+async function tableEngine(connection, table) {
+  const [rows] = await connection.query(
+    `SELECT ENGINE FROM information_schema.TABLES
+     WHERE TABLE_SCHEMA=? AND TABLE_NAME=?`,
+    [process.env.DB_NAME, table]
+  );
+  return rows[0]?.ENGINE || null;
+}
+
+async function hasPrimaryIndexOnColumn(connection, table, column) {
+  const [[row]] = await connection.query(
+    `SELECT COUNT(*) total FROM information_schema.STATISTICS
+     WHERE TABLE_SCHEMA=? AND TABLE_NAME=? AND INDEX_NAME='PRIMARY'
+       AND COLUMN_NAME=? AND SEQ_IN_INDEX=1`,
+    [process.env.DB_NAME, table, column]
+  );
+  return Number(row.total) > 0;
+}
+
+async function validateCatalogForeignKey(connection, element, stepLabel) {
+  const definition = catalogForeignKeyDefinitions[element?.name];
+  if (!definition) return;
+  const [child, parent, childEngine, parentEngine, parentIndexed] = await Promise.all([
+    columnDefinition(connection, definition.childTable, definition.childColumn),
+    columnDefinition(connection, definition.parentTable, definition.parentColumn),
+    tableEngine(connection, definition.childTable),
+    tableEngine(connection, definition.parentTable),
+    hasPrimaryIndexOnColumn(connection, definition.parentTable, definition.parentColumn)
+  ]);
+  if (!child || !parent) {
+    throw new Error(`${stepLabel}: faltan columnas para crear ${element.name}.`);
+  }
+  if (String(child.COLUMN_TYPE).toLowerCase() !== String(parent.COLUMN_TYPE).toLowerCase()) {
+    throw new Error(
+      `${stepLabel}: tipos incompatibles para ${element.name}: `
+      + `${definition.childTable}.${definition.childColumn}=${child.COLUMN_TYPE}, `
+      + `${definition.parentTable}.${definition.parentColumn}=${parent.COLUMN_TYPE}.`
+    );
+  }
+  if (String(childEngine).toLowerCase() !== 'innodb' || String(parentEngine).toLowerCase() !== 'innodb') {
+    throw new Error(
+      `${stepLabel}: ${element.name} requiere InnoDB; `
+      + `${definition.childTable}=${childEngine || 'sin motor'}, ${definition.parentTable}=${parentEngine || 'sin motor'}.`
+    );
+  }
+  if (!parentIndexed) {
+    throw new Error(`${stepLabel}: ${definition.parentTable}.${definition.parentColumn} no tiene la clave primaria esperada.`);
+  }
+  const [[orphans]] = await connection.query(
+    `SELECT COUNT(*) total
+     FROM \`${definition.childTable}\` childRow
+     LEFT JOIN \`${definition.parentTable}\` parentRow
+       ON parentRow.\`${definition.parentColumn}\`=childRow.\`${definition.childColumn}\`
+     WHERE childRow.\`${definition.childColumn}\` IS NOT NULL
+       AND parentRow.\`${definition.parentColumn}\` IS NULL`
+  );
+  if (Number(orphans.total) > 0) {
+    throw new Error(
+      `${stepLabel}: ${element.name} no puede crearse; existen ${orphans.total} referencias huerfanas `
+      + `en ${definition.childTable}.${definition.childColumn}.`
+    );
+  }
+  console.log(
+    `${stepLabel}: validacion de ${element.name} correcta `
+    + `(tipo ${child.COLUMN_TYPE}, hijo nullable=${child.IS_NULLABLE}, padre nullable=${parent.IS_NULLABLE}, InnoDB, huerfanos=0).`
+  );
+}
 
 async function validateMultitenantData(connection) {
   const problems = [];
@@ -359,6 +494,141 @@ async function inspect004State(connection, recorded) {
   }, null, 2));
 }
 
+async function read006State(connection, recorded) {
+  const requirements = migrationRequirements['006_catalogo_maestro.sql'];
+  const estado006 = {
+    migracion006Registrada: Boolean(recorded),
+    tablas: {},
+    columnas: {},
+    indices: {},
+    clavesForaneas: {},
+    datos: {
+      funcionalidadesCatalogoMaestro: null,
+      planesConCatalogoMaestro: null,
+      vinculosDuplicados: null,
+      referenciasMaestrasInvalidas: null,
+      vinculosLocalesInvalidos: null
+    },
+    estructuraCompleta: false,
+    datosValidos: false
+  };
+
+  const relatedTables = [
+    ...Object.keys(requirements.columns),
+    'plan',
+    'funcionalidad',
+    'planFuncionalidad'
+  ];
+  for (const table of relatedTables) {
+    estado006.tablas[table] = await hasTable(connection, table);
+  }
+  for (const [table, requiredColumns] of Object.entries(requirements.columns)) {
+    estado006.columnas[table] = await hasColumns(connection, table, requiredColumns);
+  }
+  for (const [table, name, indexedColumns, unique] of requirements.indexes) {
+    estado006.indices[`${table}.${name}`] = await hasIndex(connection, table, name, indexedColumns, unique);
+  }
+  for (const relation of requirements.foreignKeyConstraints) {
+    const [table, name] = relation;
+    estado006.clavesForaneas[`${table}.${name}`] = await hasForeignKeyConstraint(
+      connection, ...relation
+    );
+  }
+
+  const catalogTables = Object.keys(requirements.columns);
+  estado006.estructuraCompleta = catalogTables.every((table) => estado006.tablas[table])
+    && Object.values(estado006.columnas).every(Boolean)
+    && Object.values(estado006.indices).every(Boolean)
+    && Object.values(estado006.clavesForaneas).every(Boolean);
+
+  const subscriptionTablesReady = ['plan', 'funcionalidad', 'planFuncionalidad']
+    .every((table) => estado006.tablas[table]);
+  if (subscriptionTablesReady) {
+    const [[feature]] = await connection.query(
+      "SELECT COUNT(*) total FROM funcionalidad WHERE codigo='catalogo_maestro'"
+    );
+    estado006.datos.funcionalidadesCatalogoMaestro = Number(feature.total);
+    const [[planAccess]] = await connection.query(
+      `SELECT COUNT(DISTINCT p.codigo) total
+       FROM planFuncionalidad pf
+       JOIN plan p ON p.idPlan=pf.idPlan
+       JOIN funcionalidad f ON f.idFuncionalidad=pf.idFuncionalidad
+       WHERE f.codigo='catalogo_maestro' AND pf.habilitada=1
+         AND f.activo=1 AND p.codigo IN ('basico','avanzado')`
+    );
+    estado006.datos.planesConCatalogoMaestro = Number(planAccess.total);
+  }
+
+  if (estado006.estructuraCompleta) {
+    const [[duplicateLinks]] = await connection.query(
+      `SELECT COUNT(*) total FROM (
+         SELECT idTienda, idProductoMaestro
+         FROM producto
+         WHERE idProductoMaestro IS NOT NULL
+         GROUP BY idTienda, idProductoMaestro HAVING COUNT(*)>1
+       ) duplicados`
+    );
+    estado006.datos.vinculosDuplicados = Number(duplicateLinks.total);
+    const [[invalidMasterTaxonomy]] = await connection.query(
+      `SELECT COUNT(*) total
+       FROM productoMaestro pm
+       LEFT JOIN categoriaMaestra c ON c.idCategoriaMaestra=pm.idCategoriaMaestra
+       LEFT JOIN marcaMaestra m ON m.idMarcaMaestra=pm.idMarcaMaestra
+       WHERE (pm.idCategoriaMaestra IS NOT NULL AND c.idCategoriaMaestra IS NULL)
+          OR (pm.idMarcaMaestra IS NOT NULL AND m.idMarcaMaestra IS NULL)`
+    );
+    estado006.datos.referenciasMaestrasInvalidas = Number(invalidMasterTaxonomy.total);
+    const [[invalidLocalMaster]] = await connection.query(
+      `SELECT COUNT(*) total
+       FROM producto p
+       LEFT JOIN productoMaestro pm ON pm.idProductoMaestro=p.idProductoMaestro
+       WHERE p.idProductoMaestro IS NOT NULL AND pm.idProductoMaestro IS NULL`
+    );
+    estado006.datos.vinculosLocalesInvalidos = Number(invalidLocalMaster.total);
+  }
+
+  estado006.datosValidos = estado006.datos.funcionalidadesCatalogoMaestro === 1
+    && estado006.datos.planesConCatalogoMaestro === 2
+    && estado006.datos.vinculosDuplicados === 0
+    && estado006.datos.referenciasMaestrasInvalidas === 0
+    && estado006.datos.vinculosLocalesInvalidos === 0;
+
+  return estado006;
+}
+
+function inspect006State(estado006) {
+  console.log('Estado previo detectado para 006_catalogo_maestro.sql:');
+  console.log(JSON.stringify(estado006, null, 2));
+}
+
+function decide006Action(estado006) {
+  const complete = estado006.estructuraCompleta && estado006.datosValidos;
+  if (estado006.migracion006Registrada) {
+    return complete ? 'continuar' : 'detener';
+  }
+  return complete ? 'registrar' : 'recuperar';
+}
+
+async function missingRequirementElements(connection, file) {
+  const requirements = migrationRequirements[file] || {};
+  const missing = [];
+  for (const [table, columns] of Object.entries(requirements.columns || {})) {
+    for (const column of columns) {
+      if (!await hasColumns(connection, table, [column])) missing.push(`columna ${table}.${column}`);
+    }
+  }
+  for (const [table, name, columns, unique] of requirements.indexes || []) {
+    if (!await hasIndex(connection, table, name, columns, unique)) missing.push(`indice ${table}.${name}`);
+  }
+  for (const relation of requirements.foreignKeyConstraints || []) {
+    const [table, name] = relation;
+    if (!await hasForeignKeyConstraint(connection, ...relation)) {
+      missing.push(`restriccion ${table}.${name}`);
+    }
+  }
+  return missing;
+}
+
 function isExistingStructureError(error) {
   return [
     'ER_DUP_FIELDNAME',
@@ -385,19 +655,31 @@ async function main() {
 
     for (const file of files) {
       const [recorded] = await connection.query('SELECT nombre FROM schema_migrations WHERE nombre=?', [file]);
+      let estado006 = null;
       if (file === '004_multitienda_base.sql') {
         await inspect004State(connection, recorded.length > 0);
       }
+      if (file === '006_catalogo_maestro.sql') {
+        estado006 = await read006State(connection, recorded.length > 0);
+        inspect006State(estado006);
+        console.log(`Decision para 006_catalogo_maestro.sql: ${decide006Action(estado006)}.`);
+      }
       if (recorded.length) {
-        if (['004_multitienda_base.sql', '005_planes_suscripciones.sql'].includes(file)
-          && !await requirementsSatisfied(connection, file)) {
+        const registeredMigrationIsIncomplete = file === '006_catalogo_maestro.sql'
+          ? decide006Action(estado006) === 'detener'
+          : ['004_multitienda_base.sql', '005_planes_suscripciones.sql'].includes(file)
+            && !await requirementsSatisfied(connection, file);
+        if (registeredMigrationIsIncomplete) {
           throw new Error(`La migracion ${file} figura en schema_migrations, pero su estructura o sus datos estan incompletos. No se aplicaron cambios adicionales.`);
         }
         console.log(`Migracion ya registrada: ${file}`);
         continue;
       }
 
-      if (await requirementsSatisfied(connection, file)) {
+      const existingMigrationIsComplete = file === '006_catalogo_maestro.sql'
+        ? decide006Action(estado006) === 'registrar'
+        : await requirementsSatisfied(connection, file);
+      if (existingMigrationIsComplete) {
         await connection.query('INSERT INTO schema_migrations (nombre) VALUES (?)', [file]);
         console.log(`Migracion existente registrada sin repetir cambios: ${file}`);
         continue;
@@ -415,7 +697,7 @@ async function main() {
           console.log('Datos multi-tienda validados antes de crear indices y restricciones.');
         }
 
-        const element = file === '004_multitienda_base.sql'
+        const element = ['004_multitienda_base.sql', '006_catalogo_maestro.sql'].includes(file)
           ? structureElementFromStatement(statement)
           : null;
         if (element && await structureElementExists(connection, element)) {
@@ -423,17 +705,31 @@ async function main() {
           continue;
         }
 
+        if (file === '006_catalogo_maestro.sql' && element?.type === 'restriccion') {
+          await validateCatalogForeignKey(
+            connection,
+            element,
+            `Paso ${index + 1}/${statements.length} (${element.table}.${element.name})`
+          );
+        }
+
         try {
+          if (element) {
+            console.log(`Paso ${index + 1}/${statements.length}: creando ${element.type} ${element.table}.${element.name}.`);
+          }
           await connection.query(statement);
         } catch (error) {
-          if (isExistingStructureError(error)) {
+          if (isExistingStructureError(error) && element && await structureElementExists(connection, element)) {
             console.log(`Paso ${index + 1}/${statements.length}: elemento existente; se verificara al finalizar.`);
             continue;
           }
           const description = element
             ? `${element.type} ${element.table}.${element.name}`
             : statement.replace(/\s+/g, ' ').trim().slice(0, 100);
-          throw new Error(`Fallo ${file} en el paso ${index + 1}/${statements.length} (${description}): ${error.message}`);
+          throw new Error(
+            `Fallo ${file} en el paso ${index + 1}/${statements.length} (${description}). `
+            + `MySQL ${error.code || 'ERROR'}: ${error.message}`
+          );
         }
       }
 
@@ -441,8 +737,20 @@ async function main() {
         await validateMultitenantData(connection);
       }
 
-      if (!await requirementsSatisfied(connection, file)) {
-        throw new Error(`La migracion ${file} termino sin completar la estructura esperada.`);
+      if (file === '006_catalogo_maestro.sql') {
+        estado006 = await read006State(connection, false);
+        console.log('Estado final validado para 006_catalogo_maestro.sql:');
+        console.log(JSON.stringify(estado006, null, 2));
+      }
+      const migrationCompleted = file === '006_catalogo_maestro.sql'
+        ? estado006.estructuraCompleta && estado006.datosValidos
+        : await requirementsSatisfied(connection, file);
+      if (!migrationCompleted) {
+        const missing = await missingRequirementElements(connection, file);
+        throw new Error(
+          `La migracion ${file} termino sin completar la estructura o validacion esperada. `
+          + `Elementos faltantes: ${missing.length ? missing.join(', ') : 'ninguno; revise datos y configuracion de la migracion'}.`
+        );
       }
       await connection.query('INSERT INTO schema_migrations (nombre) VALUES (?)', [file]);
       console.log(`Migracion aplicada: ${file}`);

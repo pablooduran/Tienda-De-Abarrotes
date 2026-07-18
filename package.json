@@ -13,17 +13,21 @@
     "db:seed-demo": "node scripts/seed-demo.js",
     "db:check-multitenant": "node scripts/check-multitenant.js",
     "db:check-subscriptions": "node scripts/check-subscriptions.js",
+    "db:check-master-catalog": "node scripts/check-master-catalog.js",
     "test:tenant-isolation": "node scripts/test-tenant-isolation.js",
     "test:admin-management": "node scripts/test-admin-management.js",
-    "test:subscriptions": "node scripts/test-subscriptions.js"
+    "test:subscriptions": "node scripts/test-subscriptions.js",
+    "test:master-catalog": "node scripts/test-master-catalog.js"
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",
     "dotenv": "^16.4.5",
+    "exceljs": "^4.4.0",
     "express": "^4.19.2",
     "express-mysql-session": "^3.0.3",
     "express-session": "^1.18.0",
     "helmet": "^7.1.0",
+    "multer": "^2.2.0",
     "mysql2": "^3.11.0"
   },
   "devDependencies": {

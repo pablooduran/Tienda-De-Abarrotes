@@ -188,6 +188,7 @@ function applyReadOnlyUi() {
     '#view form:not(#reportForm) button[type="submit"]',
     '#modalRoot form button[type="submit"]',
     '#addProduct',
+    '#addFromCatalog',
     '[data-edit]',
     '[data-delete]',
     '[data-restore-client]',
@@ -777,6 +778,200 @@ async function openProductModal(row = {}) {
   } catch (error) { showError(error.message); }
 }
 
+function suggestedLocalCategory(masterCategory) {
+  const normalized = String(masterCategory || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toUpperCase();
+  return state.categorias.includes(normalized) ? normalized : 'OTROS';
+}
+
+async function openMasterCatalogPicker() {
+  const picker = { page: 1, pages: 1, rows: [], categories: [], brands: [], selected: new Map() };
+  modalRoot.innerHTML = `
+    <div class="modal-backdrop">
+      <div class="modal modal-wide catalog-picker-modal">
+        <h3>Agregar desde catálogo</h3>
+        <div class="modal-body catalog-picker-layout">
+          <section class="catalog-browser">
+            <div class="catalog-picker-filters">
+              <label>Buscar<input id="catalogPickerSearch" type="search" placeholder="Nombre, marca o código"></label>
+              <label>Categoría<select id="catalogPickerCategory"><option value="">Todas</option></select></label>
+              <label>Marca<select id="catalogPickerBrand"><option value="">Todas</option></select></label>
+            </div>
+            <div id="catalogPickerResults" class="catalog-picker-results"></div>
+            <div class="catalog-picker-pagination"><button type="button" class="secondary" id="catalogPickerPrevious">Anterior</button><span id="catalogPickerPage">Página 1</span><button type="button" class="secondary" id="catalogPickerNext">Siguiente</button></div>
+          </section>
+          <section class="catalog-selection">
+            <div class="panel-title"><div><h4>Productos seleccionados</h4><p class="hint">Completa precio, stock y organización local.</p></div><strong id="catalogSelectedCount">0</strong></div>
+            <div id="catalogSelectedProducts" class="catalog-selected-products"><p class="muted">Todavía no seleccionaste productos.</p></div>
+          </section>
+          <p id="catalogPickerError" class="text-danger wide" hidden></p>
+        </div>
+        <div class="modal-actions"><button type="button" class="secondary" data-modal-cancel>Cancelar</button><button type="button" id="catalogAddSelected">Agregar al inventario</button></div>
+      </div>
+    </div>`;
+  const root = modalRoot;
+  const search = root.querySelector('#catalogPickerSearch');
+  const category = root.querySelector('#catalogPickerCategory');
+  const brand = root.querySelector('#catalogPickerBrand');
+  const results = root.querySelector('#catalogPickerResults');
+  const selectedTarget = root.querySelector('#catalogSelectedProducts');
+  const pickerError = root.querySelector('#catalogPickerError');
+  const showPickerError = (text = '') => {
+    pickerError.textContent = text;
+    pickerError.hidden = !text;
+  };
+
+  const captureSelectedConfiguration = () => {
+    selectedTarget.querySelectorAll('[data-master-config]').forEach((card) => {
+      const product = picker.selected.get(Number(card.dataset.masterConfig));
+      if (!product) return;
+      product.localConfig = {
+        nombreLocal: card.querySelector('[name="nombreLocal"]').value,
+        categoriaLocal: card.querySelector('[name="categoriaLocal"]').value,
+        idProveedor: card.querySelector('[name="idProveedor"]').value,
+        precioCompra: card.querySelector('[name="precioCompra"]').value,
+        precioVenta: card.querySelector('[name="precioVenta"]').value,
+        stockInicial: card.querySelector('[name="stockInicial"]').value,
+        stockMinimo: card.querySelector('[name="stockMinimo"]').value,
+        unidadesPorPaquete: card.querySelector('[name="unidadesPorPaquete"]').value,
+        permiteVentaPorUnidad: card.querySelector('[name="permiteVentaPorUnidad"]').checked,
+        permiteVentaPorPaquete: card.querySelector('[name="permiteVentaPorPaquete"]').checked
+      };
+    });
+  };
+
+  const renderSelected = () => {
+    captureSelectedConfiguration();
+    root.querySelector('#catalogSelectedCount').textContent = String(picker.selected.size);
+    if (!picker.selected.size) {
+      selectedTarget.innerHTML = '<p class="muted">Todavía no seleccionaste productos.</p>';
+      return;
+    }
+    selectedTarget.innerHTML = [...picker.selected.values()].map((product) => {
+      const config = product.localConfig || {
+        nombreLocal: product.nombre,
+        categoriaLocal: suggestedLocalCategory(product.categoriaMaestra),
+        idProveedor: '',
+        precioCompra: '0',
+        precioVenta: '',
+        stockInicial: '0',
+        stockMinimo: '5',
+        unidadesPorPaquete: String(Number(product.unidadesPorPaquete || 1)),
+        permiteVentaPorUnidad: Boolean(product.permiteVentaPorUnidad),
+        permiteVentaPorPaquete: Boolean(product.permiteVentaPorPaquete)
+      };
+      return `
+      <article class="catalog-selected-item" data-master-config="${product.idProductoMaestro}">
+        <div class="catalog-selected-heading"><div><strong>${escapeHtml(product.nombre)}</strong><span>${escapeHtml(product.marca || 'Sin marca')} · ${escapeHtml(product.presentacion || 'Sin presentación')}</span></div><button type="button" class="small danger" data-remove-master="${product.idProductoMaestro}">Quitar</button></div>
+        <div class="catalog-config-grid">
+          <label>Nombre local<input name="nombreLocal" required value="${escapeHtml(config.nombreLocal)}"></label>
+          <label>Categoría local<select name="categoriaLocal">${categoryOptions(config.categoriaLocal)}</select></label>
+          <label>Proveedor<select name="idProveedor">${options(state.proveedores, 'idProveedor', 'nombre', 'Sin proveedor', config.idProveedor)}</select></label>
+          <label>Precio de compra<input name="precioCompra" type="number" min="0" step="0.01" value="${escapeHtml(config.precioCompra)}" required></label>
+          <label>Precio de venta<input name="precioVenta" type="number" min="0.01" step="0.01" value="${escapeHtml(config.precioVenta)}" required></label>
+          <label>Stock inicial (unidades)<input name="stockInicial" type="number" min="0" step="1" value="${escapeHtml(config.stockInicial)}" required></label>
+          <label>Stock mínimo (unidades)<input name="stockMinimo" type="number" min="1" step="1" value="${escapeHtml(config.stockMinimo)}" required></label>
+          <label>Unidades por paquete<input name="unidadesPorPaquete" type="number" min="1" step="1" value="${escapeHtml(config.unidadesPorPaquete)}" required></label>
+          <label class="check"><input name="permiteVentaPorUnidad" type="checkbox" ${config.permiteVentaPorUnidad ? 'checked' : ''}> Vender por unidad</label>
+          <label class="check"><input name="permiteVentaPorPaquete" type="checkbox" ${config.permiteVentaPorPaquete ? 'checked' : ''}> Vender por paquete</label>
+        </div>
+      </article>`;
+    }).join('');
+    selectedTarget.querySelectorAll('[data-remove-master]').forEach((button) => button.addEventListener('click', () => {
+      picker.selected.delete(Number(button.dataset.removeMaster));
+      renderSelected();
+      renderResults();
+    }));
+  };
+
+  const renderResults = () => {
+    results.innerHTML = picker.rows.length ? picker.rows.map((product) => {
+      const chosen = picker.selected.has(Number(product.idProductoMaestro));
+      const unavailable = Boolean(product.agregadoEnTienda);
+      const content = product.contenidoCantidad ? `${Number(product.contenidoCantidad)} ${product.contenidoUnidad || ''}` : '';
+      return `<article class="catalog-master-result">
+        <div><strong>${escapeHtml(product.nombre)}</strong><span>${escapeHtml(product.marca || 'Sin marca')} · ${escapeHtml(product.categoriaMaestra || 'Sin categoría')}</span><small>${escapeHtml([product.presentacion, content, product.codigoBarras].filter(Boolean).join(' · ') || 'Sin datos adicionales')}</small></div>
+        <button type="button" class="small ${chosen ? 'secondary' : ''}" data-select-master="${product.idProductoMaestro}" ${unavailable || chosen ? 'disabled' : ''}>${unavailable ? 'Ya agregado' : chosen ? 'Seleccionado' : 'Agregar'}</button>
+      </article>`;
+    }).join('') : '<p class="muted">No hay coincidencias.</p>';
+    root.querySelector('#catalogPickerPage').textContent = `Página ${picker.page} de ${picker.pages}`;
+    root.querySelector('#catalogPickerPrevious').disabled = picker.page <= 1;
+    root.querySelector('#catalogPickerNext').disabled = picker.page >= picker.pages;
+    results.querySelectorAll('[data-select-master]').forEach((button) => button.addEventListener('click', () => {
+      const product = picker.rows.find((row) => String(row.idProductoMaestro) === button.dataset.selectMaster);
+      if (product) picker.selected.set(Number(product.idProductoMaestro), product);
+      renderSelected();
+      renderResults();
+    }));
+  };
+
+  const loadRows = async (page = 1) => {
+    const query = new URLSearchParams({ page: String(page), limit: '20' });
+    if (search.value.trim()) query.set('q', search.value.trim());
+    if (category.value) query.set('idCategoriaMaestra', category.value);
+    if (brand.value) query.set('idMarcaMaestra', brand.value);
+    const response = await api(`/api/catalogo-maestro?${query}`);
+    picker.rows = response.rows;
+    picker.page = response.page;
+    picker.pages = response.pages;
+    renderResults();
+  };
+
+  try {
+    [picker.categories, picker.brands] = await Promise.all([
+      api('/api/catalogo-maestro/categorias'),
+      api('/api/catalogo-maestro/marcas')
+    ]);
+    category.innerHTML = options(picker.categories, 'idCategoriaMaestra', 'nombre', 'Todas');
+    brand.innerHTML = options(picker.brands, 'idMarcaMaestra', 'nombre', 'Todas');
+    await loadRows(1);
+  } catch (error) {
+    modalRoot.innerHTML = '';
+    return showError(error.message);
+  }
+
+  let searchTimer;
+  search.addEventListener('input', () => {
+    window.clearTimeout(searchTimer);
+    searchTimer = window.setTimeout(() => loadRows(1).catch((error) => showPickerError(error.message)), 250);
+  });
+  [category, brand].forEach((filter) => filter.addEventListener('change', () => loadRows(1).catch((error) => showPickerError(error.message))));
+  root.querySelector('#catalogPickerPrevious').addEventListener('click', () => loadRows(picker.page - 1).catch((error) => showPickerError(error.message)));
+  root.querySelector('#catalogPickerNext').addEventListener('click', () => loadRows(picker.page + 1).catch((error) => showPickerError(error.message)));
+  root.querySelector('[data-modal-cancel]').addEventListener('click', () => { modalRoot.innerHTML = ''; });
+  root.querySelector('#catalogAddSelected').addEventListener('click', async () => {
+    if (!picker.selected.size) return showPickerError('Selecciona al menos un producto maestro.');
+    const invalidInput = selectedTarget.querySelector(':invalid');
+    if (invalidInput) {
+      invalidInput.reportValidity();
+      return showPickerError('Revisa los datos comerciales de los productos seleccionados.');
+    }
+    showPickerError();
+    const items = [...selectedTarget.querySelectorAll('[data-master-config]')].map((card) => ({
+      idProductoMaestro: Number(card.dataset.masterConfig),
+      nombreLocal: card.querySelector('[name="nombreLocal"]').value.trim(),
+      categoriaLocal: card.querySelector('[name="categoriaLocal"]').value,
+      idProveedor: card.querySelector('[name="idProveedor"]').value || null,
+      precioCompra: Number(card.querySelector('[name="precioCompra"]').value),
+      precioVenta: Number(card.querySelector('[name="precioVenta"]').value),
+      stockInicial: Number(card.querySelector('[name="stockInicial"]').value),
+      stockMinimo: Number(card.querySelector('[name="stockMinimo"]').value),
+      unidadesPorPaquete: Number(card.querySelector('[name="unidadesPorPaquete"]').value),
+      permiteVentaPorUnidad: card.querySelector('[name="permiteVentaPorUnidad"]').checked,
+      permiteVentaPorPaquete: card.querySelector('[name="permiteVentaPorPaquete"]').checked,
+      unidadMedida: 'unidad',
+      activo: true
+    }));
+    try {
+      const result = await api('/api/catalogo-maestro/agregar', { method: 'POST', body: JSON.stringify({ items }) });
+      modalRoot.innerHTML = '';
+      await showSuccess(result.message);
+      await loadView('productos');
+    } catch (error) {
+      showPickerError(error.message);
+    }
+  });
+}
+
 function filterProductsLocal() {
   const q = normalizeSearch(document.getElementById('productSearch')?.value || '');
   const categoria = document.getElementById('productCategory')?.value || '';
@@ -817,6 +1012,7 @@ async function productos() {
   view.innerHTML = `
     <div class="panel toolbar">
       <button id="addProduct">Añadir producto</button>
+      <button id="addFromCatalog" class="secondary">Agregar desde catálogo</button>
       <label>Buscar<input id="productSearch" placeholder="Buscar producto"></label>
       <label>Categoría<select id="productCategory"><option value="">Todas</option>${categoryOptions()}</select></label>
       <label>Proveedor<select id="productProvider">${options(state.proveedores, 'idProveedor', 'nombre', 'Todos')}</select></label>
@@ -826,6 +1022,7 @@ async function productos() {
     <div class="panel" id="productTable"></div>`;
   wireUppercase(view);
   document.getElementById('addProduct').addEventListener('click', () => openProductModal());
+  document.getElementById('addFromCatalog').addEventListener('click', openMasterCatalogPicker);
   ['productSearch', 'productCategory', 'productProvider', 'productLowStock', 'productSort'].forEach((id) => {
     document.getElementById(id).addEventListener('input', filterProductsLocal);
     document.getElementById(id).addEventListener('change', filterProductsLocal);

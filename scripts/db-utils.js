@@ -63,7 +63,16 @@ async function hasForeignKey(connection, table, column, referencedTable, referen
   return Number(rows[0].total) > 0;
 }
 
-async function hasForeignKeyConstraint(connection, table, constraintName, columns, referencedTable, referencedColumns) {
+async function hasForeignKeyConstraint(
+  connection,
+  table,
+  constraintName,
+  columns,
+  referencedTable,
+  referencedColumns,
+  expectedUpdateRule,
+  expectedDeleteRule
+) {
   const [rows] = await connection.query(
     `SELECT COLUMN_NAME, REFERENCED_TABLE_NAME, REFERENCED_COLUMN_NAME
      FROM information_schema.KEY_COLUMN_USAGE
@@ -72,9 +81,21 @@ async function hasForeignKeyConstraint(connection, table, constraintName, column
     [process.env.DB_NAME, table, constraintName]
   );
   if (rows.length !== columns.length) return false;
-  return rows.every((row, index) => row.COLUMN_NAME === columns[index]
-    && row.REFERENCED_TABLE_NAME === referencedTable
-    && row.REFERENCED_COLUMN_NAME === referencedColumns[index]);
+  const identifier = (value) => String(value || '').toLocaleLowerCase('en-US');
+  const columnsMatch = rows.every((row, index) => identifier(row.COLUMN_NAME) === identifier(columns[index])
+    && identifier(row.REFERENCED_TABLE_NAME) === identifier(referencedTable)
+    && identifier(row.REFERENCED_COLUMN_NAME) === identifier(referencedColumns[index]));
+  if (!columnsMatch) return false;
+  if (!expectedUpdateRule && !expectedDeleteRule) return true;
+  const [rules] = await connection.query(
+    `SELECT UPDATE_RULE, DELETE_RULE
+     FROM information_schema.REFERENTIAL_CONSTRAINTS
+     WHERE CONSTRAINT_SCHEMA=? AND TABLE_NAME=? AND CONSTRAINT_NAME=?`,
+    [process.env.DB_NAME, table, constraintName]
+  );
+  if (rules.length !== 1) return false;
+  return (!expectedUpdateRule || identifier(rules[0].UPDATE_RULE) === identifier(expectedUpdateRule))
+    && (!expectedDeleteRule || identifier(rules[0].DELETE_RULE) === identifier(expectedDeleteRule));
 }
 
 async function hasIndex(connection, table, indexName, columns, unique = false) {
