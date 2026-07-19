@@ -12,6 +12,16 @@ const {
   operationKey,
   stockError
 } = require('../services/stock-movement-service');
+const {
+  applyLotExit,
+  assertReconciled,
+  createLotEntries,
+  lockLots,
+  lockProduct,
+  normalizeLotEntries,
+  prepareLotExit
+} = require('../services/lot-service');
+const { formatLocalDateTime } = require('../utils/local-datetime');
 
 const router = express.Router();
 const ADJUSTMENT_WINDOW_MS = 10 * 60 * 1000;
@@ -199,12 +209,7 @@ router.post('/productos/:idProducto/ajustar-stock', requirePlanFeature('ajuste_s
   const connection = await pool.getConnection();
   try {
     await connection.beginTransaction();
-    const [products] = await connection.query(
-      `SELECT idProducto, nombre, stockUnidadesTotal FROM producto
-       WHERE idProducto=? AND idTienda=? AND activo=1 FOR UPDATE`,
-      [idProducto, idTienda]
-    );
-    if (!products.length) throw stockError(404, 'Producto no encontrado.');
+    const product = await lockProduct(connection, idTienda, idProducto);
     const [existing] = await connection.query(
       `SELECT idMovimientoStock, stockAnterior, cantidad, stockPosterior
        FROM movimientoStock WHERE idTienda=? AND claveOperacion=? FOR UPDATE`,
@@ -215,9 +220,33 @@ router.post('/productos/:idProducto/ajustar-stock', requirePlanFeature('ajuste_s
       return res.json({ message: 'El ajuste ya habia sido registrado.', repetida: true, ...existing[0] });
     }
 
-    const stockAnterior = Number(products[0].stockUnidadesTotal);
+    const stockAnterior = Number(product.stockUnidadesTotal);
     const diferencia = nuevoStock - stockAnterior;
     if (diferencia === 0) throw stockError(400, 'El nuevo stock debe ser diferente del stock actual.', 'ZERO_STOCK_ADJUSTMENT');
+    const operationDate = new Date();
+    const operationDateTime = formatLocalDateTime(operationDate);
+    let lotExit = null;
+    let lotEntries = null;
+    if (Number(product.controlaLotes)) {
+      const lotMode = String(req.body.modoLotes || '').trim();
+      const expectedMode = diferencia > 0 ? 'ajuste_positivo' : 'ajuste_negativo';
+      if (lotMode !== expectedMode) {
+        throw stockError(409,
+          'Este producto controla lotes. Debe registrar un ajuste por lotes de forma explicita.',
+          'LOT_ADJUSTMENT_REQUIRED');
+      }
+      if (diferencia > 0) {
+        const currentLots = await lockLots(connection, idTienda, idProducto, product);
+        assertReconciled(product, currentLots);
+        lotEntries = normalizeLotEntries(req.body.lotes, {
+          requiredTotal: diferencia,
+          controlsExpiration: Number(product.controlaVencimiento) === 1,
+          operationDate
+        });
+      } else {
+        lotExit = await prepareLotExit(connection, { idTienda, product, cantidad: Math.abs(diferencia) });
+      }
+    }
     const [updated] = await connection.query(
       `UPDATE producto SET stockUnidadesTotal=?, stock=?
        WHERE idProducto=? AND idTienda=? AND activo=1`,
@@ -239,6 +268,30 @@ router.post('/productos/:idProducto/ajustar-stock', requirePlanFeature('ajuste_s
       referenciaTipo: 'ajuste_manual',
       referenciaId: idProducto,
       claveOperacion: key,
+      idAdministrador,
+      creadoEn: operationDateTime
+    });
+    if (lotEntries) {
+      await createLotEntries(connection, {
+        idTienda,
+        idProducto,
+        entries: lotEntries,
+        origen: 'ajuste_positivo',
+        operation: `adjustment:${requestKey}`,
+        detailIndex: 1,
+        creadoEn: operationDateTime,
+        idMovimientoStock,
+        idAdministrador
+      });
+    }
+    await applyLotExit(connection, {
+      prepared: lotExit,
+      idTienda,
+      idProducto,
+      idMovimientoStock,
+      operation: `adjustment:${requestKey}`,
+      detailIndex: 1,
+      creadoEn: operationDateTime,
       idAdministrador
     });
     await connection.commit();

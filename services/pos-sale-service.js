@@ -5,6 +5,11 @@ const {
   operationKey,
   stockError
 } = require('./stock-movement-service');
+const {
+  applyLotExit,
+  microsToDecimal,
+  prepareLotExit
+} = require('./lot-service');
 const { formatLocalDate, formatLocalDateTime } = require('../utils/local-datetime');
 
 const SALE_PRESENTATIONS = new Set(['unidad', 'paquete']);
@@ -97,7 +102,8 @@ async function lockAndPriceItems(connection, idTienda, rawItems) {
     const [rows] = await connection.query(
       `SELECT idProducto, nombre, codigoBarras, precioVenta, precioVentaPaquete,
               unidadesPorPaquete, ultimoPrecioCompra, stockUnidadesTotal,
-              permiteVentaPorUnidad, permiteVentaPorPaquete, activo
+              permiteVentaPorUnidad, permiteVentaPorPaquete, activo,
+              controlaLotes, controlaVencimiento, lotesActivadosEn
        FROM producto
        WHERE idProducto=? AND idTienda=? AND activo=1
        FOR UPDATE`,
@@ -125,15 +131,26 @@ async function lockAndPriceItems(connection, idTienda, rawItems) {
       ? unitPriceCents * Number(product.unidadesPorPaquete)
       : cents(product.precioVentaPaquete, `Precio por paquete de ${product.nombre}`, { allowZero: false });
     const priceCents = item.presentacion === 'paquete' ? packagePriceCents : unitPriceCents;
-    const costUnitCents = cents(product.ultimoPrecioCompra, `Costo de ${product.nombre}`);
+    const lotExit = await prepareLotExit(connection, { idTienda, product, cantidad: units });
+    const costUnitCents = lotExit
+      ? (lotExit.allCostsKnown ? Math.round(lotExit.totalCostCents / units) : 0)
+      : cents(product.ultimoPrecioCompra, `Costo de ${product.nombre}`);
     const subtotalCents = ensureMoneyRange(priceCents * item.cantidad, `Subtotal de ${product.nombre}`);
-    const subtotalCostCents = ensureMoneyRange(costUnitCents * units, `Costo de ${product.nombre}`);
+    const subtotalCostCents = ensureMoneyRange(
+      lotExit ? lotExit.totalCostCents : costUnitCents * units,
+      `Costo de ${product.nombre}`
+    );
     locked.push({
       ...item,
       product,
+      lotExit,
       units,
       priceCents,
-      costSource: costUnitCents > 0 ? 'real' : 'desconocido',
+      costUnitValue: lotExit
+        ? (lotExit.allCostsKnown ? microsToDecimal(lotExit.unitCostMicros) : '0.000000')
+        : decimal(costUnitCents),
+      costSource: lotExit ? (lotExit.allCostsKnown ? 'real' : 'desconocido')
+        : (costUnitCents > 0 ? 'real' : 'desconocido'),
       subtotalCents,
       subtotalCostCents
     });
@@ -274,7 +291,7 @@ async function registerSale({ idTienda, idAdministrador, body, legacyMode = fals
           subtotalCosto, ganancia, origenCosto, presentacionVenta, cantidadEquivalenteUnidades)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [idTienda, idVenta, item.product.idProducto, item.cantidad, decimal(item.priceCents),
-          decimal(cents(item.product.ultimoPrecioCompra, 'Costo del producto')), decimal(item.subtotalCents),
+          item.costUnitValue, decimal(item.subtotalCents),
           decimal(item.subtotalCostCents), decimal(item.gainCents), item.costSource, item.presentacion, item.units]
       );
       const stockAnterior = Number(item.product.stockUnidadesTotal);
@@ -285,7 +302,7 @@ async function registerSale({ idTienda, idAdministrador, body, legacyMode = fals
         [stockPosterior, stockPosterior, item.product.idProducto, idTienda, stockAnterior]
       );
       if (!stockUpdate.affectedRows) throw stockError(409, 'El stock cambio durante la venta. Revise el carrito.');
-      await insertStockMovement(connection, {
+      const idMovimientoStock = await insertStockMovement(connection, {
         idTienda,
         idProducto: item.product.idProducto,
         tipoMovimiento: 'salida',
@@ -298,6 +315,17 @@ async function registerSale({ idTienda, idAdministrador, body, legacyMode = fals
         motivo: balanceCents > 0 ? 'Salida por venta con saldo pendiente.' : 'Salida por venta pagada.',
         idDetalleVenta: detail.insertId,
         claveOperacion: movementKey('detalle-venta', detail.insertId),
+        idAdministrador,
+        creadoEn: operationDateTime
+      });
+      await applyLotExit(connection, {
+        prepared: item.lotExit,
+        idTienda,
+        idProducto: item.product.idProducto,
+        idMovimientoStock,
+        operation: `sale:${requestKey}`,
+        detailIndex: item.index + 1,
+        creadoEn: operationDateTime,
         idAdministrador
       });
     }

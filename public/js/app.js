@@ -5,19 +5,21 @@ const menu = document.getElementById('menu');
 const message = document.getElementById('message');
 const modalRoot = document.getElementById('modalRoot');
 
-let state = { productos: [], clientes: [], proveedores: [], fiados: [], ventas: [], categorias: [], context: null };
+let state = { productos: [], clientes: [], proveedores: [], fiados: [], ventas: [], categorias: [], context: null, lotAccess: null };
 let debtFocus = null;
 let posCart = [];
 let posOperationKey = null;
 let posSearchTimer = null;
 let lastBarcodeScan = { value: '', at: 0 };
 let inventoryUi = { activeTab: 'resumen', rankingMode: 'ingresos', movementClass: '', data: {} };
+let lotUi = { page: 1, pages: 1, activeTab: 'lotes' };
 
 const sections = [
   ['inicio', 'Inicio', 'Resumen general del negocio'],
   ['productos', 'Productos', 'Catálogo, stock y presentaciones'],
   ['movimientosStock', 'Movimientos de stock', 'Entradas, salidas y ajustes del inventario'],
   ['inventarioInteligente', 'Inteligencia de inventario', 'Alertas, rotación y decisiones de abastecimiento'],
+  ['lotesVencimientos', 'Lotes y vencimientos', 'Trazabilidad, alertas y stock vendible'],
   ['clientes', 'Clientes', 'Registro de clientes'],
   ['proveedores', 'Proveedores', 'Registro de proveedores'],
   ['ventas', 'Punto de venta', 'Cobro rápido, pagos mixtos y comprobantes'],
@@ -80,9 +82,10 @@ function validatePhoneValue(value) {
 
 function modal({ title: modalTitle, body, confirmText = 'Aceptar', cancelText = '', danger = false, wide = false, preserveOnConfirm = false, onOpen = null }) {
   return new Promise((resolve) => {
+    const returnFocus = document.activeElement;
     modalRoot.innerHTML = `
       <div class="modal-backdrop">
-        <div class="modal ${wide ? 'modal-wide' : ''}">
+        <div class="modal ${wide ? 'modal-wide' : ''}" role="dialog" aria-modal="true" aria-label="${escapeHtml(modalTitle)}">
           <h3>${escapeHtml(modalTitle)}</h3>
           <div class="modal-body">${body}</div>
           <div class="modal-actions">
@@ -95,6 +98,7 @@ function modal({ title: modalTitle, body, confirmText = 'Aceptar', cancelText = 
     if (typeof onOpen === 'function') onOpen(modalRoot);
     const close = (value) => {
       modalRoot.innerHTML = '';
+      returnFocus?.focus?.();
       resolve(value);
     };
     modalRoot.querySelector('[data-modal-confirm]').addEventListener('click', () => {
@@ -103,8 +107,18 @@ function modal({ title: modalTitle, body, confirmText = 'Aceptar', cancelText = 
     });
     const cancel = modalRoot.querySelector('[data-modal-cancel]');
     if (cancel) cancel.addEventListener('click', () => close(false));
+    modalRoot.querySelector('button, input, select, textarea')?.focus();
   });
 }
+
+document.addEventListener('keydown', (event) => {
+  if (event.key !== 'Escape' || !modalRoot.firstElementChild) return;
+  const close = modalRoot.querySelector('[data-modal-cancel], [data-modal-confirm]');
+  if (close) {
+    event.preventDefault();
+    close.click();
+  }
+});
 function showError(text) { return modal({ title: 'No se pudo completar', body: `<p>${escapeHtml(text)}</p>`, confirmText: 'Entendido', danger: true }); }
 function showSuccess(text) { return modal({ title: 'Listo', body: `<p>${escapeHtml(text)}</p>`, confirmText: 'Aceptar' }); }
 function confirmAction(text, danger = false) { return modal({ title: 'Confirmar acción', body: `<p>${escapeHtml(text)}</p>`, confirmText: 'Confirmar', cancelText: 'Cancelar', danger }); }
@@ -164,7 +178,12 @@ async function api(url, options = {}) {
   });
   if (response.status === 401) window.location.href = '/login.html';
   const data = await response.json().catch(() => ({}));
-  if (!response.ok) throw new Error(data.error || 'No se pudo completar la operación.');
+  if (!response.ok) {
+    const error = new Error(data.error || 'No se pudo completar la operación.');
+    error.code = data.code || null;
+    error.status = response.status;
+    throw error;
+  }
   return data;
 }
 function formData(form) { return Object.fromEntries(new FormData(form).entries()); }
@@ -214,6 +233,7 @@ function applyReadOnlyUi() {
     '[data-finance-write]',
     '[data-inventory-write]',
     '[data-inventory-product-config]',
+    '[data-lot-write]',
     '#payClientTotal'
   ];
   document.querySelectorAll(selectors.join(',')).forEach((control) => {
@@ -226,7 +246,17 @@ function applyReadOnlyUi() {
 
 async function loadContext() {
   state.context = await api('/api/contexto');
+  state.lotAccess = await api('/api/lotes/acceso').catch(() => ({ productosControlados: 0 }));
   renderSubscriptionContext();
+}
+
+function hasFeature(code) {
+  return Boolean(state.context?.caracteristicas?.includes(code));
+}
+
+function hasLotOperationalAccess() {
+  return ['control_lotes', 'alertas_vencimiento', 'trazabilidad_lotes', 'exportacion_lotes', 'vencimientos_lote']
+    .some(hasFeature) || Number(state.lotAccess?.productosControlados || 0) > 0;
 }
 
 function sectionAllowed(id) {
@@ -235,6 +265,7 @@ function sectionAllowed(id) {
   if (id === 'finanzas') return features.includes('reportes_financieros');
   if (id === 'cierreCaja') return features.includes('cierre_caja');
   if (id === 'inventarioInteligente') return features.includes('inventario_resumen');
+  if (id === 'lotesVencimientos') return hasLotOperationalAccess();
   return true;
 }
 
@@ -281,7 +312,7 @@ async function loadView(id) {
   title.textContent = section[1];
   subtitle.textContent = section[2];
   await refreshCatalogs();
-  const handlers = { inicio, productos, movimientosStock, inventarioInteligente, clientes, proveedores, ventas, compras, historialVentas, pagos, gastos, finanzas, cierreCaja, reportes };
+  const handlers = { inicio, productos, movimientosStock, inventarioInteligente, lotesVencimientos, clientes, proveedores, ventas, compras, historialVentas, pagos, gastos, finanzas, cierreCaja, reportes };
   if (!handlers[id] || !sectionAllowed(id)) return loadView('inicio');
   await handlers[id]();
   applyReadOnlyUi();
@@ -1046,12 +1077,13 @@ function renderProductTable(rows) {
     <tbody>${rows.map((p) => `<tr class="${p.bajoStock ? 'low-stock' : ''}">
       <td>${escapeHtml(p.nombre)}</td><td>${escapeHtml(p.proveedor || 'SIN PROVEEDOR')}</td><td>${escapeHtml(p.categoria)}</td>
       <td>Bs ${money(p.precioVenta)}</td><td>${stockLabel(p)}</td><td>${packageText(p)}</td>
-      <td>${p.bajoStock ? '<span class="badge pendiente">Bajo stock</span>' : '<span class="badge pagado">Normal</span>'}</td>
-      <td class="actions"><button class="small secondary" data-edit="${p.idProducto}">Editar</button><button class="small" data-adjust-stock="${p.idProducto}">Ajustar stock</button><button class="small secondary" data-product-movements="${p.idProducto}">Ver movimientos</button><button class="small danger" data-delete="${p.idProducto}">Ocultar</button></td>
+      <td>${p.bajoStock ? '<span class="badge pendiente">Bajo stock</span>' : '<span class="badge pagado">Normal</span>'}${Number(p.controlaLotes) ? `<span class="lot-control-label">Lotes${Number(p.controlaVencimiento) ? ' y vencimiento' : ''}</span>` : ''}</td>
+      <td class="actions"><button class="small secondary" data-edit="${p.idProducto}">Editar</button><button class="small" data-adjust-stock="${p.idProducto}">Ajustar stock</button><button class="small secondary" data-product-movements="${p.idProducto}">Ver movimientos</button>${Number(p.controlaLotes) || hasFeature('control_lotes') ? `<button class="small secondary" data-lot-config="${p.idProducto}">${Number(p.controlaLotes) ? 'Configurar lotes' : 'Activar lotes'}</button>` : ''}<button class="small danger" data-delete="${p.idProducto}">Ocultar</button></td>
     </tr>`).join('')}</tbody></table></div>`;
   target.querySelectorAll('[data-edit]').forEach((btn) => btn.addEventListener('click', () => openProductModal(state.productos.find((p) => String(p.idProducto) === btn.dataset.edit))));
   target.querySelectorAll('[data-adjust-stock]').forEach((btn) => btn.addEventListener('click', () => openStockAdjustment(state.productos.find((p) => String(p.idProducto) === btn.dataset.adjustStock))));
   target.querySelectorAll('[data-product-movements]').forEach((btn) => btn.addEventListener('click', () => openProductMovements(btn.dataset.productMovements)));
+  target.querySelectorAll('[data-lot-config]').forEach((btn) => btn.addEventListener('click', () => openLotProductConfiguration(state.productos.find((p) => String(p.idProducto) === btn.dataset.lotConfig))));
   target.querySelectorAll('[data-delete]').forEach((btn) => btn.addEventListener('click', async () => {
     if (!await confirmAction('¿Deseas ocultar este producto? Su stock y movimientos se conservarán.', true)) return;
     try {
@@ -1068,6 +1100,7 @@ async function productos() {
       <button id="addProduct">Añadir producto</button>
       <button id="addFromCatalog" class="secondary">Agregar desde catálogo</button>
       <button id="showHiddenProducts" class="secondary">Ver productos ocultos</button>
+      ${hasLotOperationalAccess() ? '<button id="openLots" class="secondary">Lotes y vencimientos</button>' : ''}
       <label>Buscar<input id="productSearch" placeholder="Buscar producto"></label>
       <label>Categoría<select id="productCategory"><option value="">Todas</option>${categoryOptions()}</select></label>
       <label>Proveedor<select id="productProvider">${options(state.proveedores, 'idProveedor', 'nombre', 'Todos')}</select></label>
@@ -1079,6 +1112,7 @@ async function productos() {
   document.getElementById('addProduct').addEventListener('click', () => openProductModal());
   document.getElementById('addFromCatalog').addEventListener('click', openMasterCatalogPicker);
   document.getElementById('showHiddenProducts').addEventListener('click', openHiddenProducts);
+  document.getElementById('openLots')?.addEventListener('click', () => loadView('lotesVencimientos'));
   ['productSearch', 'productCategory', 'productProvider', 'productLowStock', 'productSort'].forEach((id) => {
     document.getElementById(id).addEventListener('input', filterProductsLocal);
     document.getElementById(id).addEventListener('change', filterProductsLocal);
@@ -1153,12 +1187,126 @@ function requestStockAdjustment(product) {
   });
 }
 
+async function requestLotStockAdjustment(product) {
+  const returnFocus = document.activeElement;
+  const snapshot = await api(`/api/productos/${product.idProducto}/lotes-disponibles`);
+  const operationKey = newOperationKey();
+  const expiredStock = snapshot.lotes.filter((lot) => lot.motivoNoVendible === 'vencido')
+    .reduce((sum, lot) => sum + Number(lot.cantidadRestante || 0), 0);
+  const blockedStock = snapshot.lotes.filter((lot) => lot.motivoNoVendible === 'bloqueado')
+    .reduce((sum, lot) => sum + Number(lot.cantidadRestante || 0), 0);
+  return new Promise((resolve) => {
+    modalRoot.innerHTML = `<div class="modal-backdrop"><form class="modal modal-wide" id="lotStockAdjustmentForm" role="dialog" aria-modal="true" aria-labelledby="lotAdjustmentTitle">
+      <h3 id="lotAdjustmentTitle">Ajustar lotes de ${escapeHtml(product.nombre)}</h3><div class="modal-body">
+        <div class="lot-balance-strip"><span>Stock general<strong>${escapeHtml(snapshot.stockGeneral)}</strong></span><span>Stock trazado<strong>${escapeHtml(snapshot.stockTrazado)}</strong></span><span>Stock vendible<strong>${escapeHtml(snapshot.stockVendible)}</strong></span><span>Stock vencido<strong>${escapeHtml(expiredStock)}</strong></span><span>Stock bloqueado<strong>${escapeHtml(blockedStock)}</strong></span></div>
+        <div class="form-grid"><label>Tipo de ajuste<select name="modoLotes"><option value="ajuste_positivo">Agregar stock con nuevos lotes</option><option value="ajuste_negativo">Retirar stock por FEFO/FIFO</option></select></label><label>Cantidad en unidades base<input name="cantidadAjuste" type="number" min="1" step="1" value="1" required></label></div>
+        <div data-positive-lots><div class="purchase-lot-heading"><div><strong>Nuevos lotes</strong><p>La suma debe coincidir con la cantidad agregada.</p></div><button type="button" class="secondary small" data-add-adjustment-lot>Agregar lote</button></div><div class="lot-entry-list" data-adjustment-lot-rows>${lotEntryRow(0, { requiresExpiration: Number(product.controlaVencimiento) === 1, quantity: 1 })}</div><strong data-adjustment-lot-summary></strong></div>
+        <div class="inventory-note" data-negative-note hidden><strong>Salida automática</strong><p>El sistema retirará primero los lotes según ${Number(product.controlaVencimiento) ? 'FEFO' : 'FIFO'}. No puede usarse un conteo objetivo ambiguo.</p></div>
+        <div class="form-grid"><label>Motivo<input name="motivo" minlength="5" maxlength="160" required></label><label>Contraseña actual<input name="password" type="password" autocomplete="current-password" required></label><label class="wide">Observación<textarea name="observacion" maxlength="500" rows="3"></textarea></label></div>
+        <div class="inventory-note" data-adjustment-confirm hidden><strong>Confirme el ajuste</strong><p>El stock general y los lotes se actualizarán en la misma operación.</p></div>
+        <p class="form-error" data-adjustment-error aria-live="polite"></p>
+      </div><div class="modal-actions"><button type="button" class="secondary" data-modal-cancel>Cancelar</button><button type="submit" data-lot-write>Revisar ajuste</button></div>
+    </form></div>`;
+    const form = document.getElementById('lotStockAdjustmentForm');
+    const rows = form.querySelector('[data-adjustment-lot-rows]');
+    let nextIndex = 1;
+    const update = () => {
+      const quantity = Number(form.elements.cantidadAjuste.value || 0);
+      const total = collectLotEntryRows(rows).reduce((sum, entry) => sum + Number(entry.cantidad || 0), 0);
+      const summary = form.querySelector('[data-adjustment-lot-summary]');
+      summary.textContent = `Distribuido: ${total} · requerido: ${quantity}`;
+      summary.classList.toggle('text-danger', total !== quantity);
+      summary.classList.toggle('text-ok', total === quantity);
+    };
+    const wireRow = (row) => {
+      row.querySelectorAll('input').forEach((input) => input.addEventListener('input', update));
+      row.querySelector('[data-remove-lot]').addEventListener('click', () => { row.remove(); update(); });
+    };
+    rows.querySelectorAll('[data-lot-entry]').forEach(wireRow);
+    form.querySelector('[data-add-adjustment-lot]').addEventListener('click', () => {
+      const wrapper = document.createElement('div');
+      wrapper.innerHTML = lotEntryRow(nextIndex++, { requiresExpiration: Number(product.controlaVencimiento) === 1 });
+      const row = wrapper.firstElementChild;
+      rows.appendChild(row);
+      wireRow(row);
+      update();
+    });
+    const setMode = () => {
+      const positive = form.elements.modoLotes.value === 'ajuste_positivo';
+      form.querySelector('[data-positive-lots]').hidden = !positive;
+      form.querySelector('[data-negative-note]').hidden = positive;
+      update();
+    };
+    form.elements.modoLotes.addEventListener('change', setMode);
+    form.elements.cantidadAjuste.addEventListener('input', () => {
+      const entries = rows.querySelectorAll('[data-lot-entry]');
+      if (entries.length === 1) entries[0].querySelector('[name="cantidad"]').value = form.elements.cantidadAjuste.value;
+      update();
+    });
+    form.addEventListener('input', () => {
+      delete form.dataset.confirmed;
+      form.querySelector('[data-adjustment-confirm]').hidden = true;
+      form.querySelector('button[type="submit"]').textContent = 'Revisar ajuste';
+    });
+    const close = (value) => {
+      form.elements.password.value = '';
+      modalRoot.innerHTML = '';
+      returnFocus?.focus?.();
+      resolve(value);
+    };
+    form.querySelector('[data-modal-cancel]').addEventListener('click', () => close(null));
+    form.addEventListener('submit', (event) => {
+      event.preventDefault();
+      const errorTarget = form.querySelector('[data-adjustment-error]');
+      errorTarget.textContent = '';
+      const quantity = Number(form.elements.cantidadAjuste.value);
+      const positive = form.elements.modoLotes.value === 'ajuste_positivo';
+      if (!Number.isInteger(quantity) || quantity <= 0) { errorTarget.textContent = 'La cantidad debe ser un entero mayor a cero.'; return; }
+      if (!positive && quantity > Number(snapshot.stockVendible)) { errorTarget.textContent = 'La cantidad supera el stock vendible disponible.'; return; }
+      const lots = positive ? collectLotEntryRows(rows) : [];
+      if (positive && (!lots.length || lots.some((entry) => !Number.isInteger(entry.cantidad) || entry.cantidad <= 0)
+        || lots.reduce((sum, entry) => sum + entry.cantidad, 0) !== quantity)) {
+        errorTarget.textContent = 'Los nuevos lotes deben sumar exactamente la cantidad agregada.';
+        return;
+      }
+      if (positive && Number(product.controlaVencimiento) && lots.some((entry) => !entry.fechaVencimiento)) {
+        errorTarget.textContent = 'Todos los lotes requieren fecha de vencimiento.';
+        return;
+      }
+      if (form.dataset.confirmed !== 'true') {
+        form.dataset.confirmed = 'true';
+        form.querySelector('[data-adjustment-confirm]').hidden = false;
+        form.querySelector('button[type="submit"]').textContent = 'Registrar ajuste ahora';
+        return;
+      }
+      close({
+        nuevoStock: Number(snapshot.stockGeneral) + (positive ? quantity : -quantity),
+        modoLotes: form.elements.modoLotes.value,
+        lotes: positive ? lots : undefined,
+        motivo: form.elements.motivo.value,
+        observacion: form.elements.observacion.value,
+        password: form.elements.password.value,
+        claveOperacion: operationKey
+      });
+    });
+    setMode();
+    form.elements.cantidadAjuste.focus();
+  });
+}
+
 async function openStockAdjustment(product) {
   if (!product) return;
-  const data = await requestStockAdjustment(product);
+  let data;
+  try {
+    data = Number(product.controlaLotes)
+      ? await requestLotStockAdjustment(product)
+      : await requestStockAdjustment(product);
+  } catch (error) {
+    return showError(error.message);
+  }
   if (!data) return;
   data.nuevoStock = Number(data.nuevoStock);
-  data.claveOperacion = newOperationKey();
+  data.claveOperacion = data.claveOperacion || newOperationKey();
   try {
     const result = await api(`/api/productos/${product.idProducto}/ajustar-stock`, {
       method: 'POST', body: JSON.stringify(data)
@@ -1167,6 +1315,8 @@ async function openStockAdjustment(product) {
     await loadView('productos');
   } catch (error) {
     await showError(error.message);
+  } finally {
+    data.password = '';
   }
 }
 
@@ -1351,6 +1501,65 @@ function operationView(kind) {
   renderAutocomplete(kind);
 }
 
+function purchaseLotRow(product, quantity = '') {
+  return `<div class="purchase-lot-row" data-purchase-lot-entry>
+    <label>Código<input name="lotCodigo" maxlength="80" placeholder="Opcional"></label>
+    <label>Vencimiento<input name="lotVencimiento" type="date" min="${localDateValue(new Date())}" ${Number(product.controlaVencimiento) ? 'required' : ''}></label>
+    <label>Unidades base<input name="lotCantidad" type="number" min="1" step="1" required value="${escapeHtml(quantity)}"></label>
+    <button type="button" class="danger small" data-remove-purchase-lot aria-label="Eliminar lote">Eliminar</button>
+  </div>`;
+}
+
+function wirePurchaseLotEditor(row, product) {
+  const editor = row.querySelector('[data-purchase-lot-editor]');
+  if (!editor) return;
+  const rows = editor.querySelector('[data-purchase-lot-rows]');
+  const summary = editor.querySelector('[data-purchase-lot-summary]');
+  const expected = () => equivalentUnitsClient(
+    product,
+    Number(row.querySelector('[name="cantidad"]').value || 0),
+    row.querySelector('[name="presentacion"]').value,
+    true
+  );
+  const update = () => {
+    const total = [...rows.querySelectorAll('[name="lotCantidad"]')]
+      .reduce((sum, input) => sum + Number(input.value || 0), 0);
+    const needed = expected();
+    summary.textContent = `Requerido: ${needed} unidades · distribuido: ${total} · pendiente: ${needed - total}`;
+    summary.classList.toggle('text-danger', total !== needed);
+    summary.classList.toggle('text-ok', total === needed);
+  };
+  const wire = (lotRow) => {
+    lotRow.querySelector('[name="lotCantidad"]').addEventListener('input', () => {
+      lotRow.dataset.edited = 'true';
+      update();
+    });
+    lotRow.querySelector('[data-remove-purchase-lot]').addEventListener('click', () => { lotRow.remove(); update(); });
+  };
+  rows.querySelectorAll('[data-purchase-lot-entry]').forEach(wire);
+  editor.querySelector('[data-add-purchase-lot]').addEventListener('click', () => {
+    const wrapper = document.createElement('div');
+    wrapper.innerHTML = purchaseLotRow(product);
+    const lotRow = wrapper.firstElementChild;
+    rows.appendChild(lotRow);
+    wire(lotRow);
+    update();
+  });
+  editor.updateLotSummary = () => {
+    const entries = rows.querySelectorAll('[data-purchase-lot-entry]');
+    if (entries.length === 1 && entries[0].dataset.edited !== 'true') {
+      entries[0].querySelector('[name="lotCantidad"]').value = expected();
+    }
+    const price = Number(row.querySelector('[name="precioCompra"]')?.value || 0);
+    const units = expected();
+    editor.querySelector('[data-purchase-unit-cost]').textContent = price > 0 && units > 0
+      ? `Costo estimado por unidad base: Bs ${money((price * Number(row.querySelector('[name="cantidad"]').value || 0)) / units)}`
+      : 'Ingrese el precio de compra para ver el costo unitario.';
+    update();
+  };
+  editor.updateLotSummary();
+}
+
 function addProductItem(kind, product) {
   if (!product) return;
   const existing = document.querySelector(`.cart-item[data-product="${product.idProducto}"]`);
@@ -1387,10 +1596,16 @@ function addProductItem(kind, product) {
       <span class="item-info muted"></span>
       <strong class="item-subtotal">Bs 0.00</strong>
       <button type="button" class="danger small">QUITAR</button>
-    </div>`;
+    </div>
+    ${isPurchase && Number(product.controlaLotes) ? `<section class="purchase-lot-editor" data-purchase-lot-editor>
+      <div class="purchase-lot-heading"><div><strong>Distribución por lotes obligatoria</strong><p>${Number(product.controlaVencimiento) ? 'Cada lote requiere vencimiento.' : 'El código y vencimiento son opcionales.'}</p></div><button type="button" class="secondary small" data-add-purchase-lot>Agregar lote</button></div>
+      <div class="purchase-lot-rows" data-purchase-lot-rows>${purchaseLotRow(product, 1)}</div>
+      <div class="purchase-lot-summary"><span data-purchase-lot-summary></span><small data-purchase-unit-cost></small></div>
+    </section>` : ''}`;
   row.querySelector('button').addEventListener('click', () => { row.remove(); calculateTotal(kind); });
   row.querySelectorAll('input, select').forEach((input) => input.addEventListener('input', () => fillItemInfo(row, kind)));
   document.getElementById('items').appendChild(row);
+  if (isPurchase && Number(product.controlaLotes)) wirePurchaseLotEditor(row, product);
   fillItemInfo(row, kind);
   focusCartItem(row);
 }
@@ -1423,6 +1638,7 @@ function fillItemInfo(row, kind) {
     ? `Stock insuficiente: requiere ${units}, disponible ${product.stockUnidadesTotal}`
     : `${units} unidades equivalentes`;
   row.querySelector('.item-subtotal').textContent = `Bs ${money(subtotal)}`;
+  row.querySelector('[data-purchase-lot-editor]')?.updateLotSummary?.();
   calculateTotal(kind);
 }
 
@@ -1433,7 +1649,17 @@ function collectItems(kind) {
       cantidad: row.querySelector('[name="cantidad"]').value,
       presentacion: row.querySelector('[name="presentacion"]').value
     };
-    if (kind === 'compras') item.precioCompra = row.querySelector('[name="precioCompra"]').value;
+    if (kind === 'compras') {
+      item.precioCompra = row.querySelector('[name="precioCompra"]').value;
+      const lotRows = [...row.querySelectorAll('[data-purchase-lot-entry]')];
+      if (lotRows.length) {
+        item.lotes = lotRows.map((lotRow) => ({
+          codigoLote: lotRow.querySelector('[name="lotCodigo"]').value.trim() || null,
+          fechaVencimiento: lotRow.querySelector('[name="lotVencimiento"]').value || null,
+          cantidad: Number(lotRow.querySelector('[name="lotCantidad"]').value)
+        }));
+      }
+    }
     return item;
   });
 }
@@ -1462,6 +1688,18 @@ async function saveOperation(event, kind) {
   if (body.items.length === 0) return showError('Debe agregar al menos un producto.');
   const invalidItem = body.items.some((item) => Number(item.cantidad) <= 0 || (kind === 'compras' && Number(item.precioCompra) <= 0));
   if (invalidItem) return showError('Revise cantidades y precios. Deben ser mayores a cero.');
+  if (kind === 'compras') {
+    const invalidLots = body.items.some((item) => {
+      const product = state.productos.find((row) => String(row.idProducto) === String(item.idProducto));
+      if (!Number(product?.controlaLotes)) return false;
+      const expected = equivalentUnitsClient(product, Number(item.cantidad), item.presentacion, true);
+      return !Array.isArray(item.lotes) || item.lotes.length === 0
+        || item.lotes.some((lot) => !Number.isInteger(lot.cantidad) || lot.cantidad <= 0
+          || (Number(product.controlaVencimiento) === 1 && !lot.fechaVencimiento))
+        || item.lotes.reduce((sum, lot) => sum + lot.cantidad, 0) !== expected;
+    });
+    if (invalidLots) return showError('La distribución por lotes debe cubrir exactamente todas las unidades base y completar los vencimientos obligatorios.');
+  }
   if ([...document.querySelectorAll('.cart-item.has-warning')].length) return showError('Hay productos con stock insuficiente. Ajuste cantidades antes de registrar.');
   if (body.tipo === 'fiada' && !body.idCliente) return showError('Una venta fiada debe tener cliente registrado.');
   const label = kind === 'ventas' ? (body.tipo === 'fiada' ? 'venta fiada' : 'venta pagada') : 'compra';
@@ -1494,6 +1732,12 @@ function posTotals() {
   return { subtotal, discount, total: Math.max(0, subtotal - discount) };
 }
 
+function posAvailableStock(product) {
+  return Number(product?.controlaLotes)
+    ? Number(product.stockVendible || 0)
+    : Number(product?.stockUnidadesTotal || 0);
+}
+
 function posProductCard(product) {
   const packagePrice = Number(product.precioVentaPaquete ?? (Number(product.precioVenta) * Number(product.unidadesPorPaquete || 1)));
   const presentations = [
@@ -1509,6 +1753,7 @@ function posProductCard(product) {
         <strong>${escapeHtml(product.nombre)}</strong>
         <span>${escapeHtml(product.categoria)} · ${escapeHtml(product.proveedor || 'Sin proveedor')}</span>
         <small>${escapeHtml(stockLabel(product))}</small>
+        ${Number(product.controlaLotes) ? `<small class="lot-pos-stock">Vendible: ${escapeHtml(posAvailableStock(product))} unidades · salida ${Number(product.controlaVencimiento) ? 'FEFO' : 'FIFO'}</small>${Number(product.stockUnidadesTotal) > posAvailableStock(product) ? '<small class="text-danger">Parte del stock está vencida o bloqueada.</small>' : ''}` : ''}
         <small>${escapeHtml(presentations)}</small>
       </div>
       <button type="button" data-pos-add="${product.idProducto}">Agregar</button>
@@ -1568,7 +1813,8 @@ function renderPosCart() {
   if (!container) return;
   container.innerHTML = posCart.length ? posCart.map((line, index) => {
     const units = posLineUnits(line);
-    const insufficient = units > Number(line.producto.stockUnidadesTotal || 0);
+    const available = posAvailableStock(line.producto);
+    const insufficient = units > available;
     const packageOption = line.producto.permiteVentaPorPaquete && Number(line.producto.unidadesPorPaquete || 1) > 1
       ? `<option value="paquete" ${line.presentacion === 'paquete' ? 'selected' : ''}>Paquete</option>` : '';
     const unitOption = line.producto.permiteVentaPorUnidad
@@ -1587,7 +1833,7 @@ function renderPosCart() {
           <span>${units} unidades · Bs ${money(posLinePrice(line))} c/u</span>
           <strong>Bs ${money(Number(line.cantidad) * posLinePrice(line))}</strong>
         </div>
-        ${insufficient ? `<p class="text-danger">Requiere ${units}; disponibles ${line.producto.stockUnidadesTotal}.</p>` : ''}
+        ${insufficient ? `<p class="text-danger">Requiere ${units}; vendibles ${available}.${Number(line.producto.controlaLotes) ? ' Hay stock físico vencido o bloqueado que no puede venderse.' : ''}</p>` : ''}
       </article>`;
   }).join('') : '<p class="muted empty-state">El carrito esta vacio.</p>';
   container.querySelectorAll('[data-pos-remove]').forEach((button) => button.addEventListener('click', () => {
@@ -1766,8 +2012,8 @@ function showSaleReceipt(receipt) {
 async function submitPosSale(event) {
   event.preventDefault();
   if (!posCart.length) return showError('Debe agregar al menos un producto.');
-  if (posCart.some((line) => posLineUnits(line) > Number(line.producto.stockUnidadesTotal || 0))) {
-    return showError('Hay productos con stock insuficiente.');
+  if (posCart.some((line) => posLineUnits(line) > posAvailableStock(line.producto))) {
+    return showError('Hay productos sin stock vendible suficiente. Parte del stock puede estar vencida o bloqueada.');
   }
   const totals = posTotals();
   const payment = posPaymentDraft();
@@ -1799,7 +2045,9 @@ async function submitPosSale(event) {
     showSaleReceipt(data.comprobante);
     refreshCatalogs().catch(() => {});
   } catch (error) {
-    showError(error.message);
+    showError(error.code === 'INSUFFICIENT_SELLABLE_LOT_STOCK'
+      ? 'Hay stock físico, pero parte está vencida o bloqueada.'
+      : error.message);
   } finally {
     button.disabled = Boolean(state.context?.soloLectura);
   }
@@ -1911,7 +2159,12 @@ async function showSaleDetailLegacy(idVenta) {
 
 async function showSaleDetail(idVenta) {
   try {
-    const data = await api(`/api/ventas/${idVenta}`);
+    const [data, lotTrace] = await Promise.all([
+      api(`/api/ventas/${idVenta}`),
+      hasLotOperationalAccess()
+        ? api(`/api/ventas/${idVenta}/lotes-utilizados`).catch(() => ({ rows: [] }))
+        : Promise.resolve({ rows: [] })
+    ]);
     const v = data.venta;
     await modal({
       title: `Venta #${v.idVenta}`,
@@ -1924,7 +2177,8 @@ async function showSaleDetail(idVenta) {
         ${v.idFiado ? `<p><button type="button" class="secondary" data-open-debt="${v.idFiado}" data-client="${v.idCliente || ''}" data-client-name="${escapeHtml(v.cliente)}">Ver en Fiados/Pagos</button></p>` : ''}
         <p><button type="button" class="secondary" data-open-receipt="${v.idVenta}">Ver comprobante</button></p>
         <div class="table-wrap"><table><thead><tr><th>Producto</th><th>Cantidad</th><th>Presentación</th><th>Unidades</th><th>Precio</th><th>Costo</th><th>Ganancia</th></tr></thead>
-        <tbody>${data.detalle.map((d) => `<tr><td>${escapeHtml(d.nombre)}</td><td>${intValue(d.cantidad)}</td><td>${escapeHtml(d.presentacionVenta)}</td><td>${intValue(d.cantidadEquivalenteUnidades)}</td><td>Bs ${money(d.subtotal)}</td><td>Bs ${money(d.subtotalCosto)}</td><td>Bs ${money(d.ganancia)}</td></tr>`).join('')}</tbody></table></div>`,
+        <tbody>${data.detalle.map((d) => `<tr><td>${escapeHtml(d.nombre)}</td><td>${intValue(d.cantidad)}</td><td>${escapeHtml(d.presentacionVenta)}</td><td>${intValue(d.cantidadEquivalenteUnidades)}</td><td>Bs ${money(d.subtotal)}</td><td>Bs ${money(d.subtotalCosto)}</td><td>Bs ${money(d.ganancia)}</td></tr>`).join('')}</tbody></table></div>
+        ${lotTrace.rows.length ? `<h4>Lotes utilizados</h4><div class="table-wrap"><table><thead><tr><th>Producto</th><th>Lote</th><th>Vencimiento</th><th>Unidades</th><th>Costo del lote</th></tr></thead><tbody>${lotTrace.rows.map((row) => `<tr><td>${escapeHtml(row.producto)}</td><td><button type="button" class="link-button" data-lot-detail="${row.idLoteProducto}">${escapeHtml(row.codigoLote || 'Sin código')}</button></td><td>${lotDate(row.fechaVencimiento)}</td><td>${escapeHtml(row.cantidadUnidades)}</td><td>${row.costoUnitarioBase === null ? 'Desconocido' : `Bs ${money(row.costoUnitarioBase)}`}</td></tr>`).join('')}</tbody></table></div>` : ''}`,
       onOpen: (root) => {
         const button = root.querySelector('[data-open-debt]');
         if (button) button.addEventListener('click', () => {
@@ -1939,6 +2193,7 @@ async function showSaleDetail(idVenta) {
         root.querySelector('[data-open-receipt]').addEventListener('click', async () => {
           try { showSaleReceipt(await api(`/api/ventas/${v.idVenta}/comprobante`)); } catch (error) { showError(error.message); }
         });
+        wireLotRowActions(root);
       }
     });
   } catch (error) { showError(error.message); }
@@ -2751,6 +3006,7 @@ function inventoryFilterQuery() {
 function inventoryRenderSummary() {
   const summary = inventoryUi.data.resumen;
   const valuation = inventoryUi.data.resumenValoracion?.resumen;
+  const lots = inventoryUi.data.resumenLotes;
   if (!summary || !valuation) return inventoryEmpty('No se pudo completar el resumen para los filtros seleccionados.');
   const cards = [
     ['Productos activos', summary.productosActivos, 'neutral'],
@@ -2767,6 +3023,7 @@ function inventoryRenderSummary() {
     <div class="inventory-section-heading"><div><h3 id="inventorySummaryTitle">Panorama del inventario</h3><p>${escapeHtml(inventoryPeriod(summary.periodo))}</p></div></div>
     <div class="inventory-metrics">${cards.map(([label, value, tone]) => `<article class="inventory-metric metric-${tone}"><span>${escapeHtml(label)}</span><strong>${escapeHtml(value)}</strong></article>`).join('')}</div>
     <div class="inventory-note"><strong>Lectura responsable de costos</strong><p>${escapeHtml(`Costo conocido en ${valuation.productosConCostoConocido} productos. ${valuation.productosConCostoDesconocido ? `Falta costo en ${valuation.productosConCostoDesconocido} productos (${valuation.unidadesConCostoDesconocido} unidades).` : 'Todos los productos analizados tienen un costo conocido.'}`)}</p></div>
+    ${lots ? `<div class="inventory-note"><strong>Productos controlados por lotes</strong><p>Stock general trazado: ${escapeHtml(lots.stockTrazado)} · vendible: ${escapeHtml(lots.stockVendible)} · vencido: ${escapeHtml(lots.stockVencido)} · bloqueado: ${escapeHtml(lots.stockBloqueado)}.</p><button type="button" class="secondary small" data-open-lot-dashboard>Ver lotes y vencimientos</button></div>` : ''}
   </section>`;
 }
 
@@ -2776,7 +3033,7 @@ function inventoryRenderAlerts() {
   const canWrite = !state.context?.soloLectura;
   return `<div class="inventory-section-heading"><div><h3>Alertas que requieren atención</h3><p>${escapeHtml(inventoryPeriod(data.periodo))} · ${data.total} resultados</p></div></div>
     <div class="table-wrap"><table class="inventory-table"><caption class="sr-only">Productos con alertas de inventario</caption><thead><tr><th>Producto</th><th>Categoría</th><th>Stock actual</th><th>Stock mínimo</th><th>Estado</th><th>Proveedor</th><th>Acción</th></tr></thead><tbody>
-    ${data.rows.map((row) => `<tr><td><strong>${escapeHtml(row.nombre)}</strong></td><td>${escapeHtml(row.categoria)}</td><td>${escapeHtml(row.stockActual)} ${escapeHtml(row.unidadBase)}</td><td>${escapeHtml(row.stockMinimo)}</td><td>${inventoryStateBadge(row.estadoInventario)}</td><td>${escapeHtml(row.proveedor || 'Sin proveedor')}</td><td>${canWrite ? `<button type="button" class="small secondary" data-inventory-product-config="${escapeHtml(row.idProducto)}">Configurar</button>` : '<span class="muted">Solo lectura</span>'}</td></tr>`).join('')}
+    ${data.rows.map((row) => { const product = state.productos.find((item) => Number(item.idProducto) === Number(row.idProducto)); return `<tr><td><strong>${escapeHtml(row.nombre)}</strong></td><td>${escapeHtml(row.categoria)}</td><td>${escapeHtml(row.stockActual)} ${escapeHtml(row.unidadBase)}${Number(product?.controlaLotes) ? '<small>Controlado por lotes</small>' : ''}</td><td>${escapeHtml(row.stockMinimo)}</td><td>${inventoryStateBadge(row.estadoInventario)}</td><td>${escapeHtml(row.proveedor || 'Sin proveedor')}</td><td><div class="actions">${canWrite ? `<button type="button" class="small secondary" data-inventory-product-config="${escapeHtml(row.idProducto)}">Configurar análisis</button>` : '<span class="muted">Solo lectura</span>'}${Number(product?.controlaLotes) ? `<button type="button" class="small secondary" data-inventory-product-lots="${escapeHtml(row.idProducto)}">Ver lotes</button>` : ''}</div></td></tr>`; }).join('')}
     </tbody></table></div>`;
 }
 
@@ -2877,6 +3134,8 @@ function renderInventoryActiveTab() {
   target.innerHTML = renderers[inventoryUi.activeTab]?.() || inventoryEmpty('Seleccione una sección de inventario.');
   target.querySelector('[data-inventory-retry]')?.addEventListener('click', () => loadInventoryActiveTab(true));
   target.querySelectorAll('[data-inventory-product-config]').forEach((button) => button.addEventListener('click', () => openInventoryProductConfiguration(button.dataset.inventoryProductConfig)));
+  target.querySelectorAll('[data-inventory-product-lots]').forEach((button) => button.addEventListener('click', () => openProductLotAvailability(button.dataset.inventoryProductLots)));
+  target.querySelector('[data-open-lot-dashboard]')?.addEventListener('click', () => loadView('lotesVencimientos'));
   target.querySelectorAll('[data-ranking-mode]').forEach((button) => button.addEventListener('click', () => {
     inventoryUi.rankingMode = button.dataset.rankingMode;
     renderInventoryActiveTab();
@@ -2899,12 +3158,14 @@ async function loadInventoryActiveTab(force = false) {
   try {
     const query = inventoryFilterQuery().toString();
     if (tab === 'resumen') {
-      const [summary, valuation] = await Promise.all([
+      const [summary, valuation, lots] = await Promise.all([
         api(`/api/inventario-inteligente/resumen?${query}`),
-        api(`/api/inventario-inteligente/valoracion?${query}`)
+        api(`/api/inventario-inteligente/valoracion?${query}`),
+        hasLotOperationalAccess() ? api('/api/lotes/resumen') : Promise.resolve(null)
       ]);
       inventoryUi.data.resumen = summary;
       inventoryUi.data.resumenValoracion = valuation;
+      inventoryUi.data.resumenLotes = lots;
     } else {
       const endpoints = {
         alertas: 'alertas', ranking: 'ranking', valoracion: 'valoracion', sugerencias: 'compras-sugeridas',
@@ -3088,6 +3349,416 @@ async function inventarioInteligente() {
     await loadInventoryActiveTab();
   }));
   await loadInventoryActiveTab();
+}
+
+function lotDate(value) {
+  if (!value) return 'Sin vencimiento';
+  const text = String(value).slice(0, 10);
+  const match = text.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  return match ? `${match[3]}/${match[2]}/${match[1]}` : escapeHtml(text);
+}
+
+function lotStatusLabel(value) {
+  return ({
+    vencido: 'Vencido', vence_hoy: 'Vence hoy', proximo_a_vencer: 'Próximo a vencer',
+    vigente: 'Vigente', bloqueado: 'Bloqueado', agotado: 'Agotado',
+    disponible: 'Disponible', anulado: 'Anulado'
+  })[value] || value || 'Sin estado';
+}
+
+function lotBadge(value) {
+  return `<span class="lot-badge lot-${escapeHtml(value || 'vigente')}">${escapeHtml(lotStatusLabel(value))}</span>`;
+}
+
+function lotCost(value) {
+  return value === null || value === undefined || value === ''
+    ? '<span class="muted">Costo desconocido</span>'
+    : `Bs ${money(value)}`;
+}
+
+function lotLoading(text = 'Cargando lotes...') {
+  return `<div class="inventory-loading" role="status"><span aria-hidden="true"></span>${escapeHtml(text)}</div>`;
+}
+
+function lotEmpty(text) {
+  return `<div class="inventory-empty"><strong>Sin datos</strong><p>${escapeHtml(text)}</p></div>`;
+}
+
+function lotFilterQuery(page = lotUi.page) {
+  const form = document.getElementById('lotFilters');
+  const values = form ? formData(form) : {};
+  const query = new URLSearchParams({ pagina: String(page), limite: values.limite || '25' });
+  ['producto', 'proveedor', 'codigoLote', 'estadoOperativo', 'estadoCalculado', 'venceDesde', 'venceHasta']
+    .forEach((key) => { if (values[key]) query.set(key, values[key]); });
+  if (form?.querySelector('[name="soloConSaldo"]')?.checked) query.set('soloConSaldo', 'true');
+  return query;
+}
+
+function renderLotSummary(summary) {
+  const metrics = [
+    ['Productos controlados', summary.productosControlados, 'neutral'],
+    ['Stock trazado', summary.stockTrazado, 'neutral'],
+    ['Stock vendible', summary.stockVendible, 'success'],
+    ['Stock vencido', summary.stockVencido, 'danger'],
+    ['Stock bloqueado', summary.stockBloqueado, 'warning'],
+    ['Próximos a vencer', summary.lotesProximos, 'attention'],
+    ['Valor conocido por lotes', `Bs ${money(summary.valorTotalRestante)}`, 'neutral']
+  ];
+  const alerts = [
+    ['Vencidos', summary.lotesVencidos, 'vencido'], ['Vencen hoy', summary.lotesVencenHoy, 'vence_hoy'],
+    ['Próximos', summary.lotesProximos, 'proximo_a_vencer'], ['Bloqueados', summary.lotesBloqueados, 'bloqueado'],
+    ['Agotados', summary.lotesAgotados, 'agotado']
+  ];
+  return `<div class="lot-summary-grid">${metrics.map(([label, value, tone]) => `
+    <article class="inventory-metric metric-${tone}"><span>${escapeHtml(label)}</span><strong>${escapeHtml(value)}</strong></article>`).join('')}</div>
+    <div class="lot-alert-strip" aria-label="Resumen de alertas">${alerts.map(([label, value, status]) => `<span>${lotBadge(status)}<strong>${escapeHtml(value)}</strong><small>${escapeHtml(label)}</small></span>`).join('')}</div>
+    ${Number(summary.lotesCostoDesconocido) > 0 ? `<p class="inventory-note-inline">Costo desconocido en ${escapeHtml(summary.lotesCostoDesconocido)} lotes con saldo.</p>` : ''}`;
+}
+
+function lotRowActions(row) {
+  return `<div class="actions">
+    <button type="button" class="small secondary" data-lot-detail="${row.idLoteProducto}">Ver detalle</button>
+    <button type="button" class="small secondary" data-lot-product-config="${row.idProducto}">Configurar producto</button>
+  </div>`;
+}
+
+function renderLotRows(rows) {
+  if (!rows.length) return lotEmpty('No hay lotes para los filtros seleccionados.');
+  const desktop = `<div class="table-wrap lot-desktop-table"><table><caption class="sr-only">Lotes de productos</caption>
+    <thead><tr><th>Producto</th><th>Lote</th><th>Proveedor</th><th>Vencimiento</th><th>Estado</th><th>Cantidades</th><th>Costo y valor</th><th>Origen</th><th>Acciones</th></tr></thead>
+    <tbody>${rows.map((row) => `<tr>
+      <td><strong>${escapeHtml(row.producto)}</strong><small>${escapeHtml(row.categoria || 'Sin categoría')}</small></td>
+      <td>${escapeHtml(row.codigoLote || 'Sin código')}</td><td>${escapeHtml(row.proveedor || 'Sin proveedor')}</td>
+      <td>${lotDate(row.fechaVencimiento)}</td><td>${lotBadge(row.estadoCalculado)}<small>${escapeHtml(lotStatusLabel(row.estadoOperativo))}</small></td>
+      <td><strong>${escapeHtml(row.cantidadRestante)}</strong> restantes<small>Inicial: ${escapeHtml(row.cantidadInicial)}</small></td>
+      <td>${lotCost(row.costoUnitarioBase)}<small>Valor: ${row.valorRestante === null ? 'desconocido' : `Bs ${money(row.valorRestante)}`}</small></td>
+      <td>${escapeHtml(lotStatusLabel(row.origen))}</td><td>${lotRowActions(row)}</td>
+    </tr>`).join('')}</tbody></table></div>`;
+  const mobile = `<div class="lot-mobile-list">${rows.map((row) => `<article class="lot-card">
+    <header><div><strong>${escapeHtml(row.producto)}</strong><span>${escapeHtml(row.codigoLote || 'Sin código')}</span></div>${lotBadge(row.estadoCalculado)}</header>
+    <dl><div><dt>Vencimiento</dt><dd>${lotDate(row.fechaVencimiento)}</dd></div><div><dt>Saldo</dt><dd>${escapeHtml(row.cantidadRestante)} unidades</dd></div>
+      <div><dt>Proveedor</dt><dd>${escapeHtml(row.proveedor || 'Sin proveedor')}</dd></div><div><dt>Valor</dt><dd>${row.valorRestante === null ? 'Costo desconocido' : `Bs ${money(row.valorRestante)}`}</dd></div></dl>
+    ${lotRowActions(row)}</article>`).join('')}</div>`;
+  return desktop + mobile;
+}
+
+function wireLotRowActions(root) {
+  root.querySelectorAll('[data-lot-detail]').forEach((button) => button.addEventListener('click', () => openLotDetail(button.dataset.lotDetail)));
+  root.querySelectorAll('[data-lot-product-config]').forEach((button) => button.addEventListener('click', () => {
+    openLotProductConfiguration(state.productos.find((product) => String(product.idProducto) === button.dataset.lotProductConfig));
+  }));
+}
+
+async function loadLotsPanel(page = 1) {
+  const target = document.getElementById('lotContent');
+  if (!target) return;
+  target.innerHTML = lotLoading(lotUi.activeTab === 'alertas' ? 'Cargando alertas...' : 'Cargando lotes...');
+  try {
+    const query = lotFilterQuery(page);
+    const [summary, data] = await Promise.all([
+      api(`/api/lotes/resumen?${query}`),
+      api(`/api/lotes?${query}`)
+    ]);
+    lotUi.page = Number(data.page || 1);
+    lotUi.pages = Number(data.pages || 1);
+    const alertNote = lotUi.activeTab === 'alertas'
+      ? '<div class="inventory-note"><strong>Alertas de vencimiento</strong><p>Use el filtro de estado para revisar vencidos, los que vencen hoy, próximos, bloqueados o agotados.</p><div class="inventory-segmented"><button type="button" data-lot-alert-days="7">Próximos 7 días</button><button type="button" data-lot-alert-days="15">15 días</button><button type="button" data-lot-alert-days="30">30 días</button><button type="button" class="secondary" data-lot-alert-days="all">Limpiar período</button></div></div>' : '';
+    target.innerHTML = `${renderLotSummary(summary)}${alertNote}<div class="lot-results-heading"><strong>${escapeHtml(data.total)} lotes</strong><span>Página ${lotUi.page} de ${lotUi.pages}</span></div>${renderLotRows(data.rows)}
+      <div class="movement-pagination"><button type="button" class="secondary" id="lotPrevious">Anterior</button><span>Página ${lotUi.page} de ${lotUi.pages}</span><button type="button" class="secondary" id="lotNext">Siguiente</button></div>`;
+    document.getElementById('lotPrevious').disabled = lotUi.page <= 1;
+    document.getElementById('lotNext').disabled = lotUi.page >= lotUi.pages;
+    document.getElementById('lotPrevious').addEventListener('click', () => loadLotsPanel(lotUi.page - 1));
+    document.getElementById('lotNext').addEventListener('click', () => loadLotsPanel(lotUi.page + 1));
+    wireLotRowActions(target);
+    target.querySelectorAll('[data-lot-alert-days]').forEach((button) => button.addEventListener('click', () => {
+      const form = document.getElementById('lotFilters');
+      if (button.dataset.lotAlertDays === 'all') {
+        form.elements.venceDesde.value = '';
+        form.elements.venceHasta.value = '';
+        form.elements.estadoCalculado.value = '';
+      } else {
+        const today = new Date();
+        const days = Number(button.dataset.lotAlertDays);
+        form.elements.venceDesde.value = localDateValue(today);
+        form.elements.venceHasta.value = localDateValue(new Date(today.getFullYear(), today.getMonth(), today.getDate() + days));
+        form.elements.estadoCalculado.value = 'proximo_a_vencer';
+      }
+      loadLotsPanel(1);
+    }));
+  } catch (error) {
+    target.innerHTML = `<div class="inventory-empty inventory-error"><strong>No se pudo cargar</strong><p>${escapeHtml(error.message)}</p><button type="button" id="retryLots">Reintentar</button></div>`;
+    document.getElementById('retryLots').addEventListener('click', () => loadLotsPanel(page));
+  }
+}
+
+async function openLotDetail(idLote) {
+  const trigger = document.activeElement;
+  try {
+    const data = await api(`/api/lotes/${encodeURIComponent(idLote)}`);
+    const lot = data.lote;
+    const movements = data.movimientos || [];
+    await modal({
+      title: `Lote de ${lot.producto}`,
+      wide: true,
+      confirmText: 'Cerrar',
+      body: `<div class="lot-detail-grid">
+        <div><span>Producto</span><strong>${escapeHtml(lot.producto)}</strong></div><div><span>Código</span><strong>${escapeHtml(lot.codigoLote || 'Sin código')}</strong></div>
+        <div><span>Estado</span>${lotBadge(lot.estadoOperativo)}</div><div><span>Vencimiento</span><strong>${lotDate(lot.fechaVencimiento)}</strong></div>
+        <div><span>Ingreso</span><strong>${escapeHtml(formatDate(lot.fechaIngreso))}</strong></div><div><span>Proveedor</span><strong>${escapeHtml(lot.proveedor || 'Sin proveedor')}</strong></div>
+        <div><span>Cantidad inicial</span><strong>${escapeHtml(lot.cantidadInicial)}</strong></div><div><span>Cantidad restante</span><strong>${escapeHtml(lot.cantidadRestante)}</strong></div>
+        <div><span>Costo unitario</span><strong>${lot.costoUnitarioBase === null ? 'Desconocido' : `Bs ${money(lot.costoUnitarioBase)}`}</strong></div><div><span>Valor restante</span><strong>${lot.valorRestante === null ? 'Desconocido' : `Bs ${money(lot.valorRestante)}`}</strong></div>
+        <div><span>Compra</span><strong>${lot.idCompra ? `#${escapeHtml(lot.idCompra)} · ${escapeHtml(formatDate(lot.fechaCompra))}` : 'Sin compra relacionada'}</strong></div><div><span>Creado por</span><strong>${escapeHtml(lot.creadoPor || 'Sistema')}</strong></div>
+      </div>
+      <div class="inventory-note"><strong>Saldo del producto</strong><p>General: ${escapeHtml(data.stock.stockGeneral)} · trazado: ${escapeHtml(data.stock.stockTrazado)} · vendible: ${escapeHtml(data.stock.stockVendible)}</p></div>
+      <h4>Movimientos y trazabilidad</h4>${movements.length ? `<div class="table-wrap"><table><thead><tr><th>Fecha</th><th>Tipo</th><th>Cantidad</th><th>Saldo del lote</th><th>Referencia</th><th>Responsable</th></tr></thead><tbody>${movements.map((movement) => `<tr><td>${escapeHtml(formatDate(movement.creadoEn))}</td><td>${escapeHtml(lotStatusLabel(movement.tipoRegistro))}</td><td>${Number(movement.cantidad) > 0 ? '+' : ''}${escapeHtml(movement.cantidad)}</td><td>${escapeHtml(movement.cantidadAnterior)} → ${escapeHtml(movement.cantidadPosterior)}</td><td>${movement.idVenta ? `Venta #${escapeHtml(movement.idVenta)}` : movement.origen === 'compra' ? 'Compra' : escapeHtml(movement.origen || 'Distribución inicial')}</td><td>${escapeHtml(movement.responsable || 'Sistema')}</td></tr>`).join('')}</tbody></table></div>` : lotEmpty('Este lote todavía no tiene movimientos posteriores.')}`
+    });
+  } catch (error) { await showError(error.message); }
+  trigger?.focus?.();
+}
+
+async function openProductLotAvailability(idProducto) {
+  try {
+    const data = await api(`/api/productos/${encodeURIComponent(idProducto)}/lotes-disponibles`);
+    await modal({
+      title: `Lotes disponibles de ${data.producto.nombre}`,
+      wide: true,
+      confirmText: 'Cerrar',
+      body: `<div class="lot-balance-strip"><span>Stock general<strong>${escapeHtml(data.stockGeneral)}</strong></span><span>Stock trazado<strong>${escapeHtml(data.stockTrazado)}</strong></span><span>Stock vendible<strong>${escapeHtml(data.stockVendible)}</strong></span></div>
+        <p class="inventory-note-inline">La salida se asigna automáticamente por ${Number(data.producto.controlaVencimiento) ? 'FEFO' : 'FIFO'}.</p>
+        ${data.lotes.length ? `<div class="lot-mobile-list always-visible">${data.lotes.map((lot) => `<article class="lot-card"><header><div><strong>${escapeHtml(lot.codigoLote || 'Sin código')}</strong><span>${lotDate(lot.fechaVencimiento)}</span></div>${lotBadge(lot.vendible ? 'vigente' : lot.motivoNoVendible)}</header><dl><div><dt>Saldo</dt><dd>${escapeHtml(lot.cantidadRestante)}</dd></div><div><dt>Ingreso</dt><dd>${escapeHtml(formatDate(lot.fechaIngreso))}</dd></div><div><dt>Costo</dt><dd>${lot.costoUnitarioBase === null ? 'Desconocido' : `Bs ${money(lot.costoUnitarioBase)}`}</dd></div></dl><button type="button" class="secondary small" data-lot-detail="${lot.idLoteProducto}">Ver trazabilidad</button></article>`).join('')}</div>` : lotEmpty('Este producto todavía no tiene lotes.')}`,
+      onOpen: wireLotRowActions
+    });
+  } catch (error) { showError(error.message); }
+}
+
+async function downloadLotExport() {
+  const button = document.getElementById('exportLots');
+  if (!button) return;
+  const original = button.textContent;
+  button.disabled = true;
+  button.textContent = 'Generando archivo...';
+  try {
+    const response = await fetch(`/api/lotes/exportacion.xlsx?${lotFilterQuery(1)}`, { credentials: 'same-origin' });
+    if (response.status === 401) window.location.href = '/login.html';
+    if (!response.ok) {
+      const body = await response.json().catch(() => ({}));
+      throw new Error(body.error || 'No se pudo generar la exportación.');
+    }
+    const blob = await response.blob();
+    const disposition = response.headers.get('content-disposition') || '';
+    const name = (disposition.match(/filename="([^"]+)"/)?.[1] || 'lotes-vencimientos.xlsx').replace(/[^a-zA-Z0-9._-]/g, '-');
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = name;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
+  } catch (error) { showError(error.message); }
+  finally { button.disabled = false; button.textContent = original; }
+}
+
+async function lotesVencimientos() {
+  lotUi = { page: 1, pages: 1, activeTab: 'lotes' };
+  const canAlert = hasFeature('alertas_vencimiento');
+  const canExport = hasFeature('exportacion_lotes');
+  const downgraded = !hasFeature('trazabilidad_lotes') && Number(state.lotAccess?.productosControlados || 0) > 0;
+  view.innerHTML = `${downgraded ? '<div class="inventory-plan-note"><strong>Trazabilidad protegida</strong><span>La tienda conserva productos controlados. Puede consultar sus lotes, pero las funciones avanzadas dependen del plan actual.</span></div>' : ''}
+    <div class="panel lot-filter-panel"><form id="lotFilters" class="lot-filters">
+      <label>Producto<select name="producto">${options(state.productos, 'idProducto', 'nombre', 'Todos')}</select></label>
+      <label>Proveedor<select name="proveedor">${options(state.proveedores, 'idProveedor', 'nombre', 'Todos')}</select></label>
+      <label>Código de lote<input name="codigoLote" maxlength="80" placeholder="Buscar código"></label>
+      <label>Estado operativo<select name="estadoOperativo"><option value="">Todos</option><option value="disponible">Disponible</option><option value="bloqueado">Bloqueado</option><option value="anulado">Anulado</option></select></label>
+      <label>Estado calculado<select name="estadoCalculado"><option value="">Todos</option><option value="vencido">Vencido</option><option value="vence_hoy">Vence hoy</option><option value="proximo_a_vencer">Próximo a vencer</option><option value="vigente">Vigente</option><option value="bloqueado">Bloqueado</option><option value="agotado">Agotado</option></select></label>
+      <label>Vence desde<input name="venceDesde" type="date"></label><label>Vence hasta<input name="venceHasta" type="date"></label>
+      <label>Resultados<select name="limite"><option value="25">25</option><option value="50">50</option><option value="100">100</option></select></label>
+      <label class="check"><input name="soloConSaldo" type="checkbox"> Solo con saldo</label>
+      <div class="lot-filter-actions"><button type="submit">Aplicar filtros</button><button type="button" class="secondary" id="clearLotFilters">Limpiar</button>${canExport ? '<button type="button" class="secondary" id="exportLots">Exportar XLSX</button>' : ''}</div>
+    </form></div>
+    <div class="inventory-tabs" role="tablist" aria-label="Vistas de lotes"><button type="button" class="active" role="tab" data-lot-tab="lotes" aria-selected="true">Todos los lotes</button>${canAlert ? '<button type="button" role="tab" data-lot-tab="alertas" aria-selected="false">Alertas</button>' : ''}</div>
+    <div class="panel" id="lotContent"></div>`;
+  const form = document.getElementById('lotFilters');
+  form.addEventListener('submit', (event) => { event.preventDefault(); loadLotsPanel(1); });
+  document.getElementById('clearLotFilters').addEventListener('click', () => { form.reset(); loadLotsPanel(1); });
+  document.getElementById('exportLots')?.addEventListener('click', downloadLotExport);
+  document.querySelectorAll('[data-lot-tab]').forEach((button) => button.addEventListener('click', () => {
+    lotUi.activeTab = button.dataset.lotTab;
+    document.querySelectorAll('[data-lot-tab]').forEach((tab) => {
+      const active = tab === button;
+      tab.classList.toggle('active', active);
+      tab.setAttribute('aria-selected', String(active));
+    });
+    if (lotUi.activeTab === 'alertas' && !form.elements.estadoCalculado.value) form.elements.estadoCalculado.value = 'proximo_a_vencer';
+    loadLotsPanel(1);
+  }));
+  await loadLotsPanel(1);
+}
+
+function lotEntryRow(index, { requiresExpiration = false, quantity = '' } = {}) {
+  return `<div class="lot-entry" data-lot-entry="${index}">
+    <label>Código de lote<input name="codigoLote" maxlength="80" placeholder="Opcional"></label>
+    <label>Vencimiento<input name="fechaVencimiento" type="date" min="${localDateValue(new Date())}" ${requiresExpiration ? 'required' : ''}></label>
+    <label>Cantidad en unidades base<input name="cantidad" type="number" min="1" step="1" required value="${escapeHtml(quantity)}"></label>
+    <label>Costo unitario base<input name="costoUnitarioBase" type="number" min="0" step="0.000001" placeholder="Opcional"></label>
+    <button type="button" class="danger small" data-remove-lot aria-label="Eliminar fila de lote">Eliminar</button>
+  </div>`;
+}
+
+function collectLotEntryRows(container) {
+  return [...container.querySelectorAll('[data-lot-entry]')].map((row) => ({
+    codigoLote: row.querySelector('[name="codigoLote"]').value.trim() || null,
+    fechaVencimiento: row.querySelector('[name="fechaVencimiento"]').value || null,
+    cantidad: Number(row.querySelector('[name="cantidad"]').value),
+    costoUnitarioBase: row.querySelector('[name="costoUnitarioBase"]').value || null
+  }));
+}
+
+function wireLotEntryEditor(container, { totalTarget, expectedTotal, requiresExpiration }) {
+  let nextIndex = container.querySelectorAll('[data-lot-entry]').length;
+  const update = () => {
+    const total = collectLotEntryRows(container).reduce((sum, row) => sum + (Number.isFinite(row.cantidad) ? row.cantidad : 0), 0);
+    if (totalTarget) {
+      totalTarget.textContent = `Distribuido: ${total} · pendiente: ${expectedTotal - total}`;
+      totalTarget.classList.toggle('text-danger', total !== expectedTotal);
+      totalTarget.classList.toggle('text-ok', total === expectedTotal);
+    }
+  };
+  const wireRow = (row) => {
+    row.querySelectorAll('input').forEach((input) => input.addEventListener('input', update));
+    row.querySelector('[data-remove-lot]').addEventListener('click', () => { row.remove(); update(); });
+  };
+  container.querySelectorAll('[data-lot-entry]').forEach(wireRow);
+  return {
+    add(quantity = '') {
+      const wrapper = document.createElement('div');
+      wrapper.innerHTML = lotEntryRow(nextIndex++, { requiresExpiration, quantity });
+      const row = wrapper.firstElementChild;
+      container.appendChild(row);
+      wireRow(row);
+      update();
+    },
+    update
+  };
+}
+
+async function openInitialLotDistribution(product) {
+  const returnFocus = document.activeElement;
+  if (!hasFeature('control_lotes')) return showError('El control de lotes no está incluido en el plan actual.');
+  if (state.context?.soloLectura) return showError('La cuenta está en modo de solo lectura.');
+  const stock = Number(product.stockUnidadesTotal || 0);
+  if (stock <= 0) return openLotProductConfiguration(product);
+  const operationKey = newOperationKey();
+  modalRoot.innerHTML = `<div class="modal-backdrop"><form class="modal modal-wide" id="initialLotForm" role="dialog" aria-modal="true" aria-labelledby="initialLotTitle">
+    <h3 id="initialLotTitle">Distribuir stock de ${escapeHtml(product.nombre)}</h3><div class="modal-body">
+      <div class="inventory-note"><strong>${stock} unidades base existentes</strong><p>La distribución debe coincidir exactamente. Esta operación no modifica el stock general.</p></div>
+      <div class="form-grid"><label class="check"><input name="controlaVencimiento" type="checkbox"> Controlar vencimientos</label><label>Días de alerta<input name="diasAlertaVencimiento" type="number" min="1" max="365" value="${escapeHtml(product.diasAlertaVencimiento || state.lotAccess?.diasAlertaVencimientoDefault || 30)}"></label></div>
+      <div id="initialLotRows" class="lot-entry-list">${lotEntryRow(0, { quantity: stock })}</div>
+      <div class="lot-editor-footer"><strong id="initialLotTotal"></strong><button type="button" class="secondary" id="addInitialLot">Agregar lote</button></div>
+      <div class="inventory-note" id="initialLotConfirmation" hidden><strong>Confirme la distribución</strong><p>Se crearán los lotes indicados sin cambiar el stock general.</p></div>
+      <p class="form-error" id="initialLotError" aria-live="polite"></p>
+    </div><div class="modal-actions"><button type="button" class="secondary" data-modal-cancel>Cancelar</button><button type="submit" data-lot-write>Confirmar distribución</button></div>
+  </form></div>`;
+  const form = document.getElementById('initialLotForm');
+  const container = document.getElementById('initialLotRows');
+  let editor = wireLotEntryEditor(container, { totalTarget: document.getElementById('initialLotTotal'), expectedTotal: stock, requiresExpiration: false });
+  editor.update();
+  const close = () => { modalRoot.innerHTML = ''; returnFocus?.focus?.(); };
+  modalRoot.querySelector('[data-modal-cancel]').addEventListener('click', close);
+  document.getElementById('addInitialLot').addEventListener('click', () => editor.add());
+  form.elements.controlaVencimiento.addEventListener('change', () => {
+    container.querySelectorAll('[name="fechaVencimiento"]').forEach((input) => { input.required = form.elements.controlaVencimiento.checked; });
+  });
+  form.addEventListener('input', () => {
+    delete form.dataset.confirmed;
+    document.getElementById('initialLotConfirmation').hidden = true;
+    form.querySelector('button[type="submit"]').textContent = 'Confirmar distribución';
+  });
+  form.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    const errorTarget = document.getElementById('initialLotError');
+    try {
+      const lots = collectLotEntryRows(container);
+      if (!lots.length || lots.some((row) => !Number.isInteger(row.cantidad) || row.cantidad <= 0)) throw new Error('Cada lote debe tener una cantidad entera mayor a cero.');
+      if (lots.reduce((sum, row) => sum + row.cantidad, 0) !== stock) throw new Error(`La distribución debe sumar exactamente ${stock} unidades.`);
+      if (form.elements.controlaVencimiento.checked && lots.some((row) => !row.fechaVencimiento)) throw new Error('Todos los lotes requieren fecha de vencimiento.');
+      if (form.dataset.confirmed !== 'true') {
+        form.dataset.confirmed = 'true';
+        document.getElementById('initialLotConfirmation').hidden = false;
+        form.querySelector('button[type="submit"]').textContent = 'Registrar distribución ahora';
+        return;
+      }
+      await api('/api/lotes/distribucion-inicial', { method: 'POST', body: JSON.stringify({
+        idProducto: product.idProducto,
+        controlaVencimiento: form.elements.controlaVencimiento.checked,
+        diasAlertaVencimiento: Number(form.elements.diasAlertaVencimiento.value),
+        lotes: lots,
+        claveOperacion: operationKey
+      }) });
+      close();
+      state.lotAccess = { ...state.lotAccess, productosControlados: Number(state.lotAccess?.productosControlados || 0) + 1 };
+      await refreshCatalogs();
+      renderMenu();
+      await showSuccess('Distribución inicial registrada. El stock general no fue modificado.');
+      await loadView('lotesVencimientos');
+    } catch (error) { errorTarget.textContent = error.message; }
+  });
+  form.querySelector('input, select, button')?.focus();
+}
+
+async function openLotProductConfiguration(product) {
+  const returnFocus = document.activeElement;
+  if (!product) return showError('Producto no encontrado.');
+  const canConfigure = hasFeature('control_lotes') && !state.context?.soloLectura;
+  const controlled = Number(product.controlaLotes) === 1;
+  if (!controlled && Number(product.stockUnidadesTotal) > 0) return openInitialLotDistribution(product);
+  modalRoot.innerHTML = `<div class="modal-backdrop"><form class="modal" id="lotProductConfigForm" role="dialog" aria-modal="true" aria-labelledby="lotConfigTitle">
+    <h3 id="lotConfigTitle">Lotes de ${escapeHtml(product.nombre)}</h3><div class="modal-body inventory-product-config">
+      ${!canConfigure ? '<div class="inventory-plan-note"><strong>Modo consulta</strong><span>La configuración no puede modificarse con el plan o estado actual.</span></div>' : ''}
+      <label class="check"><input name="controlaLotes" type="checkbox" ${controlled ? 'checked disabled' : ''}> Controlar lotes</label>
+      <label class="check"><input name="controlaVencimiento" type="checkbox" ${Number(product.controlaVencimiento) ? 'checked' : ''} ${canConfigure ? '' : 'disabled'}> Controlar vencimientos</label>
+      <label>Días de alerta<input name="diasAlertaVencimiento" type="number" min="1" max="365" value="${escapeHtml(product.diasAlertaVencimiento || state.lotAccess?.diasAlertaVencimientoDefault || 30)}" ${canConfigure ? '' : 'disabled'}></label>
+      <p class="hint">${controlled ? `Activado: ${escapeHtml(formatDate(product.lotesActivadosEn))}. No puede desactivarse porque su historial es inmutable.` : 'El producto no tiene stock y puede activarse directamente.'}</p>
+      <div class="inventory-note" data-lot-activation-confirm hidden><strong>Confirme la activación</strong><p>Desde este momento, las compras, ventas y ajustes deberán conservar trazabilidad por lotes.</p></div>
+      <p class="form-error" data-lot-config-error aria-live="polite"></p>
+    </div><div class="modal-actions"><button type="button" class="secondary" data-modal-cancel>${canConfigure ? 'Cancelar' : 'Cerrar'}</button>${canConfigure ? '<button type="submit" data-lot-write>Guardar configuración</button>' : ''}</div>
+  </form></div>`;
+  const form = document.getElementById('lotProductConfigForm');
+  const close = () => { modalRoot.innerHTML = ''; returnFocus?.focus?.(); };
+  modalRoot.querySelector('[data-modal-cancel]').addEventListener('click', close);
+  if (!canConfigure) return;
+  if (!controlled) form.elements.controlaLotes.addEventListener('change', () => {
+    if (!form.elements.controlaLotes.checked) form.elements.controlaVencimiento.checked = false;
+  });
+  form.addEventListener('input', () => {
+    delete form.dataset.confirmed;
+    form.querySelector('[data-lot-activation-confirm]').hidden = true;
+    form.querySelector('button[type="submit"]').textContent = 'Guardar configuración';
+  });
+  form.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    const errorTarget = form.querySelector('[data-lot-config-error]');
+    try {
+      if (!controlled && !form.elements.controlaLotes.checked) throw new Error('Active el control de lotes para guardar esta configuración.');
+      if (!controlled && form.dataset.confirmed !== 'true') {
+        form.dataset.confirmed = 'true';
+        form.querySelector('[data-lot-activation-confirm]').hidden = false;
+        form.querySelector('button[type="submit"]').textContent = 'Activar control ahora';
+        return;
+      }
+      const result = await api(`/api/productos/${product.idProducto}/configuracion-lotes`, { method: 'PATCH', body: JSON.stringify({
+        controlaLotes: true,
+        controlaVencimiento: form.elements.controlaVencimiento.checked,
+        diasAlertaVencimiento: Number(form.elements.diasAlertaVencimiento.value)
+      }) });
+      close();
+      await refreshCatalogs();
+      state.lotAccess = { ...state.lotAccess, productosControlados: Math.max(1, Number(state.lotAccess?.productosControlados || 0)) };
+      renderMenu();
+      await showSuccess(result.message);
+      await loadView('productos');
+    } catch (error) { errorTarget.textContent = error.message; }
+  });
 }
 
 function reportFilters(type) {

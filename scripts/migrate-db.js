@@ -19,12 +19,12 @@ const {
 const MIGRATION_LOCAL_DATETIME_TOKEN = '__MIGRATION_LOCAL_DATETIME__';
 
 function prepareMigrationStatement(file, statement, context = {}) {
-  if (file !== '010_inteligencia_inventario.sql'
+  if (!['010_inteligencia_inventario.sql', '011_lotes_vencimientos.sql'].includes(file)
     || !statement.includes(MIGRATION_LOCAL_DATETIME_TOKEN)) {
     return { sql: statement, params: [] };
   }
   if (!context.localDateTime) {
-    throw new Error('La migracion 010 requiere una marca de fecha local explicita.');
+    throw new Error(`La migracion ${file} requiere una marca de fecha local explicita.`);
   }
   const occurrences = statement.split(MIGRATION_LOCAL_DATETIME_TOKEN).length - 1;
   return {
@@ -350,10 +350,233 @@ const migrationRequirements = {
       ['configuracionInventarioTienda', 'fk_configInventario_tienda', ['idTienda'], 'tienda', ['idTienda'], 'RESTRICT', 'RESTRICT'],
       ['configuracionInventarioTienda', 'fk_configInventario_administrador', ['idTienda', 'idAdministradorActualiza'], 'administrador', ['idTienda', 'idAdministrador'], 'RESTRICT', 'RESTRICT']
     ]
+  },
+  '011_lotes_vencimientos.sql': {
+    columns: {
+      configuracionInventarioTienda: ['diasAlertaVencimientoDefault'],
+      producto: ['controlaLotes', 'controlaVencimiento', 'diasAlertaVencimiento', 'lotesActivadosEn'],
+      loteProducto: [
+        'idLoteProducto', 'idTienda', 'idProducto', 'idProveedor', 'idDetalleCompra',
+        'codigoLote', 'origen', 'fechaIngreso', 'fechaVencimiento', 'cantidadInicial',
+        'cantidadRestante', 'costoUnitarioBase', 'estadoOperativo', 'claveOperacion',
+        'creadoEn', 'actualizadoEn', 'idAdministradorCrea', 'idAdministradorActualiza'
+      ],
+      movimientoLote: [
+        'idMovimientoLote', 'idTienda', 'idProducto', 'idLoteProducto',
+        'idMovimientoStock', 'tipoRegistro', 'cantidad', 'cantidadAnterior',
+        'cantidadPosterior', 'claveOperacion', 'creadoEn', 'idAdministrador'
+      ]
+    },
+    indexes: [
+      ['detalleCompra', 'uq_detalleCompra_tienda_producto_id', ['idTienda', 'idProducto', 'idDetalleCompra'], true],
+      ['movimientoStock', 'uq_movimiento_tienda_producto_id', ['idTienda', 'idProducto', 'idMovimientoStock'], true],
+      ['loteProducto', 'PRIMARY', ['idLoteProducto'], true],
+      ['loteProducto', 'uq_lote_tienda_producto_id', ['idTienda', 'idProducto', 'idLoteProducto'], true],
+      ['loteProducto', 'uq_lote_tienda_clave', ['idTienda', 'claveOperacion'], true],
+      ['loteProducto', 'idx_lote_tienda_producto_estado_vencimiento', ['idTienda', 'idProducto', 'estadoOperativo', 'fechaVencimiento'], false],
+      ['loteProducto', 'idx_lote_tienda_producto_ingreso', ['idTienda', 'idProducto', 'fechaIngreso', 'idLoteProducto'], false],
+      ['loteProducto', 'idx_lote_tienda_proveedor_ingreso', ['idTienda', 'idProveedor', 'fechaIngreso'], false],
+      ['loteProducto', 'idx_lote_tienda_detalleCompra', ['idTienda', 'idDetalleCompra'], false],
+      ['loteProducto', 'idx_lote_tienda_codigo', ['idTienda', 'codigoLote'], false],
+      ['loteProducto', 'idx_lote_tienda_estado_vencimiento', ['idTienda', 'estadoOperativo', 'fechaVencimiento'], false],
+      ['movimientoLote', 'PRIMARY', ['idMovimientoLote'], true],
+      ['movimientoLote', 'uq_movimientoLote_tienda_clave', ['idTienda', 'claveOperacion'], true],
+      ['movimientoLote', 'idx_movimientoLote_tienda_lote_fecha', ['idTienda', 'idLoteProducto', 'creadoEn'], false],
+      ['movimientoLote', 'idx_movimientoLote_tienda_movimiento', ['idTienda', 'idMovimientoStock'], false],
+      ['movimientoLote', 'idx_movimientoLote_tienda_producto_fecha', ['idTienda', 'idProducto', 'creadoEn'], false],
+      ['movimientoLote', 'idx_movimientoLote_tienda_tipo_fecha', ['idTienda', 'tipoRegistro', 'creadoEn'], false]
+    ],
+    checks: [
+      ['configuracionInventarioTienda', 'chk_configInventario_alerta_vencimiento'],
+      ['producto', 'chk_producto_controla_lotes'],
+      ['producto', 'chk_producto_controla_vencimiento'],
+      ['producto', 'chk_producto_vencimiento_requiere_lotes'],
+      ['producto', 'chk_producto_dias_alerta_vencimiento'],
+      ['producto', 'chk_producto_lotes_activacion'],
+      ['loteProducto', 'chk_lote_cantidades'],
+      ['loteProducto', 'chk_lote_costo'],
+      ['loteProducto', 'chk_lote_fecha_vencimiento'],
+      ['loteProducto', 'chk_lote_codigo'],
+      ['loteProducto', 'chk_lote_origen_detalle'],
+      ['loteProducto', 'chk_lote_anulado_sin_saldo'],
+      ['movimientoLote', 'chk_movimientoLote_cantidad'],
+      ['movimientoLote', 'chk_movimientoLote_balance'],
+      ['movimientoLote', 'chk_movimientoLote_referencia']
+    ],
+    foreignKeyConstraints: [
+      ['loteProducto', 'fk_lote_tienda', ['idTienda'], 'tienda', ['idTienda'], 'RESTRICT', 'RESTRICT'],
+      ['loteProducto', 'fk_lote_producto', ['idTienda', 'idProducto'], 'producto', ['idTienda', 'idProducto'], 'RESTRICT', 'RESTRICT'],
+      ['loteProducto', 'fk_lote_proveedor', ['idTienda', 'idProveedor'], 'proveedor', ['idTienda', 'idProveedor'], 'RESTRICT', 'RESTRICT'],
+      ['loteProducto', 'fk_lote_detalleCompra', ['idTienda', 'idProducto', 'idDetalleCompra'], 'detalleCompra', ['idTienda', 'idProducto', 'idDetalleCompra'], 'RESTRICT', 'RESTRICT'],
+      ['loteProducto', 'fk_lote_admin_crea', ['idTienda', 'idAdministradorCrea'], 'administrador', ['idTienda', 'idAdministrador'], 'RESTRICT', 'RESTRICT'],
+      ['loteProducto', 'fk_lote_admin_actualiza', ['idTienda', 'idAdministradorActualiza'], 'administrador', ['idTienda', 'idAdministrador'], 'RESTRICT', 'RESTRICT'],
+      ['movimientoLote', 'fk_movimientoLote_tienda', ['idTienda'], 'tienda', ['idTienda'], 'RESTRICT', 'RESTRICT'],
+      ['movimientoLote', 'fk_movimientoLote_producto', ['idTienda', 'idProducto'], 'producto', ['idTienda', 'idProducto'], 'RESTRICT', 'RESTRICT'],
+      ['movimientoLote', 'fk_movimientoLote_lote', ['idTienda', 'idProducto', 'idLoteProducto'], 'loteProducto', ['idTienda', 'idProducto', 'idLoteProducto'], 'RESTRICT', 'RESTRICT'],
+      ['movimientoLote', 'fk_movimientoLote_movimientoStock', ['idTienda', 'idProducto', 'idMovimientoStock'], 'movimientoStock', ['idTienda', 'idProducto', 'idMovimientoStock'], 'RESTRICT', 'RESTRICT'],
+      ['movimientoLote', 'fk_movimientoLote_administrador', ['idTienda', 'idAdministrador'], 'administrador', ['idTienda', 'idAdministrador'], 'RESTRICT', 'RESTRICT']
+    ]
   }
 };
 
+const LOTS_FEATURES = Object.freeze([
+  'vencimientos_lote',
+  'control_lotes',
+  'alertas_vencimiento',
+  'trazabilidad_lotes',
+  'exportacion_lotes'
+]);
+
+const LOTS_COLUMN_DEFINITIONS = Object.freeze({
+  configuracionInventarioTienda: {
+    diasAlertaVencimientoDefault: { type: 'int', nullable: false, defaultValue: 30 }
+  },
+  producto: {
+    controlaLotes: { type: 'tinyint(1)', nullable: false, defaultValue: 0 },
+    controlaVencimiento: { type: 'tinyint(1)', nullable: false, defaultValue: 0 },
+    diasAlertaVencimiento: { type: 'int', nullable: true, defaultValue: null },
+    lotesActivadosEn: { type: 'datetime', nullable: true, defaultValue: null, extra: '' },
+    ultimoPrecioCompra: { type: 'decimal(14,6)', nullable: false, defaultValue: 0 }
+  },
+  detalleVenta: {
+    costoUnitario: { type: 'decimal(14,6)', nullable: false, defaultValue: 0 }
+  },
+  loteProducto: {
+    idLoteProducto: { type: 'bigint', nullable: false, defaultValue: null, extraIncludes: 'auto_increment' },
+    idTienda: { type: 'int', nullable: false, defaultValue: null },
+    idProducto: { type: 'int', nullable: false, defaultValue: null },
+    idProveedor: { type: 'int', nullable: true, defaultValue: null },
+    idDetalleCompra: { type: 'int', nullable: true, defaultValue: null },
+    codigoLote: { type: 'varchar(80)', nullable: true, defaultValue: null },
+    origen: { type: "enum('compra','distribucion_inicial','ajuste_positivo','reversion')", nullable: false, defaultValue: null },
+    fechaIngreso: { type: 'datetime', nullable: false, defaultValue: null, extra: '' },
+    fechaVencimiento: { type: 'date', nullable: true, defaultValue: null, extra: '' },
+    cantidadInicial: { type: 'int', nullable: false, defaultValue: null },
+    cantidadRestante: { type: 'int', nullable: false, defaultValue: null },
+    costoUnitarioBase: { type: 'decimal(14,6)', nullable: true, defaultValue: null },
+    estadoOperativo: { type: "enum('disponible','bloqueado','anulado')", nullable: false, defaultValue: 'disponible' },
+    claveOperacion: { type: 'varchar(160)', nullable: false, defaultValue: null },
+    creadoEn: { type: 'datetime', nullable: false, defaultValue: null, extra: '' },
+    actualizadoEn: { type: 'datetime', nullable: false, defaultValue: null, extra: '' },
+    idAdministradorCrea: { type: 'int', nullable: false, defaultValue: null },
+    idAdministradorActualiza: { type: 'int', nullable: true, defaultValue: null }
+  },
+  movimientoLote: {
+    idMovimientoLote: { type: 'bigint', nullable: false, defaultValue: null, extraIncludes: 'auto_increment' },
+    idTienda: { type: 'int', nullable: false, defaultValue: null },
+    idProducto: { type: 'int', nullable: false, defaultValue: null },
+    idLoteProducto: { type: 'bigint', nullable: false, defaultValue: null },
+    idMovimientoStock: { type: 'bigint', nullable: true, defaultValue: null },
+    tipoRegistro: { type: "enum('movimiento_stock','distribucion_inicial')", nullable: false, defaultValue: null },
+    cantidad: { type: 'int', nullable: false, defaultValue: null },
+    cantidadAnterior: { type: 'int', nullable: false, defaultValue: null },
+    cantidadPosterior: { type: 'int', nullable: false, defaultValue: null },
+    claveOperacion: { type: 'varchar(160)', nullable: false, defaultValue: null },
+    creadoEn: { type: 'datetime', nullable: false, defaultValue: null, extra: '' },
+    idAdministrador: { type: 'int', nullable: false, defaultValue: null }
+  }
+});
+
+function normalizedIdentifier(value) {
+  return String(value || '').toLocaleLowerCase('en-US');
+}
+
+function normalizedColumnDefault(value) {
+  if (value === null || value === undefined) return null;
+  const text = String(value).trim().toLocaleLowerCase('en-US');
+  if (/^-?\d+(?:\.\d+)?$/.test(text)) return Number(text);
+  return text;
+}
+
+async function normalizedHasTable(connection, table) {
+  const [[row]] = await connection.query(
+    `SELECT COUNT(*) total FROM information_schema.TABLES
+     WHERE TABLE_SCHEMA=? AND LOWER(TABLE_NAME)=LOWER(?)`,
+    [process.env.DB_NAME, table]
+  );
+  return Number(row.total) > 0;
+}
+
+async function normalizedColumnDetails(connection, table, columns) {
+  if (!columns.length) return {};
+  const placeholders = columns.map(() => 'LOWER(?)').join(',');
+  const [rows] = await connection.query(
+    `SELECT COLUMN_NAME, COLUMN_TYPE, IS_NULLABLE, COLUMN_DEFAULT, EXTRA
+     FROM information_schema.COLUMNS
+     WHERE TABLE_SCHEMA=? AND LOWER(TABLE_NAME)=LOWER(?)
+       AND LOWER(COLUMN_NAME) IN (${placeholders})`,
+    [process.env.DB_NAME, table, ...columns]
+  );
+  return Object.fromEntries(rows.map((row) => [normalizedIdentifier(row.COLUMN_NAME), row]));
+}
+
+function columnDefinitionMatches(actual, expected) {
+  if (!actual) return false;
+  const actualType = normalizedIdentifier(actual.COLUMN_TYPE);
+  const expectedType = normalizedIdentifier(expected.type);
+  return actualType === expectedType
+    && (actual.IS_NULLABLE === 'YES') === expected.nullable
+    && normalizedColumnDefault(actual.COLUMN_DEFAULT) === normalizedColumnDefault(expected.defaultValue)
+    && (expected.extra === undefined || normalizedIdentifier(actual.EXTRA) === normalizedIdentifier(expected.extra))
+    && (!expected.extraIncludes || normalizedIdentifier(actual.EXTRA).includes(normalizedIdentifier(expected.extraIncludes)));
+}
+
+async function normalizedHasIndex(connection, table, indexName, columns, unique = false) {
+  const [rows] = await connection.query(
+    `SELECT COLUMN_NAME, NON_UNIQUE FROM information_schema.STATISTICS
+     WHERE TABLE_SCHEMA=? AND LOWER(TABLE_NAME)=LOWER(?) AND LOWER(INDEX_NAME)=LOWER(?)
+     ORDER BY SEQ_IN_INDEX`,
+    [process.env.DB_NAME, table, indexName]
+  );
+  if (rows.length !== columns.length) return false;
+  return rows.every((row, index) => normalizedIdentifier(row.COLUMN_NAME) === normalizedIdentifier(columns[index])
+    && Number(row.NON_UNIQUE) === (unique ? 0 : 1));
+}
+
+async function normalizedHasConstraint(connection, table, constraintName, type = null) {
+  const params = [process.env.DB_NAME, table, constraintName];
+  const typeClause = type ? ' AND CONSTRAINT_TYPE=?' : '';
+  if (type) params.push(type);
+  const [[row]] = await connection.query(
+    `SELECT COUNT(*) total FROM information_schema.TABLE_CONSTRAINTS
+     WHERE CONSTRAINT_SCHEMA=? AND LOWER(TABLE_NAME)=LOWER(?)
+       AND LOWER(CONSTRAINT_NAME)=LOWER(?)${typeClause}`,
+    params
+  );
+  return Number(row.total) > 0;
+}
+
+async function normalizedHasForeignKeyConstraint(connection, relation) {
+  const [table, name, columns, parentTable, parentColumns, updateRule, deleteRule] = relation;
+  const [rows] = await connection.query(
+    `SELECT COLUMN_NAME, REFERENCED_TABLE_NAME, REFERENCED_COLUMN_NAME
+     FROM information_schema.KEY_COLUMN_USAGE
+     WHERE TABLE_SCHEMA=? AND LOWER(TABLE_NAME)=LOWER(?)
+       AND LOWER(CONSTRAINT_NAME)=LOWER(?)
+     ORDER BY ORDINAL_POSITION`,
+    [process.env.DB_NAME, table, name]
+  );
+  if (rows.length !== columns.length) return false;
+  const columnsMatch = rows.every((row, index) => normalizedIdentifier(row.COLUMN_NAME) === normalizedIdentifier(columns[index])
+    && normalizedIdentifier(row.REFERENCED_TABLE_NAME) === normalizedIdentifier(parentTable)
+    && normalizedIdentifier(row.REFERENCED_COLUMN_NAME) === normalizedIdentifier(parentColumns[index]));
+  if (!columnsMatch) return false;
+  const [rules] = await connection.query(
+    `SELECT UPDATE_RULE, DELETE_RULE FROM information_schema.REFERENTIAL_CONSTRAINTS
+     WHERE CONSTRAINT_SCHEMA=? AND LOWER(TABLE_NAME)=LOWER(?)
+       AND LOWER(CONSTRAINT_NAME)=LOWER(?)`,
+    [process.env.DB_NAME, table, name]
+  );
+  return rules.length === 1
+    && normalizedIdentifier(rules[0].UPDATE_RULE) === normalizedIdentifier(updateRule)
+    && normalizedIdentifier(rules[0].DELETE_RULE) === normalizedIdentifier(deleteRule);
+}
+
 async function requirementsSatisfied(connection, file) {
+  if (file === '011_lotes_vencimientos.sql') {
+    const estado011 = await inspect011State(connection, false, { log: false });
+    return estado011.estructuraCompleta && estado011.datosValidos;
+  }
   const requirements = migrationRequirements[file];
   if (!requirements) return false;
   for (const [table, columns] of Object.entries(requirements.columns || {})) {
@@ -915,6 +1138,24 @@ function structureElementFromStatement(statement) {
   const column = normalized.match(/^ALTER TABLE\s+`?([A-Za-z0-9_]+)`?\s+ADD COLUMN\s+`?([A-Za-z0-9_]+)`?/i);
   if (column) return { type: 'columna', table: column[1], name: column[2] };
 
+  const modifiedColumn = normalized.match(
+    /^ALTER TABLE\s+`?([A-Za-z0-9_]+)`?\s+MODIFY COLUMN\s+`?([A-Za-z0-9_]+)`?\s+([A-Za-z]+(?:\(\d+(?:,\d+)?\))?)(.*)$/i
+  );
+  if (modifiedColumn) {
+    const defaultMatch = modifiedColumn[4].match(/\bDEFAULT\s+('(?:[^']|'')*'|[^\s,]+)/i);
+    const rawDefault = defaultMatch ? defaultMatch[1].replace(/^'|'$/g, '') : null;
+    return {
+      type: 'definicion_columna',
+      table: modifiedColumn[1],
+      name: modifiedColumn[2],
+      expected: {
+        type: modifiedColumn[3],
+        nullable: !/\bNOT NULL\b/i.test(modifiedColumn[4]),
+        defaultValue: rawDefault
+      }
+    };
+  }
+
   const index = normalized.match(/^ALTER TABLE\s+`?([A-Za-z0-9_]+)`?\s+ADD\s+(?:UNIQUE\s+)?INDEX\s+`?([A-Za-z0-9_]+)`?/i);
   if (index) return { type: 'indice', table: index[1], name: index[2] };
 
@@ -924,8 +1165,27 @@ function structureElementFromStatement(statement) {
   return null;
 }
 
-async function structureElementExists(connection, element) {
+async function structureElementExists(connection, element, file = null) {
   if (!element) return false;
+  if (element.type === 'definicion_columna') {
+    const details = await normalizedColumnDetails(connection, element.table, [element.name]);
+    return columnDefinitionMatches(details[normalizedIdentifier(element.name)], element.expected);
+  }
+  if (file === '011_lotes_vencimientos.sql') {
+    if (element.type === 'columna') {
+      const details = await normalizedColumnDetails(connection, element.table, [element.name]);
+      return Boolean(details[normalizedIdentifier(element.name)]);
+    }
+    if (element.type === 'indice') {
+      const [[row]] = await connection.query(
+        `SELECT COUNT(*) total FROM information_schema.STATISTICS
+         WHERE TABLE_SCHEMA=? AND LOWER(TABLE_NAME)=LOWER(?) AND LOWER(INDEX_NAME)=LOWER(?)`,
+        [process.env.DB_NAME, element.table, element.name]
+      );
+      return Number(row.total) > 0;
+    }
+    return normalizedHasConstraint(connection, element.table, element.name);
+  }
   if (element.type === 'columna') return hasColumns(connection, element.table, [element.name]);
   if (element.type === 'indice') return hasIndexNamed(connection, element.table, element.name);
   return hasConstraint(connection, element.table, element.name);
@@ -1231,6 +1491,305 @@ async function inspect010State(connection, recorded) {
   return estado010;
 }
 
+async function migrationCount(connection, sql, params = []) {
+  const [[row]] = await connection.query(sql, params);
+  return Number(row.total || 0);
+}
+
+async function inspect011Data(connection, estado011) {
+  const datos = {
+    configuracionesAlertaInvalidas: null,
+    productosConfiguracionLotesInvalida: null,
+    productosActivacionIncoherente: null,
+    productosConLotesActivos: null,
+    lotesInvalidos: null,
+    lotesReferenciasInvalidas: null,
+    lotesEnProductosSinControl: null,
+    lotesSinVencimientoRequerido: null,
+    lotesClavesDuplicadas: null,
+    lotesSinMovimiento: null,
+    lotesSaldoFinalIncoherente: null,
+    movimientosLoteInvalidos: null,
+    movimientosLoteReferenciasInvalidas: null,
+    movimientosLoteClavesDuplicadas: null,
+    reconciliacionesInvalidas: null,
+    movimientosStockSinCoberturaLote: null,
+    funcionalidadesActivas: null,
+    accesosAvanzado: null,
+    accesosBasico: null,
+    funcionalidadesDuplicadas: null,
+    accesosPlanDuplicados: null,
+    lotes: null,
+    movimientosLote: null
+  };
+
+  if (estado011.columnas.configuracionInventarioTienda) {
+    datos.configuracionesAlertaInvalidas = await migrationCount(connection,
+      `SELECT COUNT(*) total FROM configuracionInventarioTienda
+       WHERE diasAlertaVencimientoDefault NOT BETWEEN 1 AND 365`);
+  }
+  if (estado011.columnas.producto) {
+    datos.productosConfiguracionLotesInvalida = await migrationCount(connection,
+      `SELECT COUNT(*) total FROM producto
+       WHERE controlaLotes NOT IN (0,1)
+          OR controlaVencimiento NOT IN (0,1)
+          OR (controlaVencimiento=1 AND controlaLotes=0)
+          OR (diasAlertaVencimiento IS NOT NULL AND diasAlertaVencimiento NOT BETWEEN 1 AND 365)`);
+    datos.productosActivacionIncoherente = await migrationCount(connection,
+      `SELECT COUNT(*) total FROM producto
+       WHERE (controlaLotes=0 AND lotesActivadosEn IS NOT NULL)
+          OR (controlaLotes=1 AND lotesActivadosEn IS NULL)`);
+    datos.productosConLotesActivos = await migrationCount(connection,
+      'SELECT COUNT(*) total FROM producto WHERE controlaLotes=1');
+  }
+
+  if (estado011.columnas.loteProducto) {
+    datos.lotes = await migrationCount(connection, 'SELECT COUNT(*) total FROM loteProducto');
+    datos.lotesInvalidos = await migrationCount(connection,
+      `SELECT COUNT(*) total FROM loteProducto
+       WHERE cantidadInicial<=0 OR cantidadRestante<0 OR cantidadRestante>cantidadInicial
+          OR costoUnitarioBase<0
+          OR (fechaVencimiento IS NOT NULL AND fechaVencimiento<DATE(fechaIngreso))
+          OR (codigoLote IS NOT NULL AND CHAR_LENGTH(TRIM(codigoLote))=0)
+          OR (origen='compra' AND idDetalleCompra IS NULL)
+          OR (origen<>'compra' AND idDetalleCompra IS NOT NULL)
+          OR (estadoOperativo='anulado' AND cantidadRestante<>0)`);
+    datos.lotesReferenciasInvalidas = await migrationCount(connection,
+      `SELECT COUNT(*) total FROM loteProducto l
+       LEFT JOIN tienda t ON t.idTienda=l.idTienda
+       LEFT JOIN producto p ON p.idTienda=l.idTienda AND p.idProducto=l.idProducto
+       LEFT JOIN proveedor pr ON pr.idTienda=l.idTienda AND pr.idProveedor=l.idProveedor
+       LEFT JOIN detalleCompra dc
+         ON dc.idTienda=l.idTienda AND dc.idProducto=l.idProducto
+        AND dc.idDetalleCompra=l.idDetalleCompra
+       LEFT JOIN compra c ON c.idTienda=dc.idTienda AND c.idCompra=dc.idCompra
+       LEFT JOIN administrador ac
+         ON ac.idTienda=l.idTienda AND ac.idAdministrador=l.idAdministradorCrea
+       LEFT JOIN administrador au
+         ON au.idTienda=l.idTienda AND au.idAdministrador=l.idAdministradorActualiza
+       WHERE t.idTienda IS NULL OR p.idProducto IS NULL OR ac.idAdministrador IS NULL
+          OR (l.idProveedor IS NOT NULL AND pr.idProveedor IS NULL)
+          OR (l.idDetalleCompra IS NOT NULL AND dc.idDetalleCompra IS NULL)
+          OR (l.origen='compra' AND c.idCompra IS NULL)
+          OR (l.idProveedor IS NOT NULL AND c.idProveedor IS NOT NULL AND l.idProveedor<>c.idProveedor)
+          OR (l.idAdministradorActualiza IS NOT NULL AND au.idAdministrador IS NULL)`);
+    datos.lotesEnProductosSinControl = await migrationCount(connection,
+      `SELECT COUNT(*) total FROM loteProducto l
+       JOIN producto p ON p.idTienda=l.idTienda AND p.idProducto=l.idProducto
+       WHERE p.controlaLotes=0`);
+    datos.lotesSinVencimientoRequerido = await migrationCount(connection,
+      `SELECT COUNT(*) total FROM loteProducto l
+       JOIN producto p ON p.idTienda=l.idTienda AND p.idProducto=l.idProducto
+       WHERE p.controlaVencimiento=1 AND l.estadoOperativo<>'anulado'
+         AND l.cantidadRestante>0 AND l.fechaVencimiento IS NULL`);
+    datos.lotesClavesDuplicadas = await migrationCount(connection,
+      `SELECT COUNT(*) total FROM (
+         SELECT idTienda, claveOperacion FROM loteProducto
+         GROUP BY idTienda, claveOperacion HAVING COUNT(*)>1
+       ) duplicados`);
+  }
+
+  if (estado011.columnas.movimientoLote) {
+    datos.movimientosLote = await migrationCount(connection, 'SELECT COUNT(*) total FROM movimientoLote');
+    datos.movimientosLoteInvalidos = await migrationCount(connection,
+      `SELECT COUNT(*) total FROM movimientoLote
+       WHERE cantidad=0 OR cantidadAnterior<0 OR cantidadPosterior<0
+          OR cantidadPosterior<>cantidadAnterior+cantidad
+          OR (tipoRegistro='distribucion_inicial'
+              AND (idMovimientoStock IS NOT NULL OR cantidad<=0))
+          OR (tipoRegistro='movimiento_stock' AND idMovimientoStock IS NULL)`);
+    datos.movimientosLoteReferenciasInvalidas = await migrationCount(connection,
+      `SELECT COUNT(*) total FROM movimientoLote ml
+       LEFT JOIN producto p ON p.idTienda=ml.idTienda AND p.idProducto=ml.idProducto
+       LEFT JOIN loteProducto l
+         ON l.idTienda=ml.idTienda AND l.idProducto=ml.idProducto
+        AND l.idLoteProducto=ml.idLoteProducto
+       LEFT JOIN movimientoStock ms
+         ON ms.idTienda=ml.idTienda AND ms.idProducto=ml.idProducto
+        AND ms.idMovimientoStock=ml.idMovimientoStock
+       LEFT JOIN administrador a
+         ON a.idTienda=ml.idTienda AND a.idAdministrador=ml.idAdministrador
+       WHERE p.idProducto IS NULL OR l.idLoteProducto IS NULL OR a.idAdministrador IS NULL
+          OR (ml.idMovimientoStock IS NOT NULL AND ms.idMovimientoStock IS NULL)`);
+    datos.movimientosLoteClavesDuplicadas = await migrationCount(connection,
+      `SELECT COUNT(*) total FROM (
+         SELECT idTienda, claveOperacion FROM movimientoLote
+         GROUP BY idTienda, claveOperacion HAVING COUNT(*)>1
+       ) duplicados`);
+  }
+
+  if (estado011.columnas.loteProducto && estado011.columnas.movimientoLote) {
+    datos.lotesSinMovimiento = await migrationCount(connection,
+      `SELECT COUNT(*) total FROM loteProducto l
+       WHERE NOT EXISTS (
+         SELECT 1 FROM movimientoLote ml
+         WHERE ml.idTienda=l.idTienda AND ml.idProducto=l.idProducto
+           AND ml.idLoteProducto=l.idLoteProducto
+       )`);
+    datos.lotesSaldoFinalIncoherente = await migrationCount(connection,
+      `SELECT COUNT(*) total FROM loteProducto l
+       JOIN movimientoLote ml ON ml.idMovimientoLote=(
+         SELECT MAX(ultimo.idMovimientoLote) FROM movimientoLote ultimo
+         WHERE ultimo.idTienda=l.idTienda AND ultimo.idProducto=l.idProducto
+           AND ultimo.idLoteProducto=l.idLoteProducto
+       )
+       WHERE ml.cantidadPosterior<>l.cantidadRestante`);
+  }
+
+  if (estado011.columnas.producto && estado011.columnas.loteProducto) {
+    datos.reconciliacionesInvalidas = await migrationCount(connection,
+      `SELECT COUNT(*) total FROM (
+         SELECT p.idTienda, p.idProducto
+         FROM producto p
+         LEFT JOIN loteProducto l
+           ON l.idTienda=p.idTienda AND l.idProducto=p.idProducto
+          AND l.estadoOperativo<>'anulado'
+         WHERE p.controlaLotes=1
+         GROUP BY p.idTienda, p.idProducto, p.stockUnidadesTotal
+         HAVING COALESCE(SUM(l.cantidadRestante),0)<>p.stockUnidadesTotal
+       ) diferencias`);
+  }
+  if (estado011.columnas.producto && estado011.columnas.movimientoLote
+    && await normalizedHasTable(connection, 'movimientoStock')) {
+    datos.movimientosStockSinCoberturaLote = await migrationCount(connection,
+      `SELECT COUNT(*) total FROM (
+         SELECT ms.idTienda, ms.idProducto, ms.idMovimientoStock, ms.cantidad
+         FROM movimientoStock ms
+         JOIN producto p ON p.idTienda=ms.idTienda AND p.idProducto=ms.idProducto
+         LEFT JOIN movimientoLote ml
+           ON ml.idTienda=ms.idTienda AND ml.idProducto=ms.idProducto
+          AND ml.idMovimientoStock=ms.idMovimientoStock
+          AND ml.tipoRegistro='movimiento_stock'
+         WHERE p.controlaLotes=1 AND p.lotesActivadosEn IS NOT NULL
+            AND ms.creadoEn>p.lotesActivadosEn
+         GROUP BY ms.idTienda, ms.idProducto, ms.idMovimientoStock, ms.cantidad
+         HAVING COALESCE(SUM(ml.cantidad),0)<>ms.cantidad
+       ) diferencias`);
+  }
+
+  const featureTablesExist = await normalizedHasTable(connection, 'funcionalidad')
+    && await normalizedHasTable(connection, 'plan')
+    && await normalizedHasTable(connection, 'planFuncionalidad');
+  if (featureTablesExist) {
+    const placeholders = LOTS_FEATURES.map(() => '?').join(',');
+    datos.funcionalidadesActivas = await migrationCount(connection,
+      `SELECT COUNT(DISTINCT codigo) total FROM funcionalidad
+       WHERE activo=1 AND codigo IN (${placeholders})`, LOTS_FEATURES);
+    datos.accesosAvanzado = await migrationCount(connection,
+      `SELECT COUNT(DISTINCT f.codigo) total FROM planFuncionalidad pf
+       JOIN plan p ON p.idPlan=pf.idPlan
+       JOIN funcionalidad f ON f.idFuncionalidad=pf.idFuncionalidad
+       WHERE p.codigo='avanzado' AND p.activo=1 AND f.activo=1 AND pf.habilitada=1
+         AND f.codigo IN (${placeholders})`, LOTS_FEATURES);
+    datos.accesosBasico = await migrationCount(connection,
+      `SELECT COUNT(DISTINCT f.codigo) total FROM planFuncionalidad pf
+       JOIN plan p ON p.idPlan=pf.idPlan
+       JOIN funcionalidad f ON f.idFuncionalidad=pf.idFuncionalidad
+       WHERE p.codigo='basico' AND f.activo=1 AND pf.habilitada=1
+         AND f.codigo IN (${placeholders})`, LOTS_FEATURES);
+    datos.funcionalidadesDuplicadas = await migrationCount(connection,
+      `SELECT COUNT(*) total FROM (
+         SELECT codigo FROM funcionalidad GROUP BY codigo HAVING COUNT(*)>1
+       ) duplicados`);
+    datos.accesosPlanDuplicados = await migrationCount(connection,
+      `SELECT COUNT(*) total FROM (
+         SELECT idPlan, idFuncionalidad FROM planFuncionalidad
+         GROUP BY idPlan, idFuncionalidad HAVING COUNT(*)>1
+       ) duplicados`);
+  }
+  return datos;
+}
+
+function lotsExpirationDataValid(datos) {
+  const zeroChecks = [
+    'configuracionesAlertaInvalidas', 'productosConfiguracionLotesInvalida',
+    'productosActivacionIncoherente', 'lotesInvalidos', 'lotesReferenciasInvalidas',
+    'lotesEnProductosSinControl', 'lotesSinVencimientoRequerido',
+    'lotesClavesDuplicadas', 'lotesSinMovimiento', 'lotesSaldoFinalIncoherente',
+    'movimientosLoteInvalidos', 'movimientosLoteReferenciasInvalidas',
+    'movimientosLoteClavesDuplicadas', 'reconciliacionesInvalidas',
+    'movimientosStockSinCoberturaLote', 'funcionalidadesDuplicadas',
+    'accesosPlanDuplicados'
+  ];
+  return zeroChecks.every((key) => datos[key] === 0)
+    && datos.funcionalidadesActivas === LOTS_FEATURES.length
+    && datos.accesosAvanzado === LOTS_FEATURES.length
+    && datos.accesosBasico === 0;
+}
+
+async function inspect011State(connection, recorded, { log = true } = {}) {
+  const requirements = migrationRequirements['011_lotes_vencimientos.sql'];
+  const estado011 = {
+    migracion011Registrada: Boolean(recorded),
+    tablas: {},
+    columnas: {},
+    tiposNulabilidadDefaults: {},
+    indices: {},
+    checks: {},
+    clavesForaneas: {},
+    motores: {},
+    estructuraCompleta: false,
+    datosValidos: false,
+    datos: null
+  };
+  const tables = new Set([
+    ...Object.keys(requirements.columns),
+    ...Object.keys(LOTS_COLUMN_DEFINITIONS),
+    'detalleCompra', 'movimientoStock'
+  ]);
+  for (const table of tables) estado011.tablas[table] = await normalizedHasTable(connection, table);
+  for (const [table, columns] of Object.entries(requirements.columns)) {
+    const details = estado011.tablas[table] ? await normalizedColumnDetails(connection, table, columns) : {};
+    estado011.columnas[table] = columns.every((column) => Boolean(details[normalizedIdentifier(column)]));
+  }
+  for (const [table, definitions] of Object.entries(LOTS_COLUMN_DEFINITIONS)) {
+    const details = estado011.tablas[table]
+      ? await normalizedColumnDetails(connection, table, Object.keys(definitions)) : {};
+    estado011.tiposNulabilidadDefaults[table] = {};
+    for (const [column, expected] of Object.entries(definitions)) {
+      estado011.tiposNulabilidadDefaults[table][column] = columnDefinitionMatches(
+        details[normalizedIdentifier(column)], expected
+      );
+    }
+  }
+  for (const [table, name, columns, unique] of requirements.indexes) {
+    estado011.indices[`${table}.${name}`] = await normalizedHasIndex(connection, table, name, columns, unique);
+  }
+  for (const [table, name] of requirements.checks) {
+    estado011.checks[`${table}.${name}`] = await normalizedHasConstraint(connection, table, name, 'CHECK');
+  }
+  for (const relation of requirements.foreignKeyConstraints) {
+    estado011.clavesForaneas[`${relation[0]}.${relation[1]}`] = await normalizedHasForeignKeyConstraint(connection, relation);
+  }
+  for (const table of ['loteProducto', 'movimientoLote']) {
+    if (!estado011.tablas[table]) {
+      estado011.motores[table] = false;
+      continue;
+    }
+    const [[engine]] = await connection.query(
+      `SELECT ENGINE FROM information_schema.TABLES
+       WHERE TABLE_SCHEMA=? AND LOWER(TABLE_NAME)=LOWER(?)`,
+      [process.env.DB_NAME, table]
+    );
+    estado011.motores[table] = normalizedIdentifier(engine?.ENGINE) === 'innodb';
+  }
+  estado011.estructuraCompleta = Object.values(estado011.tablas).every(Boolean)
+    && Object.values(estado011.columnas).every(Boolean)
+    && Object.values(estado011.tiposNulabilidadDefaults)
+      .every((table) => Object.values(table).every(Boolean))
+    && Object.values(estado011.indices).every(Boolean)
+    && Object.values(estado011.checks).every(Boolean)
+    && Object.values(estado011.clavesForaneas).every(Boolean)
+    && Object.values(estado011.motores).every(Boolean);
+  estado011.datos = await inspect011Data(connection, estado011);
+  estado011.datosValidos = estado011.estructuraCompleta && lotsExpirationDataValid(estado011.datos);
+  if (log) {
+    console.log('Estado previo detectado para 011_lotes_vencimientos.sql:');
+    console.log(JSON.stringify(estado011, null, 2));
+  }
+  return estado011;
+}
+
 async function validateFinancialMigrationData(connection) {
   if (await hasColumns(connection, 'detalleVenta', ['origenCosto'])) {
     const [[invalidCosts]] = await connection.query(
@@ -1331,6 +1890,35 @@ async function validateInventoryIntelligenceMigrationData(connection) {
   }
 }
 
+async function validateLotsExpirationMigrationData(connection) {
+  const [[invalidCosts]] = await connection.query(
+    `SELECT
+       (SELECT COUNT(*) FROM producto WHERE ultimoPrecioCompra<0)
+       + (SELECT COUNT(*) FROM detalleVenta WHERE costoUnitario<0) total`
+  );
+  if (Number(invalidCosts.total) > 0) {
+    throw new Error(`La migracion 011 no puede continuar: existen ${invalidCosts.total} costos negativos.`);
+  }
+  const estado = await inspect011State(connection, false, { log: false });
+  const invalidKeys = [
+    'configuracionesAlertaInvalidas', 'productosConfiguracionLotesInvalida',
+    'productosActivacionIncoherente', 'lotesInvalidos', 'lotesReferenciasInvalidas',
+    'lotesEnProductosSinControl', 'lotesSinVencimientoRequerido',
+    'lotesClavesDuplicadas', 'lotesSinMovimiento', 'lotesSaldoFinalIncoherente',
+    'movimientosLoteInvalidos', 'movimientosLoteReferenciasInvalidas',
+    'movimientosLoteClavesDuplicadas', 'reconciliacionesInvalidas',
+    'movimientosStockSinCoberturaLote', 'funcionalidadesDuplicadas',
+    'accesosPlanDuplicados'
+  ].filter((key) => estado.datos[key] !== null && estado.datos[key] > 0);
+  if (invalidKeys.length) {
+    const detail = invalidKeys.map((key) => `${key}=${estado.datos[key]}`).join(', ');
+    throw new Error(`La migracion 011 no puede continuar por datos incompatibles: ${detail}.`);
+  }
+  if (estado.datos.accesosBasico !== null && estado.datos.accesosBasico > 0) {
+    throw new Error('La migracion 011 no puede continuar: el plan basico tiene funciones de lotes habilitadas.');
+  }
+}
+
 function isExistingStructureError(error) {
   return [
     'ER_DUP_FIELDNAME',
@@ -1359,6 +1947,7 @@ async function main() {
       const [recorded] = await connection.query('SELECT nombre FROM schema_migrations WHERE nombre=?', [file]);
       let estado006 = null;
       let estado010 = null;
+      let estado011 = null;
       if (file === '004_multitienda_base.sql') {
         await inspect004State(connection, recorded.length > 0);
       }
@@ -1376,11 +1965,16 @@ async function main() {
       if (file === '010_inteligencia_inventario.sql') {
         estado010 = await inspect010State(connection, recorded.length > 0);
       }
+      if (file === '011_lotes_vencimientos.sql') {
+        estado011 = await inspect011State(connection, recorded.length > 0);
+      }
       if (recorded.length) {
         const registeredMigrationIsIncomplete = file === '006_catalogo_maestro.sql'
           ? decide006Action(estado006) === 'detener'
           : file === '010_inteligencia_inventario.sql'
             ? !(estado010.estructuraCompleta && estado010.datosValidos)
+            : file === '011_lotes_vencimientos.sql'
+              ? !(estado011.estructuraCompleta && estado011.datosValidos)
             : ['004_multitienda_base.sql', '005_planes_suscripciones.sql', '007_movimientos_stock.sql', '008_punto_venta_pagos.sql', '009_finanzas_reportes_caja.sql'].includes(file)
             && !await requirementsSatisfied(connection, file);
         if (registeredMigrationIsIncomplete) {
@@ -1394,16 +1988,25 @@ async function main() {
         ? decide006Action(estado006) === 'registrar'
         : file === '010_inteligencia_inventario.sql'
           ? estado010.estructuraCompleta && estado010.datosValidos
+          : file === '011_lotes_vencimientos.sql'
+            ? estado011.estructuraCompleta && estado011.datosValidos
           : await requirementsSatisfied(connection, file);
       if (existingMigrationIsComplete) {
-        if (file === '010_inteligencia_inventario.sql') {
+        if (['010_inteligencia_inventario.sql', '011_lotes_vencimientos.sql'].includes(file)) {
           await connection.query('INSERT IGNORE INTO schema_migrations (nombre) VALUES (?)', [file]);
           const [finalRecord] = await connection.query(
             'SELECT nombre FROM schema_migrations WHERE nombre=?', [file]
           );
-          estado010 = await inspect010State(connection, finalRecord.length > 0);
-          if (!estado010.migracion010Registrada || !estado010.estructuraCompleta || !estado010.datosValidos) {
-            throw new Error('La migracion 010 no pudo confirmar su registro y estado fisico final.');
+          if (file === '010_inteligencia_inventario.sql') {
+            estado010 = await inspect010State(connection, finalRecord.length > 0);
+            if (!estado010.migracion010Registrada || !estado010.estructuraCompleta || !estado010.datosValidos) {
+              throw new Error('La migracion 010 no pudo confirmar su registro y estado fisico final.');
+            }
+          } else {
+            estado011 = await inspect011State(connection, finalRecord.length > 0);
+            if (!estado011.migracion011Registrada || !estado011.estructuraCompleta || !estado011.datosValidos) {
+              throw new Error('La migracion 011 no pudo confirmar su registro y estado fisico final.');
+            }
           }
         } else {
           await connection.query('INSERT INTO schema_migrations (nombre) VALUES (?)', [file]);
@@ -1413,7 +2016,7 @@ async function main() {
       }
 
       const statements = readSqlStatements(path.join(migrationsDir, file));
-      const migrationContext = file === '010_inteligencia_inventario.sql'
+      const migrationContext = ['010_inteligencia_inventario.sql', '011_lotes_vencimientos.sql'].includes(file)
         ? { localDateTime: formatLocalDateTime() }
         : {};
       let multitenantDataValidated = false;
@@ -1429,6 +2032,10 @@ async function main() {
         await validateInventoryIntelligenceMigrationData(connection);
         console.log('Datos de inventario existentes validados antes de recuperar la estructura 010.');
       }
+      if (file === '011_lotes_vencimientos.sql') {
+        await validateLotsExpirationMigrationData(connection);
+        console.log('Datos existentes validados antes de recuperar la estructura de lotes 011.');
+      }
       for (let index = 0; index < statements.length; index += 1) {
         const statement = statements[index];
         if (file === '004_multitienda_base.sql'
@@ -1439,10 +2046,10 @@ async function main() {
           console.log('Datos multi-tienda validados antes de crear indices y restricciones.');
         }
 
-        const element = ['004_multitienda_base.sql', '006_catalogo_maestro.sql', '007_movimientos_stock.sql', '008_punto_venta_pagos.sql', '009_finanzas_reportes_caja.sql', '010_inteligencia_inventario.sql'].includes(file)
+        const element = ['004_multitienda_base.sql', '006_catalogo_maestro.sql', '007_movimientos_stock.sql', '008_punto_venta_pagos.sql', '009_finanzas_reportes_caja.sql', '010_inteligencia_inventario.sql', '011_lotes_vencimientos.sql'].includes(file)
           ? structureElementFromStatement(statement)
           : null;
-        if (element && await structureElementExists(connection, element)) {
+        if (element && await structureElementExists(connection, element, file)) {
           console.log(`Paso ${index + 1}/${statements.length} omitido; ${element.type} existente: ${element.table}.${element.name}.`);
           continue;
         }
@@ -1462,7 +2069,7 @@ async function main() {
           const executable = prepareMigrationStatement(file, statement, migrationContext);
           await connection.query(executable.sql, executable.params);
         } catch (error) {
-          if (isExistingStructureError(error) && element && await structureElementExists(connection, element)) {
+          if (isExistingStructureError(error) && element && await structureElementExists(connection, element, file)) {
             console.log(`Paso ${index + 1}/${statements.length}: elemento existente; se verificara al finalizar.`);
             continue;
           }
@@ -1488,10 +2095,15 @@ async function main() {
       if (file === '010_inteligencia_inventario.sql') {
         estado010 = await inspect010State(connection, false);
       }
+      if (file === '011_lotes_vencimientos.sql') {
+        estado011 = await inspect011State(connection, false);
+      }
       const migrationCompleted = file === '006_catalogo_maestro.sql'
         ? estado006.estructuraCompleta && estado006.datosValidos
         : file === '010_inteligencia_inventario.sql'
           ? estado010.estructuraCompleta && estado010.datosValidos
+          : file === '011_lotes_vencimientos.sql'
+            ? estado011.estructuraCompleta && estado011.datosValidos
           : await requirementsSatisfied(connection, file);
       if (!migrationCompleted) {
         const missing = await missingRequirementElements(connection, file);
@@ -1500,14 +2112,21 @@ async function main() {
           + `Elementos faltantes: ${missing.length ? missing.join(', ') : 'ninguno; revise datos y configuracion de la migracion'}.`
         );
       }
-      if (file === '010_inteligencia_inventario.sql') {
+      if (['010_inteligencia_inventario.sql', '011_lotes_vencimientos.sql'].includes(file)) {
         await connection.query('INSERT IGNORE INTO schema_migrations (nombre) VALUES (?)', [file]);
         const [finalRecord] = await connection.query(
           'SELECT nombre FROM schema_migrations WHERE nombre=?', [file]
         );
-        estado010 = await inspect010State(connection, finalRecord.length > 0);
-        if (!estado010.migracion010Registrada || !estado010.estructuraCompleta || !estado010.datosValidos) {
-          throw new Error('La migracion 010 no pudo confirmar su registro y estado fisico final.');
+        if (file === '010_inteligencia_inventario.sql') {
+          estado010 = await inspect010State(connection, finalRecord.length > 0);
+          if (!estado010.migracion010Registrada || !estado010.estructuraCompleta || !estado010.datosValidos) {
+            throw new Error('La migracion 010 no pudo confirmar su registro y estado fisico final.');
+          }
+        } else {
+          estado011 = await inspect011State(connection, finalRecord.length > 0);
+          if (!estado011.migracion011Registrada || !estado011.estructuraCompleta || !estado011.datosValidos) {
+            throw new Error('La migracion 011 no pudo confirmar su registro y estado fisico final.');
+          }
         }
       } else {
         await connection.query('INSERT INTO schema_migrations (nombre) VALUES (?)', [file]);

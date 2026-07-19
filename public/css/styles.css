@@ -1345,6 +1345,147 @@ tr.low-stock { background: var(--warn); }
 }
 .inventory-config-form label small { color: var(--muted); }
 .inventory-product-config { display: grid; gap: 12px; }
+.lot-filter-panel { padding-bottom: 12px; }
+.lot-filters {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(130px, 1fr));
+  gap: 10px;
+  align-items: end;
+}
+.lot-filter-actions {
+  grid-column: 1 / -1;
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.lot-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+  margin-bottom: 14px;
+}
+.lot-alert-strip {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 14px;
+}
+.lot-alert-strip > span {
+  display: grid;
+  grid-template-columns: auto auto;
+  align-items: center;
+  gap: 4px 8px;
+  min-width: 130px;
+  padding: 8px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: #fff;
+}
+.lot-alert-strip > span .lot-badge { grid-row: 1 / 3; }
+.lot-alert-strip > span strong { font-size: 18px; }
+.lot-alert-strip > span small { color: var(--muted); }
+.lot-results-heading,
+.lot-editor-footer,
+.purchase-lot-heading,
+.purchase-lot-summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 12px 0;
+}
+.lot-results-heading span,
+.purchase-lot-heading p,
+.purchase-lot-summary small { color: var(--muted); }
+.purchase-lot-heading p { margin: 3px 0 0; }
+.lot-mobile-list { display: none; }
+.lot-mobile-list.always-visible { display: grid; gap: 10px; }
+.lot-badge,
+.lot-control-label {
+  display: inline-flex;
+  align-items: center;
+  width: fit-content;
+  padding: 4px 8px;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+.lot-control-label { margin-top: 4px; color: #385565; background: #edf4f7; border-color: #cadde5; }
+.lot-vencido { color: var(--danger); background: #ffe9e6; border-color: #f5bbb5; }
+.lot-vence_hoy { color: #745500; background: #fff0b8; border-color: #e2c456; }
+.lot-proximo_a_vencer { color: #745500; background: #fff8dc; border-color: #e8cc72; }
+.lot-vigente,
+.lot-disponible { color: var(--ok); background: #e6f4ee; border-color: #b8e0cc; }
+.lot-bloqueado { color: #4b5863; background: #edf1f3; border-color: #cdd7dc; }
+.lot-agotado,
+.lot-anulado { color: #68736e; background: #eef1f0; border-color: #d4dad7; }
+.lot-detail-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+.lot-detail-grid > div {
+  min-width: 0;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: #f8faf9;
+}
+.lot-detail-grid span,
+.lot-detail-grid strong { display: block; overflow-wrap: anywhere; }
+.lot-detail-grid span { margin-bottom: 4px; color: var(--muted); font-size: 12px; }
+.lot-entry-list,
+.purchase-lot-rows { display: grid; gap: 10px; }
+.lot-entry,
+.purchase-lot-row {
+  display: grid;
+  grid-template-columns: 1.2fr 1fr 1fr 1fr auto;
+  gap: 9px;
+  align-items: end;
+  padding: 11px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: #f8faf9;
+}
+.purchase-lot-row { grid-template-columns: 1.2fr 1fr 1fr auto; }
+.purchase-lot-editor {
+  margin-top: 12px;
+  padding: 12px;
+  border: 1px solid #cbded6;
+  border-left: 4px solid var(--brand);
+  border-radius: 7px;
+  background: #f5faf7;
+}
+.lot-balance-strip {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  margin-bottom: 14px;
+}
+.lot-balance-strip span {
+  padding: 10px 12px;
+  color: var(--muted);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: #f7f9f8;
+}
+.lot-balance-strip strong { display: block; margin-top: 4px; color: var(--ink); font-size: 20px; }
+.lot-pos-stock { color: #245d4e !important; font-weight: 700; }
+.link-button {
+  padding: 0;
+  color: var(--brand);
+  background: transparent;
+  border: 0;
+  box-shadow: none;
+  text-decoration: underline;
+}
+.link-button:hover { color: var(--brand-dark); background: transparent; transform: none; box-shadow: none; }
+button:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible { outline: 3px solid rgba(40, 106, 89, .28); outline-offset: 2px; }
 .sr-only {
   position: absolute;
   width: 1px;
@@ -1429,6 +1570,10 @@ tr.low-stock { background: var(--warn); }
   .inventory-metrics { grid-template-columns: repeat(3, minmax(0, 1fr)); }
   .inventory-metrics-compact { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .inventory-suggestion dl { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .lot-filters { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .lot-summary-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .lot-entry,
+  .purchase-lot-row { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 
 @media (max-width: 900px) {
@@ -1493,6 +1638,8 @@ tr.low-stock { background: var(--warn); }
   .inventory-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .inventory-suggestion-list { grid-template-columns: 1fr; }
   .inventory-section-heading { align-items: stretch; flex-direction: column; }
+  .lot-filters,
+  .lot-detail-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 
 @media (max-width: 560px) {
@@ -1549,6 +1696,38 @@ tr.low-stock { background: var(--warn); }
   .inventory-metrics,
   .inventory-metrics-compact,
   .inventory-suggestion dl { grid-template-columns: 1fr; }
+  .lot-filters,
+  .lot-summary-grid,
+  .lot-detail-grid,
+  .lot-entry,
+  .purchase-lot-row,
+  .lot-balance-strip { grid-template-columns: 1fr; }
+  .lot-filter-actions,
+  .lot-results-heading,
+  .lot-editor-footer,
+  .purchase-lot-heading,
+  .purchase-lot-summary { display: grid; grid-template-columns: 1fr; }
+  .lot-filter-actions button,
+  .lot-editor-footer button,
+  .purchase-lot-heading button { width: 100%; }
+  .lot-desktop-table { display: none; }
+  .lot-mobile-list { display: grid; gap: 10px; }
+  .lot-mobile-list.always-visible { display: grid; }
+  .lot-card {
+    display: grid;
+    gap: 10px;
+    padding: 12px;
+    border: 1px solid var(--line);
+    border-radius: 7px;
+    background: #fff;
+  }
+  .lot-card header { display: flex; align-items: start; justify-content: space-between; gap: 10px; }
+  .lot-card header strong,
+  .lot-card header span { display: block; }
+  .lot-card header span { margin-top: 3px; color: var(--muted); }
+  .lot-card dl { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin: 0; }
+  .lot-card dt { color: var(--muted); font-size: 12px; }
+  .lot-card dd { margin: 3px 0 0; overflow-wrap: anywhere; }
   .inventory-filter-actions,
   .inventory-plan-note,
   .inventory-suggestion header { display: grid; }

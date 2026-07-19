@@ -2,6 +2,7 @@ const express = require('express');
 const pool = require('../config/db');
 const { requirePlanFeature } = require('../middleware/subscription');
 const { getSaleReceipt, registerSale } = require('../services/pos-sale-service');
+const { formatLocalDate } = require('../utils/local-datetime');
 
 const router = express.Router();
 
@@ -63,7 +64,14 @@ async function listProducts(req, res, next, forcedView = null) {
       `SELECT p.idProducto, p.nombre, p.categoria, p.codigoBarras,
               p.codigoBarras codigoBarrasDisponible,
               p.precioVenta, p.precioVentaPaquete, p.unidadesPorPaquete,
-              p.stockUnidadesTotal, p.permiteVentaPorUnidad, p.permiteVentaPorPaquete,
+              p.stockUnidadesTotal, p.controlaLotes, p.controlaVencimiento,
+              CASE WHEN p.controlaLotes=1 THEN (
+                SELECT COALESCE(SUM(l.cantidadRestante),0) FROM loteProducto l
+                WHERE l.idTienda=p.idTienda AND l.idProducto=p.idProducto
+                  AND l.estadoOperativo='disponible' AND l.cantidadRestante>0
+                  AND (l.fechaVencimiento IS NULL OR l.fechaVencimiento>=?)
+              ) ELSE p.stockUnidadesTotal END stockVendible,
+              p.permiteVentaPorUnidad, p.permiteVentaPorPaquete,
               p.favoritoPos, pr.nombre proveedor,
               ${statsColumns},
               CASE WHEN ?<>'' AND p.codigoBarras=? THEN 1 ELSE 0 END exactBarcode
@@ -73,7 +81,7 @@ async function listProducts(req, res, next, forcedView = null) {
        WHERE ${conditions.join(' AND ')}
        ORDER BY ${order}
        LIMIT ? OFFSET ?`,
-      [q, q, ...queryParams, limit, offset]
+      [formatLocalDate(), q, q, ...queryParams, limit, offset]
     );
     res.json({ productos: rows, pagina: page, limite: limit, hayMas: rows.length === limit });
   } catch (error) {
@@ -94,12 +102,19 @@ router.get('/pos/productos/:idProducto', async (req, res, next) => {
       `SELECT p.idProducto, p.nombre, p.categoria, p.codigoBarras,
               p.codigoBarras codigoBarrasDisponible,
               p.precioVenta, p.precioVentaPaquete, p.unidadesPorPaquete,
-              p.stockUnidadesTotal, p.permiteVentaPorUnidad, p.permiteVentaPorPaquete,
+              p.stockUnidadesTotal, p.controlaLotes, p.controlaVencimiento,
+              CASE WHEN p.controlaLotes=1 THEN (
+                SELECT COALESCE(SUM(l.cantidadRestante),0) FROM loteProducto l
+                WHERE l.idTienda=p.idTienda AND l.idProducto=p.idProducto
+                  AND l.estadoOperativo='disponible' AND l.cantidadRestante>0
+                  AND (l.fechaVencimiento IS NULL OR l.fechaVencimiento>=?)
+              ) ELSE p.stockUnidadesTotal END stockVendible,
+              p.permiteVentaPorUnidad, p.permiteVentaPorPaquete,
               p.favoritoPos, pr.nombre proveedor
        FROM producto p
        LEFT JOIN proveedor pr ON pr.idTienda=p.idTienda AND pr.idProveedor=p.idProveedor
        WHERE p.idTienda=? AND p.idProducto=? AND p.activo=1`,
-      [tenantId(req), idProducto]
+      [formatLocalDate(), tenantId(req), idProducto]
     );
     if (!rows.length) return res.status(404).json({ error: 'Producto no encontrado.' });
     res.json(rows[0]);

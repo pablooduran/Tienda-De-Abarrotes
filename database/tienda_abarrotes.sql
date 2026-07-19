@@ -134,6 +134,18 @@ INSERT INTO funcionalidad (codigo, nombre, descripcion)
 SELECT 'vencimientos_lote', 'Vencimientos por lote', 'Control opcional de lotes y vencimientos.'
 WHERE NOT EXISTS (SELECT 1 FROM funcionalidad WHERE codigo='vencimientos_lote');
 INSERT INTO funcionalidad (codigo, nombre, descripcion)
+SELECT 'control_lotes', 'Control de lotes', 'Trazabilidad operativa de existencias por ingreso fisico.'
+WHERE NOT EXISTS (SELECT 1 FROM funcionalidad WHERE codigo='control_lotes');
+INSERT INTO funcionalidad (codigo, nombre, descripcion)
+SELECT 'alertas_vencimiento', 'Alertas de vencimiento', 'Avisos de lotes proximos a vencer o vencidos.'
+WHERE NOT EXISTS (SELECT 1 FROM funcionalidad WHERE codigo='alertas_vencimiento');
+INSERT INTO funcionalidad (codigo, nombre, descripcion)
+SELECT 'trazabilidad_lotes', 'Trazabilidad de lotes', 'Seguimiento desde la compra hasta la salida comercial.'
+WHERE NOT EXISTS (SELECT 1 FROM funcionalidad WHERE codigo='trazabilidad_lotes');
+INSERT INTO funcionalidad (codigo, nombre, descripcion)
+SELECT 'exportacion_lotes', 'Exportacion de lotes', 'Exportacion administrativa de lotes y vencimientos.'
+WHERE NOT EXISTS (SELECT 1 FROM funcionalidad WHERE codigo='exportacion_lotes');
+INSERT INTO funcionalidad (codigo, nombre, descripcion)
 SELECT 'portal_clientes', 'Portal de clientes', 'Acceso futuro para compradores y pedidos.'
 WHERE NOT EXISTS (SELECT 1 FROM funcionalidad WHERE codigo='portal_clientes');
 INSERT INTO funcionalidad (codigo, nombre, descripcion)
@@ -366,12 +378,16 @@ CREATE TABLE IF NOT EXISTS producto (
   precioVentaPaquete DECIMAL(10,2) NULL,
   stock INT NOT NULL DEFAULT 0,
   stockMinimo INT NOT NULL DEFAULT 5,
+  controlaLotes TINYINT(1) NOT NULL DEFAULT 0,
+  controlaVencimiento TINYINT(1) NOT NULL DEFAULT 0,
+  diasAlertaVencimiento INT NULL,
+  lotesActivadosEn DATETIME NULL,
   diasReposicion INT NULL,
   diasCoberturaObjetivo INT NULL,
   presentacionCompraSugerida ENUM('unidad','paquete') NULL,
   fechaInicioSeguimiento DATETIME NOT NULL,
   stockUnidadesTotal INT NOT NULL DEFAULT 0,
-  ultimoPrecioCompra DECIMAL(10,2) NOT NULL DEFAULT 0,
+  ultimoPrecioCompra DECIMAL(14,6) NOT NULL DEFAULT 0,
   permiteVentaPorPaquete BOOLEAN NOT NULL DEFAULT TRUE,
   permiteVentaPorUnidad BOOLEAN NOT NULL DEFAULT TRUE,
   favoritoPos TINYINT(1) NOT NULL DEFAULT 0,
@@ -394,6 +410,16 @@ CREATE TABLE IF NOT EXISTS producto (
   CONSTRAINT fk_producto_tienda_proveedor FOREIGN KEY (idTienda, idProveedor) REFERENCES proveedor(idTienda, idProveedor),
   CONSTRAINT chk_producto_dias_reposicion CHECK (diasReposicion IS NULL OR diasReposicion BETWEEN 0 AND 365),
   CONSTRAINT chk_producto_dias_cobertura CHECK (diasCoberturaObjetivo IS NULL OR diasCoberturaObjetivo BETWEEN 1 AND 365),
+  CONSTRAINT chk_producto_controla_lotes CHECK (controlaLotes IN (0,1)),
+  CONSTRAINT chk_producto_controla_vencimiento CHECK (controlaVencimiento IN (0,1)),
+  CONSTRAINT chk_producto_vencimiento_requiere_lotes CHECK (controlaVencimiento=0 OR controlaLotes=1),
+  CONSTRAINT chk_producto_dias_alerta_vencimiento CHECK (
+    diasAlertaVencimiento IS NULL OR diasAlertaVencimiento BETWEEN 1 AND 365
+  ),
+  CONSTRAINT chk_producto_lotes_activacion CHECK (
+    (controlaLotes=0 AND lotesActivadosEn IS NULL)
+    OR (controlaLotes=1 AND lotesActivadosEn IS NOT NULL)
+  ),
   CONSTRAINT fk_producto_productoMaestro FOREIGN KEY (idProductoMaestro)
     REFERENCES productoMaestro(idProductoMaestro) ON UPDATE CASCADE ON DELETE RESTRICT
 );
@@ -405,6 +431,7 @@ CREATE TABLE IF NOT EXISTS configuracionInventarioTienda (
   diasReposicionDefault INT NOT NULL DEFAULT 3,
   diasCoberturaDefault INT NOT NULL DEFAULT 14,
   diasProductoNuevo INT NOT NULL DEFAULT 30,
+  diasAlertaVencimientoDefault INT NOT NULL DEFAULT 30,
   creadoEn DATETIME NOT NULL,
   actualizadoEn DATETIME NOT NULL,
   idAdministradorActualiza INT NULL,
@@ -416,6 +443,9 @@ CREATE TABLE IF NOT EXISTS configuracionInventarioTienda (
   CONSTRAINT chk_configInventario_reposicion CHECK (diasReposicionDefault BETWEEN 0 AND 365),
   CONSTRAINT chk_configInventario_cobertura CHECK (diasCoberturaDefault BETWEEN 1 AND 365),
   CONSTRAINT chk_configInventario_producto_nuevo CHECK (diasProductoNuevo BETWEEN 1 AND 365),
+  CONSTRAINT chk_configInventario_alerta_vencimiento CHECK (
+    diasAlertaVencimientoDefault BETWEEN 1 AND 365
+  ),
   CONSTRAINT fk_configInventario_tienda FOREIGN KEY (idTienda)
     REFERENCES tienda(idTienda) ON UPDATE RESTRICT ON DELETE RESTRICT,
   CONSTRAINT fk_configInventario_administrador FOREIGN KEY (idTienda, idAdministradorActualiza)
@@ -468,7 +498,7 @@ CREATE TABLE IF NOT EXISTS detalleVenta (
   idProducto INT NOT NULL,
   cantidad DECIMAL(10,2) NOT NULL,
   precioVenta DECIMAL(10,2) NOT NULL,
-  costoUnitario DECIMAL(10,2) NOT NULL DEFAULT 0,
+  costoUnitario DECIMAL(14,6) NOT NULL DEFAULT 0,
   subtotal DECIMAL(10,2) NOT NULL,
   subtotalCosto DECIMAL(10,2) NOT NULL DEFAULT 0,
   ganancia DECIMAL(10,2) NOT NULL DEFAULT 0,
@@ -513,6 +543,7 @@ CREATE TABLE IF NOT EXISTS detalleCompra (
   presentacionCompra VARCHAR(30) NOT NULL DEFAULT 'unidad',
   cantidadEquivalenteUnidades INT NOT NULL DEFAULT 0,
   UNIQUE KEY uq_detalleCompra_tienda_id (idTienda, idDetalleCompra),
+  UNIQUE KEY uq_detalleCompra_tienda_producto_id (idTienda, idProducto, idDetalleCompra),
   KEY idx_detalleCompra_tienda_compra (idTienda, idCompra),
   KEY idx_detalleCompra_tienda_producto (idTienda, idProducto),
   KEY idx_detalleCompra_tienda_producto_compra (idTienda, idProducto, idCompra),
@@ -763,6 +794,7 @@ CREATE TABLE IF NOT EXISTS movimientoStock (
   UNIQUE KEY uq_movimiento_tienda_clave (idTienda, claveOperacion),
   UNIQUE KEY uq_movimiento_tienda_detalleVenta (idTienda, idDetalleVenta),
   UNIQUE KEY uq_movimiento_tienda_detalleCompra (idTienda, idDetalleCompra),
+  UNIQUE KEY uq_movimiento_tienda_producto_id (idTienda, idProducto, idMovimientoStock),
   KEY idx_movimiento_tienda_fecha (idTienda, creadoEn, idMovimientoStock),
   KEY idx_movimiento_tienda_producto_fecha (idTienda, idProducto, creadoEn, idMovimientoStock),
   KEY idx_movimiento_tienda_tipo_origen (idTienda, tipoMovimiento, origen),
@@ -791,6 +823,110 @@ CREATE TABLE IF NOT EXISTS movimientoStock (
     REFERENCES detalleVenta(idTienda, idDetalleVenta) ON UPDATE RESTRICT ON DELETE RESTRICT,
   CONSTRAINT fk_movimiento_detalleCompra FOREIGN KEY (idTienda, idDetalleCompra)
     REFERENCES detalleCompra(idTienda, idDetalleCompra) ON UPDATE RESTRICT ON DELETE RESTRICT
+) ENGINE=InnoDB;
+
+CREATE TABLE IF NOT EXISTS loteProducto (
+  idLoteProducto BIGINT NOT NULL AUTO_INCREMENT,
+  idTienda INT NOT NULL,
+  idProducto INT NOT NULL,
+  idProveedor INT NULL,
+  idDetalleCompra INT NULL,
+  codigoLote VARCHAR(80) NULL,
+  origen ENUM('compra','distribucion_inicial','ajuste_positivo','reversion') NOT NULL,
+  fechaIngreso DATETIME NOT NULL,
+  fechaVencimiento DATE NULL,
+  cantidadInicial INT NOT NULL,
+  cantidadRestante INT NOT NULL,
+  costoUnitarioBase DECIMAL(14,6) NULL,
+  estadoOperativo ENUM('disponible','bloqueado','anulado') NOT NULL DEFAULT 'disponible',
+  claveOperacion VARCHAR(160) NOT NULL,
+  creadoEn DATETIME NOT NULL,
+  actualizadoEn DATETIME NOT NULL,
+  idAdministradorCrea INT NOT NULL,
+  idAdministradorActualiza INT NULL,
+  PRIMARY KEY (idLoteProducto),
+  UNIQUE KEY uq_lote_tienda_producto_id (idTienda, idProducto, idLoteProducto),
+  UNIQUE KEY uq_lote_tienda_clave (idTienda, claveOperacion),
+  KEY idx_lote_tienda_producto_estado_vencimiento
+    (idTienda, idProducto, estadoOperativo, fechaVencimiento),
+  KEY idx_lote_tienda_producto_ingreso
+    (idTienda, idProducto, fechaIngreso, idLoteProducto),
+  KEY idx_lote_tienda_proveedor_ingreso (idTienda, idProveedor, fechaIngreso),
+  KEY idx_lote_tienda_detalleCompra (idTienda, idDetalleCompra),
+  KEY idx_lote_tienda_codigo (idTienda, codigoLote),
+  KEY idx_lote_tienda_estado_vencimiento (idTienda, estadoOperativo, fechaVencimiento),
+  CONSTRAINT chk_lote_cantidades CHECK (
+    cantidadInicial>0 AND cantidadRestante>=0 AND cantidadRestante<=cantidadInicial
+  ),
+  CONSTRAINT chk_lote_costo CHECK (costoUnitarioBase IS NULL OR costoUnitarioBase>=0),
+  CONSTRAINT chk_lote_fecha_vencimiento CHECK (
+    fechaVencimiento IS NULL OR fechaVencimiento>=DATE(fechaIngreso)
+  ),
+  CONSTRAINT chk_lote_codigo CHECK (codigoLote IS NULL OR CHAR_LENGTH(TRIM(codigoLote))>0),
+  CONSTRAINT chk_lote_origen_detalle CHECK (
+    (origen='compra' AND idDetalleCompra IS NOT NULL)
+    OR (origen<>'compra' AND idDetalleCompra IS NULL)
+  ),
+  CONSTRAINT chk_lote_anulado_sin_saldo CHECK (
+    estadoOperativo<>'anulado' OR cantidadRestante=0
+  ),
+  CONSTRAINT fk_lote_tienda FOREIGN KEY (idTienda)
+    REFERENCES tienda(idTienda) ON UPDATE RESTRICT ON DELETE RESTRICT,
+  CONSTRAINT fk_lote_producto FOREIGN KEY (idTienda, idProducto)
+    REFERENCES producto(idTienda, idProducto) ON UPDATE RESTRICT ON DELETE RESTRICT,
+  CONSTRAINT fk_lote_proveedor FOREIGN KEY (idTienda, idProveedor)
+    REFERENCES proveedor(idTienda, idProveedor) ON UPDATE RESTRICT ON DELETE RESTRICT,
+  CONSTRAINT fk_lote_detalleCompra FOREIGN KEY (idTienda, idProducto, idDetalleCompra)
+    REFERENCES detalleCompra(idTienda, idProducto, idDetalleCompra)
+    ON UPDATE RESTRICT ON DELETE RESTRICT,
+  CONSTRAINT fk_lote_admin_crea FOREIGN KEY (idTienda, idAdministradorCrea)
+    REFERENCES administrador(idTienda, idAdministrador) ON UPDATE RESTRICT ON DELETE RESTRICT,
+  CONSTRAINT fk_lote_admin_actualiza FOREIGN KEY (idTienda, idAdministradorActualiza)
+    REFERENCES administrador(idTienda, idAdministrador) ON UPDATE RESTRICT ON DELETE RESTRICT
+) ENGINE=InnoDB;
+
+CREATE TABLE IF NOT EXISTS movimientoLote (
+  idMovimientoLote BIGINT NOT NULL AUTO_INCREMENT,
+  idTienda INT NOT NULL,
+  idProducto INT NOT NULL,
+  idLoteProducto BIGINT NOT NULL,
+  idMovimientoStock BIGINT NULL,
+  tipoRegistro ENUM('movimiento_stock','distribucion_inicial') NOT NULL,
+  cantidad INT NOT NULL,
+  cantidadAnterior INT NOT NULL,
+  cantidadPosterior INT NOT NULL,
+  claveOperacion VARCHAR(160) NOT NULL,
+  creadoEn DATETIME NOT NULL,
+  idAdministrador INT NOT NULL,
+  PRIMARY KEY (idMovimientoLote),
+  UNIQUE KEY uq_movimientoLote_tienda_clave (idTienda, claveOperacion),
+  KEY idx_movimientoLote_tienda_lote_fecha (idTienda, idLoteProducto, creadoEn),
+  KEY idx_movimientoLote_tienda_movimiento (idTienda, idMovimientoStock),
+  KEY idx_movimientoLote_tienda_producto_fecha (idTienda, idProducto, creadoEn),
+  KEY idx_movimientoLote_tienda_tipo_fecha (idTienda, tipoRegistro, creadoEn),
+  CONSTRAINT chk_movimientoLote_cantidad CHECK (cantidad<>0),
+  CONSTRAINT chk_movimientoLote_balance CHECK (
+    cantidadAnterior>=0
+    AND cantidadPosterior>=0
+    AND cantidadPosterior=cantidadAnterior+cantidad
+  ),
+  CONSTRAINT chk_movimientoLote_referencia CHECK (
+    (tipoRegistro='distribucion_inicial' AND idMovimientoStock IS NULL AND cantidad>0)
+    OR (tipoRegistro='movimiento_stock' AND idMovimientoStock IS NOT NULL)
+  ),
+  CONSTRAINT fk_movimientoLote_tienda FOREIGN KEY (idTienda)
+    REFERENCES tienda(idTienda) ON UPDATE RESTRICT ON DELETE RESTRICT,
+  CONSTRAINT fk_movimientoLote_producto FOREIGN KEY (idTienda, idProducto)
+    REFERENCES producto(idTienda, idProducto) ON UPDATE RESTRICT ON DELETE RESTRICT,
+  CONSTRAINT fk_movimientoLote_lote FOREIGN KEY (idTienda, idProducto, idLoteProducto)
+    REFERENCES loteProducto(idTienda, idProducto, idLoteProducto)
+    ON UPDATE RESTRICT ON DELETE RESTRICT,
+  CONSTRAINT fk_movimientoLote_movimientoStock
+    FOREIGN KEY (idTienda, idProducto, idMovimientoStock)
+    REFERENCES movimientoStock(idTienda, idProducto, idMovimientoStock)
+    ON UPDATE RESTRICT ON DELETE RESTRICT,
+  CONSTRAINT fk_movimientoLote_administrador FOREIGN KEY (idTienda, idAdministrador)
+    REFERENCES administrador(idTienda, idAdministrador) ON UPDATE RESTRICT ON DELETE RESTRICT
 ) ENGINE=InnoDB;
 
 -- Esta instalacion crea Tienda Deisy como contexto inicial.

@@ -1,4 +1,5 @@
 const crypto = require('crypto');
+const { formatLocalDateTime } = require('../utils/local-datetime');
 
 const MOVEMENT_TYPES = new Set([
   'entrada',
@@ -122,8 +123,8 @@ async function insertStockMovement(connection, input) {
     `INSERT INTO movimientoStock
       (idTienda, idProducto, tipoMovimiento, origen, cantidad, stockAnterior, stockPosterior,
        cantidadOperacion, unidadOperacion, motivo, observacion, idDetalleVenta, idDetalleCompra,
-       referenciaTipo, referenciaId, claveOperacion, idAdministrador)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       referenciaTipo, referenciaId, claveOperacion, idAdministrador, creadoEn)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       idTienda,
       idProducto,
@@ -141,7 +142,8 @@ async function insertStockMovement(connection, input) {
       cleanText(input.referenciaTipo, 40),
       input.referenciaId || null,
       movementRecordKey(input.claveOperacion),
-      input.idAdministrador || null
+      input.idAdministrador || null,
+      input.creadoEn || formatLocalDateTime()
     ]
   );
   return result.insertId;

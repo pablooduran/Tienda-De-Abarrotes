@@ -8,6 +8,13 @@ const {
   operationKey
 } = require('../services/stock-movement-service');
 const { normalizeBarcode, recordDebtPaymentForSale, registerSale } = require('../services/pos-sale-service');
+const {
+  assertReconciled,
+  createLotEntries,
+  decimalToMicros,
+  lockLots,
+  normalizeLotEntries
+} = require('../services/lot-service');
 const { formatLocalDateTime } = require('../utils/local-datetime');
 
 const router = express.Router();
@@ -626,7 +633,7 @@ async function validateItems(connection, items, type, idTienda) {
       error.status = 400;
       throw error;
     }
-    return { item, originalIndex, cantidad, idProducto, presentation };
+    return { rawItem: item, originalIndex, cantidad, idProducto, presentation };
   });
   if (new Set(prepared.map((entry) => entry.idProducto)).size !== prepared.length) {
     const error = new Error('Cada producto debe aparecer una sola vez en la operacion.');
@@ -636,7 +643,7 @@ async function validateItems(connection, items, type, idTienda) {
 
   const normalized = [];
   for (const entry of [...prepared].sort((a, b) => a.idProducto - b.idProducto)) {
-    const { item, originalIndex, cantidad, idProducto, presentation } = entry;
+    const { rawItem, originalIndex, cantidad, idProducto, presentation } = entry;
     const [rows] = await connection.query(
       `${productSelect('WHERE p.idProducto=? AND p.idTienda=? AND p.activo=1')} FOR UPDATE`,
       [idProducto, idTienda]
@@ -663,7 +670,7 @@ async function validateItems(connection, items, type, idTienda) {
       error.status = 400;
       throw error;
     }
-    const precio = isPurchase ? asNumber(item.precioCompra) : asNumber(product.precioVenta) * (presentation === 'paquete' ? product.unidadesPorPaquete : 1);
+    const precio = isPurchase ? asNumber(rawItem.precioCompra) : asNumber(product.precioVenta) * (presentation === 'paquete' ? product.unidadesPorPaquete : 1);
     if (precio <= 0) {
       const error = new Error(isPurchase ? 'El precio de compra debe ser mayor a cero.' : `El precio de venta de ${product.nombre} no es valido.`);
       error.status = 400;
@@ -672,7 +679,19 @@ async function validateItems(connection, items, type, idTienda) {
     const costoUnitario = asNumber(product.ultimoPrecioCompra);
     const subtotal = cantidad * precio;
     const subtotalCosto = isPurchase ? 0 : unidades * costoUnitario;
-    normalized.push({ originalIndex, product, cantidad, presentation, unidades, precio, costoUnitario, subtotal, subtotalCosto, ganancia: subtotal - subtotalCosto });
+    normalized.push({
+      rawItem,
+      originalIndex,
+      product,
+      cantidad,
+      presentation,
+      unidades,
+      precio,
+      costoUnitario,
+      subtotal,
+      subtotalCosto,
+      ganancia: subtotal - subtotalCosto
+    });
   }
   return normalized.sort((a, b) => a.originalIndex - b.originalIndex);
 }
@@ -762,7 +781,8 @@ router.post('/compras', async (req, res, next) => {
     const idTienda = tenantId(req);
     const requestKey = operationKey(req.body.claveOperacion);
     const result = await runTransaction(async (connection) => {
-      const operationDateTime = formatLocalDateTime();
+      const operationDate = new Date();
+      const operationDateTime = formatLocalDateTime(operationDate);
       if (req.body.idProveedor) {
         await requireTenantRecord(connection, 'proveedor', 'idProveedor', req.body.idProveedor, idTienda);
       }
@@ -785,6 +805,21 @@ router.post('/compras', async (req, res, next) => {
       );
       for (const item of items) {
         const costoUnitario = item.unidades > 0 ? item.subtotal / item.unidades : 0;
+        const requestedLots = Array.isArray(item.rawItem?.lotes) ? item.rawItem.lotes : [];
+        let lotEntries = null;
+        if (Number(item.product.controlaLotes)) {
+          const currentLots = await lockLots(connection, idTienda, item.product.idProducto, item.product);
+          assertReconciled(item.product, currentLots);
+          lotEntries = normalizeLotEntries(requestedLots, {
+            requiredTotal: item.unidades,
+            controlsExpiration: Number(item.product.controlaVencimiento) === 1,
+            operationDate
+          });
+        } else if (requestedLots.length) {
+          const error = new Error('Debe activar el control de lotes antes de registrar lotes en una compra.');
+          error.status = 400;
+          throw error;
+        }
         const [detail] = await connection.query(
           `INSERT INTO detalleCompra
            (idTienda, idCompra, idProducto, cantidad, precioCompra, subtotal, presentacionCompra, cantidadEquivalenteUnidades)
@@ -799,7 +834,7 @@ router.post('/compras', async (req, res, next) => {
           [stockPosterior, stockPosterior, costoUnitario, item.product.idProducto, idTienda, stockAnterior]
         );
         if (!stockUpdate.affectedRows) throw notFound('Producto no encontrado.');
-        await insertStockMovement(connection, {
+        const idMovimientoStock = await insertStockMovement(connection, {
           idTienda,
           idProducto: item.product.idProducto,
           tipoMovimiento: 'entrada',
@@ -812,8 +847,25 @@ router.post('/compras', async (req, res, next) => {
           motivo: 'Entrada por compra.',
           idDetalleCompra: detail.insertId,
           claveOperacion: movementKey('detalle-compra', detail.insertId),
-          idAdministrador: req.session.admin.id
+          idAdministrador: req.session.admin.id,
+          creadoEn: operationDateTime
         });
+        if (lotEntries) {
+          await createLotEntries(connection, {
+            idTienda,
+            idProducto: item.product.idProducto,
+            idProveedor: req.body.idProveedor || null,
+            idDetalleCompra: detail.insertId,
+            idMovimientoStock,
+            entries: lotEntries,
+            costMicros: decimalToMicros(costoUnitario.toFixed(6), 'El costo unitario', { nullable: false }),
+            origen: 'compra',
+            operation: `purchase:${requestKey}`,
+            detailIndex: item.originalIndex + 1,
+            creadoEn: operationDateTime,
+            idAdministrador: req.session.admin.id
+          });
+        }
       }
       return { idCompra: compra.insertId, total };
     });

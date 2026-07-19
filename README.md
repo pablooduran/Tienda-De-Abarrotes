@@ -334,6 +334,18 @@ npm.cmd run test:inventory-intelligence
 
 La prueba valida estados de stock, historial suficiente, demanda, sugerencias por unidad y paquete, dias restantes, rotacion, productos sin movimiento, valoracion, aislamiento, permisos por plan, solo lectura y exportacion Excel segura. Crea dos tiendas temporales en localhost y elimina todos los datos que genera.
 
+### Prueba local de lotes y vencimientos
+
+Con `011` aplicada y el servidor local iniciado, ejecute:
+
+```powershell
+$env:APP_ENV='local'
+$env:DB_HOST='localhost'
+npm.cmd run test:lots-expiration
+```
+
+La prueba verifica activacion y distribucion inicial, compras por unidad y paquete, FEFO, FIFO, vencimientos, lotes bloqueados, costos ponderados, ajustes, idempotencia, concurrencia, trazabilidad, aislamiento y continuidad operativa tras un cambio de plan. Solo funciona en localhost y en una base cuyo nombre contenga `prueba` o `test`; elimina primero los movimientos y lotes temporales para respetar el historial protegido por claves foraneas.
+
 ### Validacion manual de la interfaz de inteligencia de inventario
 
 Inicie el servidor local y abra la seccion **Inteligencia de inventario** desde el menu de la tienda. Pruebe filtros de fecha, categoria, proveedor, producto y estado; el rango maximo admitido es de 365 dias.
@@ -360,3 +372,28 @@ Con una suscripcion en modo de solo lectura, confirme:
 - el backend rechaza cualquier intento de escritura aunque se manipule la interfaz.
 
 Revise tambien la vista en computadora, tableta y telefono: las pestañas deben desplazarse horizontalmente cuando no caben, las tablas deben conservar scroll propio y los formularios deben apilarse sin superponer textos o botones.
+
+### Validacion manual de lotes y vencimientos
+
+Con `011` aplicada, inicie el servidor local y abra **Lotes y vencimientos**. La pantalla obtiene siempre la tienda desde la sesion; ningun filtro o formulario envia `idTienda`.
+
+Compruebe con un plan avanzado:
+
+- el resumen separa stock trazado, vendible, vencido y bloqueado;
+- los filtros por producto, proveedor, codigo, estado y vencimiento pueden aplicarse y limpiarse;
+- **Exportar XLSX** genera las hojas Lotes y Resumen, y agrega Alertas cuando existen resultados relevantes;
+- el detalle muestra compra, responsable, movimientos y ventas relacionadas sin claves internas;
+- un producto con stock cero puede activar lotes directamente;
+- un producto con stock existente exige distribuir exactamente todo su saldo antes de activar lotes;
+- una compra normal no muestra controles de lotes, mientras una compra controlada exige distribuir sus unidades base;
+- los ajustes positivos crean nuevos lotes y los negativos explican la salida automatica FEFO/FIFO;
+- el POS muestra stock vendible y no pide seleccionar lotes manualmente;
+- el historial de venta muestra los lotes utilizados cuando existe trazabilidad.
+
+Compruebe tambien:
+
+- una suscripcion en solo lectura permite consultas, pero no activacion, distribucion ni ajustes;
+- una tienda degradada conserva acceso de lectura a productos que ya controlaban lotes, aunque no pueda activar otros nuevos;
+- en movil los lotes aparecen como tarjetas apiladas y los formularios no requieren desplazamiento horizontal;
+- los costos desconocidos se muestran como desconocidos, no como cero;
+- las fechas de vencimiento conservan el dia local y no se desplazan por UTC.
