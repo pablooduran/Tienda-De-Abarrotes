@@ -216,12 +216,21 @@ async function financialSummary(connection, idTienda, range) {
        WHERE d.idTienda=? AND v.fecha>=? AND v.fecha<?`, params
     ),
     connection.query(
-      `SELECT COALESCE(SUM(monto),0) dineroCobrado,
-              COALESCE(SUM(CASE WHEN metodoPago='efectivo' THEN monto ELSE 0 END),0) efectivo,
-              COALESCE(SUM(CASE WHEN metodoPago='qr' THEN monto ELSE 0 END),0) qr,
-              COALESCE(SUM(CASE WHEN metodoPago='no_especificado' THEN monto ELSE 0 END),0) noEspecificado,
-              COALESCE(SUM(CASE WHEN idPagoFiado IS NOT NULL THEN monto ELSE 0 END),0) cobrosFiado
-       FROM pagoVenta WHERE idTienda=? AND creadoEn>=? AND creadoEn<?`, params
+      `SELECT COALESCE(SUM(pagos.monto),0) dineroCobrado,
+              COALESCE(SUM(CASE WHEN pagos.metodoPago='efectivo' THEN pagos.monto ELSE 0 END),0) efectivo,
+              COALESCE(SUM(CASE WHEN pagos.metodoPago='qr' THEN pagos.monto ELSE 0 END),0) qr,
+              COALESCE(SUM(CASE WHEN pagos.metodoPago='no_especificado' THEN pagos.monto ELSE 0 END),0) noEspecificado,
+              COALESCE(SUM(CASE WHEN pagos.metodoPago NOT IN ('efectivo','qr','no_especificado') THEN pagos.monto ELSE 0 END),0) otrosMetodos,
+              COALESCE(SUM(CASE WHEN pagos.idPagoFiado IS NOT NULL THEN pagos.monto ELSE 0 END),0) cobrosFiado
+       FROM (
+         SELECT pv.idPagoFiado, pv.monto,
+                CASE WHEN pv.idPagoFiado IS NOT NULL THEN COALESCE(cf.metodoPago,pv.metodoPago)
+                     ELSE pv.metodoPago END metodoPago
+         FROM pagoVenta pv
+         LEFT JOIN pagoFiado pf ON pf.idTienda=pv.idTienda AND pf.idPagoFiado=pv.idPagoFiado
+         LEFT JOIN cobroFiado cf ON cf.idTienda=pf.idTienda AND cf.idCobroFiado=pf.idCobroFiado
+         WHERE pv.idTienda=? AND pv.creadoEn>=? AND pv.creadoEn<?
+       ) pagos`, params
     ),
     connection.query(
       `SELECT COALESCE(SUM(monto),0) gastos, COUNT(*) cantidadGastos
@@ -276,6 +285,7 @@ async function financialSummary(connection, idTienda, range) {
     efectivo: Number(payments[0].efectivo || 0),
     qr: Number(payments[0].qr || 0),
     cobrosNoEspecificados: Number(payments[0].noEspecificado || 0),
+    cobrosOtrosMetodos: Number(payments[0].otrosMetodos || 0),
     cobrosFiado: Number(payments[0].cobrosFiado || 0),
     fiadoGenerado: Number(debts[0].fiadoGenerado || 0),
     cuentasPorCobrar: Number(receivables[0].cuentasPorCobrar || 0),
@@ -311,13 +321,20 @@ async function salesByDay(connection, idTienda, range) {
 
 async function paymentMethods(connection, idTienda, range) {
   const [rows] = await connection.query(
-    `SELECT metodoPago,
-            COALESCE(SUM(CASE WHEN idPagoFiado IS NULL THEN monto ELSE 0 END),0) pagosIniciales,
-            COALESCE(SUM(CASE WHEN idPagoFiado IS NOT NULL THEN monto ELSE 0 END),0) cobrosFiado,
-            COALESCE(SUM(monto),0) total, COUNT(*) cantidad
-     FROM pagoVenta
-     WHERE idTienda=? AND creadoEn>=? AND creadoEn<?
-     GROUP BY metodoPago ORDER BY total DESC`,
+    `SELECT pagos.metodoPago,
+            COALESCE(SUM(CASE WHEN pagos.idPagoFiado IS NULL THEN pagos.monto ELSE 0 END),0) pagosIniciales,
+            COALESCE(SUM(CASE WHEN pagos.idPagoFiado IS NOT NULL THEN pagos.monto ELSE 0 END),0) cobrosFiado,
+            COALESCE(SUM(pagos.monto),0) total, COUNT(*) cantidad
+     FROM (
+       SELECT pv.idPagoFiado, pv.monto,
+              CASE WHEN pv.idPagoFiado IS NOT NULL THEN COALESCE(cf.metodoPago,pv.metodoPago)
+                   ELSE pv.metodoPago END metodoPago
+       FROM pagoVenta pv
+       LEFT JOIN pagoFiado pf ON pf.idTienda=pv.idTienda AND pf.idPagoFiado=pv.idPagoFiado
+       LEFT JOIN cobroFiado cf ON cf.idTienda=pf.idTienda AND cf.idCobroFiado=pf.idCobroFiado
+       WHERE pv.idTienda=? AND pv.creadoEn>=? AND pv.creadoEn<?
+     ) pagos
+     GROUP BY pagos.metodoPago ORDER BY total DESC`,
     [idTienda, range.inicio, range.finExclusivo]
   );
   return rows;
@@ -429,12 +446,20 @@ async function calculateCashClose(connection, idTienda, range, initialValue = 0)
   const [[payments], [expenses], [sales], [debts], [purchases]] = await Promise.all([
     connection.query(
       `SELECT
-        COALESCE(SUM(CASE WHEN metodoPago='efectivo' AND idPagoFiado IS NULL THEN monto ELSE 0 END),0) efectivoVentas,
-        COALESCE(SUM(CASE WHEN metodoPago='efectivo' AND idPagoFiado IS NOT NULL THEN monto ELSE 0 END),0) efectivoFiados,
-        COALESCE(SUM(CASE WHEN metodoPago='qr' THEN monto ELSE 0 END),0) totalQR,
-        COALESCE(SUM(CASE WHEN metodoPago='no_especificado' THEN monto ELSE 0 END),0) totalNoEspecificado,
-        COALESCE(SUM(monto),0) totalCobrado
-       FROM pagoVenta WHERE idTienda=? AND creadoEn>=? AND creadoEn<?`, params
+        COALESCE(SUM(CASE WHEN pagos.metodoPago='efectivo' AND pagos.idPagoFiado IS NULL THEN pagos.monto ELSE 0 END),0) efectivoVentas,
+        COALESCE(SUM(CASE WHEN pagos.metodoPago='efectivo' AND pagos.idPagoFiado IS NOT NULL THEN pagos.monto ELSE 0 END),0) efectivoFiados,
+        COALESCE(SUM(CASE WHEN pagos.metodoPago='qr' THEN pagos.monto ELSE 0 END),0) totalQR,
+        COALESCE(SUM(CASE WHEN pagos.metodoPago NOT IN ('efectivo','qr') THEN pagos.monto ELSE 0 END),0) totalNoEspecificado,
+        COALESCE(SUM(pagos.monto),0) totalCobrado
+       FROM (
+         SELECT pv.idPagoFiado, pv.monto,
+                CASE WHEN pv.idPagoFiado IS NOT NULL THEN COALESCE(cf.metodoPago,pv.metodoPago)
+                     ELSE pv.metodoPago END metodoPago
+         FROM pagoVenta pv
+         LEFT JOIN pagoFiado pf ON pf.idTienda=pv.idTienda AND pf.idPagoFiado=pv.idPagoFiado
+         LEFT JOIN cobroFiado cf ON cf.idTienda=pf.idTienda AND cf.idCobroFiado=pf.idCobroFiado
+         WHERE pv.idTienda=? AND pv.creadoEn>=? AND pv.creadoEn<?
+       ) pagos`, params
     ),
     connection.query(
       `SELECT COALESCE(SUM(CASE WHEN metodoPago='efectivo' THEN monto ELSE 0 END),0) gastosEfectivo,

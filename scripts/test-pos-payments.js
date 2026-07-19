@@ -93,8 +93,10 @@ async function cleanupStore(connection, idTienda) {
   await connection.query('DELETE FROM gasto WHERE idTienda=?', [idTienda]);
   await connection.query('DELETE FROM categoriaGasto WHERE idTienda=?', [idTienda]);
   await connection.query('DELETE FROM movimientoStock WHERE idTienda=?', [idTienda]);
+  await connection.query('DELETE FROM seguimientoCobranza WHERE idTienda=?', [idTienda]);
   await connection.query('DELETE FROM pagoVenta WHERE idTienda=?', [idTienda]);
   await connection.query('DELETE FROM pagoFiado WHERE idTienda=?', [idTienda]);
+  await connection.query('DELETE FROM cobroFiado WHERE idTienda=?', [idTienda]);
   await connection.query('DELETE FROM detalleFiado WHERE idTienda=?', [idTienda]);
   await connection.query('DELETE FROM detalleVenta WHERE idTienda=?', [idTienda]);
   await connection.query('DELETE FROM detalleCompra WHERE idTienda=?', [idTienda]);
@@ -104,6 +106,8 @@ async function cleanupStore(connection, idTienda) {
   await connection.query('DELETE FROM producto WHERE idTienda=?', [idTienda]);
   await connection.query('DELETE FROM cliente WHERE idTienda=?', [idTienda]);
   await connection.query('DELETE FROM proveedor WHERE idTienda=?', [idTienda]);
+  await connection.query('DELETE FROM plantillaCobranzaTienda WHERE idTienda=?', [idTienda]);
+  await connection.query('DELETE FROM configuracionCreditoTienda WHERE idTienda=?', [idTienda]);
   await connection.query('DELETE FROM configuracionInventarioTienda WHERE idTienda=?', [idTienda]);
   await connection.query('DELETE FROM suscripcionTienda WHERE idTienda=?', [idTienda]);
   await connection.query('DELETE FROM administrador WHERE idTienda=?', [idTienda]);
@@ -319,7 +323,10 @@ async function main() {
     const movementBeforeDebtPayment = await scalar(connection,
       'SELECT COUNT(*) total FROM movimientoStock WHERE idTienda=? AND idDetalleVenta IS NOT NULL', [fixture.storeA]);
     const [[mixedDebt]] = await connection.query('SELECT idFiado FROM fiado WHERE idTienda=? AND idVenta=?', [fixture.storeA, mixedSale.idVenta]);
-    await expect(ownerA, '/api/pagos-fiado', { method: 'POST', body: { idFiado: mixedDebt.idFiado, monto: 3, observacion: 'Abono POS' } }, 201, 'Pago posterior de fiado');
+    await expect(ownerA, '/api/pagos-fiado', { method: 'POST', body: {
+      idFiado: mixedDebt.idFiado, monto: 3, metodoPago: 'efectivo',
+      claveOperacion: `cobro-pos-${marker}`, observacion: 'Abono POS'
+    } }, 201, 'Pago posterior de fiado');
     assert(await scalar(connection, 'SELECT COUNT(*) total FROM movimientoStock WHERE idTienda=? AND idDetalleVenta IS NOT NULL', [fixture.storeA]) === movementBeforeDebtPayment,
       'El pago posterior del fiado genero otro movimiento de stock.');
     assert(await scalar(connection, 'SELECT COUNT(*) total FROM pagoVenta WHERE idTienda=? AND idVenta=? AND idPagoFiado IS NOT NULL', [fixture.storeA, mixedSale.idVenta]) === 1,

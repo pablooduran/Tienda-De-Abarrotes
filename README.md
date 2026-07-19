@@ -346,6 +346,20 @@ npm.cmd run test:lots-expiration
 
 La prueba verifica activacion y distribucion inicial, compras por unidad y paquete, FEFO, FIFO, vencimientos, lotes bloqueados, costos ponderados, ajustes, idempotencia, concurrencia, trazabilidad, aislamiento y continuidad operativa tras un cambio de plan. Solo funciona en localhost y en una base cuyo nombre contenga `prueba` o `test`; elimina primero los movimientos y lotes temporales para respetar el historial protegido por claves foraneas.
 
+### Prueba local de clientes y credito
+
+Con `012` aplicada y el servidor local iniciado, ejecute:
+
+```powershell
+$env:APP_ENV='local'
+$env:DB_HOST='localhost'
+npm.cmd run test:customers-credit
+```
+
+La prueba cubre perfiles ampliados, documentos normalizados, limites individuales y de tienda, politicas de deuda vencida, fechas prometidas, cobros especificos y acumulados, deuda oculta, idempotencia, concurrencia, estado de cuenta, alertas, seguimientos y mensajes preparados para WhatsApp. Tambien confirma aislamiento entre tiendas, permisos por plan, continuidad de cobros tras un downgrade y que ningun pago modifica stock, lotes o movimientos de inventario. Usa solamente tiendas y credenciales temporales en una base local cuyo nombre contenga `prueba` o `test`, y elimina todos los datos que crea.
+
+Los cobros posteriores se registran con una cabecera `cobroFiado` y una distribucion `pagoFiado` por deuda. Cada distribucion vinculada a una venta produce un unico `pagoVenta`; los reintentos con la misma `claveOperacion` devuelven el cobro existente sin duplicar dinero ni saldos. WhatsApp se limita a preparar texto y un enlace `wa.me`: nunca envia ni marca mensajes como enviados automaticamente.
+
 ### Validacion manual de la interfaz de inteligencia de inventario
 
 Inicie el servidor local y abra la seccion **Inteligencia de inventario** desde el menu de la tienda. Pruebe filtros de fecha, categoria, proveedor, producto y estado; el rango maximo admitido es de 365 dias.

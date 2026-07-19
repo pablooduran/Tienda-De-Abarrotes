@@ -1,7 +1,7 @@
 const crypto = require('crypto');
 const bcrypt = require('bcryptjs');
 const mysql = require('mysql2/promise');
-const { requireEnvironment, requireLocalhostDatabase } = require('../config/env');
+const { requireLocalhostDatabase } = require('../config/env');
 
 function assert(condition, message) {
   if (!condition) throw new Error(message);
@@ -11,6 +11,7 @@ class HttpSession {
   constructor(baseUrl) {
     this.baseUrl = baseUrl;
     this.cookie = '';
+    this.diagnosticContext = null;
   }
 
   async request(path, options = {}) {
@@ -36,7 +37,16 @@ class HttpSession {
 
 async function expect(session, path, options, status, label) {
   const response = await session.request(path, options);
-  assert(response.status === status, `${label}: se esperaba HTTP ${status} y se obtuvo ${response.status}.`);
+  if (response.status !== status) {
+    throw new Error(`${label}: diagnostico seguro:\n${JSON.stringify({
+      metodo: options?.method || 'GET',
+      ruta: path,
+      statusEsperado: status,
+      statusRecibido: response.status,
+      respuesta: response.body,
+      contextoTienda: session.diagnosticContext
+    }, null, 2)}`);
+  }
   return response.body;
 }
 
@@ -47,55 +57,97 @@ function containsTenantField(value) {
 }
 
 async function findByName(session, endpoint, name) {
-  const rows = await expect(session, endpoint, {}, 200, `Listado ${endpoint}`);
+  const response = await expect(session, endpoint, {}, 200, `Listado ${endpoint}`);
+  const rows = Array.isArray(response) ? response : (response.clientes || []);
   const row = rows.find((item) => item.nombre === name);
   assert(row, `No se encontro ${name} en ${endpoint}.`);
-  assert(!containsTenantField(rows), `${endpoint} expuso idTienda al navegador.`);
+  assert(!containsTenantField(response), `${endpoint} expuso idTienda al navegador.`);
   return row;
+}
+
+async function resolveOperationalPlan(connection, superSession) {
+  const plans = await expect(superSession, '/api/admin/planes', {}, 200, 'Listado de planes para aislamiento');
+  const [rows] = await connection.query(
+    `SELECT p.idPlan, f.codigo funcionalidad
+     FROM plan p
+     JOIN planFuncionalidad pf ON pf.idPlan=p.idPlan AND pf.habilitada=1
+     JOIN funcionalidad f ON f.idFuncionalidad=pf.idFuncionalidad AND f.activo=1
+     WHERE p.activo=1`
+  );
+  const features = new Map();
+  for (const row of rows) {
+    const idPlan = Number(row.idPlan);
+    if (!features.has(idPlan)) features.set(idPlan, new Set());
+    features.get(idPlan).add(row.funcionalidad);
+  }
+  const candidates = plans.filter((plan) => Number(plan.activo) === 1
+    && features.get(Number(plan.idPlan))?.has('clientes_basico'));
+  candidates.sort((left, right) =>
+    (features.get(Number(right.idPlan))?.size || 0) - (features.get(Number(left.idPlan))?.size || 0)
+  );
+  assert(candidates.length > 0, 'No existe un plan activo con clientes_basico para la prueba de aislamiento.');
+  return candidates[0];
+}
+
+function storePayload(marker, label, planCode) {
+  const password = `Owner-${label}-${crypto.randomBytes(10).toString('hex')}!`;
+  return {
+    password,
+    body: {
+      nombre: `Tienda aislamiento ${label} ${marker}`,
+      slug: `tienda-aislamiento-${label}-${marker}`,
+      estado: 'activa',
+      activo: true,
+      propietario: {
+        usuario: `owner_isolation_${label}_${marker}`,
+        password,
+        confirmacionPassword: password,
+        activo: true
+      },
+      suscripcion: { planCodigo: planCode, tipo: 'cortesia', duracionDias: 30 }
+    }
+  };
+}
+
+async function cleanupStore(connection, idTienda) {
+  if (!idTienda) return;
+  await connection.query('DELETE FROM cierreCaja WHERE idTienda=?', [idTienda]);
+  await connection.query('DELETE FROM gasto WHERE idTienda=?', [idTienda]);
+  await connection.query('DELETE FROM categoriaGasto WHERE idTienda=?', [idTienda]);
+  await connection.query('DELETE FROM movimientoLote WHERE idTienda=?', [idTienda]);
+  await connection.query('DELETE FROM loteProducto WHERE idTienda=?', [idTienda]);
+  await connection.query('DELETE FROM movimientoStock WHERE idTienda=?', [idTienda]);
+  await connection.query('DELETE FROM seguimientoCobranza WHERE idTienda=?', [idTienda]);
+  await connection.query('DELETE FROM pagoVenta WHERE idTienda=?', [idTienda]);
+  await connection.query('DELETE FROM pagoFiado WHERE idTienda=?', [idTienda]);
+  await connection.query('DELETE FROM cobroFiado WHERE idTienda=?', [idTienda]);
+  await connection.query('DELETE FROM detalleFiado WHERE idTienda=?', [idTienda]);
+  await connection.query('DELETE FROM detalleVenta WHERE idTienda=?', [idTienda]);
+  await connection.query('DELETE FROM detalleCompra WHERE idTienda=?', [idTienda]);
+  await connection.query('DELETE FROM fiado WHERE idTienda=?', [idTienda]);
+  await connection.query('DELETE FROM venta WHERE idTienda=?', [idTienda]);
+  await connection.query('DELETE FROM compra WHERE idTienda=?', [idTienda]);
+  await connection.query('DELETE FROM producto WHERE idTienda=?', [idTienda]);
+  await connection.query('DELETE FROM cliente WHERE idTienda=?', [idTienda]);
+  await connection.query('DELETE FROM proveedor WHERE idTienda=?', [idTienda]);
+  await connection.query('DELETE FROM plantillaCobranzaTienda WHERE idTienda=?', [idTienda]);
+  await connection.query('DELETE FROM configuracionCreditoTienda WHERE idTienda=?', [idTienda]);
+  await connection.query('DELETE FROM configuracionInventarioTienda WHERE idTienda=?', [idTienda]);
+  await connection.query('DELETE FROM suscripcionTienda WHERE idTienda=?', [idTienda]);
+  await connection.query('DELETE FROM administrador WHERE idTienda=?', [idTienda]);
+  await connection.query('DELETE FROM tienda WHERE idTienda=?', [idTienda]);
 }
 
 async function cleanup(connection, fixture) {
   if (!connection) return;
-  if (fixture.idTiendaSecundaria) {
-    const id = fixture.idTiendaSecundaria;
-    await connection.query('DELETE FROM cierreCaja WHERE idTienda=?', [id]);
-    await connection.query('DELETE FROM gasto WHERE idTienda=?', [id]);
-    await connection.query('DELETE FROM categoriaGasto WHERE idTienda=?', [id]);
-    await connection.query('DELETE FROM movimientoStock WHERE idTienda=?', [id]);
-    await connection.query('DELETE FROM pagoVenta WHERE idTienda=?', [id]);
-    await connection.query('DELETE FROM pagoFiado WHERE idTienda=?', [id]);
-    await connection.query('DELETE FROM detalleFiado WHERE idTienda=?', [id]);
-    await connection.query('DELETE FROM detalleVenta WHERE idTienda=?', [id]);
-    await connection.query('DELETE FROM detalleCompra WHERE idTienda=?', [id]);
-    await connection.query('DELETE FROM fiado WHERE idTienda=?', [id]);
-    await connection.query('DELETE FROM venta WHERE idTienda=?', [id]);
-    await connection.query('DELETE FROM compra WHERE idTienda=?', [id]);
-    await connection.query('DELETE FROM producto WHERE idTienda=?', [id]);
-    await connection.query('DELETE FROM cliente WHERE idTienda=?', [id]);
-    await connection.query('DELETE FROM proveedor WHERE idTienda=?', [id]);
-    await connection.query('DELETE FROM configuracionInventarioTienda WHERE idTienda=?', [id]);
-    await connection.query('DELETE FROM suscripcionTienda WHERE idTienda=?', [id]);
-    await connection.query('DELETE FROM administrador WHERE idTienda=?', [id]);
-    await connection.query('DELETE FROM tienda WHERE idTienda=?', [id]);
-  }
-  if (fixture.idTiendaDeisy) {
-    await connection.query(
-      `DELETE ms FROM movimientoStock ms
-       JOIN producto p ON p.idProducto=ms.idProducto AND p.idTienda=ms.idTienda
-       WHERE p.idTienda=? AND p.nombre=?`,
-      [fixture.idTiendaDeisy, fixture.nombreProductoDeisy]
-    );
-    await connection.query('DELETE FROM producto WHERE idTienda=? AND nombre=?', [fixture.idTiendaDeisy, fixture.nombreProductoDeisy]);
-    await connection.query('DELETE FROM cliente WHERE idTienda=? AND nombre=?', [fixture.idTiendaDeisy, fixture.nombreClienteDeisy]);
-    await connection.query('DELETE FROM proveedor WHERE idTienda=? AND nombre=?', [fixture.idTiendaDeisy, fixture.nombreProveedorDeisy]);
-  }
+  await cleanupStore(connection, fixture.idTiendaSecundaria);
+  await cleanupStore(connection, fixture.idTiendaPrimaria);
   if (fixture.usuarioSuperadmin) {
     await connection.query('DELETE FROM administrador WHERE usuario=?', [fixture.usuarioSuperadmin]);
   }
 }
 
 async function main() {
-  requireEnvironment(['ADMIN_USER', 'ADMIN_PASSWORD']);
   const config = { ...requireLocalhostDatabase('La prueba de aislamiento multi-tienda'), decimalNumbers: true };
   if (!/(prueba|test)/i.test(config.database)) {
     throw new Error('La prueba solo puede ejecutarse sobre una base cuyo nombre indique que es de pruebas.');
@@ -104,9 +156,9 @@ async function main() {
   const baseUrl = process.env.TEST_BASE_URL || `http://localhost:${process.env.PORT || 3000}`;
   const marker = crypto.randomBytes(5).toString('hex');
   const fixture = {
-    nombreProveedorDeisy: `PROVEEDOR DEISY TEST ${marker}`,
-    nombreClienteDeisy: `CLIENTE DEISY TEST ${marker}`,
-    nombreProductoDeisy: `PRODUCTO DEISY TEST ${marker}`,
+    nombreProveedorPrimaria: `PROVEEDOR PRIMERA TEST ${marker}`,
+    nombreClientePrimaria: `CLIENTE PRIMERA TEST ${marker}`,
+    nombreProductoPrimaria: `PRODUCTO PRIMERA TEST ${marker}`,
     usuarioSuperadmin: `super_test_${marker}`
   };
   const sessions = [];
@@ -114,67 +166,62 @@ async function main() {
 
   try {
     connection = await mysql.createConnection(config);
-    const [[deisy]] = await connection.query("SELECT idTienda FROM tienda WHERE slug='tienda-deisy' LIMIT 1");
-    assert(deisy, 'No existe Tienda Deisy en la base local.');
-    fixture.idTiendaDeisy = deisy.idTienda;
-
-    const slug = `tienda-prueba-${marker}`;
-    const [store] = await connection.query(
-      "INSERT INTO tienda (nombre, slug, activo, estado) VALUES (?, ?, 1, 'activa')",
-      [`TIENDA PRUEBA ${marker}`, slug]
-    );
-    fixture.idTiendaSecundaria = store.insertId;
-    const [[advancedPlan]] = await connection.query("SELECT idPlan FROM plan WHERE codigo='avanzado' LIMIT 1");
-    assert(advancedPlan, 'No existe el plan avanzado. Ejecute primero la migracion 005.');
-    await connection.query(
-      `INSERT INTO suscripcionTienda
-       (idTienda, idPlan, tipo, estado, fechaInicio, fechaFin, renovacionAutomatica, observacion)
-       VALUES (?, ?, 'cortesia', 'activa', CURRENT_TIMESTAMP, DATE_ADD(CURRENT_TIMESTAMP, INTERVAL 30 DAY), 0, 'Prueba de aislamiento')`,
-      [fixture.idTiendaSecundaria, advancedPlan.idPlan]
-    );
-
-    const ownerUser = `owner_test_${marker}`;
-    const ownerPassword = `Owner-${crypto.randomBytes(12).toString('hex')}!`;
     const inactiveUser = `inactive_test_${marker}`;
     const inactivePassword = `Inactive-${crypto.randomBytes(12).toString('hex')}!`;
     const superPassword = `Super-${crypto.randomBytes(12).toString('hex')}!`;
-    const [ownerHash, inactiveHash, superHash] = await Promise.all([
-      bcrypt.hash(ownerPassword, 10),
-      bcrypt.hash(inactivePassword, 10),
-      bcrypt.hash(superPassword, 10)
+    const [inactiveHash, superHash] = await Promise.all([
+      bcrypt.hash(inactivePassword, 10), bcrypt.hash(superPassword, 10)
     ]);
-    await connection.query(
-      "INSERT INTO administrador (idTienda, usuario, password, rol, activo) VALUES (?, ?, ?, 'dueno_tienda', 1)",
-      [fixture.idTiendaSecundaria, ownerUser, ownerHash]
-    );
-    await connection.query(
-      "INSERT INTO administrador (idTienda, usuario, password, rol, activo) VALUES (?, ?, ?, 'dueno_tienda', 0)",
-      [fixture.idTiendaSecundaria, inactiveUser, inactiveHash]
-    );
     await connection.query(
       "INSERT INTO administrador (idTienda, usuario, password, rol, activo) VALUES (NULL, ?, ?, 'superadmin', 1)",
       [fixture.usuarioSuperadmin, superHash]
     );
 
-    const deisySession = new HttpSession(baseUrl);
+    const primarySession = new HttpSession(baseUrl);
     const secondSession = new HttpSession(baseUrl);
     const superSession = new HttpSession(baseUrl);
     const inactiveSession = new HttpSession(baseUrl);
-    sessions.push(deisySession, secondSession, superSession, inactiveSession);
+    sessions.push(primarySession, secondSession, superSession, inactiveSession);
 
-    const deisyLogin = await expect(deisySession, '/auth/login', {
-      method: 'POST', body: { usuario: process.env.ADMIN_USER, password: process.env.ADMIN_PASSWORD }
-    }, 200, 'Login Tienda Deisy');
-    assert(!containsTenantField(deisyLogin), 'El login expuso idTienda al navegador.');
+    await expect(superSession, '/auth/login', {
+      method: 'POST', body: { usuario: fixture.usuarioSuperadmin, password: superPassword }
+    }, 200, 'Login superadmin futuro');
+    const operationalPlan = await resolveOperationalPlan(connection, superSession);
+    const primaryStore = storePayload(marker, 'primaria', operationalPlan.codigo);
+    const secondaryStore = storePayload(marker, 'secundaria', operationalPlan.codigo);
+    const primaryCreated = await expect(superSession, '/api/admin/tiendas', {
+      method: 'POST', body: primaryStore.body
+    }, 201, 'Crear primera tienda temporal');
+    fixture.idTiendaPrimaria = primaryCreated.tienda.idTienda;
+    const secondaryCreated = await expect(superSession, '/api/admin/tiendas', {
+      method: 'POST', body: secondaryStore.body
+    }, 201, 'Crear segunda tienda temporal');
+    fixture.idTiendaSecundaria = secondaryCreated.tienda.idTienda;
+    primarySession.diagnosticContext = {
+      tiendaActiva: primaryCreated.tienda,
+      plan: primaryCreated.suscripcion.planCodigo,
+      estadoSuscripcion: primaryCreated.suscripcion.estado
+    };
+    secondSession.diagnosticContext = {
+      tiendaActiva: secondaryCreated.tienda,
+      plan: secondaryCreated.suscripcion.planCodigo,
+      estadoSuscripcion: secondaryCreated.suscripcion.estado
+    };
+    await connection.query(
+      "INSERT INTO administrador (idTienda, usuario, password, rol, activo) VALUES (?, ?, ?, 'dueno_tienda', 0)",
+      [fixture.idTiendaSecundaria, inactiveUser, inactiveHash]
+    );
+
+    const primaryLogin = await expect(primarySession, '/auth/login', {
+      method: 'POST', body: { usuario: primaryStore.body.propietario.usuario, password: primaryStore.password }
+    }, 200, 'Login primera tienda');
+    assert(!containsTenantField(primaryLogin), 'El login expuso idTienda al navegador.');
     await expect(secondSession, '/auth/login', {
-      method: 'POST', body: { usuario: ownerUser, password: ownerPassword }
+      method: 'POST', body: { usuario: secondaryStore.body.propietario.usuario, password: secondaryStore.password }
     }, 200, 'Login segunda tienda');
     await expect(inactiveSession, '/auth/login', {
       method: 'POST', body: { usuario: inactiveUser, password: inactivePassword }
     }, 401, 'Bloqueo de usuario inactivo');
-    await expect(superSession, '/auth/login', {
-      method: 'POST', body: { usuario: fixture.usuarioSuperadmin, password: superPassword }
-    }, 200, 'Login superadmin futuro');
     await expect(superSession, '/api/productos', {}, 403, 'Bloqueo operativo de superadmin');
 
     const secondNames = {
@@ -204,14 +251,14 @@ async function main() {
     }, 201, 'Crear producto segunda tienda');
     const secondProduct = await findByName(secondSession, '/api/productos', secondNames.producto);
 
-    await expect(deisySession, '/api/proveedores', { method: 'POST', body: { nombre: fixture.nombreProveedorDeisy, telefono: '70000003' } }, 201, 'Crear proveedor Deisy');
-    await expect(deisySession, '/api/clientes', { method: 'POST', body: { nombre: fixture.nombreClienteDeisy, telefono: '70000004' } }, 201, 'Crear cliente Deisy');
-    const deisyProvider = await findByName(deisySession, '/api/proveedores', fixture.nombreProveedorDeisy);
-    await expect(deisySession, '/api/productos', {
+    await expect(primarySession, '/api/proveedores', { method: 'POST', body: { nombre: fixture.nombreProveedorPrimaria, telefono: '70000003' } }, 201, 'Crear proveedor primera tienda');
+    await expect(primarySession, '/api/clientes', { method: 'POST', body: { nombre: fixture.nombreClientePrimaria, telefono: '70000004' } }, 201, 'Crear cliente primera tienda');
+    const primaryProvider = await findByName(primarySession, '/api/proveedores', fixture.nombreProveedorPrimaria);
+    await expect(primarySession, '/api/productos', {
       method: 'POST',
       body: {
-        nombre: fixture.nombreProductoDeisy,
-        idProveedor: deisyProvider.idProveedor,
+        nombre: fixture.nombreProductoPrimaria,
+        idProveedor: primaryProvider.idProveedor,
         categoria: 'OTROS',
         unidadMedida: 'unidad',
         unidadesPorPaquete: 1,
@@ -222,14 +269,14 @@ async function main() {
         permiteVentaPorPaquete: false,
         permiteVentaPorUnidad: true
       }
-    }, 201, 'Crear producto Deisy');
-    await findByName(deisySession, '/api/productos', fixture.nombreProductoDeisy);
+    }, 201, 'Crear producto primera tienda');
+    await findByName(primarySession, '/api/productos', fixture.nombreProductoPrimaria);
 
-    const deisyProducts = await expect(deisySession, '/api/productos', {}, 200, 'Productos Deisy');
+    const primaryProducts = await expect(primarySession, '/api/productos', {}, 200, 'Productos primera tienda');
     const secondProducts = await expect(secondSession, '/api/productos', {}, 200, 'Productos segunda tienda');
-    assert(!deisyProducts.some((item) => item.idProducto === secondProduct.idProducto), 'Tienda Deisy vio un producto de otra tienda.');
-    assert(!secondProducts.some((item) => item.nombre === fixture.nombreProductoDeisy), 'La segunda tienda vio un producto de Tienda Deisy.');
-    await expect(deisySession, `/api/clientes/${secondClient.idCliente}`, {
+    assert(!primaryProducts.some((item) => item.idProducto === secondProduct.idProducto), 'La primera tienda vio un producto de otra tienda.');
+    assert(!secondProducts.some((item) => item.nombre === fixture.nombreProductoPrimaria), 'La segunda tienda vio un producto de la primera tienda.');
+    await expect(primarySession, `/api/clientes/${secondClient.idCliente}`, {
       method: 'PUT', body: { nombre: 'INTENTO CRUZADO', telefono: '70000005' }
     }, 404, 'Actualizacion cruzada de cliente');
 
@@ -256,7 +303,10 @@ async function main() {
       }
     }, 201, 'Venta fiada segunda tienda');
     await expect(secondSession, '/api/pagos-fiado', {
-      method: 'POST', body: { idFiado: sale.idFiado, monto: 4, observacion: 'PRUEBA AISLAMIENTO' }
+      method: 'POST', body: {
+        idFiado: sale.idFiado, monto: 4, metodoPago: 'efectivo',
+        claveOperacion: `pago-aislamiento-${marker}`, observacion: 'PRUEBA AISLAMIENTO'
+      }
     }, 201, 'Pago segunda tienda');
     await expect(secondSession, '/api/ventas', {
       method: 'POST',
@@ -267,13 +317,16 @@ async function main() {
       }
     }, 201, 'Segundo fiado para pago acumulado');
     const accumulatedPayment = await expect(secondSession, '/api/pagos-fiado/cliente', {
-      method: 'POST', body: { idCliente: secondClient.idCliente, monto: 2, observacion: 'PRUEBA ACUMULADA' }
+      method: 'POST', body: {
+        idCliente: secondClient.idCliente, monto: 2, metodoPago: 'efectivo',
+        claveOperacion: `pago-acumulado-aislamiento-${marker}`, observacion: 'PRUEBA ACUMULADA'
+      }
     }, 201, 'Pago acumulado segunda tienda');
     assert(accumulatedPayment.aplicaciones.length > 0, 'El pago acumulado no se aplico a ningun fiado.');
 
-    await expect(deisySession, `/api/ventas/${sale.idVenta}`, {}, 404, 'Lectura cruzada de venta');
-    await expect(deisySession, `/api/fiados/${sale.idFiado}`, {}, 404, 'Lectura cruzada de fiado');
-    await expect(deisySession, '/api/ventas', {
+    await expect(primarySession, `/api/ventas/${sale.idVenta}`, {}, 404, 'Lectura cruzada de venta');
+    await expect(primarySession, `/api/fiados/${sale.idFiado}`, {}, 404, 'Lectura cruzada de fiado');
+    await expect(primarySession, '/api/ventas', {
       method: 'POST',
       body: { tipo: 'pagada', items: [{ idProducto: secondProduct.idProducto, cantidad: 1, presentacion: 'unidad' }] }
     }, 404, 'Venta con producto de otra tienda');
@@ -294,11 +347,11 @@ async function main() {
     });
 
     const secondReport = await expect(secondSession, '/api/reportes/ventasRango', {}, 200, 'Reporte segunda tienda');
-    const deisyReport = await expect(deisySession, '/api/reportes/ventasRango', {}, 200, 'Reporte Deisy');
+    const primaryReport = await expect(primarySession, '/api/reportes/ventasRango', {}, 200, 'Reporte primera tienda');
     assert(secondReport.rows.some((row) => row.idVenta === sale.idVenta), 'El reporte de la segunda tienda no incluyo su venta.');
-    assert(!deisyReport.rows.some((row) => row.idVenta === sale.idVenta), 'El reporte Deisy mezclo una venta de otra tienda.');
+    assert(!primaryReport.rows.some((row) => row.idVenta === sale.idVenta), 'El reporte de la primera tienda mezclo una venta de otra tienda.');
     await expect(secondSession, '/api/dashboard', {}, 200, 'Dashboard segunda tienda');
-    await expect(deisySession, '/api/dashboard', {}, 200, 'Dashboard Deisy');
+    await expect(primarySession, '/api/dashboard', {}, 200, 'Dashboard primera tienda');
 
     console.log('Prueba de aislamiento multi-tienda completada correctamente.');
   } finally {

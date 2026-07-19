@@ -25,6 +25,7 @@ const adminCatalogRoutes = require('./routes/admin-catalog');
 const adminRoutes = require('./routes/admin');
 const apiRoutes = require('./routes/api');
 const authRoutes = require('./routes/auth');
+const customerCreditRoutes = require('./routes/customers-credit');
 const financeRoutes = require('./routes/finance');
 const inventoryIntelligenceRoutes = require('./routes/inventory-intelligence');
 const lotRoutes = require('./routes/lots');
@@ -77,6 +78,7 @@ app.use('/api/catalogo-maestro', requireAuth, requireTenant, resolveSubscription
 app.use('/api', requireAuth, requireTenant, resolveSubscription, requireActiveSubscription, financeRoutes);
 app.use('/api', requireAuth, requireTenant, resolveSubscription, requireActiveSubscription, inventoryIntelligenceRoutes);
 app.use('/api', requireAuth, requireTenant, resolveSubscription, requireActiveSubscription, lotRoutes);
+app.use('/api', requireAuth, requireTenant, resolveSubscription, requireActiveSubscription, customerCreditRoutes);
 app.use('/api', requireAuth, requireTenant, resolveSubscription, requireActiveSubscription, posRoutes);
 app.use('/api', requireAuth, requireTenant, resolveSubscription, requireActiveSubscription, stockRoutes);
 app.use('/api', requireAuth, requireTenant, resolveSubscription, requireActiveSubscription, apiRoutes);

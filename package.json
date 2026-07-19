@@ -19,6 +19,7 @@
     "db:check-financial-reports": "node scripts/check-financial-reports.js",
     "db:check-inventory-intelligence": "node scripts/check-inventory-intelligence.js",
     "db:check-lots-expiration": "node scripts/check-lots-expiration.js",
+    "db:check-customers-credit": "node scripts/check-customers-credit.js",
     "test:tenant-isolation": "node scripts/test-tenant-isolation.js",
     "test:admin-management": "node scripts/test-admin-management.js",
     "test:subscriptions": "node scripts/test-subscriptions.js",
@@ -27,7 +28,8 @@
     "test:pos-payments": "node scripts/test-pos-payments.js",
     "test:financial-reports": "node scripts/test-financial-reports.js",
     "test:inventory-intelligence": "node scripts/test-inventory-intelligence.js",
-    "test:lots-expiration": "node scripts/test-lots-expiration.js"
+    "test:lots-expiration": "node scripts/test-lots-expiration.js",
+    "test:customers-credit": "node scripts/test-customers-credit.js"
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",

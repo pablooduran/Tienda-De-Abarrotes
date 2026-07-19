@@ -19,7 +19,11 @@ const {
 const MIGRATION_LOCAL_DATETIME_TOKEN = '__MIGRATION_LOCAL_DATETIME__';
 
 function prepareMigrationStatement(file, statement, context = {}) {
-  if (!['010_inteligencia_inventario.sql', '011_lotes_vencimientos.sql'].includes(file)
+  if (![
+    '010_inteligencia_inventario.sql',
+    '011_lotes_vencimientos.sql',
+    '012_clientes_fiados_comunicacion.sql'
+  ].includes(file)
     || !statement.includes(MIGRATION_LOCAL_DATETIME_TOKEN)) {
     return { sql: statement, params: [] };
   }
@@ -416,6 +420,110 @@ const migrationRequirements = {
       ['movimientoLote', 'fk_movimientoLote_movimientoStock', ['idTienda', 'idProducto', 'idMovimientoStock'], 'movimientoStock', ['idTienda', 'idProducto', 'idMovimientoStock'], 'RESTRICT', 'RESTRICT'],
       ['movimientoLote', 'fk_movimientoLote_administrador', ['idTienda', 'idAdministrador'], 'administrador', ['idTienda', 'idAdministrador'], 'RESTRICT', 'RESTRICT']
     ]
+  },
+  '012_clientes_fiados_comunicacion.sql': {
+    columns: {
+      cliente: [
+        'direccion', 'telefonoAlternativo', 'telefonoNormalizado', 'documentoIdentidad',
+        'documentoNormalizado', 'correo', 'notas', 'limiteCredito', 'permiteFiado',
+        'diasCreditoDefault', 'canalPreferido', 'aceptaRecordatorios', 'horarioPreferido',
+        'creadoEn', 'actualizadoEn', 'idAdministradorCrea', 'idAdministradorActualiza'
+      ],
+      fiado: [
+        'fechaVencimiento', 'fechaPrometidaPago', 'observacionCredito', 'cerradoEn',
+        'idAdministradorCrea'
+      ],
+      pagoFiado: ['idCobroFiado', 'claveDistribucion'],
+      configuracionCreditoTienda: [
+        'idTienda', 'limiteCreditoDefault', 'diasCreditoDefault', 'diasAvisoVencimiento',
+        'politicaFiadoVencido', 'requiereTelefonoParaFiado', 'permiteFiadoSinFecha',
+        'codigoPaisWhatsApp', 'creadoEn', 'actualizadoEn', 'idAdministradorActualiza'
+      ],
+      cobroFiado: [
+        'idCobroFiado', 'idTienda', 'idCliente', 'fechaCobro', 'montoTotal', 'metodoPago',
+        'montoRecibido', 'cambio', 'referencia', 'observacion', 'claveOperacion',
+        'creadoEn', 'idAdministrador', 'esLegado'
+      ],
+      seguimientoCobranza: [
+        'idSeguimientoCobranza', 'idTienda', 'idCliente', 'idFiado', 'tipo', 'canal',
+        'detalle', 'fechaCompromiso', 'creadoEn', 'idAdministrador'
+      ],
+      plantillaCobranzaTienda: [
+        'idPlantillaCobranza', 'idTienda', 'tipo', 'nombre', 'contenido', 'activo',
+        'creadoEn', 'actualizadoEn', 'idAdministradorActualiza'
+      ]
+    },
+    indexes: [
+      ['cliente', 'idx_cliente_tienda_activo_nombre', ['idTienda', 'activo', 'nombre'], false],
+      ['cliente', 'uq_cliente_tienda_documento_normalizado', ['idTienda', 'documentoNormalizado'], true],
+      ['cliente', 'idx_cliente_tienda_telefono_normalizado', ['idTienda', 'telefonoNormalizado'], false],
+      ['cliente', 'idx_cliente_tienda_permite_fiado_activo', ['idTienda', 'permiteFiado', 'activo'], false],
+      ['cliente', 'idx_cliente_tienda_admin_crea', ['idTienda', 'idAdministradorCrea'], false],
+      ['cliente', 'idx_cliente_tienda_admin_actualiza', ['idTienda', 'idAdministradorActualiza'], false],
+      ['fiado', 'uq_fiado_tienda_cliente_id', ['idTienda', 'idCliente', 'idFiado'], true],
+      ['fiado', 'idx_fiado_tienda_cliente_saldo', ['idTienda', 'idCliente', 'saldoPendiente'], false],
+      ['fiado', 'idx_fiado_tienda_vencimiento_saldo', ['idTienda', 'fechaVencimiento', 'saldoPendiente'], false],
+      ['fiado', 'idx_fiado_tienda_promesa_saldo', ['idTienda', 'fechaPrometidaPago', 'saldoPendiente'], false],
+      ['fiado', 'idx_fiado_tienda_estado_activo', ['idTienda', 'estado', 'activo'], false],
+      ['fiado', 'idx_fiado_tienda_venta', ['idTienda', 'idVenta'], false],
+      ['fiado', 'idx_fiado_tienda_admin_crea', ['idTienda', 'idAdministradorCrea'], false],
+      ['configuracionCreditoTienda', 'PRIMARY', ['idTienda'], true],
+      ['configuracionCreditoTienda', 'idx_configCredito_tienda_admin', ['idTienda', 'idAdministradorActualiza'], false],
+      ['cobroFiado', 'PRIMARY', ['idCobroFiado'], true],
+      ['cobroFiado', 'uq_cobroFiado_tienda_id', ['idTienda', 'idCobroFiado'], true],
+      ['cobroFiado', 'uq_cobroFiado_tienda_clave', ['idTienda', 'claveOperacion'], true],
+      ['cobroFiado', 'idx_cobroFiado_tienda_cliente_fecha', ['idTienda', 'idCliente', 'fechaCobro'], false],
+      ['cobroFiado', 'idx_cobroFiado_tienda_fecha_metodo', ['idTienda', 'fechaCobro', 'metodoPago'], false],
+      ['cobroFiado', 'idx_cobroFiado_tienda_admin_fecha', ['idTienda', 'idAdministrador', 'fechaCobro'], false],
+      ['pagoFiado', 'uq_pagoFiado_tienda_clave_distribucion', ['idTienda', 'claveDistribucion'], true],
+      ['pagoFiado', 'idx_pagoFiado_tienda_cobro_fiado', ['idTienda', 'idCobroFiado', 'idFiado'], false],
+      ['seguimientoCobranza', 'PRIMARY', ['idSeguimientoCobranza'], true],
+      ['seguimientoCobranza', 'idx_seguimientoCobranza_tienda_cliente_fecha', ['idTienda', 'idCliente', 'creadoEn'], false],
+      ['seguimientoCobranza', 'idx_seguimientoCobranza_tienda_fiado_fecha', ['idTienda', 'idFiado', 'creadoEn'], false],
+      ['seguimientoCobranza', 'idx_seguimientoCobranza_tienda_tipo_fecha', ['idTienda', 'tipo', 'creadoEn'], false],
+      ['seguimientoCobranza', 'idx_seguimientoCobranza_tienda_compromiso', ['idTienda', 'fechaCompromiso'], false],
+      ['seguimientoCobranza', 'idx_seguimientoCobranza_tienda_admin', ['idTienda', 'idAdministrador'], false],
+      ['plantillaCobranzaTienda', 'PRIMARY', ['idPlantillaCobranza'], true],
+      ['plantillaCobranzaTienda', 'uq_plantillaCobranza_tienda_tipo_nombre', ['idTienda', 'tipo', 'nombre'], true],
+      ['plantillaCobranzaTienda', 'idx_plantillaCobranza_tienda_activo_tipo', ['idTienda', 'activo', 'tipo'], false],
+      ['plantillaCobranzaTienda', 'idx_plantillaCobranza_tienda_admin', ['idTienda', 'idAdministradorActualiza'], false]
+    ],
+    checks: [
+      ['cliente', 'chk_cliente_limite_credito'],
+      ['cliente', 'chk_cliente_permite_fiado'],
+      ['cliente', 'chk_cliente_acepta_recordatorios'],
+      ['cliente', 'chk_cliente_dias_credito'],
+      ['cliente', 'chk_cliente_contacto_normalizado'],
+      ['fiado', 'chk_fiado_cierre_credito'],
+      ['configuracionCreditoTienda', 'chk_configCredito_limite'],
+      ['configuracionCreditoTienda', 'chk_configCredito_dias'],
+      ['configuracionCreditoTienda', 'chk_configCredito_booleanos'],
+      ['configuracionCreditoTienda', 'chk_configCredito_codigo_pais'],
+      ['cobroFiado', 'chk_cobroFiado_monto'],
+      ['cobroFiado', 'chk_cobroFiado_cambio'],
+      ['cobroFiado', 'chk_cobroFiado_legado'],
+      ['seguimientoCobranza', 'chk_seguimientoCobranza_detalle'],
+      ['seguimientoCobranza', 'chk_seguimientoCobranza_compromiso'],
+      ['plantillaCobranzaTienda', 'chk_plantillaCobranza_texto'],
+      ['plantillaCobranzaTienda', 'chk_plantillaCobranza_activo']
+    ],
+    foreignKeyConstraints: [
+      ['cliente', 'fk_cliente_admin_crea', ['idTienda', 'idAdministradorCrea'], 'administrador', ['idTienda', 'idAdministrador'], 'RESTRICT', 'RESTRICT'],
+      ['cliente', 'fk_cliente_admin_actualiza', ['idTienda', 'idAdministradorActualiza'], 'administrador', ['idTienda', 'idAdministrador'], 'RESTRICT', 'RESTRICT'],
+      ['fiado', 'fk_fiado_admin_crea', ['idTienda', 'idAdministradorCrea'], 'administrador', ['idTienda', 'idAdministrador'], 'RESTRICT', 'RESTRICT'],
+      ['configuracionCreditoTienda', 'fk_configCredito_tienda', ['idTienda'], 'tienda', ['idTienda'], 'RESTRICT', 'RESTRICT'],
+      ['configuracionCreditoTienda', 'fk_configCredito_administrador', ['idTienda', 'idAdministradorActualiza'], 'administrador', ['idTienda', 'idAdministrador'], 'RESTRICT', 'RESTRICT'],
+      ['cobroFiado', 'fk_cobroFiado_tienda', ['idTienda'], 'tienda', ['idTienda'], 'RESTRICT', 'RESTRICT'],
+      ['cobroFiado', 'fk_cobroFiado_cliente', ['idTienda', 'idCliente'], 'cliente', ['idTienda', 'idCliente'], 'RESTRICT', 'RESTRICT'],
+      ['cobroFiado', 'fk_cobroFiado_administrador', ['idTienda', 'idAdministrador'], 'administrador', ['idTienda', 'idAdministrador'], 'RESTRICT', 'RESTRICT'],
+      ['pagoFiado', 'fk_pagoFiado_cobro', ['idTienda', 'idCobroFiado'], 'cobroFiado', ['idTienda', 'idCobroFiado'], 'RESTRICT', 'RESTRICT'],
+      ['seguimientoCobranza', 'fk_seguimientoCobranza_tienda', ['idTienda'], 'tienda', ['idTienda'], 'RESTRICT', 'RESTRICT'],
+      ['seguimientoCobranza', 'fk_seguimientoCobranza_cliente', ['idTienda', 'idCliente'], 'cliente', ['idTienda', 'idCliente'], 'RESTRICT', 'RESTRICT'],
+      ['seguimientoCobranza', 'fk_seguimientoCobranza_fiado', ['idTienda', 'idCliente', 'idFiado'], 'fiado', ['idTienda', 'idCliente', 'idFiado'], 'RESTRICT', 'RESTRICT'],
+      ['seguimientoCobranza', 'fk_seguimientoCobranza_administrador', ['idTienda', 'idAdministrador'], 'administrador', ['idTienda', 'idAdministrador'], 'RESTRICT', 'RESTRICT'],
+      ['plantillaCobranzaTienda', 'fk_plantillaCobranza_tienda', ['idTienda'], 'tienda', ['idTienda'], 'RESTRICT', 'RESTRICT'],
+      ['plantillaCobranzaTienda', 'fk_plantillaCobranza_administrador', ['idTienda', 'idAdministradorActualiza'], 'administrador', ['idTienda', 'idAdministrador'], 'RESTRICT', 'RESTRICT']
+    ]
   }
 };
 
@@ -474,6 +582,124 @@ const LOTS_COLUMN_DEFINITIONS = Object.freeze({
     claveOperacion: { type: 'varchar(160)', nullable: false, defaultValue: null },
     creadoEn: { type: 'datetime', nullable: false, defaultValue: null, extra: '' },
     idAdministrador: { type: 'int', nullable: false, defaultValue: null }
+  }
+});
+
+const CUSTOMER_CREDIT_CORE_FEATURES = Object.freeze([
+  'clientes_basico', 'fiados_basico', 'pagos_fiado', 'estado_cuenta_basico'
+]);
+const CUSTOMER_CREDIT_ADVANCED_FEATURES = Object.freeze([
+  'limites_credito', 'seguimiento_cobranza', 'segmentacion_clientes',
+  'exportacion_clientes_fiados', 'recordatorios_fiado'
+]);
+const CUSTOMER_CREDIT_FEATURES = Object.freeze([
+  ...CUSTOMER_CREDIT_CORE_FEATURES,
+  ...CUSTOMER_CREDIT_ADVANCED_FEATURES
+]);
+const CUSTOMER_CREDIT_COLUMN_DEFINITIONS = Object.freeze({
+  cliente: {
+    direccion: { type: 'varchar(255)', nullable: true, defaultValue: null },
+    telefonoAlternativo: { type: 'varchar(30)', nullable: true, defaultValue: null },
+    telefonoNormalizado: { type: 'varchar(30)', nullable: true, defaultValue: null },
+    documentoIdentidad: { type: 'varchar(50)', nullable: true, defaultValue: null },
+    documentoNormalizado: { type: 'varchar(50)', nullable: true, defaultValue: null },
+    correo: { type: 'varchar(160)', nullable: true, defaultValue: null },
+    notas: { type: 'varchar(1000)', nullable: true, defaultValue: null },
+    limiteCredito: { type: 'decimal(12,2)', nullable: true, defaultValue: null },
+    permiteFiado: { type: 'tinyint(1)', nullable: false, defaultValue: 1 },
+    diasCreditoDefault: { type: 'int', nullable: true, defaultValue: null },
+    canalPreferido: {
+      type: "enum('ninguno','whatsapp','telefono','correo','presencial')",
+      nullable: false,
+      defaultValue: 'ninguno'
+    },
+    aceptaRecordatorios: { type: 'tinyint(1)', nullable: false, defaultValue: 1 },
+    horarioPreferido: { type: 'varchar(120)', nullable: true, defaultValue: null },
+    creadoEn: { type: 'datetime', nullable: false, defaultValue: null, extra: '' },
+    actualizadoEn: { type: 'datetime', nullable: false, defaultValue: null, extra: '' },
+    idAdministradorCrea: { type: 'int', nullable: true, defaultValue: null },
+    idAdministradorActualiza: { type: 'int', nullable: true, defaultValue: null }
+  },
+  fiado: {
+    fechaVencimiento: { type: 'date', nullable: true, defaultValue: null, extra: '' },
+    fechaPrometidaPago: { type: 'date', nullable: true, defaultValue: null, extra: '' },
+    observacionCredito: { type: 'varchar(1000)', nullable: true, defaultValue: null },
+    cerradoEn: { type: 'datetime', nullable: true, defaultValue: null, extra: '' },
+    idAdministradorCrea: { type: 'int', nullable: true, defaultValue: null }
+  },
+  pagoFiado: {
+    idCobroFiado: { type: 'bigint', nullable: false, defaultValue: null },
+    claveDistribucion: { type: 'varchar(160)', nullable: false, defaultValue: null }
+  },
+  configuracionCreditoTienda: {
+    idTienda: { type: 'int', nullable: false, defaultValue: null },
+    limiteCreditoDefault: { type: 'decimal(12,2)', nullable: true, defaultValue: null },
+    diasCreditoDefault: { type: 'int', nullable: false, defaultValue: 30 },
+    diasAvisoVencimiento: { type: 'int', nullable: false, defaultValue: 3 },
+    politicaFiadoVencido: {
+      type: "enum('permitir','advertir','bloquear')", nullable: false, defaultValue: 'advertir'
+    },
+    requiereTelefonoParaFiado: { type: 'tinyint(1)', nullable: false, defaultValue: 0 },
+    permiteFiadoSinFecha: { type: 'tinyint(1)', nullable: false, defaultValue: 1 },
+    codigoPaisWhatsApp: { type: 'varchar(8)', nullable: true, defaultValue: null },
+    creadoEn: { type: 'datetime', nullable: false, defaultValue: null, extra: '' },
+    actualizadoEn: { type: 'datetime', nullable: false, defaultValue: null, extra: '' },
+    idAdministradorActualiza: { type: 'int', nullable: true, defaultValue: null }
+  },
+  cobroFiado: {
+    idCobroFiado: { type: 'bigint', nullable: false, defaultValue: null, extraIncludes: 'auto_increment' },
+    idTienda: { type: 'int', nullable: false, defaultValue: null },
+    idCliente: { type: 'int', nullable: false, defaultValue: null },
+    fechaCobro: { type: 'datetime', nullable: false, defaultValue: null, extra: '' },
+    montoTotal: { type: 'decimal(12,2)', nullable: false, defaultValue: null },
+    metodoPago: {
+      type: "enum('efectivo','qr','transferencia','tarjeta','otro','no_especificado')",
+      nullable: false,
+      defaultValue: null
+    },
+    montoRecibido: { type: 'decimal(12,2)', nullable: true, defaultValue: null },
+    cambio: { type: 'decimal(12,2)', nullable: false, defaultValue: 0 },
+    referencia: { type: 'varchar(160)', nullable: true, defaultValue: null },
+    observacion: { type: 'varchar(1000)', nullable: true, defaultValue: null },
+    claveOperacion: { type: 'varchar(160)', nullable: false, defaultValue: null },
+    creadoEn: { type: 'datetime', nullable: false, defaultValue: null, extra: '' },
+    idAdministrador: { type: 'int', nullable: true, defaultValue: null },
+    esLegado: { type: 'tinyint(1)', nullable: false, defaultValue: 0 }
+  },
+  seguimientoCobranza: {
+    idSeguimientoCobranza: { type: 'bigint', nullable: false, defaultValue: null, extraIncludes: 'auto_increment' },
+    idTienda: { type: 'int', nullable: false, defaultValue: null },
+    idCliente: { type: 'int', nullable: false, defaultValue: null },
+    idFiado: { type: 'int', nullable: true, defaultValue: null },
+    tipo: {
+      type: "enum('nota','recordatorio_preparado','llamada','mensaje_enviado_manual','compromiso_pago','visita')",
+      nullable: false,
+      defaultValue: null
+    },
+    canal: {
+      type: "enum('ninguno','whatsapp','telefono','presencial','correo')",
+      nullable: false,
+      defaultValue: 'ninguno'
+    },
+    detalle: { type: 'varchar(2000)', nullable: false, defaultValue: null },
+    fechaCompromiso: { type: 'date', nullable: true, defaultValue: null, extra: '' },
+    creadoEn: { type: 'datetime', nullable: false, defaultValue: null, extra: '' },
+    idAdministrador: { type: 'int', nullable: false, defaultValue: null }
+  },
+  plantillaCobranzaTienda: {
+    idPlantillaCobranza: { type: 'bigint', nullable: false, defaultValue: null, extraIncludes: 'auto_increment' },
+    idTienda: { type: 'int', nullable: false, defaultValue: null },
+    tipo: {
+      type: "enum('recordatorio_previo','deuda_vencida','confirmacion_pago','estado_cuenta')",
+      nullable: false,
+      defaultValue: null
+    },
+    nombre: { type: 'varchar(100)', nullable: false, defaultValue: null },
+    contenido: { type: 'varchar(2000)', nullable: false, defaultValue: null },
+    activo: { type: 'tinyint(1)', nullable: false, defaultValue: 1 },
+    creadoEn: { type: 'datetime', nullable: false, defaultValue: null, extra: '' },
+    actualizadoEn: { type: 'datetime', nullable: false, defaultValue: null, extra: '' },
+    idAdministradorActualiza: { type: 'int', nullable: true, defaultValue: null }
   }
 });
 
@@ -576,6 +802,10 @@ async function requirementsSatisfied(connection, file) {
   if (file === '011_lotes_vencimientos.sql') {
     const estado011 = await inspect011State(connection, false, { log: false });
     return estado011.estructuraCompleta && estado011.datosValidos;
+  }
+  if (file === '012_clientes_fiados_comunicacion.sql') {
+    const estado012 = await inspect012State(connection, false, { log: false });
+    return estado012.estructuraCompleta && estado012.datosValidos;
   }
   const requirements = migrationRequirements[file];
   if (!requirements) return false;
@@ -1171,7 +1401,7 @@ async function structureElementExists(connection, element, file = null) {
     const details = await normalizedColumnDetails(connection, element.table, [element.name]);
     return columnDefinitionMatches(details[normalizedIdentifier(element.name)], element.expected);
   }
-  if (file === '011_lotes_vencimientos.sql') {
+  if (['011_lotes_vencimientos.sql', '012_clientes_fiados_comunicacion.sql'].includes(file)) {
     if (element.type === 'columna') {
       const details = await normalizedColumnDetails(connection, element.table, [element.name]);
       return Boolean(details[normalizedIdentifier(element.name)]);
@@ -1790,6 +2020,395 @@ async function inspect011State(connection, recorded, { log = true } = {}) {
   return estado011;
 }
 
+async function customerCreditFeatureAccess(connection, planCode, codes) {
+  const placeholders = codes.map(() => '?').join(',');
+  return migrationCount(connection,
+    `SELECT COUNT(DISTINCT f.codigo) total FROM planFuncionalidad pf
+     JOIN plan p ON p.idPlan=pf.idPlan
+     JOIN funcionalidad f ON f.idFuncionalidad=pf.idFuncionalidad
+     WHERE p.codigo=? AND p.activo=1 AND f.activo=1 AND pf.habilitada=1
+       AND f.codigo IN (${placeholders})`,
+    [planCode, ...codes]);
+}
+
+async function inspect012Data(connection, estado012) {
+  const data = {
+    tiendasSinConfiguracion: null,
+    configuracionesInvalidas: null,
+    tiendasSinPlantillasDefault: null,
+    plantillasDuplicadas: null,
+    plantillasInvalidas: null,
+    variablesPlantillaInvalidas: null,
+    clientesInvalidos: null,
+    documentosNormalizadosDuplicados: null,
+    fiadosInvalidos: null,
+    fiadosSaldoNoReconciliado: null,
+    fiadosPagosNoReconciliados: null,
+    fiadosFechasIncoherentes: null,
+    fiadosCierreIncoherente: null,
+    cobrosInvalidos: null,
+    cobrosReferenciasCruzadas: null,
+    clavesCobroDuplicadas: null,
+    cobrosSinDistribucion: null,
+    cobrosSumaDistribucionInvalida: null,
+    pagosSinCobroOClave: null,
+    clavesDistribucionDuplicadas: null,
+    pagosCruzados: null,
+    cabecerasLegadoInvalidas: null,
+    pagosLegadoSinCabeceraDeterministica: null,
+    cabecerasLegadoSinPago: null,
+    pagosVentaDuplicadosPorPagoFiado: null,
+    seguimientosInvalidos: null,
+    seguimientosCruzados: null,
+    funcionalidadesActivas: null,
+    accesosBasicoCore: null,
+    accesosAvanzadoCore: null,
+    accesosAvanzadoExclusivos: null,
+    funcionesAvanzadasEnBasico: null,
+    funcionalidadesDuplicadas: null,
+    accesosPlanDuplicados: null
+  };
+  if (estado012.columnas.configuracionCreditoTienda) {
+    data.tiendasSinConfiguracion = await migrationCount(connection,
+      `SELECT COUNT(*) total FROM tienda t WHERE NOT EXISTS (
+         SELECT 1 FROM configuracionCreditoTienda c WHERE c.idTienda=t.idTienda
+       )`);
+    data.configuracionesInvalidas = await migrationCount(connection,
+      `SELECT COUNT(*) total FROM configuracionCreditoTienda c
+       LEFT JOIN tienda t ON t.idTienda=c.idTienda
+       LEFT JOIN administrador a
+         ON a.idTienda=c.idTienda AND a.idAdministrador=c.idAdministradorActualiza
+       WHERE t.idTienda IS NULL OR c.creadoEn IS NULL OR c.actualizadoEn IS NULL
+          OR (c.limiteCreditoDefault IS NOT NULL AND c.limiteCreditoDefault<0)
+          OR c.diasCreditoDefault NOT BETWEEN 1 AND 365
+          OR c.diasAvisoVencimiento NOT BETWEEN 0 AND 90
+          OR c.requiereTelefonoParaFiado NOT IN (0,1)
+          OR c.permiteFiadoSinFecha NOT IN (0,1)
+          OR (c.codigoPaisWhatsApp IS NOT NULL
+              AND c.codigoPaisWhatsApp NOT REGEXP '^[0-9]{1,8}$')
+          OR (c.idAdministradorActualiza IS NOT NULL AND a.idAdministrador IS NULL)`);
+  }
+  if (estado012.columnas.plantillaCobranzaTienda) {
+    data.tiendasSinPlantillasDefault = await migrationCount(connection,
+      `SELECT COUNT(*) total FROM tienda t WHERE (
+         SELECT COUNT(*) FROM plantillaCobranzaTienda p
+         WHERE p.idTienda=t.idTienda AND (
+           (p.tipo='recordatorio_previo' AND p.nombre='Recordatorio previo')
+           OR (p.tipo='deuda_vencida' AND p.nombre='Deuda vencida')
+           OR (p.tipo='confirmacion_pago' AND p.nombre='Confirmacion de pago')
+           OR (p.tipo='estado_cuenta' AND p.nombre='Estado de cuenta')
+         )
+       )<>4`);
+    data.plantillasInvalidas = await migrationCount(connection,
+      `SELECT COUNT(*) total FROM plantillaCobranzaTienda p
+       LEFT JOIN tienda t ON t.idTienda=p.idTienda
+       LEFT JOIN administrador a
+         ON a.idTienda=p.idTienda AND a.idAdministrador=p.idAdministradorActualiza
+       WHERE t.idTienda IS NULL OR p.creadoEn IS NULL OR p.actualizadoEn IS NULL
+          OR CHAR_LENGTH(TRIM(p.nombre))=0 OR CHAR_LENGTH(TRIM(p.contenido))=0
+          OR p.activo NOT IN (0,1)
+          OR (p.idAdministradorActualiza IS NOT NULL AND a.idAdministrador IS NULL)`);
+    data.plantillasDuplicadas = await migrationCount(connection,
+      `SELECT COUNT(*) total FROM (
+         SELECT idTienda, tipo, nombre FROM plantillaCobranzaTienda
+         GROUP BY idTienda, tipo, nombre HAVING COUNT(*)>1
+       ) duplicadas`);
+    const [templates] = await connection.query('SELECT contenido FROM plantillaCobranzaTienda');
+    const allowedVariables = new Set([
+      'tienda', 'cliente', 'saldo', 'vencimiento', 'dias_atraso', 'comprobante'
+    ]);
+    data.variablesPlantillaInvalidas = templates.filter((template) => {
+      const tokens = String(template.contenido || '').match(/\{[^{}]+\}/g) || [];
+      return tokens.some((token) => !allowedVariables.has(token.slice(1, -1)));
+    }).length;
+  }
+  if (estado012.columnas.cliente) {
+    data.clientesInvalidos = await migrationCount(connection,
+      `SELECT COUNT(*) total FROM cliente c
+       LEFT JOIN administrador ac
+         ON ac.idTienda=c.idTienda AND ac.idAdministrador=c.idAdministradorCrea
+       LEFT JOIN administrador au
+         ON au.idTienda=c.idTienda AND au.idAdministrador=c.idAdministradorActualiza
+       WHERE c.creadoEn IS NULL OR c.actualizadoEn IS NULL
+          OR (c.limiteCredito IS NOT NULL AND c.limiteCredito<0)
+          OR c.permiteFiado NOT IN (0,1) OR c.aceptaRecordatorios NOT IN (0,1)
+          OR (c.diasCreditoDefault IS NOT NULL AND c.diasCreditoDefault NOT BETWEEN 1 AND 365)
+          OR (c.correo IS NOT NULL AND CHAR_LENGTH(TRIM(c.correo))=0)
+          OR (c.documentoNormalizado IS NOT NULL AND CHAR_LENGTH(TRIM(c.documentoNormalizado))=0)
+          OR (c.telefonoNormalizado IS NOT NULL AND CHAR_LENGTH(TRIM(c.telefonoNormalizado))=0)
+          OR (c.idAdministradorCrea IS NOT NULL AND ac.idAdministrador IS NULL)
+          OR (c.idAdministradorActualiza IS NOT NULL AND au.idAdministrador IS NULL)`);
+    data.documentosNormalizadosDuplicados = await migrationCount(connection,
+      `SELECT COUNT(*) total FROM (
+         SELECT idTienda, documentoNormalizado FROM cliente
+         WHERE documentoNormalizado IS NOT NULL
+         GROUP BY idTienda, documentoNormalizado HAVING COUNT(*)>1
+       ) duplicados`);
+  }
+  if (estado012.columnas.fiado) {
+    data.fiadosInvalidos = await migrationCount(connection,
+      `SELECT COUNT(*) total FROM fiado f
+       LEFT JOIN administrador a
+         ON a.idTienda=f.idTienda AND a.idAdministrador=f.idAdministradorCrea
+       WHERE f.totalFiado<0 OR f.totalPagado<0 OR f.saldoPendiente<0
+          OR f.totalPagado>f.totalFiado
+          OR (f.idAdministradorCrea IS NOT NULL AND a.idAdministrador IS NULL)`);
+    data.fiadosSaldoNoReconciliado = await migrationCount(connection,
+      'SELECT COUNT(*) total FROM fiado WHERE ABS((totalFiado-totalPagado)-saldoPendiente)>=0.01');
+    data.fiadosPagosNoReconciliados = await migrationCount(connection,
+      `SELECT COUNT(*) total FROM (
+         SELECT f.idTienda, f.idFiado, f.totalFiado, f.totalPagado, f.saldoPendiente
+         FROM fiado f
+         LEFT JOIN pagoFiado pf ON pf.idTienda=f.idTienda AND pf.idFiado=f.idFiado
+         GROUP BY f.idTienda, f.idFiado, f.totalFiado, f.totalPagado, f.saldoPendiente
+         HAVING ABS(COALESCE(SUM(pf.monto),0)-f.totalPagado)>=0.01
+            OR ABS((f.totalFiado-COALESCE(SUM(pf.monto),0))-f.saldoPendiente)>=0.01
+       ) diferencias`);
+    data.fiadosFechasIncoherentes = await migrationCount(connection,
+      `SELECT COUNT(*) total FROM fiado f
+       JOIN venta v ON v.idTienda=f.idTienda AND v.idVenta=f.idVenta
+       WHERE f.fechaVencimiento IS NOT NULL AND f.fechaVencimiento<DATE(v.fecha)`);
+    data.fiadosCierreIncoherente = await migrationCount(connection,
+      `SELECT COUNT(*) total FROM fiado
+       WHERE (saldoPendiente>0 AND cerradoEn IS NOT NULL)
+          OR (saldoPendiente=0 AND cerradoEn IS NULL)`);
+  }
+  if (estado012.columnas.cobroFiado && estado012.columnas.pagoFiado) {
+    data.cobrosInvalidos = await migrationCount(connection,
+      `SELECT COUNT(*) total FROM cobroFiado
+       WHERE montoTotal<=0 OR cambio<0 OR esLegado NOT IN (0,1)
+          OR (montoRecibido IS NULL AND cambio<>0)
+          OR (montoRecibido IS NOT NULL AND (
+                montoRecibido<montoTotal OR ABS((montoRecibido-montoTotal)-cambio)>=0.01
+              ))`);
+    data.cobrosReferenciasCruzadas = await migrationCount(connection,
+      `SELECT COUNT(*) total FROM cobroFiado c
+       LEFT JOIN cliente cl ON cl.idTienda=c.idTienda AND cl.idCliente=c.idCliente
+       LEFT JOIN administrador a
+         ON a.idTienda=c.idTienda AND a.idAdministrador=c.idAdministrador
+       WHERE cl.idCliente IS NULL OR (c.idAdministrador IS NOT NULL AND a.idAdministrador IS NULL)`);
+    data.clavesCobroDuplicadas = await migrationCount(connection,
+      `SELECT COUNT(*) total FROM (
+         SELECT idTienda, claveOperacion FROM cobroFiado
+         GROUP BY idTienda, claveOperacion HAVING COUNT(*)>1
+       ) duplicados`);
+    data.cobrosSinDistribucion = await migrationCount(connection,
+      `SELECT COUNT(*) total FROM cobroFiado c WHERE NOT EXISTS (
+         SELECT 1 FROM pagoFiado pf
+         WHERE pf.idTienda=c.idTienda AND pf.idCobroFiado=c.idCobroFiado
+       )`);
+    data.cobrosSumaDistribucionInvalida = await migrationCount(connection,
+      `SELECT COUNT(*) total FROM (
+         SELECT c.idTienda, c.idCobroFiado, c.montoTotal
+         FROM cobroFiado c
+         LEFT JOIN pagoFiado pf
+           ON pf.idTienda=c.idTienda AND pf.idCobroFiado=c.idCobroFiado
+         GROUP BY c.idTienda, c.idCobroFiado, c.montoTotal
+         HAVING ABS(COALESCE(SUM(pf.monto),0)-c.montoTotal)>=0.01
+       ) diferencias`);
+    data.pagosSinCobroOClave = await migrationCount(connection,
+      `SELECT COUNT(*) total FROM pagoFiado
+       WHERE idCobroFiado IS NULL OR claveDistribucion IS NULL
+          OR CHAR_LENGTH(TRIM(claveDistribucion))=0`);
+    data.clavesDistribucionDuplicadas = await migrationCount(connection,
+      `SELECT COUNT(*) total FROM (
+         SELECT idTienda, claveDistribucion FROM pagoFiado
+         GROUP BY idTienda, claveDistribucion HAVING COUNT(*)>1
+       ) duplicados`);
+    data.pagosCruzados = await migrationCount(connection,
+      `SELECT COUNT(*) total FROM pagoFiado pf
+       LEFT JOIN fiado f ON f.idTienda=pf.idTienda AND f.idFiado=pf.idFiado
+       LEFT JOIN cobroFiado c ON c.idTienda=pf.idTienda AND c.idCobroFiado=pf.idCobroFiado
+       WHERE f.idFiado IS NULL OR c.idCobroFiado IS NULL OR f.idCliente<>c.idCliente`);
+    data.cabecerasLegadoInvalidas = await migrationCount(connection,
+      `SELECT COUNT(*) total FROM cobroFiado c
+       WHERE c.esLegado=1 AND (
+         c.claveOperacion NOT REGEXP '^legado:pago-fiado:[0-9]+$'
+         OR c.montoRecibido IS NOT NULL OR c.cambio<>0
+       )`);
+    data.pagosLegadoSinCabeceraDeterministica = await migrationCount(connection,
+      `SELECT COUNT(*) total FROM pagoFiado pf
+       LEFT JOIN cobroFiado c
+         ON c.idTienda=pf.idTienda AND c.idCobroFiado=pf.idCobroFiado
+       LEFT JOIN pagoVenta pv
+         ON pv.idTienda=pf.idTienda AND pv.idPagoFiado=pf.idPagoFiado
+       WHERE pf.claveDistribucion=CONCAT('legado:distribucion:',pf.idPagoFiado)
+         AND (c.idCobroFiado IS NULL OR c.esLegado<>1
+              OR c.claveOperacion<>CONCAT('legado:pago-fiado:',pf.idPagoFiado)
+              OR c.montoTotal<>pf.monto OR c.fechaCobro<>pf.fechaPago
+              OR c.metodoPago<>COALESCE(pv.metodoPago,'no_especificado')
+              OR NOT (c.idAdministrador <=> pv.idAdministrador)
+              OR NOT (c.referencia <=> pv.referencia))`);
+    data.cabecerasLegadoSinPago = await migrationCount(connection,
+      `SELECT COUNT(*) total FROM cobroFiado c
+       WHERE c.esLegado=1 AND NOT EXISTS (
+         SELECT 1 FROM pagoFiado pf
+         WHERE pf.idTienda=c.idTienda AND pf.idCobroFiado=c.idCobroFiado
+           AND c.claveOperacion=CONCAT('legado:pago-fiado:',pf.idPagoFiado)
+       )`);
+  }
+  if (estado012.tablas.pagoVenta) {
+    data.pagosVentaDuplicadosPorPagoFiado = await migrationCount(connection,
+      `SELECT COUNT(*) total FROM (
+         SELECT idTienda, idPagoFiado FROM pagoVenta
+         WHERE idPagoFiado IS NOT NULL
+         GROUP BY idTienda, idPagoFiado HAVING COUNT(*)>1
+       ) duplicados`);
+  }
+  if (estado012.columnas.seguimientoCobranza) {
+    data.seguimientosInvalidos = await migrationCount(connection,
+      `SELECT COUNT(*) total FROM seguimientoCobranza
+       WHERE CHAR_LENGTH(TRIM(detalle))=0
+          OR (tipo='compromiso_pago' AND fechaCompromiso IS NULL)`);
+    data.seguimientosCruzados = await migrationCount(connection,
+      `SELECT COUNT(*) total FROM seguimientoCobranza s
+       LEFT JOIN cliente c ON c.idTienda=s.idTienda AND c.idCliente=s.idCliente
+       LEFT JOIN fiado f
+         ON f.idTienda=s.idTienda AND f.idCliente=s.idCliente AND f.idFiado=s.idFiado
+       LEFT JOIN administrador a
+         ON a.idTienda=s.idTienda AND a.idAdministrador=s.idAdministrador
+       WHERE c.idCliente IS NULL OR a.idAdministrador IS NULL
+          OR (s.idFiado IS NOT NULL AND f.idFiado IS NULL)`);
+  }
+  const featureTablesReady = ['funcionalidad', 'plan', 'planFuncionalidad']
+    .every((table) => estado012.tablas[table]);
+  if (featureTablesReady) {
+    const placeholders = CUSTOMER_CREDIT_FEATURES.map(() => '?').join(',');
+    data.funcionalidadesActivas = await migrationCount(connection,
+      `SELECT COUNT(DISTINCT codigo) total FROM funcionalidad
+       WHERE activo=1 AND codigo IN (${placeholders})`, CUSTOMER_CREDIT_FEATURES);
+    data.accesosBasicoCore = await customerCreditFeatureAccess(
+      connection, 'basico', CUSTOMER_CREDIT_CORE_FEATURES
+    );
+    data.accesosAvanzadoCore = await customerCreditFeatureAccess(
+      connection, 'avanzado', CUSTOMER_CREDIT_CORE_FEATURES
+    );
+    data.accesosAvanzadoExclusivos = await customerCreditFeatureAccess(
+      connection, 'avanzado', CUSTOMER_CREDIT_ADVANCED_FEATURES
+    );
+    data.funcionesAvanzadasEnBasico = await customerCreditFeatureAccess(
+      connection, 'basico', CUSTOMER_CREDIT_ADVANCED_FEATURES
+    );
+    data.funcionalidadesDuplicadas = await migrationCount(connection,
+      `SELECT COUNT(*) total FROM (
+         SELECT codigo FROM funcionalidad GROUP BY codigo HAVING COUNT(*)>1
+       ) duplicados`);
+    data.accesosPlanDuplicados = await migrationCount(connection,
+      `SELECT COUNT(*) total FROM (
+         SELECT idPlan, idFuncionalidad FROM planFuncionalidad
+         GROUP BY idPlan, idFuncionalidad HAVING COUNT(*)>1
+       ) duplicados`);
+  }
+  return data;
+}
+
+function customerCreditDataValid(data) {
+  const zeroChecks = [
+    'tiendasSinConfiguracion', 'configuracionesInvalidas', 'tiendasSinPlantillasDefault',
+    'plantillasDuplicadas', 'plantillasInvalidas', 'variablesPlantillaInvalidas',
+    'clientesInvalidos', 'documentosNormalizadosDuplicados',
+    'fiadosInvalidos', 'fiadosSaldoNoReconciliado', 'fiadosPagosNoReconciliados',
+    'fiadosFechasIncoherentes',
+    'fiadosCierreIncoherente', 'cobrosInvalidos', 'cobrosReferenciasCruzadas',
+    'clavesCobroDuplicadas',
+    'cobrosSinDistribucion', 'cobrosSumaDistribucionInvalida', 'pagosSinCobroOClave',
+    'clavesDistribucionDuplicadas', 'pagosCruzados', 'cabecerasLegadoInvalidas',
+    'pagosLegadoSinCabeceraDeterministica', 'cabecerasLegadoSinPago',
+    'pagosVentaDuplicadosPorPagoFiado',
+    'seguimientosInvalidos', 'seguimientosCruzados', 'funcionesAvanzadasEnBasico',
+    'funcionalidadesDuplicadas', 'accesosPlanDuplicados'
+  ];
+  return zeroChecks.every((key) => data[key] === 0)
+    && data.funcionalidadesActivas === CUSTOMER_CREDIT_FEATURES.length
+    && data.accesosBasicoCore === CUSTOMER_CREDIT_CORE_FEATURES.length
+    && data.accesosAvanzadoCore === CUSTOMER_CREDIT_CORE_FEATURES.length
+    && data.accesosAvanzadoExclusivos === CUSTOMER_CREDIT_ADVANCED_FEATURES.length;
+}
+
+async function inspect012State(connection, recorded, { log = true } = {}) {
+  const requirements = migrationRequirements['012_clientes_fiados_comunicacion.sql'];
+  const estado012 = {
+    migracion012Registrada: Boolean(recorded),
+    tablas: {},
+    columnas: {},
+    tiposNulabilidadDefaults: {},
+    indices: {},
+    checks: {},
+    clavesForaneas: {},
+    motores: {},
+    estructuraCompleta: false,
+    datosValidos: false,
+    datos: null
+  };
+  const tables = new Set([
+    ...Object.keys(requirements.columns),
+    ...Object.keys(CUSTOMER_CREDIT_COLUMN_DEFINITIONS),
+    'tienda', 'administrador', 'plan', 'funcionalidad', 'planFuncionalidad', 'pagoVenta'
+  ]);
+  for (const table of tables) estado012.tablas[table] = await normalizedHasTable(connection, table);
+  for (const [table, columns] of Object.entries(requirements.columns)) {
+    const details = estado012.tablas[table]
+      ? await normalizedColumnDetails(connection, table, columns) : {};
+    estado012.columnas[table] = columns.every(
+      (column) => Boolean(details[normalizedIdentifier(column)])
+    );
+  }
+  for (const [table, definitions] of Object.entries(CUSTOMER_CREDIT_COLUMN_DEFINITIONS)) {
+    const details = estado012.tablas[table]
+      ? await normalizedColumnDetails(connection, table, Object.keys(definitions)) : {};
+    estado012.tiposNulabilidadDefaults[table] = {};
+    for (const [column, expected] of Object.entries(definitions)) {
+      estado012.tiposNulabilidadDefaults[table][column] = columnDefinitionMatches(
+        details[normalizedIdentifier(column)], expected
+      );
+    }
+  }
+  for (const [table, name, columns, unique] of requirements.indexes) {
+    estado012.indices[`${table}.${name}`] = await normalizedHasIndex(
+      connection, table, name, columns, unique
+    );
+  }
+  for (const [table, name] of requirements.checks) {
+    estado012.checks[`${table}.${name}`] = await normalizedHasConstraint(
+      connection, table, name, 'CHECK'
+    );
+  }
+  for (const relation of requirements.foreignKeyConstraints) {
+    estado012.clavesForaneas[`${relation[0]}.${relation[1]}`]
+      = await normalizedHasForeignKeyConstraint(connection, relation);
+  }
+  for (const table of [
+    'cliente', 'fiado', 'pagoFiado', 'configuracionCreditoTienda', 'cobroFiado',
+    'seguimientoCobranza', 'plantillaCobranzaTienda'
+  ]) {
+    if (!estado012.tablas[table]) {
+      estado012.motores[table] = false;
+      continue;
+    }
+    const [[engine]] = await connection.query(
+      `SELECT ENGINE FROM information_schema.TABLES
+       WHERE TABLE_SCHEMA=? AND LOWER(TABLE_NAME)=LOWER(?)`,
+      [process.env.DB_NAME, table]
+    );
+    estado012.motores[table] = normalizedIdentifier(engine?.ENGINE) === 'innodb';
+  }
+  estado012.estructuraCompleta = Object.values(estado012.columnas).every(Boolean)
+    && Object.values(estado012.tiposNulabilidadDefaults)
+      .every((table) => Object.values(table).every(Boolean))
+    && Object.values(estado012.indices).every(Boolean)
+    && Object.values(estado012.checks).every(Boolean)
+    && Object.values(estado012.clavesForaneas).every(Boolean)
+    && Object.values(estado012.motores).every(Boolean);
+  estado012.datos = await inspect012Data(connection, estado012);
+  estado012.datosValidos = estado012.estructuraCompleta
+    && customerCreditDataValid(estado012.datos);
+  if (log) {
+    console.log('Estado previo detectado para 012_clientes_fiados_comunicacion.sql:');
+    console.log(JSON.stringify(estado012, null, 2));
+  }
+  return estado012;
+}
+
 async function validateFinancialMigrationData(connection) {
   if (await hasColumns(connection, 'detalleVenta', ['origenCosto'])) {
     const [[invalidCosts]] = await connection.query(
@@ -1919,6 +2538,70 @@ async function validateLotsExpirationMigrationData(connection) {
   }
 }
 
+async function validateCustomerCreditMigrationData(connection) {
+  const [[invalidFiados]] = await connection.query(
+    `SELECT COUNT(*) total FROM fiado
+     WHERE totalFiado<0 OR totalPagado<0 OR saldoPendiente<0
+        OR totalPagado>totalFiado
+        OR ABS((totalFiado-totalPagado)-saldoPendiente)>=0.01`
+  );
+  if (Number(invalidFiados.total) > 0) {
+    throw new Error(
+      `La migracion 012 no puede continuar: existen ${invalidFiados.total} fiados con saldos incompatibles.`
+    );
+  }
+  const [[unreconciledPayments]] = await connection.query(
+    `SELECT COUNT(*) total FROM (
+       SELECT f.idTienda, f.idFiado, f.totalFiado, f.totalPagado, f.saldoPendiente
+       FROM fiado f
+       LEFT JOIN pagoFiado pf ON pf.idTienda=f.idTienda AND pf.idFiado=f.idFiado
+       GROUP BY f.idTienda, f.idFiado, f.totalFiado, f.totalPagado, f.saldoPendiente
+       HAVING ABS(COALESCE(SUM(pf.monto),0)-f.totalPagado)>=0.01
+          OR ABS((f.totalFiado-COALESCE(SUM(pf.monto),0))-f.saldoPendiente)>=0.01
+     ) diferencias`
+  );
+  if (Number(unreconciledPayments.total) > 0) {
+    throw new Error(
+      `La migracion 012 no puede continuar: existen ${unreconciledPayments.total} fiados no reconciliados con sus pagos.`
+    );
+  }
+  const [[invalidPayments]] = await connection.query(
+    `SELECT COUNT(*) total FROM pagoFiado pf
+     LEFT JOIN fiado f ON f.idTienda=pf.idTienda AND f.idFiado=pf.idFiado
+     WHERE pf.monto<=0 OR f.idFiado IS NULL`
+  );
+  if (Number(invalidPayments.total) > 0) {
+    throw new Error(
+      `La migracion 012 no puede continuar: existen ${invalidPayments.total} pagos de fiado invalidos o cruzados.`
+    );
+  }
+  if (await hasColumns(connection, 'cliente', ['documentoNormalizado'])) {
+    const [[duplicates]] = await connection.query(
+      `SELECT COUNT(*) total FROM (
+         SELECT idTienda, documentoNormalizado FROM cliente
+         WHERE documentoNormalizado IS NOT NULL
+         GROUP BY idTienda, documentoNormalizado HAVING COUNT(*)>1
+       ) duplicados`
+    );
+    if (Number(duplicates.total) > 0) {
+      throw new Error(
+        `La migracion 012 no puede continuar: existen ${duplicates.total} documentos normalizados duplicados por tienda.`
+      );
+    }
+  }
+  if (await hasColumns(connection, 'pagoFiado', ['idCobroFiado', 'claveDistribucion'])
+    && await hasTable(connection, 'cobroFiado')) {
+    const estado012 = await inspect012State(connection, false, { log: false });
+    const incompatible = [
+      'cobrosInvalidos', 'cobrosReferenciasCruzadas', 'cabecerasLegadoInvalidas'
+    ].filter((key) => estado012.datos[key] !== null && estado012.datos[key] > 0);
+    if (incompatible.length) {
+      const detail = incompatible.map((key) => `${key}=${estado012.datos[key]}`).join(', ');
+      throw new Error(`La migracion 012 no puede continuar por datos incompatibles: ${detail}.`);
+    }
+  }
+}
+
 function isExistingStructureError(error) {
   return [
     'ER_DUP_FIELDNAME',
@@ -1948,6 +2631,7 @@ async function main() {
       let estado006 = null;
       let estado010 = null;
       let estado011 = null;
+      let estado012 = null;
       if (file === '004_multitienda_base.sql') {
         await inspect004State(connection, recorded.length > 0);
       }
@@ -1968,6 +2652,9 @@ async function main() {
       if (file === '011_lotes_vencimientos.sql') {
         estado011 = await inspect011State(connection, recorded.length > 0);
       }
+      if (file === '012_clientes_fiados_comunicacion.sql') {
+        estado012 = await inspect012State(connection, recorded.length > 0);
+      }
       if (recorded.length) {
         const registeredMigrationIsIncomplete = file === '006_catalogo_maestro.sql'
           ? decide006Action(estado006) === 'detener'
@@ -1975,6 +2662,8 @@ async function main() {
             ? !(estado010.estructuraCompleta && estado010.datosValidos)
             : file === '011_lotes_vencimientos.sql'
               ? !(estado011.estructuraCompleta && estado011.datosValidos)
+              : file === '012_clientes_fiados_comunicacion.sql'
+                ? !(estado012.estructuraCompleta && estado012.datosValidos)
             : ['004_multitienda_base.sql', '005_planes_suscripciones.sql', '007_movimientos_stock.sql', '008_punto_venta_pagos.sql', '009_finanzas_reportes_caja.sql'].includes(file)
             && !await requirementsSatisfied(connection, file);
         if (registeredMigrationIsIncomplete) {
@@ -1990,9 +2679,15 @@ async function main() {
           ? estado010.estructuraCompleta && estado010.datosValidos
           : file === '011_lotes_vencimientos.sql'
             ? estado011.estructuraCompleta && estado011.datosValidos
+            : file === '012_clientes_fiados_comunicacion.sql'
+              ? estado012.estructuraCompleta && estado012.datosValidos
           : await requirementsSatisfied(connection, file);
       if (existingMigrationIsComplete) {
-        if (['010_inteligencia_inventario.sql', '011_lotes_vencimientos.sql'].includes(file)) {
+        if ([
+          '010_inteligencia_inventario.sql',
+          '011_lotes_vencimientos.sql',
+          '012_clientes_fiados_comunicacion.sql'
+        ].includes(file)) {
           await connection.query('INSERT IGNORE INTO schema_migrations (nombre) VALUES (?)', [file]);
           const [finalRecord] = await connection.query(
             'SELECT nombre FROM schema_migrations WHERE nombre=?', [file]
@@ -2002,10 +2697,15 @@ async function main() {
             if (!estado010.migracion010Registrada || !estado010.estructuraCompleta || !estado010.datosValidos) {
               throw new Error('La migracion 010 no pudo confirmar su registro y estado fisico final.');
             }
-          } else {
+          } else if (file === '011_lotes_vencimientos.sql') {
             estado011 = await inspect011State(connection, finalRecord.length > 0);
             if (!estado011.migracion011Registrada || !estado011.estructuraCompleta || !estado011.datosValidos) {
               throw new Error('La migracion 011 no pudo confirmar su registro y estado fisico final.');
+            }
+          } else {
+            estado012 = await inspect012State(connection, finalRecord.length > 0);
+            if (!estado012.migracion012Registrada || !estado012.estructuraCompleta || !estado012.datosValidos) {
+              throw new Error('La migracion 012 no pudo confirmar su registro y estado fisico final.');
             }
           }
         } else {
@@ -2016,7 +2716,11 @@ async function main() {
       }
 
       const statements = readSqlStatements(path.join(migrationsDir, file));
-      const migrationContext = ['010_inteligencia_inventario.sql', '011_lotes_vencimientos.sql'].includes(file)
+      const migrationContext = [
+        '010_inteligencia_inventario.sql',
+        '011_lotes_vencimientos.sql',
+        '012_clientes_fiados_comunicacion.sql'
+      ].includes(file)
         ? { localDateTime: formatLocalDateTime() }
         : {};
       let multitenantDataValidated = false;
@@ -2036,6 +2740,10 @@ async function main() {
         await validateLotsExpirationMigrationData(connection);
         console.log('Datos existentes validados antes de recuperar la estructura de lotes 011.');
       }
+      if (file === '012_clientes_fiados_comunicacion.sql') {
+        await validateCustomerCreditMigrationData(connection);
+        console.log('Datos existentes validados antes de recuperar la estructura de credito 012.');
+      }
       for (let index = 0; index < statements.length; index += 1) {
         const statement = statements[index];
         if (file === '004_multitienda_base.sql'
@@ -2046,7 +2754,7 @@ async function main() {
           console.log('Datos multi-tienda validados antes de crear indices y restricciones.');
         }
 
-        const element = ['004_multitienda_base.sql', '006_catalogo_maestro.sql', '007_movimientos_stock.sql', '008_punto_venta_pagos.sql', '009_finanzas_reportes_caja.sql', '010_inteligencia_inventario.sql', '011_lotes_vencimientos.sql'].includes(file)
+        const element = ['004_multitienda_base.sql', '006_catalogo_maestro.sql', '007_movimientos_stock.sql', '008_punto_venta_pagos.sql', '009_finanzas_reportes_caja.sql', '010_inteligencia_inventario.sql', '011_lotes_vencimientos.sql', '012_clientes_fiados_comunicacion.sql'].includes(file)
           ? structureElementFromStatement(statement)
           : null;
         if (element && await structureElementExists(connection, element, file)) {
@@ -2098,12 +2806,17 @@ async function main() {
       if (file === '011_lotes_vencimientos.sql') {
         estado011 = await inspect011State(connection, false);
       }
+      if (file === '012_clientes_fiados_comunicacion.sql') {
+        estado012 = await inspect012State(connection, false);
+      }
       const migrationCompleted = file === '006_catalogo_maestro.sql'
         ? estado006.estructuraCompleta && estado006.datosValidos
         : file === '010_inteligencia_inventario.sql'
           ? estado010.estructuraCompleta && estado010.datosValidos
           : file === '011_lotes_vencimientos.sql'
             ? estado011.estructuraCompleta && estado011.datosValidos
+            : file === '012_clientes_fiados_comunicacion.sql'
+              ? estado012.estructuraCompleta && estado012.datosValidos
           : await requirementsSatisfied(connection, file);
       if (!migrationCompleted) {
         const missing = await missingRequirementElements(connection, file);
@@ -2112,7 +2825,11 @@ async function main() {
           + `Elementos faltantes: ${missing.length ? missing.join(', ') : 'ninguno; revise datos y configuracion de la migracion'}.`
         );
       }
-      if (['010_inteligencia_inventario.sql', '011_lotes_vencimientos.sql'].includes(file)) {
+      if ([
+        '010_inteligencia_inventario.sql',
+        '011_lotes_vencimientos.sql',
+        '012_clientes_fiados_comunicacion.sql'
+      ].includes(file)) {
         await connection.query('INSERT IGNORE INTO schema_migrations (nombre) VALUES (?)', [file]);
         const [finalRecord] = await connection.query(
           'SELECT nombre FROM schema_migrations WHERE nombre=?', [file]
@@ -2122,10 +2839,15 @@ async function main() {
           if (!estado010.migracion010Registrada || !estado010.estructuraCompleta || !estado010.datosValidos) {
             throw new Error('La migracion 010 no pudo confirmar su registro y estado fisico final.');
           }
-        } else {
+        } else if (file === '011_lotes_vencimientos.sql') {
           estado011 = await inspect011State(connection, finalRecord.length > 0);
           if (!estado011.migracion011Registrada || !estado011.estructuraCompleta || !estado011.datosValidos) {
             throw new Error('La migracion 011 no pudo confirmar su registro y estado fisico final.');
+          }
+        } else {
+          estado012 = await inspect012State(connection, finalRecord.length > 0);
+          if (!estado012.migracion012Registrada || !estado012.estructuraCompleta || !estado012.datosValidos) {
+            throw new Error('La migracion 012 no pudo confirmar su registro y estado fisico final.');
           }
         }
       } else {

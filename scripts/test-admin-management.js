@@ -60,8 +60,10 @@ async function cleanup(connection, fixture) {
     await connection.query('DELETE FROM gasto WHERE idTienda=?', [idTienda]);
     await connection.query('DELETE FROM categoriaGasto WHERE idTienda=?', [idTienda]);
     await connection.query('DELETE FROM movimientoStock WHERE idTienda=?', [idTienda]);
+    await connection.query('DELETE FROM seguimientoCobranza WHERE idTienda=?', [idTienda]);
     await connection.query('DELETE FROM pagoVenta WHERE idTienda=?', [idTienda]);
     await connection.query('DELETE FROM pagoFiado WHERE idTienda=?', [idTienda]);
+    await connection.query('DELETE FROM cobroFiado WHERE idTienda=?', [idTienda]);
     await connection.query('DELETE FROM detalleFiado WHERE idTienda=?', [idTienda]);
     await connection.query('DELETE FROM detalleVenta WHERE idTienda=?', [idTienda]);
     await connection.query('DELETE FROM detalleCompra WHERE idTienda=?', [idTienda]);
@@ -71,6 +73,8 @@ async function cleanup(connection, fixture) {
     await connection.query('DELETE FROM producto WHERE idTienda=?', [idTienda]);
     await connection.query('DELETE FROM cliente WHERE idTienda=?', [idTienda]);
     await connection.query('DELETE FROM proveedor WHERE idTienda=?', [idTienda]);
+    await connection.query('DELETE FROM plantillaCobranzaTienda WHERE idTienda=?', [idTienda]);
+    await connection.query('DELETE FROM configuracionCreditoTienda WHERE idTienda=?', [idTienda]);
     await connection.query('DELETE FROM configuracionInventarioTienda WHERE idTienda=?', [idTienda]);
     await connection.query('DELETE FROM suscripcionTienda WHERE idTienda=?', [idTienda]);
     await connection.query('DELETE FROM administrador WHERE idTienda=?', [idTienda]);

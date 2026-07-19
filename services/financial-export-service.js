@@ -71,10 +71,14 @@ async function exportRows(connection, idTienda, type, range, query) {
   }
   if (type === 'pagos') {
     return limitedRows(connection,
-      `SELECT v.codigoComprobante, pv.creadoEn fechaPago, pv.metodoPago, pv.monto,
+      `SELECT v.codigoComprobante, pv.creadoEn fechaPago,
+              CASE WHEN pv.idPagoFiado IS NOT NULL THEN COALESCE(cf.metodoPago,pv.metodoPago)
+                   ELSE pv.metodoPago END metodoPago, pv.monto,
               CASE WHEN pv.idPagoFiado IS NULL THEN 'Pago inicial' ELSE 'Cobro de fiado' END origen,
               pv.referencia
        FROM pagoVenta pv JOIN venta v ON v.idTienda=pv.idTienda AND v.idVenta=pv.idVenta
+       LEFT JOIN pagoFiado pf ON pf.idTienda=pv.idTienda AND pf.idPagoFiado=pv.idPagoFiado
+       LEFT JOIN cobroFiado cf ON cf.idTienda=pf.idTienda AND cf.idCobroFiado=pf.idCobroFiado
        WHERE pv.idTienda=? AND pv.creadoEn>=? AND pv.creadoEn<? ORDER BY pv.creadoEn, pv.idPagoVenta`, params);
   }
   if (type === 'fiados') {

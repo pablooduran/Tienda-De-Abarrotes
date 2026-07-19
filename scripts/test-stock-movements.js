@@ -107,8 +107,10 @@ async function cleanupStore(connection, idTienda) {
   await connection.query('DELETE FROM gasto WHERE idTienda=?', [idTienda]);
   await connection.query('DELETE FROM categoriaGasto WHERE idTienda=?', [idTienda]);
   await connection.query('DELETE FROM movimientoStock WHERE idTienda=?', [idTienda]);
+  await connection.query('DELETE FROM seguimientoCobranza WHERE idTienda=?', [idTienda]);
   await connection.query('DELETE FROM pagoVenta WHERE idTienda=?', [idTienda]);
   await connection.query('DELETE FROM pagoFiado WHERE idTienda=?', [idTienda]);
+  await connection.query('DELETE FROM cobroFiado WHERE idTienda=?', [idTienda]);
   await connection.query('DELETE FROM detalleFiado WHERE idTienda=?', [idTienda]);
   await connection.query('DELETE FROM detalleVenta WHERE idTienda=?', [idTienda]);
   await connection.query('DELETE FROM detalleCompra WHERE idTienda=?', [idTienda]);
@@ -118,6 +120,8 @@ async function cleanupStore(connection, idTienda) {
   await connection.query('DELETE FROM producto WHERE idTienda=?', [idTienda]);
   await connection.query('DELETE FROM cliente WHERE idTienda=?', [idTienda]);
   await connection.query('DELETE FROM proveedor WHERE idTienda=?', [idTienda]);
+  await connection.query('DELETE FROM plantillaCobranzaTienda WHERE idTienda=?', [idTienda]);
+  await connection.query('DELETE FROM configuracionCreditoTienda WHERE idTienda=?', [idTienda]);
   await connection.query('DELETE FROM configuracionInventarioTienda WHERE idTienda=?', [idTienda]);
   await connection.query('DELETE FROM suscripcionTienda WHERE idTienda=?', [idTienda]);
   await connection.query('DELETE FROM administrador WHERE idTienda=?', [idTienda]);
@@ -314,7 +318,10 @@ async function main() {
     assert(creditMovementCount === 1, 'La venta fiada genero mas de una salida de stock.');
     const beforePayment = await movementCount(connection, fixture.storeA, manualId);
     await expect(ownerA, '/api/pagos-fiado', {
-      method: 'POST', body: { idFiado: creditSale.idFiado, monto: 1, observacion: 'Pago de prueba' }
+      method: 'POST', body: {
+        idFiado: creditSale.idFiado, monto: 1, metodoPago: 'efectivo',
+        claveOperacion: `cobro-stock-${marker}`, observacion: 'Pago de prueba'
+      }
     }, 201, 'Pago de fiado');
     assert(await movementCount(connection, fixture.storeA, manualId) === beforePayment,
       'El pago del fiado modifico el historial de stock.');

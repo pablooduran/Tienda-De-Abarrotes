@@ -99,8 +99,10 @@ async function cleanupStore(connection, idTienda) {
   await connection.query('DELETE FROM gasto WHERE idTienda=?', [idTienda]);
   await connection.query('DELETE FROM categoriaGasto WHERE idTienda=?', [idTienda]);
   await connection.query('DELETE FROM movimientoStock WHERE idTienda=?', [idTienda]);
+  await connection.query('DELETE FROM seguimientoCobranza WHERE idTienda=?', [idTienda]);
   await connection.query('DELETE FROM pagoVenta WHERE idTienda=?', [idTienda]);
   await connection.query('DELETE FROM pagoFiado WHERE idTienda=?', [idTienda]);
+  await connection.query('DELETE FROM cobroFiado WHERE idTienda=?', [idTienda]);
   await connection.query('DELETE FROM detalleFiado WHERE idTienda=?', [idTienda]);
   await connection.query('DELETE FROM detalleVenta WHERE idTienda=?', [idTienda]);
   await connection.query('DELETE FROM detalleCompra WHERE idTienda=?', [idTienda]);
@@ -110,6 +112,8 @@ async function cleanupStore(connection, idTienda) {
   await connection.query('DELETE FROM producto WHERE idTienda=?', [idTienda]);
   await connection.query('DELETE FROM cliente WHERE idTienda=?', [idTienda]);
   await connection.query('DELETE FROM proveedor WHERE idTienda=?', [idTienda]);
+  await connection.query('DELETE FROM plantillaCobranzaTienda WHERE idTienda=?', [idTienda]);
+  await connection.query('DELETE FROM configuracionCreditoTienda WHERE idTienda=?', [idTienda]);
   await connection.query('DELETE FROM configuracionInventarioTienda WHERE idTienda=?', [idTienda]);
   await connection.query('DELETE FROM suscripcionTienda WHERE idTienda=?', [idTienda]);
   await connection.query('DELETE FROM administrador WHERE idTienda=?', [idTienda]);
@@ -314,6 +318,7 @@ async function main() {
       idFiado: creditSale.idFiado,
       monto: 4,
       metodoPago: 'efectivo',
+      claveOperacion: `cobro-financiero-${marker}`,
       observacion: 'Cobro financiero de prueba'
     } }, 201, 'Cobro posterior de fiado');
     const summary = await expect(advanced, `/api/reportes/finanzas/resumen?desde=${today}&hasta=${today}`, {}, 200, 'Resumen despues del cobro');

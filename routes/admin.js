@@ -115,6 +115,33 @@ async function findStore(connection, idTienda, forUpdate = false) {
   return rows[0] || null;
 }
 
+async function ensureCreditConfiguration(connection, idTienda, localDateTime) {
+  await connection.query(
+    `INSERT INTO configuracionCreditoTienda
+     (idTienda, limiteCreditoDefault, diasCreditoDefault, diasAvisoVencimiento,
+      politicaFiadoVencido, requiereTelefonoParaFiado, permiteFiadoSinFecha,
+      codigoPaisWhatsApp, creadoEn, actualizadoEn, idAdministradorActualiza)
+     VALUES (?, NULL, 30, 3, 'advertir', 0, 1, NULL, ?, ?, NULL)
+     ON DUPLICATE KEY UPDATE idTienda=idTienda`,
+    [idTienda, localDateTime, localDateTime]
+  );
+  const templates = [
+    ['recordatorio_previo', 'Recordatorio previo', 'Hola {cliente}, {tienda} le recuerda que su saldo de {saldo} vence el {vencimiento}.'],
+    ['deuda_vencida', 'Deuda vencida', 'Hola {cliente}, su saldo pendiente con {tienda} es {saldo} y tiene {dias_atraso} dias de atraso.'],
+    ['confirmacion_pago', 'Confirmacion de pago', 'Hola {cliente}, {tienda} confirma la recepcion de su pago. Saldo pendiente: {saldo}.'],
+    ['estado_cuenta', 'Estado de cuenta', 'Hola {cliente}, su estado de cuenta en {tienda} muestra un saldo pendiente de {saldo}. Comprobante: {comprobante}.']
+  ];
+  for (const [type, name, content] of templates) {
+    await connection.query(
+      `INSERT INTO plantillaCobranzaTienda
+       (idTienda,tipo,nombre,contenido,activo,creadoEn,actualizadoEn,idAdministradorActualiza)
+       VALUES (?, ?, ?, ?, 1, ?, ?, NULL)
+       ON DUPLICATE KEY UPDATE idPlantillaCobranza=idPlantillaCobranza`,
+      [idTienda, type, name, content, localDateTime, localDateTime]
+    );
+  }
+}
+
 function storeSummaryQuery(whereClause = '') {
   return `SELECT t.idTienda, t.nombre, t.slug, t.estado, t.activo, t.creadoEn, t.actualizadoEn,
       (SELECT COUNT(*) FROM administrador a
@@ -196,8 +223,10 @@ router.post('/tiendas', asyncRoute(async (req, res) => {
       'INSERT INTO tienda (nombre, slug, estado, activo) VALUES (?, ?, ?, ?)',
       [tienda.nombre, tienda.slug, tienda.estado, tienda.activo]
     );
+    const localDateTime = formatLocalDateTime();
     await ensureDefaultExpenseCategories(connection, storeResult.insertId);
-    await ensureInventoryConfiguration(connection, storeResult.insertId, formatLocalDateTime());
+    await ensureInventoryConfiguration(connection, storeResult.insertId, localDateTime);
+    await ensureCreditConfiguration(connection, storeResult.insertId, localDateTime);
     const passwordHash = await bcrypt.hash(propietario.password, 12);
     const [ownerResult] = await connection.query(
       `INSERT INTO administrador (idTienda, usuario, password, rol, activo)

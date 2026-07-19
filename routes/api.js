@@ -7,7 +7,8 @@ const {
   movementKey,
   operationKey
 } = require('../services/stock-movement-service');
-const { normalizeBarcode, recordDebtPaymentForSale, registerSale } = require('../services/pos-sale-service');
+const { normalizeBarcode, registerSale } = require('../services/pos-sale-service');
+const { collectCustomerDebt, collectSpecificDebt } = require('../services/debt-collection-service');
 const {
   assertReconciled,
   createLotEntries,
@@ -551,8 +552,9 @@ function crudRoutes(base, table, idField, protectedDeleteMessage) {
       if (table === 'cliente') {
         await requireAdminPassword(req);
         const [result] = await pool.query(
-          'UPDATE cliente SET activo=0, eliminadoEn=NOW() WHERE idCliente=? AND idTienda=? AND activo=1',
-          [req.params.id, tenantId(req)]
+          `UPDATE cliente SET activo=0, eliminadoEn=?, actualizadoEn=?, idAdministradorActualiza=?
+           WHERE idCliente=? AND idTienda=? AND activo=1`,
+          [formatLocalDateTime(), formatLocalDateTime(), req.session.admin.id, req.params.id, tenantId(req)]
         );
         if (!result.affectedRows) return res.status(404).json({ error: 'Cliente no encontrado o ya está oculto.' });
         return res.json({ message: 'Cliente ocultado. El historial se conserva.' });
@@ -598,8 +600,9 @@ router.patch('/clientes/:id/restaurar', async (req, res, next) => {
     if (!hidden.length) throw notFound('Cliente oculto no encontrado.');
     await enforcePlanLimit(connection, idTienda, 'clientes');
     const [result] = await connection.query(
-      'UPDATE cliente SET activo=1, eliminadoEn=NULL WHERE idCliente=? AND idTienda=? AND activo=0',
-      [req.params.id, idTienda]
+      `UPDATE cliente SET activo=1, eliminadoEn=NULL, actualizadoEn=?, idAdministradorActualiza=?
+       WHERE idCliente=? AND idTienda=? AND activo=0`,
+      [formatLocalDateTime(), req.session.admin.id, req.params.id, idTienda]
     );
     if (!result.affectedRows) throw notFound('Cliente oculto no encontrado.');
     await connection.commit();
@@ -1002,8 +1005,8 @@ router.delete('/fiados/:id', async (req, res, next) => {
   try {
     await requireAdminPassword(req);
     const [result] = await pool.query(
-      'UPDATE fiado SET activo=0, eliminadoEn=NOW() WHERE idFiado=? AND idTienda=? AND activo=1',
-      [req.params.id, tenantId(req)]
+      'UPDATE fiado SET activo=0, eliminadoEn=? WHERE idFiado=? AND idTienda=? AND activo=1',
+      [formatLocalDateTime(), req.params.id, tenantId(req)]
     );
     if (!result.affectedRows) return res.status(404).json({ error: 'Fiado no encontrado o ya está oculto.' });
     res.json({ message: 'Fiado ocultado. Los pagos e historial se conservan.' });
@@ -1015,50 +1018,16 @@ router.delete('/fiados/:id', async (req, res, next) => {
 
 router.post('/pagos-fiado', async (req, res, next) => {
   try {
-    requireFields(req.body, ['idFiado', 'monto']);
-    const monto = asNumber(req.body.monto);
-    const idTienda = tenantId(req);
-    if (monto <= 0) return res.status(400).json({ error: 'El pago debe ser mayor a cero.' });
-    await runTransaction(async (connection) => {
-      const [rows] = await connection.query(
-        'SELECT * FROM fiado WHERE idFiado=? AND idTienda=? AND activo=1 FOR UPDATE',
-        [req.body.idFiado, idTienda]
-      );
-      if (rows.length === 0) {
-        const error = new Error('Fiado no encontrado.');
-        error.status = 404;
-        throw error;
-      }
-      const fiado = rows[0];
-      if (monto > asNumber(fiado.saldoPendiente)) {
-        const error = new Error('El pago no puede superar el saldo pendiente.');
-        error.status = 400;
-        throw error;
-      }
-      const paymentDateTime = formatLocalDateTime();
-      const [payment] = await connection.query(
-        'INSERT INTO pagoFiado (idTienda, idFiado, fechaPago, monto, observacion) VALUES (?, ?, ?, ?, ?)',
-        [idTienda, req.body.idFiado, paymentDateTime, monto, nullableText(req.body.observacion)]
-      );
-      const totalPagado = asNumber(fiado.totalPagado) + monto;
-      const saldo = Math.max(0, asNumber(fiado.totalFiado) - totalPagado);
-      const estado = saldo === 0 ? 'pagado' : 'parcial';
-      await connection.query(
-        'UPDATE fiado SET totalPagado=?, saldoPendiente=?, estado=? WHERE idFiado=? AND idTienda=?',
-        [totalPagado, saldo, estado, req.body.idFiado, idTienda]
-      );
-      await recordDebtPaymentForSale(connection, {
-        idTienda,
-        idVenta: fiado.idVenta,
-        idPagoFiado: payment.insertId,
-        monto,
-        metodoPago: req.body.metodoPago || 'no_especificado',
-        referencia: req.body.referencia,
-        idAdministrador: req.session.admin.id,
-        fechaPago: paymentDateTime
-      });
+    const result = await collectSpecificDebt({
+      idTienda: tenantId(req),
+      idAdministrador: req.session.admin.id,
+      idFiado: req.body?.idFiado,
+      body: req.body
     });
-    res.status(201).json({ message: 'Pago registrado.' });
+    res.status(result.repetido ? 200 : 201).json({
+      message: result.repetido ? 'El cobro ya habia sido registrado.' : 'Cobro registrado.',
+      ...result
+    });
   } catch (error) {
     next(error);
   }
@@ -1066,78 +1035,17 @@ router.post('/pagos-fiado', async (req, res, next) => {
 
 router.post('/pagos-fiado/cliente', async (req, res, next) => {
   try {
-    requireFields(req.body, ['idCliente', 'monto']);
-    const monto = asNumber(req.body.monto);
-    const idTienda = tenantId(req);
-    if (monto <= 0) return res.status(400).json({ error: 'El pago debe ser mayor a cero.' });
-
-    const result = await runTransaction(async (connection) => {
-      await requireTenantRecord(connection, 'cliente', 'idCliente', req.body.idCliente, idTienda);
-      const [fiados] = await connection.query(
-        `SELECT *
-         FROM fiado
-         WHERE idCliente=? AND idTienda=? AND activo=1 AND estado IN ('pendiente','parcial')
-         ORDER BY fechaInicio ASC, idFiado ASC
-         FOR UPDATE`,
-        [req.body.idCliente, idTienda]
-      );
-      if (!fiados.length) {
-        const error = new Error('El cliente no tiene deudas pendientes.');
-        error.status = 400;
-        throw error;
-      }
-
-      const saldoAcumulado = fiados.reduce((sum, fiado) => sum + asNumber(fiado.saldoPendiente), 0);
-      if (monto > saldoAcumulado) {
-        const error = new Error(`El pago no puede superar el saldo acumulado de Bs ${saldoAcumulado.toFixed(2)}.`);
-        error.status = 400;
-        throw error;
-      }
-
-      let restante = monto;
-      const aplicaciones = [];
-      const observacion = nullableText(req.body.observacion || 'Pago acumulado');
-
-      for (const fiado of fiados) {
-        if (restante <= 0) break;
-        const saldoActual = asNumber(fiado.saldoPendiente);
-        const aplicado = Math.min(restante, saldoActual);
-        if (aplicado <= 0) continue;
-
-        const paymentDateTime = formatLocalDateTime();
-        const [payment] = await connection.query(
-          'INSERT INTO pagoFiado (idTienda, idFiado, fechaPago, monto, observacion) VALUES (?, ?, ?, ?, ?)',
-          [idTienda, fiado.idFiado, paymentDateTime, aplicado, observacion]
-        );
-
-        const totalPagado = asNumber(fiado.totalPagado) + aplicado;
-        const saldo = Math.max(0, asNumber(fiado.totalFiado) - totalPagado);
-        const estado = saldo === 0 ? 'pagado' : 'parcial';
-        await connection.query(
-          'UPDATE fiado SET totalPagado=?, saldoPendiente=?, estado=? WHERE idFiado=? AND idTienda=?',
-          [totalPagado, saldo, estado, fiado.idFiado, idTienda]
-        );
-        await recordDebtPaymentForSale(connection, {
-          idTienda,
-          idVenta: fiado.idVenta,
-          idPagoFiado: payment.insertId,
-          monto: aplicado,
-          metodoPago: req.body.metodoPago || 'no_especificado',
-          referencia: req.body.referencia,
-          idAdministrador: req.session.admin.id,
-          fechaPago: paymentDateTime
-        });
-
-        aplicaciones.push({ idFiado: fiado.idFiado, monto: aplicado, saldoPendiente: saldo, estado });
-        restante = Number((restante - aplicado).toFixed(2));
-      }
-
-      return { saldoAcumulado, montoAplicado: monto, aplicaciones };
+    const result = await collectCustomerDebt({
+      idTienda: tenantId(req),
+      idAdministrador: req.session.admin.id,
+      idCliente: req.body?.idCliente,
+      body: req.body
     });
-
-    res.status(201).json({ message: 'Pago acumulado registrado.', ...result });
+    res.status(result.repetido ? 200 : 201).json({
+      message: result.repetido ? 'El cobro ya habia sido registrado.' : 'Cobro acumulado registrado.',
+      ...result
+    });
   } catch (error) {
-    if (error.status) return res.status(error.status).json({ error: error.message });
     next(error);
   }
 });

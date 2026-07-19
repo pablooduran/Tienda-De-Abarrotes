@@ -10,6 +10,12 @@ const {
   microsToDecimal,
   prepareLotExit
 } = require('./lot-service');
+const {
+  centsToDecimal: creditDecimal,
+  lockCustomer,
+  recordOverdueCreditConfirmation,
+  validateNewCredit
+} = require('./customer-credit-service');
 const { formatLocalDate, formatLocalDateTime } = require('../utils/local-datetime');
 
 const SALE_PRESENTATIONS = new Set(['unidad', 'paquete']);
@@ -233,13 +239,9 @@ async function registerSale({ idTienda, idAdministrador, body, legacyMode = fals
       await connection.commit();
       return { idVenta: repeated.idVenta, codigoComprobante: repeated.codigoComprobante, repetida: true };
     }
-    if (idCliente) {
-      const [clients] = await connection.query(
-        'SELECT idCliente FROM cliente WHERE idCliente=? AND idTienda=? AND activo=1 FOR UPDATE',
-        [idCliente, idTienda]
-      );
-      if (!clients.length) throw stockError(404, 'Cliente no encontrado o inactivo.');
-    }
+    const lockedCustomer = idCliente
+      ? await lockCustomer(connection, idTienda, idCliente, { requireActive: true })
+      : null;
 
     const pricedItems = await lockAndPriceItems(connection, idTienda, body.items);
     const subtotalCents = ensureMoneyRange(
@@ -258,6 +260,18 @@ async function registerSale({ idTienda, idAdministrador, body, legacyMode = fals
     if (balanceCents > 0 && !idCliente) {
       throw stockError(400, 'Las ventas con saldo pendiente requieren un cliente registrado.');
     }
+    const creditValidation = balanceCents > 0
+      ? await validateNewCredit(connection, {
+        idTienda,
+        idCliente,
+        customer: lockedCustomer,
+        newDebt: decimal(balanceCents),
+        saleDate: formatLocalDate(operationDate),
+        requestedDueDate: body.fechaVencimiento,
+        confirmOverdueDebt: body.confirmarDeudaVencida === true,
+        overdueReason: body.motivoDeudaVencida
+      })
+      : null;
     if (body.saldoFiado !== undefined && cents(body.saldoFiado, 'El saldo fiado') !== balanceCents) {
       throw stockError(400, 'El saldo fiado enviado no coincide con los pagos aplicados.');
     }
@@ -347,12 +361,22 @@ async function registerSale({ idTienda, idAdministrador, body, legacyMode = fals
     if (balanceCents > 0) {
       const [debt] = await connection.query(
         `INSERT INTO fiado
-         (idTienda, idCliente, idVenta, fechaInicio, totalFiado, totalPagado, saldoPendiente, estado)
-         VALUES (?, ?, ?, ?, ?, 0, ?, ?)`,
-        [idTienda, idCliente, idVenta, formatLocalDate(operationDate), decimal(balanceCents), decimal(balanceCents),
-          'pendiente']
+         (idTienda, idCliente, idVenta, fechaInicio, fechaVencimiento, fechaPrometidaPago,
+          observacionCredito, totalFiado, totalPagado, saldoPendiente, estado, cerradoEn,
+          idAdministradorCrea)
+         VALUES (?, ?, ?, ?, ?, NULL, ?, ?, 0, ?, 'pendiente', NULL, ?)`,
+        [idTienda, idCliente, idVenta, formatLocalDate(operationDate), creditValidation.dueDate,
+          cleanText(body.observacionCredito, 1000), decimal(balanceCents), decimal(balanceCents), idAdministrador]
       );
       idFiado = debt.insertId;
+      await recordOverdueCreditConfirmation(connection, {
+        idTienda,
+        idCliente,
+        idFiado,
+        idAdministrador,
+        validation: creditValidation,
+        createdAt: operationDateTime
+      });
     }
 
     await connection.commit();
@@ -367,6 +391,15 @@ async function registerSale({ idTienda, idAdministrador, body, legacyMode = fals
       saldoPendiente: decimal(balanceCents),
       estadoPago: state,
       cambio: decimal(changeCents),
+      advertencias: creditValidation?.warnings || [],
+      deudaAnterior: creditValidation ? creditDecimal(creditValidation.debtBeforeCents) : null,
+      nuevoSaldoFiado: creditValidation ? creditDecimal(creditValidation.newDebtCents) : '0.00',
+      deudaPosterior: creditValidation ? creditDecimal(creditValidation.debtAfterCents) : null,
+      limiteEfectivo: creditValidation?.limitCents === null || creditValidation === null
+        ? null : creditDecimal(creditValidation.limitCents),
+      creditoDisponiblePosterior: creditValidation?.availableAfterCents === null || creditValidation === null
+        ? null : creditDecimal(creditValidation.availableAfterCents),
+      fechaVencimiento: creditValidation?.dueDate || null,
       repetida: false
     };
   } catch (error) {
@@ -375,44 +408,6 @@ async function registerSale({ idTienda, idAdministrador, body, legacyMode = fals
   } finally {
     connection.release();
   }
-}
-
-async function recordDebtPaymentForSale(connection, input) {
-  if (!input.idVenta) return;
-  const method = String(input.metodoPago || 'no_especificado').toLowerCase();
-  if (!['efectivo', 'qr', 'no_especificado'].includes(method)) {
-    throw stockError(400, 'El metodo de pago del fiado no es valido.');
-  }
-  const paymentCents = cents(input.monto, 'El pago de fiado', { allowZero: false });
-  const paymentDateTime = input.fechaPago || formatLocalDateTime();
-  await connection.query(
-    `INSERT INTO pagoVenta
-     (idTienda, idVenta, idPagoFiado, metodoPago, monto, montoRecibido, cambio, referencia, claveOperacion, idAdministrador, creadoEn)
-     VALUES (?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?)
-     ON DUPLICATE KEY UPDATE idPagoVenta=idPagoVenta`,
-    [input.idTienda, input.idVenta, input.idPagoFiado, method, decimal(paymentCents),
-      method === 'efectivo' ? decimal(paymentCents) : null,
-      cleanText(input.referencia, 120), `fiado:${input.idPagoFiado}`, input.idAdministrador || null,
-      paymentDateTime]
-  );
-  const [[sale]] = await connection.query(
-    'SELECT total FROM venta WHERE idTienda=? AND idVenta=? FOR UPDATE',
-    [input.idTienda, input.idVenta]
-  );
-  if (!sale) throw stockError(404, 'Venta asociada al fiado no encontrada.');
-  const [[summary]] = await connection.query(
-    'SELECT COALESCE(SUM(monto),0) montoPagado FROM pagoVenta WHERE idTienda=? AND idVenta=?',
-    [input.idTienda, input.idVenta]
-  );
-  const totalCents = cents(sale.total, 'Total de la venta');
-  const paidCents = cents(summary.montoPagado, 'Monto pagado');
-  if (paidCents > totalCents) throw stockError(409, 'Los pagos registrados superan el total de la venta.');
-  const balanceCents = Math.max(0, totalCents - paidCents);
-  await connection.query(
-    `UPDATE venta SET montoPagado=?, saldoPendiente=?, estadoPago=?
-     WHERE idTienda=? AND idVenta=?`,
-    [decimal(paidCents), decimal(balanceCents), paymentState(totalCents, paidCents), input.idTienda, input.idVenta]
-  );
 }
 
 async function getSaleReceipt(idTienda, idVenta) {
@@ -451,6 +446,5 @@ module.exports = {
   MAX_SALE_ITEMS,
   getSaleReceipt,
   normalizeBarcode,
-  recordDebtPaymentForSale,
   registerSale
 };

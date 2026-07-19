@@ -90,8 +90,10 @@ async function cleanupStore(connection, idTienda) {
   await connection.query('DELETE FROM gasto WHERE idTienda=?', [idTienda]);
   await connection.query('DELETE FROM categoriaGasto WHERE idTienda=?', [idTienda]);
   await connection.query('DELETE FROM movimientoStock WHERE idTienda=?', [idTienda]);
+  await connection.query('DELETE FROM seguimientoCobranza WHERE idTienda=?', [idTienda]);
   await connection.query('DELETE FROM pagoVenta WHERE idTienda=?', [idTienda]);
   await connection.query('DELETE FROM pagoFiado WHERE idTienda=?', [idTienda]);
+  await connection.query('DELETE FROM cobroFiado WHERE idTienda=?', [idTienda]);
   await connection.query('DELETE FROM detalleFiado WHERE idTienda=?', [idTienda]);
   await connection.query('DELETE FROM detalleVenta WHERE idTienda=?', [idTienda]);
   await connection.query('DELETE FROM detalleCompra WHERE idTienda=?', [idTienda]);
@@ -101,6 +103,8 @@ async function cleanupStore(connection, idTienda) {
   await connection.query('DELETE FROM producto WHERE idTienda=?', [idTienda]);
   await connection.query('DELETE FROM cliente WHERE idTienda=?', [idTienda]);
   await connection.query('DELETE FROM proveedor WHERE idTienda=?', [idTienda]);
+  await connection.query('DELETE FROM plantillaCobranzaTienda WHERE idTienda=?', [idTienda]);
+  await connection.query('DELETE FROM configuracionCreditoTienda WHERE idTienda=?', [idTienda]);
   await connection.query('DELETE FROM configuracionInventarioTienda WHERE idTienda=?', [idTienda]);
   await connection.query('DELETE FROM suscripcionTienda WHERE idTienda=?', [idTienda]);
   await connection.query('DELETE FROM administrador WHERE idTienda=?', [idTienda]);
@@ -231,8 +235,9 @@ async function addNonDemandOperations(connection, fixture, productId, operationD
   );
 
   const [client] = await connection.query(
-    'INSERT INTO cliente (idTienda, nombre, activo) VALUES (?, ?, 1)',
-    [fixture.advancedStore, `Cliente inteligencia ${fixture.marker}`]
+    `INSERT INTO cliente (idTienda, nombre, activo, creadoEn, actualizadoEn)
+     VALUES (?, ?, 1, ?, ?)`,
+    [fixture.advancedStore, `Cliente inteligencia ${fixture.marker}`, date, date]
   );
   const [creditSale] = await connection.query(
     `INSERT INTO venta
@@ -247,9 +252,20 @@ async function addNonDemandOperations(connection, fixture, productId, operationD
      VALUES (?, ?, ?, ?, 10, 4, 6, 'parcial', 1)`,
     [fixture.advancedStore, client.insertId, creditSale.insertId, formatLocalDate(operationDate)]
   );
+  const [collection] = await connection.query(
+    `INSERT INTO cobroFiado
+     (idTienda,idCliente,fechaCobro,montoTotal,metodoPago,montoRecibido,cambio,
+      claveOperacion,creadoEn,idAdministrador,esLegado)
+     VALUES (?, ?, ?, 4, 'efectivo', 4, 0, ?, ?, ?, 0)`,
+    [fixture.advancedStore, client.insertId, date, `inv-test-cabecera-cobro:${fixture.marker}`,
+      date, fixture.advancedOwner]
+  );
   const [debtPayment] = await connection.query(
-    'INSERT INTO pagoFiado (idTienda, idFiado, fechaPago, monto, observacion) VALUES (?, ?, ?, 4, ?)',
-    [fixture.advancedStore, debt.insertId, date, 'Cobro que no es demanda.']
+    `INSERT INTO pagoFiado
+     (idTienda,idFiado,idCobroFiado,fechaPago,monto,observacion,claveDistribucion)
+     VALUES (?, ?, ?, ?, 4, ?, ?)`,
+    [fixture.advancedStore, debt.insertId, collection.insertId, date, 'Cobro que no es demanda.',
+      `inv-test-distribucion:${fixture.marker}`]
   );
   await connection.query(
     `INSERT INTO pagoVenta
