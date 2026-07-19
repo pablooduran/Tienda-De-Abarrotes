@@ -1,4 +1,14 @@
-const { formatLocalDate, formatLocalDateTime } = require('../utils/local-datetime');
+const {
+  addLocalDays,
+  createLocalDate,
+  dateTimeParts,
+  formatLocalDate,
+  formatLocalDateTime,
+  getLocalNow,
+  parseLocalDate,
+  parseLocalDateTime: parseBusinessDateTime,
+  startOfLocalDay
+} = require('../utils/local-datetime');
 
 const DEFAULT_EXPENSE_CATEGORIES = Object.freeze([
   ['Servicios básicos', 'servicios basicos'],
@@ -67,56 +77,55 @@ function decimal(valueInCents) {
 }
 
 function dateParts(value, label) {
-  const match = String(value || '').match(/^(\d{4})-(\d{2})-(\d{2})$/);
-  if (!match) throw httpError(400, `${label} debe usar el formato AAAA-MM-DD.`);
-  const date = new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3]));
-  if (date.getFullYear() !== Number(match[1]) || date.getMonth() !== Number(match[2]) - 1 || date.getDate() !== Number(match[3])) {
-    throw httpError(400, `${label} no es valida.`);
+  try {
+    return parseLocalDate(value);
+  } catch {
+    throw httpError(400, `${label} debe usar una fecha valida en formato AAAA-MM-DD.`);
   }
-  return date;
 }
 
 const formatDateOnly = formatLocalDate;
 const formatMysqlDateTime = formatLocalDateTime;
 
-function addDays(date, days) {
-  return new Date(date.getFullYear(), date.getMonth(), date.getDate() + days);
-}
-
 function startOfWeek(date) {
-  const copy = new Date(date.getFullYear(), date.getMonth(), date.getDate());
-  const weekday = copy.getDay() || 7;
-  copy.setDate(copy.getDate() - weekday + 1);
-  return copy;
+  const start = startOfLocalDay(date);
+  const parts = dateTimeParts(start);
+  const weekday = new Date(Date.UTC(parts.year, parts.month - 1, parts.day)).getUTCDay() || 7;
+  return addLocalDays(start, -weekday + 1);
 }
 
 function reportRange(query = {}, { maximumDays = MAX_REPORT_DAYS, defaultPeriod = 'mes' } = {}) {
-  const now = new Date();
+  const now = getLocalNow();
+  const today = startOfLocalDay(now);
+  const todayParts = dateTimeParts(today);
   const period = String(query.periodo || defaultPeriod).trim().toLowerCase();
   let start;
   let endExclusive;
   if (query.desde || query.hasta || period === 'rango') {
     if (!query.desde || !query.hasta) throw httpError(400, 'Debe indicar fecha de inicio y fecha final.');
     start = dateParts(query.desde, 'La fecha de inicio');
-    endExclusive = addDays(dateParts(query.hasta, 'La fecha final'), 1);
+    endExclusive = addLocalDays(dateParts(query.hasta, 'La fecha final'), 1);
   } else if (period === 'hoy' || period === 'dia') {
-    start = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-    endExclusive = addDays(start, 1);
+    start = today;
+    endExclusive = addLocalDays(start, 1);
   } else if (period === 'ayer') {
-    endExclusive = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-    start = addDays(endExclusive, -1);
+    endExclusive = today;
+    start = addLocalDays(endExclusive, -1);
   } else if (period === 'semana') {
     start = startOfWeek(now);
-    endExclusive = addDays(now, 1);
+    endExclusive = addLocalDays(today, 1);
   } else if (period === 'mes_anterior') {
-    start = new Date(now.getFullYear(), now.getMonth() - 1, 1);
-    endExclusive = new Date(now.getFullYear(), now.getMonth(), 1);
+    endExclusive = createLocalDate(todayParts.year, todayParts.month, 1);
+    const previousMonth = todayParts.month === 1
+      ? { year: todayParts.year - 1, month: 12 }
+      : { year: todayParts.year, month: todayParts.month - 1 };
+    start = createLocalDate(previousMonth.year, previousMonth.month, 1);
   } else if (period === 'anio') {
-    start = new Date(now.getFullYear(), 0, 1);
-    endExclusive = addDays(now, 1);
+    start = createLocalDate(todayParts.year, 1, 1);
+    endExclusive = addLocalDays(today, 1);
   } else if (period === 'mes') {
-    start = new Date(now.getFullYear(), now.getMonth(), 1);
-    endExclusive = addDays(now, 1);
+    start = createLocalDate(todayParts.year, todayParts.month, 1);
+    endExclusive = addLocalDays(today, 1);
   } else {
     throw httpError(400, 'El periodo seleccionado no es valido.');
   }
@@ -125,7 +134,7 @@ function reportRange(query = {}, { maximumDays = MAX_REPORT_DAYS, defaultPeriod 
   if (days > maximumDays) throw httpError(400, `El rango no puede superar ${maximumDays} dias.`);
   return {
     desde: formatDateOnly(start),
-    hasta: formatDateOnly(addDays(endExclusive, -1)),
+    hasta: formatDateOnly(addLocalDays(endExclusive, -1)),
     inicio: `${formatDateOnly(start)} 00:00:00`,
     finExclusivo: `${formatDateOnly(endExclusive)} 00:00:00`,
     dias: days,
@@ -134,14 +143,11 @@ function reportRange(query = {}, { maximumDays = MAX_REPORT_DAYS, defaultPeriod 
 }
 
 function parseLocalDateTime(value, label) {
-  const match = String(value || '').trim().match(/^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2})(?::(\d{2}))?$/);
-  if (!match) throw httpError(400, `${label} debe usar una fecha y hora local valida.`);
-  const date = new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3]), Number(match[4]), Number(match[5]), Number(match[6] || 0));
-  if (date.getFullYear() !== Number(match[1]) || date.getMonth() !== Number(match[2]) - 1
-    || date.getDate() !== Number(match[3]) || date.getHours() !== Number(match[4]) || date.getMinutes() !== Number(match[5])) {
-    throw httpError(400, `${label} no es valida.`);
+  try {
+    return parseBusinessDateTime(value);
+  } catch {
+    throw httpError(400, `${label} debe usar una fecha y hora local valida.`);
   }
-  return date;
 }
 
 function closeRange(body = {}) {
@@ -150,17 +156,18 @@ function closeRange(body = {}) {
   if (end <= start) throw httpError(400, 'La fecha final debe ser posterior a la fecha inicial.');
   const durationDays = (end.getTime() - start.getTime()) / 86400000;
   if (durationDays > 31) throw httpError(400, 'Un cierre no puede cubrir mas de 31 dias.');
-  if (end.getTime() > Date.now() + 300000) throw httpError(400, 'La fecha final no puede estar en el futuro.');
+  if (end.getTime() > getLocalNow().getTime()) throw httpError(400, 'La fecha final no puede estar en el futuro.');
   return { inicio: formatMysqlDateTime(start), finExclusivo: formatMysqlDateTime(end) };
 }
 
-async function ensureDefaultExpenseCategories(connection, idTienda) {
+async function ensureDefaultExpenseCategories(connection, idTienda, localDateTime = formatLocalDateTime()) {
   for (const [name, normalized] of DEFAULT_EXPENSE_CATEGORIES) {
     await connection.query(
-      `INSERT INTO categoriaGasto (idTienda, nombre, nombreNormalizado, descripcion)
-       VALUES (?, ?, ?, 'Categoria inicial editable de la tienda.')
+      `INSERT INTO categoriaGasto
+       (idTienda, nombre, nombreNormalizado, descripcion, creadoEn, actualizadoEn)
+       VALUES (?, ?, ?, 'Categoria inicial editable de la tienda.', ?, ?)
        ON DUPLICATE KEY UPDATE idCategoriaGasto=idCategoriaGasto`,
-      [idTienda, name, normalized]
+      [idTienda, name, normalized, localDateTime, localDateTime]
     );
   }
 }
@@ -182,7 +189,7 @@ function expensePayload(body = {}) {
   const monto = decimal(cents(body.monto, 'El monto', { allowZero: false }));
   const metodoPago = String(body.metodoPago || '').trim().toLowerCase();
   if (!EXPENSE_METHODS.has(metodoPago)) throw httpError(400, 'El metodo de pago no es valido.');
-  const date = body.fechaGasto ? parseLocalDateTime(body.fechaGasto, 'La fecha del gasto') : new Date();
+  const date = body.fechaGasto ? parseLocalDateTime(body.fechaGasto, 'La fecha del gasto') : getLocalNow();
   return {
     idCategoriaGasto,
     concepto,

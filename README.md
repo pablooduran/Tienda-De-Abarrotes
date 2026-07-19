@@ -5,7 +5,7 @@ Sistema con Node.js, Express, MySQL y frontend en HTML, CSS y JavaScript. Admini
 ## Estructura principal
 
 - `server.js`: servidor Express, sesiones y rutas principales.
-- `config/`: validacion de configuracion y conexion MySQL.
+- `config/`: validacion de entorno, TLS y conexion MySQL centralizada.
 - `middleware/`: proteccion de rutas autenticadas.
 - `routes/`: autenticacion y API del negocio.
 - `public/`: interfaz web.
@@ -27,7 +27,7 @@ Sistema con Node.js, Express, MySQL y frontend en HTML, CSS y JavaScript. Admini
 npm install
 ```
 
-2. Cree su configuracion local tomando `.env.example` como referencia. Use valores propios y no publique ese archivo.
+2. Cree `.env.local` tomando `.env.local.example` como referencia. Use valores propios y no publique ese archivo.
 
 Variables obligatorias para iniciar la aplicacion:
 
@@ -38,7 +38,34 @@ Variables obligatorias para iniciar la aplicacion:
 - `DB_PORT`
 - `SESSION_SECRET`
 
-`SESSION_SECRET` debe tener al menos 32 caracteres. `DB_SSL=true` habilita SSL y los hosts de Aiven tambien se detectan automaticamente. La aplicacion se detiene con un mensaje claro si falta una variable obligatoria y nunca imprime contrasenas ni hashes.
+`SESSION_SECRET` debe tener al menos 32 caracteres. En local, `DB_SSL_ENABLED=false` mantiene la conexion sin TLS y no intenta leer certificados. La aplicacion se detiene con un mensaje claro si falta una variable obligatoria y nunca imprime contrasenas, hashes ni certificados.
+
+## TLS de MySQL
+
+La configuracion MySQL se construye en `config/database-options.js` y es compartida por el servidor, el almacen de sesiones, el migrador, los comprobadores y las pruebas. No existe deteccion automatica por dominio ni degradacion silenciosa.
+
+En produccion son obligatorios:
+
+```text
+APP_ENV=production
+DB_SSL_ENABLED=true
+DB_SSL_CA="-----BEGIN CERTIFICATE-----\n...contenido PEM de la CA...\n-----END CERTIFICATE-----"
+```
+
+`DB_SSL_CA` admite saltos de linea reales o `\n` escapados, como los que puede conservar Render en una variable multilinea. La aplicacion valida el PEM al iniciar y configura `rejectUnauthorized=true`. Si TLS esta desactivado, falta la CA o el certificado no puede cargarse, el proceso se detiene; nunca vuelve a una conexion insegura. `DB_SSL_CA_PATH` queda limitado a desarrollo o entornos controlados y no se admite en produccion.
+
+No agregue certificados al repositorio ni muestre la CA en logs. Obtenga la CA vigente desde el panel seguro del proveedor y carguela como secreto en el entorno de ejecucion.
+
+## Zona horaria de negocio
+
+- La zona de negocio unica es `America/La_Paz` (`-04:00`, sin horario de verano).
+- `DATETIME` representa texto civil local `AAAA-MM-DD HH:mm:ss`; `DATE` representa `AAAA-MM-DD`.
+- mysql2 devuelve `DATE` y `DATETIME` como texto mediante `dateStrings`, evitando conversiones implicitas a UTC.
+- Cada conexion fija `time_zone='-04:00'`; Node genera y valida las marcas con `utils/local-datetime.js` usando la zona IANA explicita.
+- Las escrituras activas no usan `NOW()`, `CURRENT_TIMESTAMP` ni `toISOString()` para datos de negocio.
+- Los defaults SQL antiguos se conservan por compatibilidad estructural, pero no son la fuente de tiempo de las rutas activas.
+
+Los rangos `DATETIME` usan el contrato semiabierto `[fechaInicio, fechaFin)`: el inicio se incluye y el fin se excluye. Los filtros con dos valores `DATE` incluyen ambos dias y se convierten en Node a medianoche inicial y medianoche posterior al ultimo dia. No se fabrican fechas finales futuras para incluir registros.
 
 ## Entorno local aislado
 
@@ -230,7 +257,7 @@ No ejecute `db:init`, `db:migrate`, `db:create-admin` ni `db:seed-demo` contra p
 - El flujo de efectivo conocido resta gastos de los cobros registrados. Las compras no se descuentan de caja mientras no tengan un metodo de pago confiable.
 - El cierre de caja es opcional, no altera operaciones y solo esta disponible en el plan avanzado. QR no forma parte del efectivo fisico esperado.
 - La marca de gasto recurrente es informativa. Esta fase no genera gastos futuros ni realiza cobros automaticos.
-- Los rangos usan fecha y hora local de MySQL/servidor, sin convertir `DATETIME` mediante `toISOString`. Servidor y base deben compartir la zona horaria comercial.
+- Los rangos usan la zona explicita `America/La_Paz`, independiente de la zona del servidor. `DATETIME` y `DATE` se conservan como texto local y los rangos de fecha/hora son semiabiertos.
 - Las recomendaciones de inventario son orientativas. Usan ventas reales de `detalleVenta`, respetan el historial observado y nunca crean compras ni movimientos de stock.
 - Cuando el historial es insuficiente, la sugerencia solo intenta alcanzar el stock minimo y se identifica con confianza insuficiente. Los paquetes siempre se redondean hacia arriba.
 - La valoracion separa productos con costo conocido de productos sin costo; un costo desconocido no se interpreta como cero real.
@@ -373,6 +400,19 @@ npm.cmd run test:session-revocation
 ```
 
 El comprobador es de solo lectura y reconoce estados pre, parcial y post migracion. La prueba requiere el servidor local y una base cuyo nombre contenga `prueba` o `test`; usa cuentas y tiendas temporales sin imprimir contrasenas ni identificadores de sesion.
+
+### Validacion de TLS y zona horaria
+
+Con la configuracion local activa, el comprobador de solo lectura informa la politica TLS sin mostrar la CA, verifica `dateStrings`, la zona de sesion MySQL, la coincidencia del dia local entre Node y MySQL y enumera defaults SQL heredados:
+
+```powershell
+$env:APP_ENV='local'
+$env:DB_HOST='localhost'
+npm.cmd run db:check-timezone-tls
+npm.cmd run test:timezone-tls
+```
+
+La prueba no inicia el servidor ni modifica datos. Valida configuraciones TLS sinteticas, parseo y formato local, medianoche, rangos semiabiertos, independencia de `TZ` del sistema operativo, round-trip de `DATE/DATETIME` y compatibilidad con `ONLY_FULL_GROUP_BY`.
 
 Los cobros posteriores se registran con una cabecera `cobroFiado` y una distribucion `pagoFiado` por deuda. Cada distribucion vinculada a una venta produce un unico `pagoVenta`; los reintentos con la misma `claveOperacion` devuelven el cobro existente sin duplicar dinero ni saldos. WhatsApp se limita a preparar texto y un enlace `wa.me`: nunca envia ni marca mensajes como enviados automaticamente.
 

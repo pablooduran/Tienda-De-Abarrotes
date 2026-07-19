@@ -1,4 +1,10 @@
-const { formatLocalDateTime } = require('../utils/local-datetime');
+const {
+  addLocalDays,
+  formatLocalDateTime,
+  getLocalNow,
+  parseLocalDate,
+  parseLocalDateTime
+} = require('../utils/local-datetime');
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const MAX_RANGE_DAYS = 365;
@@ -44,19 +50,15 @@ function boundedInteger(value, label, minimum, maximum, { nullable = false } = {
 function localDate(value, label, { endOfDate = false } = {}) {
   if (value === undefined || value === null || value === '') return null;
   const text = String(value).trim();
-  const match = text.match(/^(\d{4})-(\d{2})-(\d{2})(?:[T ](\d{2}):(\d{2})(?::(\d{2}))?)?$/);
-  if (!match) throw inventoryError(400, `${label} no tiene un formato valido.`);
-  const date = new Date(
-    Number(match[1]), Number(match[2]) - 1, Number(match[3]),
-    Number(match[4] || 0), Number(match[5] || 0), Number(match[6] || 0)
-  );
-  if (date.getFullYear() !== Number(match[1]) || date.getMonth() !== Number(match[2]) - 1
-    || date.getDate() !== Number(match[3]) || date.getHours() !== Number(match[4] || 0)
-    || date.getMinutes() !== Number(match[5] || 0) || date.getSeconds() !== Number(match[6] || 0)) {
+  try {
+    if (/^\d{4}-\d{2}-\d{2}$/.test(text)) {
+      const date = parseLocalDate(text);
+      return endOfDate ? addLocalDays(date, 1) : date;
+    }
+    return parseLocalDateTime(text);
+  } catch {
     throw inventoryError(400, `${label} no es una fecha valida.`);
   }
-  if (endOfDate && !match[4]) date.setDate(date.getDate() + 1);
-  return date;
 }
 
 function mysqlDate(value) {
@@ -68,10 +70,11 @@ function mysqlDate(value) {
 function dateObject(value) {
   const text = mysqlDate(value);
   if (!text) return null;
-  const match = text.match(/^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2}):(\d{2})/);
-  return match
-    ? new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3]), Number(match[4]), Number(match[5]), Number(match[6]))
-    : null;
+  try {
+    return parseLocalDateTime(text.slice(0, 19));
+  } catch {
+    return null;
+  }
 }
 
 function daysBetween(start, end) {
@@ -162,9 +165,9 @@ async function ensureInventoryConfiguration(connection, idTienda, localDateTime)
 
 function analysisRange(query, configuration) {
   const requestedEnd = localDate(query.hasta, 'La fecha hasta', { endOfDate: true });
-  const end = requestedEnd || new Date(Date.now() + 1000);
+  const end = requestedEnd || getLocalNow();
   const requestedStart = localDate(query.desde, 'La fecha desde');
-  const configuredStart = new Date(end.getTime() - Number(configuration.periodoAnalisisDias) * DAY_MS);
+  const configuredStart = addLocalDays(end, -Number(configuration.periodoAnalisisDias));
   if (requestedStart && requestedStart >= end) {
     throw inventoryError(400, 'La fecha desde debe ser anterior a la fecha hasta.');
   }

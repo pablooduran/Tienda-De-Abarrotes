@@ -1,9 +1,8 @@
 const fs = require('fs');
-const mysql = require('mysql2/promise');
-const { databaseConfig } = require('../config/env');
+const { createDatabaseConnection } = require('../config/database-connection');
 
 async function createConnection() {
-  return mysql.createConnection(databaseConfig({ decimalNumbers: true }));
+  return createDatabaseConnection();
 }
 
 function readSqlStatements(filePath) {

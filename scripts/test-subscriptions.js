@@ -1,8 +1,8 @@
 const crypto = require('crypto');
 const bcrypt = require('bcryptjs');
-const mysql = require('mysql2/promise');
+const { createDatabaseConnection } = require('../config/database-connection');
 const { requireLocalhostDatabase } = require('../config/env');
-const { formatLocalDateTime } = require('../utils/local-datetime');
+const { addLocalDays, formatLocalDateTime, getLocalNow, parseLocalDateTime } = require('../utils/local-datetime');
 
 function assert(condition, message) {
   if (!condition) throw new Error(message);
@@ -159,8 +159,8 @@ async function resolveSubscriptionTestPlans(connection, apiPlans) {
 function basicContextComparison(context, expectedSlug, expectedPlanCode) {
   const limits = context?.limites || {};
   const features = Array.isArray(context?.caracteristicas) ? context.caracteristicas : [];
-  const start = context?.suscripcion?.fechaInicio ? new Date(context.suscripcion.fechaInicio) : null;
-  const end = context?.suscripcion?.fechaFin ? new Date(context.suscripcion.fechaFin) : null;
+  const start = context?.suscripcion?.fechaInicio ? parseLocalDateTime(context.suscripcion.fechaInicio) : null;
+  const end = context?.suscripcion?.fechaFin ? parseLocalDateTime(context.suscripcion.fechaFin) : null;
   const validDates = Boolean(start && end
     && !Number.isNaN(start.getTime())
     && !Number.isNaN(end.getTime())
@@ -313,7 +313,7 @@ async function main() {
   let connection;
 
   try {
-    connection = await mysql.createConnection(config);
+    connection = await createDatabaseConnection(config);
     const [[migration]] = await connection.query(
       "SELECT COUNT(*) total FROM schema_migrations WHERE nombre='005_planes_suscripciones.sql'"
     );
@@ -362,7 +362,8 @@ async function main() {
 
     fixture.basicStore = basicCreated.tienda.idTienda;
     fixture.basicOwner = basicCreated.propietario.idAdministrador;
-    const trialDays = (new Date(trialCreated.suscripcion.fechaFin) - new Date(trialCreated.suscripcion.fechaInicio)) / 86400000;
+    const trialDays = (parseLocalDateTime(trialCreated.suscripcion.fechaFin)
+      - parseLocalDateTime(trialCreated.suscripcion.fechaInicio)) / 86400000;
     assert(Math.abs(trialDays - 14) < 0.01, 'La prueba gratuita no tiene 14 dias.');
 
     const [[transactional]] = await connection.query(
@@ -497,11 +498,12 @@ async function main() {
       permiteVentaPorUnidad: Boolean(firstProduct.permiteVentaPorUnidad)
     };
 
+    const expirationReference = getLocalNow();
     await connection.query(
-      `UPDATE suscripcionTienda SET estado='activa', fechaInicio=DATE_SUB(CURRENT_TIMESTAMP, INTERVAL 30 DAY),
-       fechaFin=DATE_SUB(CURRENT_TIMESTAMP, INTERVAL 1 DAY)
+      `UPDATE suscripcionTienda SET estado='activa', fechaInicio=?, fechaFin=?
        WHERE idSuscripcion=?`,
-      [basicCreated.suscripcion.idSuscripcion]
+      [formatLocalDateTime(addLocalDays(expirationReference, -30)),
+        formatLocalDateTime(addLocalDays(expirationReference, -1)), basicCreated.suscripcion.idSuscripcion]
     );
     const contextBeforeRenewal = await expect(
       basicSession, '/api/contexto', {}, 200, 'Contexto antes de renovar'

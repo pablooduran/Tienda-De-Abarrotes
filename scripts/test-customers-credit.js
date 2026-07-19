@@ -1,8 +1,8 @@
 const crypto = require('crypto');
 const bcrypt = require('bcryptjs');
-const mysql = require('mysql2/promise');
+const { createDatabaseConnection } = require('../config/database-connection');
 const { requireLocalhostDatabase } = require('../config/env');
-const { formatLocalDate, formatLocalDateTime } = require('../utils/local-datetime');
+const { addLocalDays, formatLocalDate, formatLocalDateTime, parseLocalDate } = require('../utils/local-datetime');
 
 function assert(condition, message) {
   if (!condition) throw new Error(message);
@@ -102,8 +102,7 @@ function storePayload(marker, label, planCode) {
 }
 
 function addDays(dateText, days) {
-  const [year, month, day] = dateText.split('-').map(Number);
-  return formatLocalDate(new Date(year, month - 1, day + days));
+  return formatLocalDate(addLocalDays(parseLocalDate(dateText), days));
 }
 
 async function captureExclusiveLocalEnd(afterDateTime) {
@@ -199,7 +198,7 @@ async function main() {
   let connection;
 
   try {
-    connection = await mysql.createConnection(config);
+    connection = await createDatabaseConnection(config);
     await connection.query(
       "INSERT INTO administrador (idTienda,usuario,password,rol,activo) VALUES (NULL,?,?,'superadmin',1)",
       [fixture.superUser, await bcrypt.hash(superPassword, 12)]

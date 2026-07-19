@@ -1,4 +1,9 @@
-const { formatLocalDate, formatLocalDateTime } = require('../utils/local-datetime');
+const {
+  addLocalDays: shiftLocalDays,
+  formatLocalDate,
+  formatLocalDateTime,
+  parseLocalDate: parseBusinessDate
+} = require('../utils/local-datetime');
 
 const CREDIT_POLICIES = new Set(['permitir', 'advertir', 'bloquear']);
 const COMMUNICATION_CHANNELS = new Set(['ninguno', 'whatsapp', 'telefono', 'correo', 'presencial']);
@@ -87,18 +92,16 @@ function parseLocalDate(value, label, { allowNull = true } = {}) {
     throw creditError(400, `${label} es obligatoria.`);
   }
   const text = String(value).trim();
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(text)) throw creditError(400, `${label} no es valida.`);
-  const [year, month, day] = text.split('-').map(Number);
-  const date = new Date(year, month - 1, day);
-  if (date.getFullYear() !== year || date.getMonth() !== month - 1 || date.getDate() !== day) {
+  try {
+    parseBusinessDate(text);
+  } catch {
     throw creditError(400, `${label} no es valida.`);
   }
   return text;
 }
 
 function addLocalDays(dateText, days) {
-  const [year, month, day] = dateText.split('-').map(Number);
-  return formatLocalDate(new Date(year, month - 1, day + days));
+  return formatLocalDate(shiftLocalDays(parseBusinessDate(dateText), days));
 }
 
 function localDateText(value) {

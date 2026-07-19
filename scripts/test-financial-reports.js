@@ -1,8 +1,9 @@
 const crypto = require('crypto');
 const bcrypt = require('bcryptjs');
 const ExcelJS = require('exceljs');
-const mysql = require('mysql2/promise');
+const { createDatabaseConnection } = require('../config/database-connection');
 const { requireLocalhostDatabase } = require('../config/env');
+const { addLocalDays, formatLocalDate, formatLocalDateTime, getLocalNow } = require('../utils/local-datetime');
 
 function assert(condition, message) {
   if (!condition) throw new Error(message);
@@ -52,9 +53,19 @@ async function expect(session, path, options, status, label) {
   return response.body;
 }
 
-function pad(value) { return String(value).padStart(2, '0'); }
-function dateOnly(date = new Date()) { return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`; }
-function dateTime(date) { return `${dateOnly(date)}T${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`; }
+function dateOnly(date = getLocalNow()) { return formatLocalDate(date); }
+function dateTime(date = getLocalNow()) { return formatLocalDateTime(date).replace(' ', 'T'); }
+
+async function captureExclusiveLocalEnd(afterDateTime) {
+  const deadline = Date.now() + 2000;
+  let current = formatLocalDateTime();
+  while (current <= afterDateTime && Date.now() < deadline) {
+    await new Promise((resolve) => setTimeout(resolve, 25));
+    current = formatLocalDateTime();
+  }
+  if (current <= afterDateTime) throw new Error('No se pudo capturar una fecha final real posterior al periodo.');
+  return current.replace(' ', 'T');
+}
 
 function storePayload(marker, code) {
   const password = `Owner-${code}-${crypto.randomBytes(10).toString('hex')}!`;
@@ -144,7 +155,7 @@ async function main() {
   let connection;
 
   try {
-    connection = await mysql.createConnection(config);
+    connection = await createDatabaseConnection(config);
     assert(await scalar(connection, "SELECT COUNT(*) total FROM schema_migrations WHERE nombre='009_finanzas_reportes_caja.sql'") === 1,
       'La migracion 009 debe estar aplicada.');
     const hash = await bcrypt.hash(superPassword, 12);
@@ -365,9 +376,9 @@ async function main() {
       'La exportacion incluyo datos de otra tienda.');
 
     const start = financialSetupStartedAt;
-    const end = new Date(Date.now() + 1000);
+    const end = await captureExclusiveLocalEnd(formatLocalDateTime());
     const closeBody = {
-      fechaInicio: dateTime(start), fechaFin: dateTime(end), efectivoInicial: 5,
+      fechaInicio: dateTime(start), fechaFin: end, efectivoInicial: 5,
       efectivoContado: 13, diferencia: 9999,
       observacion: 'Cierre de prueba', claveOperacion: `cierre-${marker}`
     };
@@ -459,9 +470,11 @@ async function main() {
     await expect(advanced, '/api/caja/cierres', { method: 'POST', body: { ...closeBody, claveOperacion: `cierre-solapado-${marker}` } }, 409, 'Cierre solapado rechazado');
     await expect(basic, `/api/caja/cierres/${close.idCierreCaja}`, {}, 403, 'Cierre inaccesible para plan sin funcion');
 
+    const expirationReference = getLocalNow();
     await connection.query(
-      "UPDATE suscripcionTienda SET fechaInicio=DATE_SUB(NOW(), INTERVAL 2 DAY), fechaFin=DATE_SUB(NOW(), INTERVAL 1 DAY), estado='activa' WHERE idSuscripcion=?",
-      [fixture.advancedSubscription]
+      "UPDATE suscripcionTienda SET fechaInicio=?, fechaFin=?, estado='activa' WHERE idSuscripcion=?",
+      [formatLocalDateTime(addLocalDays(expirationReference, -2)),
+        formatLocalDateTime(addLocalDays(expirationReference, -1)), fixture.advancedSubscription]
     );
     await expect(advanced, `/api/reportes/finanzas/resumen?desde=${today}&hasta=${today}`, {}, 200, 'Lectura financiera vencida');
     await expect(advanced, '/api/gastos', { method: 'POST', body: {
@@ -470,9 +483,11 @@ async function main() {
     await expect(advanced, '/api/caja/cierres', { method: 'POST', body: {
       ...closeBody, claveOperacion: `cierre-vencido-${marker}`
     } }, 403, 'Cierre bloqueado con suscripcion vencida');
+    const renewalReference = getLocalNow();
     await connection.query(
-      "UPDATE suscripcionTienda SET fechaInicio=NOW(), fechaFin=DATE_ADD(NOW(), INTERVAL 30 DAY), estado='activa' WHERE idSuscripcion=?",
-      [fixture.advancedSubscription]
+      "UPDATE suscripcionTienda SET fechaInicio=?, fechaFin=?, estado='activa' WHERE idSuscripcion=?",
+      [formatLocalDateTime(renewalReference), formatLocalDateTime(addLocalDays(renewalReference, 30)),
+        fixture.advancedSubscription]
     );
 
     assert(await scalar(connection, 'SELECT COUNT(*) total FROM gasto WHERE idTienda=? AND estado=\'registrado\'', [fixture.advancedStore]) === 2,

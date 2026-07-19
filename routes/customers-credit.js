@@ -20,7 +20,12 @@ const {
   summarizeDebts
 } = require('../services/customer-credit-service');
 const { collectCustomerDebt, collectSpecificDebt } = require('../services/debt-collection-service');
-const { formatLocalDate, formatLocalDateTime } = require('../utils/local-datetime');
+const {
+  addLocalDays,
+  formatLocalDate,
+  formatLocalDateTime,
+  parseLocalDate: parseBusinessDate
+} = require('../utils/local-datetime');
 
 const router = express.Router();
 const FOLLOWUP_TYPES = new Set(['nota', 'llamada', 'mensaje_enviado_manual', 'compromiso_pago', 'visita']);
@@ -793,8 +798,7 @@ router.post('/cobranza/mensaje-whatsapp/preparar', requirePlanFeature('recordato
 }));
 
 function addOneDay(dateText) {
-  const [year, month, day] = dateText.split('-').map(Number);
-  return formatLocalDate(new Date(year, month - 1, day + 1));
+  return formatLocalDate(addLocalDays(parseBusinessDate(dateText), 1));
 }
 
 function daysBetween(from, to) {

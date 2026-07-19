@@ -1,4 +1,4 @@
-const mysql = require('mysql2/promise');
+const { createDatabaseConnection } = require('../config/database-connection');
 const { databaseConfig, logDatabaseTarget } = require('../config/env');
 
 const requiredColumns = {
@@ -201,7 +201,7 @@ async function verifyStructure(connection) {
 async function main() {
   const config = databaseConfig({ decimalNumbers: true });
   logDatabaseTarget('Inicializacion de estructura', config);
-  const connection = await mysql.createConnection(config);
+  const connection = await createDatabaseConnection(config);
   try {
     await createBaseTables(connection);
     await verifyStructure(connection);

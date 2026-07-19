@@ -1,8 +1,8 @@
 const crypto = require('crypto');
 const bcrypt = require('bcryptjs');
-const mysql = require('mysql2/promise');
+const { createDatabaseConnection } = require('../config/database-connection');
 const { requireLocalhostDatabase } = require('../config/env');
-const { formatLocalDate } = require('../utils/local-datetime');
+const { addLocalDays, formatLocalDate, getLocalNow } = require('../utils/local-datetime');
 
 function assert(condition, message) {
   if (!condition) throw new Error(message);
@@ -85,9 +85,7 @@ function productPayload(name, stock = 0, options = {}) {
 }
 
 function dateOffset(days) {
-  const date = new Date();
-  date.setDate(date.getDate() + days);
-  return formatLocalDate(date);
+  return formatLocalDate(addLocalDays(getLocalNow(), days));
 }
 
 async function scalar(connection, sql, params = []) {
@@ -172,7 +170,7 @@ async function main() {
   let connection;
 
   try {
-    connection = await mysql.createConnection(config);
+    connection = await createDatabaseConnection(config);
     assert(await scalar(connection,
       "SELECT COUNT(*) total FROM schema_migrations WHERE nombre='011_lotes_vencimientos.sql'") === 1,
     'La migracion 011 debe estar aplicada.');

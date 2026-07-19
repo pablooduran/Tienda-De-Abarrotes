@@ -1,5 +1,6 @@
-const mysql = require('mysql2/promise');
+const { createDatabaseConnection } = require('../config/database-connection');
 const { databaseTarget, requireLocalhostDatabase } = require('../config/env');
+const { formatLocalDateTime } = require('../utils/local-datetime');
 
 const expectedTables = ['plan', 'funcionalidad', 'planFuncionalidad', 'suscripcionTienda'];
 
@@ -14,7 +15,7 @@ async function tableExists(connection, table) {
 
 async function main() {
   const config = { ...requireLocalhostDatabase('La comprobacion de suscripciones'), decimalNumbers: true };
-  const connection = await mysql.createConnection(config);
+  const connection = await createDatabaseConnection(config);
   try {
     const tableState = {};
     for (const table of expectedTables) tableState[table] = await tableExists(connection, table);
@@ -67,14 +68,15 @@ async function main() {
     const [statusRows] = await connection.query(
       `SELECT
          CASE
-           WHEN estado IN ('activa','pendiente') AND CURRENT_TIMESTAMP>=fechaFin THEN 'vencida'
-           WHEN estado IN ('activa','pendiente') AND CURRENT_TIMESTAMP<fechaInicio THEN 'pendiente'
+           WHEN estado IN ('activa','pendiente') AND ?>=fechaFin THEN 'vencida'
+           WHEN estado IN ('activa','pendiente') AND ?<fechaInicio THEN 'pendiente'
            WHEN estado='pendiente' THEN 'activa'
            ELSE estado
          END estadoEfectivo,
          COUNT(*) total
        FROM suscripcionTienda
-       GROUP BY estadoEfectivo ORDER BY estadoEfectivo`
+       GROUP BY estadoEfectivo ORDER BY estadoEfectivo`,
+      [formatLocalDateTime(), formatLocalDateTime()]
     );
     const [stores] = await connection.query(
       `SELECT t.idTienda, t.nombre, t.slug, p.codigo AS planCodigo,

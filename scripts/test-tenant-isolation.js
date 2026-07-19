@@ -1,6 +1,6 @@
 const crypto = require('crypto');
 const bcrypt = require('bcryptjs');
-const mysql = require('mysql2/promise');
+const { createDatabaseConnection } = require('../config/database-connection');
 const { requireLocalhostDatabase } = require('../config/env');
 
 function assert(condition, message) {
@@ -165,7 +165,7 @@ async function main() {
   let connection;
 
   try {
-    connection = await mysql.createConnection(config);
+    connection = await createDatabaseConnection(config);
     const inactiveUser = `inactive_test_${marker}`;
     const inactivePassword = `Inactive-${crypto.randomBytes(12).toString('hex')}!`;
     const superPassword = `Super-${crypto.randomBytes(12).toString('hex')}!`;

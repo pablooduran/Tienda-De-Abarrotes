@@ -158,8 +158,8 @@ function storeSummaryQuery(whereClause = '') {
       s.idSuscripcion, s.tipo AS tipoSuscripcion, s.estado AS estadoSuscripcion,
       CASE
         WHEN s.idSuscripcion IS NULL THEN 'sin_suscripcion'
-        WHEN s.estado IN ('activa','pendiente') AND CURRENT_TIMESTAMP>=s.fechaFin THEN 'vencida'
-        WHEN s.estado IN ('activa','pendiente') AND CURRENT_TIMESTAMP<s.fechaInicio THEN 'pendiente'
+        WHEN s.estado IN ('activa','pendiente') AND ?>=s.fechaFin THEN 'vencida'
+        WHEN s.estado IN ('activa','pendiente') AND ?<s.fechaInicio THEN 'pendiente'
         WHEN s.estado='pendiente' THEN 'activa'
         ELSE s.estado
       END AS estadoSuscripcionEfectivo,
@@ -170,12 +170,12 @@ function storeSummaryQuery(whereClause = '') {
       WHERE s2.idTienda=t.idTienda
       ORDER BY
         CASE
-          WHEN s2.estado IN ('activa','pendiente') AND CURRENT_TIMESTAMP>=s2.fechaInicio AND CURRENT_TIMESTAMP<s2.fechaFin THEN 0
-          WHEN s2.estado='pendiente' AND s2.fechaInicio>CURRENT_TIMESTAMP THEN 1
+          WHEN s2.estado IN ('activa','pendiente') AND ?>=s2.fechaInicio AND ?<s2.fechaFin THEN 0
+          WHEN s2.estado='pendiente' AND s2.fechaInicio>? THEN 1
           WHEN s2.estado='suspendida' THEN 2
           ELSE 3
         END,
-        CASE WHEN s2.fechaInicio>CURRENT_TIMESTAMP THEN s2.fechaInicio END ASC,
+        CASE WHEN s2.fechaInicio>? THEN s2.fechaInicio END ASC,
         s2.idSuscripcion DESC
       LIMIT 1
     )
@@ -183,18 +183,28 @@ function storeSummaryQuery(whereClause = '') {
     ${whereClause}`;
 }
 
+function storeSummaryClockParams(localNow = formatLocalDateTime()) {
+  return [localNow, localNow, localNow, localNow, localNow, localNow];
+}
+
 function asyncRoute(handler) {
   return (req, res, next) => Promise.resolve(handler(req, res, next)).catch(next);
 }
 
 router.get('/tiendas', asyncRoute(async (req, res) => {
-  const [rows] = await pool.query(`${storeSummaryQuery()} ORDER BY t.creadoEn DESC, t.idTienda DESC`);
+  const [rows] = await pool.query(
+    `${storeSummaryQuery()} ORDER BY t.creadoEn DESC, t.idTienda DESC`,
+    storeSummaryClockParams()
+  );
   res.json(rows);
 }));
 
 router.get('/tiendas/:idTienda', asyncRoute(async (req, res) => {
   const idTienda = parseId(req.params.idTienda, 'La tienda');
-  const [rows] = await pool.query(storeSummaryQuery('WHERE t.idTienda=?'), [idTienda]);
+  const [rows] = await pool.query(
+    storeSummaryQuery('WHERE t.idTienda=?'),
+    [...storeSummaryClockParams(), idTienda]
+  );
   if (!rows.length) throw httpError(404, 'La tienda no existe.');
   res.json(rows[0]);
 }));
@@ -220,12 +230,13 @@ router.post('/tiendas', asyncRoute(async (req, res) => {
     const [userRows] = await connection.query('SELECT idAdministrador FROM administrador WHERE usuario=? LIMIT 1', [propietario.usuario]);
     if (userRows.length) throw httpError(409, 'El usuario indicado ya existe.');
 
-    const [storeResult] = await connection.query(
-      'INSERT INTO tienda (nombre, slug, estado, activo) VALUES (?, ?, ?, ?)',
-      [tienda.nombre, tienda.slug, tienda.estado, tienda.activo]
-    );
     const localDateTime = formatLocalDateTime();
-    await ensureDefaultExpenseCategories(connection, storeResult.insertId);
+    const [storeResult] = await connection.query(
+      `INSERT INTO tienda (nombre, slug, estado, activo, creadoEn, actualizadoEn)
+       VALUES (?, ?, ?, ?, ?, ?)`,
+      [tienda.nombre, tienda.slug, tienda.estado, tienda.activo, localDateTime, localDateTime]
+    );
+    await ensureDefaultExpenseCategories(connection, storeResult.insertId, localDateTime);
     await ensureInventoryConfiguration(connection, storeResult.insertId, localDateTime);
     await ensureCreditConfiguration(connection, storeResult.insertId, localDateTime);
     const passwordHash = await bcrypt.hash(propietario.password, 12);
@@ -266,9 +277,9 @@ router.put('/tiendas/:idTienda', asyncRoute(async (req, res) => {
     const current = await findStore(connection, idTienda, true);
     if (!current) throw httpError(404, 'La tienda no existe.');
     await connection.query(
-      `UPDATE tienda SET nombre=?, slug=?, estado=?, activo=?, actualizadoEn=CURRENT_TIMESTAMP
+      `UPDATE tienda SET nombre=?, slug=?, estado=?, activo=?, actualizadoEn=?
        WHERE idTienda=?`,
-      [tienda.nombre, tienda.slug, tienda.estado, tienda.activo, idTienda]
+      [tienda.nombre, tienda.slug, tienda.estado, tienda.activo, formatLocalDateTime(), idTienda]
     );
     if (Number(current.activo) !== Number(tienda.activo) || current.estado !== tienda.estado) {
       await revokeStoreSessions(connection, idTienda);
@@ -290,8 +301,8 @@ router.patch('/tiendas/:idTienda/activar', asyncRoute(async (req, res) => {
     await connection.beginTransaction();
     if (!await findStore(connection, idTienda, true)) throw httpError(404, 'La tienda no existe.');
     await connection.query(
-      "UPDATE tienda SET activo=1, estado='activa', actualizadoEn=CURRENT_TIMESTAMP WHERE idTienda=?",
-      [idTienda]
+      "UPDATE tienda SET activo=1, estado='activa', actualizadoEn=? WHERE idTienda=?",
+      [formatLocalDateTime(), idTienda]
     );
     await revokeStoreSessions(connection, idTienda);
     await connection.commit();
@@ -315,8 +326,8 @@ router.patch('/tiendas/:idTienda/desactivar', asyncRoute(async (req, res) => {
     await connection.beginTransaction();
     if (!await findStore(connection, idTienda, true)) throw httpError(404, 'La tienda no existe.');
     await connection.query(
-      'UPDATE tienda SET activo=0, estado=?, actualizadoEn=CURRENT_TIMESTAMP WHERE idTienda=?',
-      [estado, idTienda]
+      'UPDATE tienda SET activo=0, estado=?, actualizadoEn=? WHERE idTienda=?',
+      [estado, formatLocalDateTime(), idTienda]
     );
     await revokeStoreSessions(connection, idTienda);
     await connection.commit();
@@ -417,14 +428,15 @@ router.patch('/propietarios/:idAdministrador/activar', asyncRoute(async (req, re
 router.get('/tiendas/:idTienda/suscripciones', asyncRoute(async (req, res) => {
   const idTienda = parseId(req.params.idTienda, 'La tienda');
   if (!await findStore(pool, idTienda)) throw httpError(404, 'La tienda no existe.');
+  const localNow = formatLocalDateTime();
   const [rows] = await pool.query(
     `SELECT s.idSuscripcion, s.tipo, s.estado, s.fechaInicio, s.fechaFin,
        s.renovacionAutomatica, s.observacion, s.creadoEn, s.actualizadoEn,
        p.codigo AS planCodigo, p.nombre AS planNombre,
        a.usuario AS creadoPorUsuario,
        CASE
-         WHEN s.estado IN ('activa','pendiente') AND CURRENT_TIMESTAMP>=s.fechaFin THEN 'vencida'
-         WHEN s.estado IN ('activa','pendiente') AND CURRENT_TIMESTAMP<s.fechaInicio THEN 'pendiente'
+         WHEN s.estado IN ('activa','pendiente') AND ?>=s.fechaFin THEN 'vencida'
+         WHEN s.estado IN ('activa','pendiente') AND ?<s.fechaInicio THEN 'pendiente'
          WHEN s.estado='pendiente' THEN 'activa'
          ELSE s.estado
        END AS estadoEfectivo
@@ -433,7 +445,7 @@ router.get('/tiendas/:idTienda/suscripciones', asyncRoute(async (req, res) => {
      LEFT JOIN administrador a ON a.idAdministrador=s.creadoPor
      WHERE s.idTienda=?
      ORDER BY s.idSuscripcion DESC`,
-    [idTienda]
+    [localNow, localNow, idTienda]
   );
   res.json(rows);
 }));
@@ -472,8 +484,8 @@ async function changeSubscriptionStatus(req, res, targetStatus) {
     if (!rows.length) throw httpError(404, 'La suscripcion no existe.');
     await findStore(connection, rows[0].idTienda, true);
     await connection.query(
-      'UPDATE suscripcionTienda SET estado=?, actualizadoEn=CURRENT_TIMESTAMP WHERE idSuscripcion=?',
-      [targetStatus, idSuscripcion]
+      'UPDATE suscripcionTienda SET estado=?, actualizadoEn=? WHERE idSuscripcion=?',
+      [targetStatus, formatLocalDateTime(), idSuscripcion]
     );
     await connection.commit();
     res.json({ message: `Suscripcion ${targetStatus === 'suspendida' ? 'suspendida' : 'cancelada'} correctamente.` });

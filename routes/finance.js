@@ -23,6 +23,7 @@ const {
   salesByDay,
   validateExpenseCategory
 } = require('../services/financial-service');
+const { formatLocalDateTime } = require('../utils/local-datetime');
 
 const router = express.Router();
 
@@ -67,10 +68,12 @@ router.post('/gastos/categorias', asyncRoute(async (req, res) => {
   const descripcion = cleanText(req.body?.descripcion, 255, { label: 'La descripcion' });
   if (!nombreNormalizado) throw httpError(400, 'El nombre de la categoria no es valido.');
   try {
+    const localDateTime = formatLocalDateTime();
     const [result] = await pool.query(
-      `INSERT INTO categoriaGasto (idTienda, nombre, nombreNormalizado, descripcion)
-       VALUES (?, ?, ?, ?)`,
-      [tenantId(req), nombre, nombreNormalizado, descripcion]
+      `INSERT INTO categoriaGasto
+       (idTienda, nombre, nombreNormalizado, descripcion, creadoEn, actualizadoEn)
+       VALUES (?, ?, ?, ?, ?, ?)`,
+      [tenantId(req), nombre, nombreNormalizado, descripcion, localDateTime, localDateTime]
     );
     res.status(201).json({ message: 'Categoria creada.', idCategoriaGasto: result.insertId });
   } catch (error) {
@@ -86,9 +89,9 @@ router.put('/gastos/categorias/:id', asyncRoute(async (req, res) => {
   const activo = req.body?.activo === false || req.body?.activo === 0 || req.body?.activo === '0' ? 0 : 1;
   try {
     const [result] = await pool.query(
-      `UPDATE categoriaGasto SET nombre=?, nombreNormalizado=?, descripcion=?, activo=?
+      `UPDATE categoriaGasto SET nombre=?, nombreNormalizado=?, descripcion=?, activo=?, actualizadoEn=?
        WHERE idTienda=? AND idCategoriaGasto=?`,
-      [nombre, normalizeName(nombre), descripcion, activo, tenantId(req), idCategoriaGasto]
+      [nombre, normalizeName(nombre), descripcion, activo, formatLocalDateTime(), tenantId(req), idCategoriaGasto]
     );
     if (!result.affectedRows) throw httpError(404, 'La categoria no existe.');
     res.json({ message: 'Categoria actualizada.' });
@@ -159,13 +162,15 @@ router.post('/gastos', asyncRoute(async (req, res) => {
   try {
     await connection.beginTransaction();
     await validateExpenseCategory(connection, tenantId(req), data.idCategoriaGasto, true);
+    const localDateTime = formatLocalDateTime();
     const [result] = await connection.query(
       `INSERT INTO gasto
        (idTienda, idCategoriaGasto, idAdministrador, fechaGasto, concepto, monto, metodoPago,
-        referencia, observacion, recurrente)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        referencia, observacion, recurrente, creadoEn, actualizadoEn)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [tenantId(req), data.idCategoriaGasto, req.session.admin.id, data.fechaGasto, data.concepto,
-        data.monto, data.metodoPago, data.referencia, data.observacion, data.recurrente]
+        data.monto, data.metodoPago, data.referencia, data.observacion, data.recurrente,
+        localDateTime, localDateTime]
     );
     await connection.commit();
     res.status(201).json({ message: 'Gasto registrado.', idGasto: result.insertId });
@@ -192,10 +197,11 @@ router.put('/gastos/:id', asyncRoute(async (req, res) => {
     await validateExpenseCategory(connection, tenantId(req), data.idCategoriaGasto, true);
     await connection.query(
       `UPDATE gasto SET idCategoriaGasto=?, idAdministradorModifica=?, fechaGasto=?, concepto=?,
-         monto=?, metodoPago=?, referencia=?, observacion=?, recurrente=?
+         monto=?, metodoPago=?, referencia=?, observacion=?, recurrente=?, actualizadoEn=?
        WHERE idTienda=? AND idGasto=?`,
       [data.idCategoriaGasto, req.session.admin.id, data.fechaGasto, data.concepto, data.monto,
-        data.metodoPago, data.referencia, data.observacion, data.recurrente, tenantId(req), idGasto]
+        data.metodoPago, data.referencia, data.observacion, data.recurrente, formatLocalDateTime(),
+        tenantId(req), idGasto]
     );
     await connection.commit();
     res.json({ message: 'Gasto actualizado.' });
@@ -211,10 +217,11 @@ router.post('/gastos/:id/anular', asyncRoute(async (req, res) => {
   const idGasto = positiveId(req.params.id, 'El gasto');
   const motivo = cleanText(req.body?.motivo, 300, { required: true, label: 'El motivo de anulacion' });
   if (motivo.length < 8) throw httpError(400, 'El motivo de anulacion debe tener al menos 8 caracteres.');
+  const localDateTime = formatLocalDateTime();
   const [result] = await pool.query(
-    `UPDATE gasto SET estado='anulado', motivoAnulacion=?, idAdministradorAnula=?, anuladoEn=CURRENT_TIMESTAMP
+    `UPDATE gasto SET estado='anulado', motivoAnulacion=?, idAdministradorAnula=?, anuladoEn=?, actualizadoEn=?
      WHERE idTienda=? AND idGasto=? AND estado='registrado'`,
-    [motivo, req.session.admin.id, tenantId(req), idGasto]
+    [motivo, req.session.admin.id, localDateTime, localDateTime, tenantId(req), idGasto]
   );
   if (!result.affectedRows) {
     const [[row]] = await pool.query('SELECT COUNT(*) total FROM gasto WHERE idTienda=? AND idGasto=?', [tenantId(req), idGasto]);
@@ -384,14 +391,14 @@ router.post('/caja/cierres', asyncRoute(async (req, res) => {
        (idTienda, idAdministrador, fechaInicio, fechaFin, efectivoInicial, efectivoVentasEsperado,
         efectivoFiadosCobrado, gastosEfectivo, efectivoEsperado, efectivoContado, diferencia,
         totalQR, totalNoEspecificado, totalCobrado, totalVentas, totalFiadoGenerado,
-        totalGastos, totalCompras, observacion, claveOperacion)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        totalGastos, totalCompras, observacion, claveOperacion, creadoEn)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [tenantId(req), req.session.admin.id, range.inicio, range.finExclusivo,
         calculated.efectivoInicial, calculated.efectivoVentasEsperado, calculated.efectivoFiadosCobrado,
         calculated.gastosEfectivo, calculated.efectivoEsperado, decimal(countedCents), diferencia,
         calculated.totalQR, calculated.totalNoEspecificado, calculated.totalCobrado,
         calculated.totalVentas, calculated.totalFiadoGenerado, calculated.totalGastos,
-        calculated.totalCompras, observacion, key]
+        calculated.totalCompras, observacion, key, formatLocalDateTime()]
     );
     await connection.commit();
     res.status(201).json({ message: 'Cierre de caja registrado.', idCierreCaja: result.insertId, diferencia, calculo: calculated });
@@ -407,9 +414,9 @@ router.post('/caja/cierres/:id/anular', asyncRoute(async (req, res) => {
   const motivo = cleanText(req.body?.motivo, 300, { required: true, label: 'El motivo de anulacion' });
   if (motivo.length < 8) throw httpError(400, 'El motivo de anulacion debe tener al menos 8 caracteres.');
   const [result] = await pool.query(
-    `UPDATE cierreCaja SET estado='anulado', motivoAnulacion=?, idAdministradorAnula=?, anuladoEn=CURRENT_TIMESTAMP
+    `UPDATE cierreCaja SET estado='anulado', motivoAnulacion=?, idAdministradorAnula=?, anuladoEn=?
      WHERE idTienda=? AND idCierreCaja=? AND estado='cerrado'`,
-    [motivo, req.session.admin.id, tenantId(req), positiveId(req.params.id, 'El cierre')]
+    [motivo, req.session.admin.id, formatLocalDateTime(), tenantId(req), positiveId(req.params.id, 'El cierre')]
   );
   if (!result.affectedRows) throw httpError(404, 'El cierre no existe o ya esta anulado.');
   res.json({ message: 'Cierre anulado. Sus valores historicos se conservaron.' });

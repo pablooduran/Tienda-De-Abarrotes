@@ -1,4 +1,4 @@
-const { formatLocalDate, formatLocalDateTime } = require('../utils/local-datetime');
+const { formatLocalDate, formatLocalDateTime, parseLocalDate } = require('../utils/local-datetime');
 const { stockError } = require('./stock-movement-service');
 
 const LOT_ORIGINS = new Set(['compra', 'distribucion_inicial', 'ajuste_positivo', 'reversion']);
@@ -52,10 +52,9 @@ function validLocalDate(value, label, { required = false } = {}) {
     return null;
   }
   const text = String(value).trim();
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(text)) throw stockError(400, `${label} no es valida.`);
-  const [year, month, day] = text.split('-').map(Number);
-  const date = new Date(year, month - 1, day);
-  if (date.getFullYear() !== year || date.getMonth() !== month - 1 || date.getDate() !== day) {
+  try {
+    parseLocalDate(text);
+  } catch {
     throw stockError(400, `${label} no es valida.`);
   }
   return text;

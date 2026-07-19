@@ -1,4 +1,4 @@
-const mysql = require('mysql2/promise');
+const { createDatabaseConnection } = require('../config/database-connection');
 const { databaseTarget, requireLocalhostDatabase } = require('../config/env');
 const { hasColumns, hasForeignKeyConstraint, hasIndex, hasTable } = require('./db-utils');
 
@@ -98,7 +98,7 @@ async function foreignKeyDiagnostic(connection, relation) {
 
 async function main() {
   const config = { ...requireLocalhostDatabase('La comprobacion del catalogo maestro'), decimalNumbers: true };
-  const connection = await mysql.createConnection(config);
+  const connection = await createDatabaseConnection(config);
   try {
     const tableState = {};
     for (const table of tables) tableState[table] = await hasTable(connection, table);

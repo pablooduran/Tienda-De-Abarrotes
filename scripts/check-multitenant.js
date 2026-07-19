@@ -1,4 +1,4 @@
-const mysql = require('mysql2/promise');
+const { createDatabaseConnection } = require('../config/database-connection');
 const { databaseTarget, requireLocalhostDatabase } = require('../config/env');
 
 const tenantTables = [
@@ -144,7 +144,7 @@ async function migration004Structure(connection, hasStoreTable) {
 
 async function main() {
   const config = { ...requireLocalhostDatabase('La comprobacion multi-tienda'), decimalNumbers: true };
-  const connection = await mysql.createConnection(config);
+  const connection = await createDatabaseConnection(config);
   try {
     const tables = {};
     for (const table of tenantTables) tables[table] = await tableSummary(connection, table);

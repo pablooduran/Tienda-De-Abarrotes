@@ -5,6 +5,7 @@ CREATE DATABASE IF NOT EXISTS tienda_abarrotes
 USE tienda_abarrotes;
 
 -- Marca explicita de instalacion en hora local de Bolivia (UTC-04:00).
+SET time_zone = '-04:00';
 SET @fecha_local_instalacion = CONVERT_TZ(UTC_TIMESTAMP(), '+00:00', '-04:00');
 
 CREATE TABLE IF NOT EXISTS tienda (
@@ -327,8 +328,8 @@ WHERE p.codigo='basico'
 
 INSERT INTO suscripcionTienda
   (idTienda, idPlan, tipo, estado, fechaInicio, fechaFin, renovacionAutomatica, observacion, creadoPor)
-SELECT t.idTienda, p.idPlan, 'cortesia', 'activa', CURRENT_TIMESTAMP,
-       DATE_ADD(CURRENT_TIMESTAMP, INTERVAL 3650 DAY), 0,
+SELECT t.idTienda, p.idPlan, 'cortesia', 'activa', @fecha_local_instalacion,
+       DATE_ADD(@fecha_local_instalacion, INTERVAL 3650 DAY), 0,
        'Suscripcion inicial de cortesia para conservar el acceso durante la migracion.', NULL
 FROM tienda t
 JOIN plan p ON p.codigo='avanzado'

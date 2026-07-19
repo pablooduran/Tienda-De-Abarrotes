@@ -21,6 +21,7 @@
     "db:check-lots-expiration": "node scripts/check-lots-expiration.js",
     "db:check-customers-credit": "node scripts/check-customers-credit.js",
     "db:check-session-security": "node scripts/check-session-security.js",
+    "db:check-timezone-tls": "node scripts/check-timezone-tls.js",
     "test:tenant-isolation": "node scripts/test-tenant-isolation.js",
     "test:admin-management": "node scripts/test-admin-management.js",
     "test:subscriptions": "node scripts/test-subscriptions.js",
@@ -32,7 +33,8 @@
     "test:lots-expiration": "node scripts/test-lots-expiration.js",
     "test:customers-credit": "node scripts/test-customers-credit.js",
     "test:customers-credit-frontend": "node scripts/test-customers-credit-frontend.js",
-    "test:session-revocation": "node scripts/test-session-revocation.js"
+    "test:session-revocation": "node scripts/test-session-revocation.js",
+    "test:timezone-tls": "node scripts/test-timezone-tls.js"
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",

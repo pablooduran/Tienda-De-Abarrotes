@@ -1,4 +1,4 @@
-const mysql = require('mysql2/promise');
+const { createDatabaseConnection } = require('../config/database-connection');
 const { databaseTarget, requireLocalhostDatabase } = require('../config/env');
 const {
   hasCheckConstraint,
@@ -61,7 +61,7 @@ async function scalar(connection, sql, params = []) {
 
 async function main() {
   const config = { ...requireLocalhostDatabase('La comprobacion de movimientos de stock'), decimalNumbers: true };
-  const connection = await mysql.createConnection(config);
+  const connection = await createDatabaseConnection(config);
   try {
     const migrationTable = await hasTable(connection, 'schema_migrations');
     const migrationRecorded = migrationTable

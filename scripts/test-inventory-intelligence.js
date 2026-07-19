@@ -1,7 +1,7 @@
 const crypto = require('crypto');
 const bcrypt = require('bcryptjs');
 const ExcelJS = require('exceljs');
-const mysql = require('mysql2/promise');
+const { createDatabaseConnection } = require('../config/database-connection');
 const { requireLocalhostDatabase } = require('../config/env');
 const { formatLocalDate, formatLocalDateTime } = require('../utils/local-datetime');
 
@@ -301,7 +301,7 @@ async function main() {
 
   try {
     currentTestStage = 'setup: conexion y estructura local';
-    connection = await mysql.createConnection(config);
+    connection = await createDatabaseConnection(config);
     assert(await scalar(connection,
       "SELECT COUNT(*) total FROM schema_migrations WHERE nombre='010_inteligencia_inventario.sql'") === 1,
     'La migracion 010 debe estar aplicada.');
@@ -341,7 +341,7 @@ async function main() {
 
     const now = new Date();
     now.setMilliseconds(0);
-    const rangeEnd = addDays(now, 1);
+    const rangeEnd = now;
     const rangeStart = addDays(rangeEnd, -120);
     const query = `desde=${encodeURIComponent(formatLocalDateTime(rangeStart))}&hasta=${encodeURIComponent(formatLocalDateTime(rangeEnd))}&limite=100`;
     await expect(advancedSession, '/api/inventario-inteligente/configuracion', {
@@ -570,7 +570,7 @@ async function main() {
       method: 'PUT', body: { periodoAnalisisDias: 30 }
     }, 403, 'Vencida bloquea configuracion');
 
-    assert(rangeEnd > now, 'La fechaFin de prueba no es posterior a los datos creados.');
+    assert(rangeEnd <= new Date(), 'La fecha final de prueba no debe quedar en el futuro.');
     console.log('Prueba de inteligencia de inventario completada correctamente.');
   } finally {
     for (const session of sessions) {

@@ -1,7 +1,8 @@
 const crypto = require('crypto');
 const bcrypt = require('bcryptjs');
-const mysql = require('mysql2/promise');
+const { createDatabaseConnection } = require('../config/database-connection');
 const { requireLocalhostDatabase } = require('../config/env');
+const { addLocalDays, formatLocalDateTime, getLocalNow } = require('../utils/local-datetime');
 
 function assert(condition, message) {
   if (!condition) throw new Error(message);
@@ -133,7 +134,7 @@ async function main() {
   let connection;
 
   try {
-    connection = await mysql.createConnection(config);
+    connection = await createDatabaseConnection(config);
     assert(await scalar(connection,
       "SELECT COUNT(*) total FROM schema_migrations WHERE nombre='008_punto_venta_pagos.sql'") === 1,
     'La migracion 008 debe estar aplicada.');
@@ -365,17 +366,21 @@ async function main() {
     assert(await scalar(connection, 'SELECT stockUnidadesTotal total FROM producto WHERE idTienda=? AND idProducto=?', [fixture.storeA, concurrentProduct.idProducto]) === 0,
       'La venta concurrente dejo stock incorrecto.');
 
+    const expirationReference = getLocalNow();
     await connection.query(
-      "UPDATE suscripcionTienda SET fechaInicio=DATE_SUB(NOW(), INTERVAL 2 DAY), fechaFin=DATE_SUB(NOW(), INTERVAL 1 DAY), estado='activa' WHERE idSuscripcion=?",
-      [fixture.subscriptionA]
+      "UPDATE suscripcionTienda SET fechaInicio=?, fechaFin=?, estado='activa' WHERE idSuscripcion=?",
+      [formatLocalDateTime(addLocalDays(expirationReference, -2)),
+        formatLocalDateTime(addLocalDays(expirationReference, -1)), fixture.subscriptionA]
     );
     await expect(ownerA, `/api/ventas/${cashSale.idVenta}/comprobante`, {}, 200, 'Comprobante disponible con suscripcion vencida');
     await expect(ownerA, '/api/pos/ventas', { method: 'POST', body: {
       claveOperacion: `expired-${marker}`, items: [{ idProducto: productA.idProducto, cantidad: 1, presentacion: 'unidad' }], pagos: [{ metodoPago: 'efectivo', monto: 10 }]
     } }, 403, 'Venta bloqueada con suscripcion vencida');
+    const renewalReference = getLocalNow();
     await connection.query(
-      "UPDATE suscripcionTienda SET fechaInicio=NOW(), fechaFin=DATE_ADD(NOW(), INTERVAL 30 DAY), estado='activa' WHERE idSuscripcion=?",
-      [fixture.subscriptionA]
+      "UPDATE suscripcionTienda SET fechaInicio=?, fechaFin=?, estado='activa' WHERE idSuscripcion=?",
+      [formatLocalDateTime(renewalReference), formatLocalDateTime(addLocalDays(renewalReference, 30)),
+        fixture.subscriptionA]
     );
 
     const encoded = encodeURIComponent(`Comprobante ${cashSale.codigoComprobante}\nTotal Bs ${cashSale.total}`);

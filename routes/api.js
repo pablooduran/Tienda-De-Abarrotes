@@ -16,7 +16,14 @@ const {
   lockLots,
   normalizeLotEntries
 } = require('../services/lot-service');
-const { formatLocalDateTime } = require('../utils/local-datetime');
+const {
+  addLocalDays,
+  createLocalDate,
+  dateTimeParts,
+  formatLocalDateTime,
+  getLocalNow,
+  startOfLocalDay
+} = require('../utils/local-datetime');
 
 const router = express.Router();
 
@@ -31,20 +38,25 @@ function omitTenant(value) {
 }
 
 function localDateBoundary(date) {
-  return formatLocalDateTime(new Date(date.getFullYear(), date.getMonth(), date.getDate()));
+  return formatLocalDateTime(startOfLocalDay(date));
 }
 
-function localPeriodBoundaries(now = new Date()) {
-  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-  const tomorrow = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
-  const yesterday = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1);
-  const month = new Date(now.getFullYear(), now.getMonth(), 1);
-  const nextMonth = new Date(now.getFullYear(), now.getMonth() + 1, 1);
-  const previousMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
-  const weekday = today.getDay() || 7;
-  const week = new Date(now.getFullYear(), now.getMonth(), now.getDate() - weekday + 1);
-  const previousWeek = new Date(week.getFullYear(), week.getMonth(), week.getDate() - 7);
-  const lastSevenDays = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 6);
+function localPeriodBoundaries(now = getLocalNow()) {
+  const today = startOfLocalDay(now);
+  const parts = dateTimeParts(today);
+  const tomorrow = addLocalDays(today, 1);
+  const yesterday = addLocalDays(today, -1);
+  const month = createLocalDate(parts.year, parts.month, 1);
+  const nextMonth = parts.month === 12
+    ? createLocalDate(parts.year + 1, 1, 1)
+    : createLocalDate(parts.year, parts.month + 1, 1);
+  const previousMonth = parts.month === 1
+    ? createLocalDate(parts.year - 1, 12, 1)
+    : createLocalDate(parts.year, parts.month - 1, 1);
+  const weekday = new Date(Date.UTC(parts.year, parts.month - 1, parts.day)).getUTCDay() || 7;
+  const week = addLocalDays(today, -weekday + 1);
+  const previousWeek = addLocalDays(week, -7);
+  const lastSevenDays = addLocalDays(today, -6);
   return {
     today: localDateBoundary(today),
     tomorrow: localDateBoundary(tomorrow),
@@ -469,8 +481,8 @@ router.patch('/productos/:id/restaurar', async (req, res, next) => {
 router.delete('/productos/:id', async (req, res, next) => {
   try {
     const [result] = await pool.query(
-      'UPDATE producto SET activo=0, eliminadoEn=NOW() WHERE idProducto=? AND idTienda=? AND activo=1',
-      [req.params.id, tenantId(req)]
+      'UPDATE producto SET activo=0, eliminadoEn=? WHERE idProducto=? AND idTienda=? AND activo=1',
+      [formatLocalDateTime(), req.params.id, tenantId(req)]
     );
     if (!result.affectedRows) return res.status(404).json({ error: 'Producto no encontrado.' });
     res.json({ message: 'Producto ocultado. Su stock e historial se conservaron.' });
@@ -510,7 +522,12 @@ function crudRoutes(base, table, idField, protectedDeleteMessage) {
           [idTienda, nombre, telefono, nullableText(req.body.direccion)]
         );
       } else {
-        await connection.query('INSERT INTO cliente (idTienda, nombre, telefono) VALUES (?, ?, ?)', [idTienda, nombre, telefono]);
+        const localDateTime = formatLocalDateTime();
+        await connection.query(
+          `INSERT INTO cliente (idTienda, nombre, telefono, creadoEn, actualizadoEn, idAdministradorCrea)
+           VALUES (?, ?, ?, ?, ?, ?)`,
+          [idTienda, nombre, telefono, localDateTime, localDateTime, req.session.admin.id]
+        );
       }
       await connection.commit();
       res.status(201).json({ message: 'Registro guardado.' });
@@ -1056,10 +1073,10 @@ function gainRange(period, desde, hasta) {
   if (period === 'semana') return ['v.fecha>=? AND v.fecha<?', [current.week, current.tomorrow]];
   if (period === 'mes') return ['v.fecha>=? AND v.fecha<?', [current.month, current.nextMonth]];
   if (period === 'anio') {
-    const now = new Date();
+    const parts = dateTimeParts(getLocalNow());
     return ['v.fecha>=? AND v.fecha<?', [
-      localDateBoundary(new Date(now.getFullYear(), 0, 1)),
-      localDateBoundary(new Date(now.getFullYear() + 1, 0, 1))
+      localDateBoundary(createLocalDate(parts.year, 1, 1)),
+      localDateBoundary(createLocalDate(parts.year + 1, 1, 1))
     ]];
   }
   return ['DATE(v.fecha) BETWEEN ? AND ?', [desde || '1000-01-01', hasta || '9999-12-31']];

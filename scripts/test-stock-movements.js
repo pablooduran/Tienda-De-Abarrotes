@@ -1,8 +1,9 @@
 const crypto = require('crypto');
 const bcrypt = require('bcryptjs');
-const mysql = require('mysql2/promise');
+const { createDatabaseConnection } = require('../config/database-connection');
 const { requireLocalhostDatabase } = require('../config/env');
 const { insertStockMovement } = require('../services/stock-movement-service');
+const { addLocalDays, formatLocalDateTime, getLocalNow } = require('../utils/local-datetime');
 
 function assert(condition, message) {
   if (!condition) throw new Error(message);
@@ -149,7 +150,7 @@ async function main() {
   let connection;
 
   try {
-    connection = await mysql.createConnection(config);
+    connection = await createDatabaseConnection(config);
     const migration = await scalar(connection,
       "SELECT COUNT(*) total FROM schema_migrations WHERE nombre='007_movimientos_stock.sql'");
     assert(migration === 1, 'La migracion 007 debe estar aplicada.');
@@ -443,7 +444,7 @@ async function main() {
       'El servicio permitio vincular un movimiento a venta y compra simultaneamente.');
 
     const beforeRollbackStock = Number((await stockOf(connection, fixture.storeA, zero.idProducto)).stockUnidadesTotal);
-    const rollbackConnection = await mysql.createConnection(config);
+    const rollbackConnection = await createDatabaseConnection(config);
     try {
       await rollbackConnection.beginTransaction();
       await rollbackConnection.query(
@@ -507,12 +508,12 @@ async function main() {
       [fixture.storeA, fixture.storeA]);
     assert(duplicateReferences === 0, 'Existen referencias de venta o compra duplicadas.');
 
+    const expirationReference = getLocalNow();
     await connection.query(
-      `UPDATE suscripcionTienda SET estado='activa',
-       fechaInicio=DATE_SUB(CURRENT_TIMESTAMP, INTERVAL 30 DAY),
-       fechaFin=DATE_SUB(CURRENT_TIMESTAMP, INTERVAL 1 DAY)
+      `UPDATE suscripcionTienda SET estado='activa', fechaInicio=?, fechaFin=?
        WHERE idSuscripcion=?`,
-      [fixture.subscriptionA]
+      [formatLocalDateTime(addLocalDays(expirationReference, -30)),
+        formatLocalDateTime(addLocalDays(expirationReference, -1)), fixture.subscriptionA]
     );
     await expect(ownerA, '/api/movimientos-stock', {}, 200,
       'Suscripcion vencida consulta movimientos');

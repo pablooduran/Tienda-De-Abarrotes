@@ -1,9 +1,9 @@
 const crypto = require('crypto');
 const bcrypt = require('bcryptjs');
 const ExcelJS = require('exceljs');
-const mysql = require('mysql2/promise');
+const { createDatabaseConnection } = require('../config/database-connection');
 const { requireLocalhostDatabase } = require('../config/env');
-const { formatLocalDateTime } = require('../utils/local-datetime');
+const { addLocalDays, formatLocalDateTime, getLocalNow } = require('../utils/local-datetime');
 
 function assert(condition, message) {
   if (!condition) throw new Error(message);
@@ -140,7 +140,7 @@ async function main() {
   let connection;
 
   try {
-    connection = await mysql.createConnection(config);
+    connection = await createDatabaseConnection(config);
     const [[migration]] = await connection.query(
       "SELECT COUNT(*) total FROM schema_migrations WHERE nombre='006_catalogo_maestro.sql'"
     );
@@ -313,10 +313,12 @@ async function main() {
       }
     }, 409, 'Limite basico de productos');
 
+    const expirationReference = getLocalNow();
     await connection.query(
-      `UPDATE suscripcionTienda SET estado='activa', fechaInicio=DATE_SUB(CURRENT_TIMESTAMP, INTERVAL 30 DAY),
-       fechaFin=DATE_SUB(CURRENT_TIMESTAMP, INTERVAL 1 DAY) WHERE idSuscripcion=?`,
-      [fixture.basicSubscription]
+      `UPDATE suscripcionTienda SET estado='activa', fechaInicio=?, fechaFin=?
+       WHERE idSuscripcion=?`,
+      [formatLocalDateTime(addLocalDays(expirationReference, -30)),
+        formatLocalDateTime(addLocalDays(expirationReference, -1)), fixture.basicSubscription]
     );
     await expect(basicSession, '/api/catalogo-maestro', {}, 200, 'Suscripcion vencida consulta catalogo');
     await expect(basicSession, '/api/catalogo-maestro/agregar', {

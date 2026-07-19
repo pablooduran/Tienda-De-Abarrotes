@@ -156,7 +156,7 @@ function logRejectedStockAction(event, context = {}) {
     idAdministrador: Number(context.idAdministrador) || null,
     idProducto: Number(context.idProducto) || null,
     codigo: cleanText(context.codigo, 50),
-    fecha: new Date().toISOString()
+    fecha: formatLocalDateTime()
   };
   console.warn('Accion sensible de stock rechazada:', JSON.stringify(safeContext));
 }

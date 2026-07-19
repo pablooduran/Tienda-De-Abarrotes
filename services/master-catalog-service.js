@@ -1,4 +1,5 @@
 const crypto = require('crypto');
+const { formatLocalDateTime } = require('../utils/local-datetime');
 
 const LOCAL_CATEGORIES = Object.freeze([
   'LACTEOS', 'LIMPIEZA', 'BEBIDAS', 'SNACKS', 'ABARROTES',
@@ -159,9 +160,10 @@ async function duplicateCandidates(connection, data, excludeId = null) {
 
 async function auditCatalog(connection, idAdministrador, accion, entidad, idEntidad, detail = null) {
   await connection.query(
-    `INSERT INTO auditoriaCatalogo (idAdministrador, accion, entidad, idEntidad, detalle)
-     VALUES (?, ?, ?, ?, ?)`,
-    [idAdministrador, accion, entidad, idEntidad || null, detail ? JSON.stringify(detail) : null]
+    `INSERT INTO auditoriaCatalogo (idAdministrador, accion, entidad, idEntidad, detalle, creadoEn)
+     VALUES (?, ?, ?, ?, ?, ?)`,
+    [idAdministrador, accion, entidad, idEntidad || null,
+      detail ? JSON.stringify(detail) : null, formatLocalDateTime()]
   );
 }
 
@@ -171,16 +173,17 @@ async function createMasterProduct(connection, input, idAdministrador) {
   if (duplicates.length && input.confirmarDuplicado !== true) {
     throw catalogError(409, 'Se encontraron productos maestros posiblemente duplicados.', 'POSSIBLE_DUPLICATE', duplicates);
   }
+  const localDateTime = formatLocalDateTime();
   const [result] = await connection.query(
     `INSERT INTO productoMaestro
       (nombre, nombreNormalizado, descripcion, idCategoriaMaestra, idMarcaMaestra, codigoBarras,
        presentacion, contenidoCantidad, contenidoUnidad, unidadesPorPaquete,
-       permiteVentaPorUnidad, permiteVentaPorPaquete, huellaDuplicado, activo)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       permiteVentaPorUnidad, permiteVentaPorPaquete, huellaDuplicado, activo, creadoEn, actualizadoEn)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [data.nombre, data.nombreNormalizado, data.descripcion, data.idCategoriaMaestra, data.idMarcaMaestra,
       data.codigoBarras, data.presentacion, data.contenidoCantidad, data.contenidoUnidad,
       data.unidadesPorPaquete, data.permiteVentaPorUnidad, data.permiteVentaPorPaquete,
-      data.huellaDuplicado, data.activo]
+      data.huellaDuplicado, data.activo, localDateTime, localDateTime]
   );
   await auditCatalog(connection, idAdministrador, 'crear', 'productoMaestro', result.insertId, {
     nombre: data.nombre,
@@ -209,12 +212,12 @@ async function updateMasterProduct(connection, idProductoMaestro, input, idAdmin
   await connection.query(
     `UPDATE productoMaestro SET nombre=?, nombreNormalizado=?, descripcion=?, idCategoriaMaestra=?,
        idMarcaMaestra=?, codigoBarras=?, presentacion=?, contenidoCantidad=?, contenidoUnidad=?,
-       unidadesPorPaquete=?, permiteVentaPorUnidad=?, permiteVentaPorPaquete=?, huellaDuplicado=?, activo=?
+       unidadesPorPaquete=?, permiteVentaPorUnidad=?, permiteVentaPorPaquete=?, huellaDuplicado=?, activo=?, actualizadoEn=?
      WHERE idProductoMaestro=?`,
     [data.nombre, data.nombreNormalizado, data.descripcion, data.idCategoriaMaestra, data.idMarcaMaestra,
       data.codigoBarras, data.presentacion, data.contenidoCantidad, data.contenidoUnidad,
       data.unidadesPorPaquete, data.permiteVentaPorUnidad, data.permiteVentaPorPaquete,
-      data.huellaDuplicado, data.activo, id]
+      data.huellaDuplicado, data.activo, formatLocalDateTime(), id]
   );
   await auditCatalog(connection, idAdministrador, 'editar', 'productoMaestro', id, {
     nombre: data.nombre,
@@ -236,9 +239,11 @@ async function createTaxonomy(connection, kind, name, idAdministrador) {
     [normalized]
   );
   if (existing.length) throw catalogError(409, 'Ya existe un registro con ese nombre normalizado.');
+  const localDateTime = formatLocalDateTime();
   const [result] = await connection.query(
-    `INSERT INTO ${definition.table} (nombre, nombreNormalizado, activo) VALUES (?, ?, 1)`,
-    [display, normalized]
+    `INSERT INTO ${definition.table}
+     (nombre, nombreNormalizado, activo, creadoEn, actualizadoEn) VALUES (?, ?, 1, ?, ?)`,
+    [display, normalized, localDateTime, localDateTime]
   );
   await auditCatalog(connection, idAdministrador, 'crear', definition.entity, result.insertId, { nombre: display });
   return { id: result.insertId, nombre: display };
@@ -280,8 +285,8 @@ async function updateTaxonomy(connection, kind, idValue, input, idAdministrador)
   );
   if (duplicate.length) throw catalogError(409, 'Ya existe un registro con ese nombre normalizado.');
   await connection.query(
-    `UPDATE ${definition.table} SET nombre=?, nombreNormalizado=? WHERE ${definition.id}=?`,
-    [name, normalized, id]
+    `UPDATE ${definition.table} SET nombre=?, nombreNormalizado=?, actualizadoEn=? WHERE ${definition.id}=?`,
+    [name, normalized, formatLocalDateTime(), id]
   );
   if (kind === 'marca') {
     const [products] = await connection.query(
@@ -292,8 +297,8 @@ async function updateTaxonomy(connection, kind, idValue, input, idAdministrador)
     for (const product of products) {
       const fingerprint = duplicateFingerprint(product, normalized);
       await connection.query(
-        'UPDATE productoMaestro SET huellaDuplicado=? WHERE idProductoMaestro=?',
-        [fingerprint, product.idProductoMaestro]
+        'UPDATE productoMaestro SET huellaDuplicado=?, actualizadoEn=? WHERE idProductoMaestro=?',
+        [fingerprint, formatLocalDateTime(), product.idProductoMaestro]
       );
     }
   }

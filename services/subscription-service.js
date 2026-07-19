@@ -1,3 +1,10 @@
+const {
+  addLocalDays,
+  formatLocalDateTime,
+  getLocalNow,
+  parseLocalDateTime
+} = require('../utils/local-datetime');
+
 const LIMITS = Object.freeze({
   propietarios: {
     column: 'limitePropietarios',
@@ -34,23 +41,19 @@ function cleanText(value) {
   return typeof value === 'string' ? value.trim() : '';
 }
 
-function toMysqlDate(date) {
-  const pad = (value) => String(value).padStart(2, '0');
-  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} `
-    + `${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`;
-}
-
 function parseDate(value, label) {
   if (!value) return null;
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) throw httpError(400, `${label} no es valida.`);
-  return date;
+  try {
+    return parseLocalDateTime(value);
+  } catch {
+    throw httpError(400, `${label} no es valida.`);
+  }
 }
 
-function effectiveStatus(subscription, now = new Date()) {
+function effectiveStatus(subscription, now = getLocalNow()) {
   if (!subscription?.idSuscripcion) return 'sin_suscripcion';
-  const start = new Date(subscription.fechaInicio);
-  const end = new Date(subscription.fechaFin);
+  const start = parseLocalDateTime(subscription.fechaInicio);
+  const end = parseLocalDateTime(subscription.fechaFin);
   if (subscription.estado === 'cancelada') return 'cancelada';
   if (subscription.estado === 'suspendida') return 'suspendida';
   if (subscription.estado === 'vencida' || now >= end) return 'vencida';
@@ -97,6 +100,7 @@ async function enabledFeatures(connection, idPlan) {
 }
 
 async function resolveSubscriptionContext(connection, idTienda) {
+  const localNow = formatLocalDateTime();
   const [rows] = await connection.query(
     `SELECT t.idTienda, t.nombre AS tiendaNombre, t.slug AS tiendaSlug,
        t.activo AS tiendaActiva, t.estado AS tiendaEstado,
@@ -110,18 +114,18 @@ async function resolveSubscriptionContext(connection, idTienda) {
        WHERE s2.idTienda=t.idTienda
        ORDER BY
          CASE
-           WHEN s2.estado IN ('activa','pendiente') AND CURRENT_TIMESTAMP>=s2.fechaInicio AND CURRENT_TIMESTAMP<s2.fechaFin THEN 0
-           WHEN s2.estado='pendiente' AND s2.fechaInicio>CURRENT_TIMESTAMP THEN 1
+           WHEN s2.estado IN ('activa','pendiente') AND ?>=s2.fechaInicio AND ?<s2.fechaFin THEN 0
+           WHEN s2.estado='pendiente' AND s2.fechaInicio>? THEN 1
            WHEN s2.estado='suspendida' THEN 2
            ELSE 3
          END,
-         CASE WHEN s2.fechaInicio>CURRENT_TIMESTAMP THEN s2.fechaInicio END ASC,
+         CASE WHEN s2.fechaInicio>? THEN s2.fechaInicio END ASC,
          s2.idSuscripcion DESC
        LIMIT 1
      )
      LEFT JOIN plan p ON p.idPlan=s.idPlan
      WHERE t.idTienda=?`,
-    [idTienda]
+    [localNow, localNow, localNow, localNow, idTienda]
   );
   if (!rows.length) throw httpError(404, 'La tienda no existe.');
   const row = rows[0];
@@ -137,7 +141,7 @@ async function resolveSubscriptionContext(connection, idTienda) {
     proveedores: row.limiteProveedores === null ? null : Number(row.limiteProveedores)
   };
   const daysRemaining = row.fechaFin
-    ? Math.max(0, Math.ceil((new Date(row.fechaFin).getTime() - Date.now()) / 86400000))
+    ? Math.max(0, Math.ceil((parseLocalDateTime(row.fechaFin).getTime() - getLocalNow().getTime()) / 86400000))
     : null;
   return {
     tienda: {
@@ -197,7 +201,8 @@ async function createSubscription(connection, input) {
   const tipo = cleanText(input.tipo).toLowerCase();
   if (!SUBSCRIPTION_TYPES.has(tipo)) throw httpError(400, 'El tipo de suscripcion no es valido.');
 
-  const start = parseDate(input.fechaInicio, 'La fecha de inicio') || new Date();
+  const now = getLocalNow();
+  const start = parseDate(input.fechaInicio, 'La fecha de inicio') || now;
   let end = parseDate(input.fechaFin, 'La fecha de vencimiento');
   if (!end) {
     const defaultDays = tipo === 'prueba' ? 14 : Number(plan.duracionDias || 30);
@@ -208,7 +213,7 @@ async function createSubscription(connection, input) {
     if (!Number.isInteger(duration) || duration < 1 || duration > maximum) {
       throw httpError(400, `La duracion debe ser un entero entre 1 y ${maximum} dias.`);
     }
-    end = new Date(start.getTime() + duration * 86400000);
+    end = addLocalDays(start, duration);
   }
   if (end <= start) throw httpError(400, 'La fecha de vencimiento debe ser posterior a la fecha de inicio.');
 
@@ -216,26 +221,29 @@ async function createSubscription(connection, input) {
   if (observation && observation.length > 500) {
     throw httpError(400, 'La observacion no puede superar 500 caracteres.');
   }
-  const startSql = toMysqlDate(start);
-  const endSql = toMysqlDate(end);
-  const status = start > new Date() ? 'pendiente' : 'activa';
+  const startSql = formatLocalDateTime(start);
+  const endSql = formatLocalDateTime(end);
+  const localNow = formatLocalDateTime(now);
+  const status = start > now ? 'pendiente' : 'activa';
 
   await connection.query(
-    `UPDATE suscripcionTienda SET estado='vencida'
-     WHERE idTienda=? AND estado='activa' AND fechaFin<=CURRENT_TIMESTAMP`,
-    [idTienda]
+    `UPDATE suscripcionTienda SET estado='vencida', actualizadoEn=?
+     WHERE idTienda=? AND estado='activa' AND fechaFin<=?`,
+    [localNow, idTienda, localNow]
   );
   await connection.query(
-    `UPDATE suscripcionTienda SET estado='cancelada'
+    `UPDATE suscripcionTienda SET estado='cancelada', actualizadoEn=?
      WHERE idTienda=? AND estado IN ('pendiente','activa','suspendida')
        AND fechaInicio<? AND ?<fechaFin`,
-    [idTienda, endSql, startSql]
+    [localNow, idTienda, endSql, startSql]
   );
   const [result] = await connection.query(
     `INSERT INTO suscripcionTienda
-      (idTienda, idPlan, tipo, estado, fechaInicio, fechaFin, renovacionAutomatica, observacion, creadoPor)
-     VALUES (?, ?, ?, ?, ?, ?, 0, ?, ?)`,
-    [idTienda, plan.idPlan, tipo, status, startSql, endSql, observation, input.creadoPor || null]
+      (idTienda, idPlan, tipo, estado, fechaInicio, fechaFin, renovacionAutomatica,
+       observacion, creadoPor, creadoEn, actualizadoEn)
+     VALUES (?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?)`,
+    [idTienda, plan.idPlan, tipo, status, startSql, endSql, observation,
+      input.creadoPor || null, localNow, localNow]
   );
   return {
     idSuscripcion: result.insertId,

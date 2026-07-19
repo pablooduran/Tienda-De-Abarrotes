@@ -1,6 +1,6 @@
 const crypto = require('crypto');
 const bcrypt = require('bcryptjs');
-const mysql = require('mysql2/promise');
+const { createDatabaseConnection } = require('../config/database-connection');
 const { requireLocalhostDatabase } = require('../config/env');
 const { formatLocalDateTime } = require('../utils/local-datetime');
 
@@ -145,7 +145,7 @@ async function main() {
   let deletedUser = null;
 
   try {
-    connection = await mysql.createConnection(config);
+    connection = await createDatabaseConnection(config);
     const plans = await resolvePlans(connection);
     const superHash = await bcrypt.hash(superPassword, 12);
     await connection.query(
