@@ -34,13 +34,16 @@
     "test:customers-credit": "node scripts/test-customers-credit.js",
     "test:customers-credit-frontend": "node scripts/test-customers-credit-frontend.js",
     "test:session-revocation": "node scripts/test-session-revocation.js",
-    "test:timezone-tls": "node scripts/test-timezone-tls.js"
+    "test:timezone-tls": "node scripts/test-timezone-tls.js",
+    "test:web-security": "node scripts/test-web-security.js",
+    "check:web-security": "node scripts/check-web-security.js"
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",
     "dotenv": "^16.4.5",
     "exceljs": "^4.4.0",
     "express": "^4.19.2",
+    "express-rate-limit": "^8.6.0",
     "express-mysql-session": "^3.0.3",
     "express-session": "^1.18.0",
     "helmet": "^7.1.0",

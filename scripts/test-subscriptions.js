@@ -3,6 +3,7 @@ const bcrypt = require('bcryptjs');
 const { createDatabaseConnection } = require('../config/database-connection');
 const { requireLocalhostDatabase } = require('../config/env');
 const { addLocalDays, formatLocalDateTime, getLocalNow, parseLocalDateTime } = require('../utils/local-datetime');
+const { applyTestRequestSecurity } = require('./http-test-security');
 
 function assert(condition, message) {
   if (!condition) throw new Error(message);
@@ -21,6 +22,7 @@ class HttpSession {
       request.headers['content-type'] = 'application/json';
       request.body = JSON.stringify(request.body);
     }
+    applyTestRequestSecurity(this.baseUrl, request);
     if (this.cookie) request.headers.cookie = this.cookie;
     const response = await fetch(`${this.baseUrl}${path}`, { ...request, redirect: 'manual' });
     const setCookie = response.headers.get('set-cookie');
@@ -89,6 +91,19 @@ function containsPassword(value) {
   return Object.entries(value).some(([key, item]) => (
     ['password', 'passwordHash', 'hash'].includes(key) || containsPassword(item)
   ));
+}
+
+function assertUniformLoginRejection(body, referenceBody, forbiddenValues = []) {
+  assert(body?.code === 'INVALID_CREDENTIALS', 'El login de tienda inactiva no devolvio INVALID_CREDENTIALS.');
+  assert(body?.error === 'Credenciales incorrectas.', 'El login de tienda inactiva expuso un mensaje diferente.');
+  assert(body.error === referenceBody.error && body.code === referenceBody.code,
+    'El login de tienda inactiva no coincide con una contrasena incorrecta.');
+  const unexpectedKeys = Object.keys(body || {}).filter((key) => !['error', 'code', 'requestId'].includes(key));
+  assert(unexpectedKeys.length === 0, `El login expuso campos internos: ${unexpectedKeys.join(', ')}.`);
+  const serialized = JSON.stringify({ error: body?.error, code: body?.code }).toLowerCase();
+  for (const value of forbiddenValues.filter(Boolean)) {
+    assert(!serialized.includes(String(value).toLowerCase()), `El login expuso informacion sobre ${value}.`);
+  }
 }
 
 const BASIC_REQUIRED_FEATURES = Object.freeze([
@@ -408,6 +423,14 @@ async function main() {
     await expect(basicSession, '/auth/login', {
       method: 'POST', body: { usuario: basic.body.propietario.usuario, password: basic.password }
     }, 200, 'Login tienda basica');
+    const uniformLoginSession = new HttpSession(baseUrl);
+    sessions.push(uniformLoginSession);
+    const wrongPasswordLogin = await expect(uniformLoginSession, '/auth/login', {
+      method: 'POST', body: { usuario: basic.body.propietario.usuario, password: `${basic.password}-incorrecta` }
+    }, 401, 'Contrasena incorrecta antes de desactivar tienda');
+    assert(wrongPasswordLogin.code === 'INVALID_CREDENTIALS'
+      && wrongPasswordLogin.error === 'Credenciales incorrectas.',
+    'La contrasena incorrecta no usa el contrato uniforme de login.');
     const context = await expect(basicSession, '/api/contexto', {}, 200, 'Contexto tienda basica');
     assertBasicContext(context, basic.body.slug, resolvedPlans.basic.codigo);
     assert(!Object.prototype.hasOwnProperty.call(context.plan, 'precioMensual'), 'El contexto expuso el precio interno.');
@@ -560,11 +583,17 @@ async function main() {
       basicSession, '/api/productos', {}, 403, 'Sesion existente bloqueada por tienda inactiva'
     );
     assert(revokedStoreSession.code === 'STORE_UNAVAILABLE', 'La tienda inactiva no devolvio STORE_UNAVAILABLE.');
-    await expect(basicSession, '/auth/login', {
+    const inactiveStoreLogin = await expect(basicSession, '/auth/login', {
       method: 'POST', body: { usuario: basic.body.propietario.usuario, password: basic.password }
-    }, 403, 'Tienda inactiva bloquea login');
+    }, 401, 'Tienda inactiva bloquea login nuevo');
+    assertUniformLoginRejection(inactiveStoreLogin, wrongPasswordLogin, [
+      basic.body.propietario.usuario, basic.body.slug, 'tienda', 'inactiva', 'store_unavailable'
+    ]);
     await expect(superSession, `/api/admin/tiendas/${fixture.basicStore}/activar`, { method: 'PATCH' }, 200, 'Reactivacion administrativa');
     await expect(basicSession, '/api/productos', {}, 401, 'Reactivar no revive la sesion anterior');
+    await expect(basicSession, '/auth/login', {
+      method: 'POST', body: { usuario: basic.body.propietario.usuario, password: basic.password }
+    }, 200, 'Login nuevo funciona despues de reactivar tienda');
 
     console.log('Prueba de planes y suscripciones completada correctamente.');
   } finally {

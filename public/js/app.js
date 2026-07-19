@@ -176,16 +176,14 @@ async function api(url, options = {}) {
     throw new Error('La suscripción está en modo de solo lectura. Puedes consultar los datos, pero no realizar cambios.');
   }
   const { allowReadOnlyWrite: _allowReadOnlyWrite, ...fetchOptions } = options;
-  const response = await fetch(url, {
-    headers: { 'Content-Type': 'application/json', ...(options.headers || {}) },
-    ...fetchOptions
+  const response = await SecurityHttp.secureFetch(url, {
+    ...fetchOptions,
+    headers: { 'Content-Type': 'application/json', ...(options.headers || {}) }
   });
-  if (response.status === 401) window.location.href = '/login.html';
   const data = await response.json().catch(() => ({}));
   if (!response.ok) {
-    const error = new Error(data.error || 'No se pudo completar la operación.');
-    error.code = data.code || null;
-    error.status = response.status;
+    const error = SecurityHttp.errorFromResponse(response, data, 'No se pudo completar la operación.');
+    if (response.status === 401) window.location.href = '/login.html';
     throw error;
   }
   return data;
@@ -347,7 +345,7 @@ async function loadView(id) {
 function chartTooltip(canvas) {
   const panel = canvas.closest('.panel') || canvas.parentElement;
   if (!panel) return null;
-  panel.style.position = panel.style.position || 'relative';
+  panel.classList.add('chart-tooltip-host');
   let tooltip = panel.querySelector('.chart-tooltip');
   if (!tooltip) {
     tooltip = document.createElement('div');
@@ -377,8 +375,6 @@ function bindChartTooltip(canvas, hitAreas) {
       return;
     }
     tooltip.innerHTML = hit.text;
-    tooltip.style.left = `${Math.min(x + 14, rect.width - 130)}px`;
-    tooltip.style.top = `${Math.max(10, y - 34)}px`;
     tooltip.classList.add('show');
   };
   canvas.onmouseleave = () => tooltip.classList.remove('show');
@@ -1996,6 +1992,7 @@ async function copyReceiptText(text) {
   if (navigator.clipboard?.writeText) return navigator.clipboard.writeText(text);
   const area = document.createElement('textarea');
   area.value = text;
+  area.className = 'clipboard-fallback';
   document.body.appendChild(area);
   area.select();
   document.execCommand('copy');
@@ -2024,13 +2021,9 @@ function showSaleReceipt(receipt) {
     if (whatsappUrl) window.open(whatsappUrl, '_blank', 'noopener');
   });
   modalRoot.querySelector('[data-receipt-print]').addEventListener('click', () => {
-    const printWindow = window.open('', '_blank', 'width=520,height=720');
-    if (!printWindow) return showError('El navegador bloqueó la ventana de impresión.');
-    printWindow.opener = null;
-    printWindow.document.write(`<html><head><title>${escapeHtml(receipt.venta.codigoComprobante)}</title><style>body{font-family:Arial,sans-serif;max-width:420px;margin:20px auto}.receipt header,.receipt footer{text-align:center}.receipt header>*{display:block;margin:4px}.receipt-lines>div,.receipt-totals span{display:flex;justify-content:space-between;gap:12px;padding:6px 0;border-bottom:1px solid #ddd}.receipt-lines small{display:block;color:#555}.receipt-grand-total{font-size:1.2rem;font-weight:bold}</style></head><body>${receiptHtml(receipt)}</body></html>`);
-    printWindow.document.close();
-    printWindow.focus();
-    printWindow.print();
+    document.body.classList.add('printing-receipt');
+    window.addEventListener('afterprint', () => document.body.classList.remove('printing-receipt'), { once: true });
+    window.print();
   });
 }
 
@@ -2414,11 +2407,11 @@ async function downloadFinancialExport(type, query, button = null) {
   const originalLabel = button?.textContent;
   try {
     if (button) { button.disabled = true; button.textContent = 'Generando...'; }
-    const response = await fetch(`/api/exportaciones/${type}.xlsx?${query}`, { credentials: 'same-origin' });
+    const response = await SecurityHttp.secureFetch(`/api/exportaciones/${type}.xlsx?${query}`);
     if (response.status === 401) return (window.location.href = '/login.html');
     if (!response.ok) {
       const data = await response.json().catch(() => ({}));
-      throw new Error(data.error || 'No se pudo generar la exportación.');
+      throw SecurityHttp.errorFromResponse(response, data, 'No se pudo generar la exportación.');
     }
     const blob = await response.blob();
     const disposition = response.headers.get('content-disposition') || '';
@@ -2927,11 +2920,11 @@ async function downloadInventoryExport() {
   button.textContent = 'Generando archivo...';
   try {
     const query = inventoryFilterQuery().toString();
-    const response = await fetch(`/api/inventario-inteligente/exportacion.xlsx?${query}`, { credentials: 'same-origin' });
+    const response = await SecurityHttp.secureFetch(`/api/inventario-inteligente/exportacion.xlsx?${query}`);
     if (response.status === 401) window.location.href = '/login.html';
     if (!response.ok) {
       const body = await response.json().catch(() => ({}));
-      throw new Error(body.error || 'No se pudo generar la exportación.');
+      throw SecurityHttp.errorFromResponse(response, body, 'No se pudo generar la exportación.');
     }
     const blob = await response.blob();
     const disposition = response.headers.get('content-disposition') || '';
@@ -3190,11 +3183,11 @@ async function downloadLotExport() {
   button.disabled = true;
   button.textContent = 'Generando archivo...';
   try {
-    const response = await fetch(`/api/lotes/exportacion.xlsx?${lotFilterQuery(1)}`, { credentials: 'same-origin' });
+    const response = await SecurityHttp.secureFetch(`/api/lotes/exportacion.xlsx?${lotFilterQuery(1)}`);
     if (response.status === 401) window.location.href = '/login.html';
     if (!response.ok) {
       const body = await response.json().catch(() => ({}));
-      throw new Error(body.error || 'No se pudo generar la exportación.');
+      throw SecurityHttp.errorFromResponse(response, body, 'No se pudo generar la exportación.');
     }
     const blob = await response.blob();
     const disposition = response.headers.get('content-disposition') || '';

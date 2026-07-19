@@ -235,6 +235,8 @@ body {
 }
 .chart-tooltip {
   position: absolute;
+  top: 10px;
+  right: 10px;
   z-index: 4;
   display: none;
   min-width: 120px;
@@ -250,6 +252,16 @@ body {
 }
 .chart-tooltip.show {
   display: block;
+}
+.chart-tooltip-host { position: relative; }
+.clipboard-fallback {
+  position: fixed;
+  left: -10000px;
+  top: 0;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  pointer-events: none;
 }
 .toolbar {
   display: grid;
@@ -1907,4 +1919,16 @@ textarea:focus-visible { outline: 3px solid rgba(40, 106, 89, .28); outline-offs
   .statement-modal { width: 100%; max-height: none; overflow: visible; padding: 0; border: 0; box-shadow: none; }
   .account-statement { width: 190mm; max-width: 100%; margin: 0 auto; font-size: 11pt; }
   .statement-row { break-inside: avoid; }
+  body.printing-receipt > * { display: none !important; }
+  body.printing-receipt #modalRoot,
+  body.printing-receipt .modal-backdrop,
+  body.printing-receipt .receipt-modal,
+  body.printing-receipt .modal-body,
+  body.printing-receipt .receipt { display: block !important; }
+  body.printing-receipt #modalRoot,
+  body.printing-receipt .modal-backdrop,
+  body.printing-receipt .receipt-modal { position: static; width: 100%; max-width: none; max-height: none; overflow: visible; padding: 0; border: 0; box-shadow: none; }
+  body.printing-receipt .receipt { max-width: 80mm; margin: 0 auto; padding: 0; border: 0; }
+  body.printing-receipt .receipt-actions,
+  body.printing-receipt .receipt-modal > h3 { display: none !important; }
 }

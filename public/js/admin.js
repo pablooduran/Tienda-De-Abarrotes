@@ -135,7 +135,7 @@ async function api(path, options = {}) {
     request.headers['Content-Type'] = 'application/json';
     request.body = JSON.stringify(request.body);
   }
-  const response = await fetch(path, request);
+  const response = await SecurityHttp.secureFetch(path, request);
   const text = await response.text();
   let body = null;
   try {
@@ -148,8 +148,7 @@ async function api(path, options = {}) {
     throw new Error('La sesión finalizó.');
   }
   if (!response.ok) {
-    const error = new Error(body?.error || 'No se pudo completar la operación.');
-    error.status = response.status;
+    const error = SecurityHttp.errorFromResponse(response, body, 'No se pudo completar la operación.');
     error.body = body;
     throw error;
   }
@@ -941,7 +940,7 @@ async function logout() {
     'Cerrar sesión'
   );
   if (!confirmed) return;
-  await fetch('/auth/logout', { method: 'POST' });
+  await SecurityHttp.secureFetch('/auth/logout', { method: 'POST' });
   window.location.href = '/login.html';
 }
 
@@ -998,7 +997,7 @@ document.querySelectorAll('.admin-sidebar .nav-link').forEach((link) => {
 
 async function initialize() {
   try {
-    const response = await fetch('/auth/status');
+    const response = await SecurityHttp.secureFetch('/auth/status');
     const status = await response.json();
     if (!status.authenticated) {
       window.location.href = '/login.html';

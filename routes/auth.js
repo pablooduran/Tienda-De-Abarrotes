@@ -1,5 +1,6 @@
 const express = require('express');
 const bcrypt = require('bcryptjs');
+const crypto = require('crypto');
 const pool = require('../config/db');
 const { requireAuth } = require('../middleware/auth');
 const {
@@ -9,6 +10,14 @@ const {
 } = require('../services/session-validation-service');
 
 const router = express.Router();
+const dummyPasswordHash = bcrypt.hash(crypto.randomBytes(32).toString('hex'), 12);
+
+function invalidCredentials(res) {
+  return res.status(401).json({
+    error: 'Credenciales incorrectas.',
+    code: 'INVALID_CREDENTIALS'
+  });
+}
 
 function regenerateSession(req) {
   return new Promise((resolve, reject) => {
@@ -37,42 +46,42 @@ function validateNewPassword(password, confirmation) {
 
 router.post('/login', async (req, res, next) => {
   try {
-    const { usuario, password } = req.body;
+    const usuario = String(req.body?.usuario || '').trim().slice(0, 80);
+    const password = req.body?.password;
     if (!usuario || !password) {
       return res.status(400).json({ error: 'Usuario y contrasena son obligatorios.' });
     }
 
     const [rows] = await pool.query(
-      `SELECT a.idAdministrador, a.usuario, a.password, a.rol, a.idTienda, a.versionSesion,
+      `SELECT a.idAdministrador, a.usuario, a.password, a.rol, a.idTienda, a.activo, a.versionSesion,
         t.activo AS tiendaActiva, t.estado AS estadoTienda
        FROM administrador a
        LEFT JOIN tienda t ON t.idTienda=a.idTienda
-       WHERE a.usuario=? AND a.activo=1
+       WHERE a.usuario=?
        LIMIT 1`,
       [usuario]
     );
     if (rows.length === 0) {
-      return res.status(401).json({ error: 'Credenciales incorrectas.' });
+      await bcrypt.compare(password, await dummyPasswordHash);
+      return invalidCredentials(res);
     }
 
     const ok = await bcrypt.compare(password, rows[0].password);
-    if (!ok) {
-      return res.status(401).json({ error: 'Credenciales incorrectas.' });
-    }
+    if (!ok || !Number(rows[0].activo)) return invalidCredentials(res);
 
     const admin = rows[0];
     if (!['dueno_tienda', 'superadmin'].includes(admin.rol)) {
-      return res.status(403).json({ error: 'La cuenta no tiene un rol valido.' });
+      return invalidCredentials(res);
     }
     if (admin.rol === 'superadmin' && admin.idTienda !== null) {
-      return res.status(403).json({ error: 'La cuenta superadmin tiene una configuracion invalida.' });
+      return invalidCredentials(res);
     }
     if (admin.rol === 'dueno_tienda'
       && (!Number.isInteger(Number(admin.idTienda))
         || Number(admin.idTienda) <= 0
         || !admin.tiendaActiva
         || admin.estadoTienda !== 'activa')) {
-      return res.status(403).json({ error: 'La tienda asociada no esta disponible.' });
+      return invalidCredentials(res);
     }
 
     await regenerateSession(req);

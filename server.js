@@ -2,14 +2,16 @@ const path = require('path');
 const express = require('express');
 const session = require('express-session');
 const MySQLSessionStore = require('express-mysql-session')(session);
-const helmet = require('helmet');
 
 const { databaseConfig, isLocalEnvironment, logDatabaseTarget, sessionSecret } = require('./config/env');
+const { webSecurityConfig } = require('./config/web-security');
 let appDatabaseConfig;
 let appSessionSecret;
+let appSecurityConfig;
 try {
   appDatabaseConfig = databaseConfig();
   appSessionSecret = sessionSecret();
+  appSecurityConfig = webSecurityConfig();
 } catch (error) {
   console.error('No se pudo iniciar la aplicacion por una configuracion incompleta.');
   console.error(error.message);
@@ -18,9 +20,15 @@ try {
 
 const pool = require('./config/db');
 const { requireAuth } = require('./middleware/auth');
+const { createErrorHandler, notFoundHandler } = require('./middleware/error-handler');
+const { createRateLimiters } = require('./middleware/rate-limiters');
+const { requestContext } = require('./middleware/request-context');
+const { mutationProtection, noStoreSensitiveResponses } = require('./middleware/request-security');
 const { requireRole } = require('./middleware/roles');
+const { permissionsPolicy, securityHeaders } = require('./middleware/security-headers');
 const { requireActiveSubscription, resolveSubscription } = require('./middleware/subscription');
 const { requireTenant } = require('./middleware/tenant');
+const { createSecurityLogger } = require('./utils/security-logger');
 const adminCatalogRoutes = require('./routes/admin-catalog');
 const adminRoutes = require('./routes/admin');
 const apiRoutes = require('./routes/api');
@@ -35,6 +43,8 @@ const stockRoutes = require('./routes/stock');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
+const securityLogger = createSecurityLogger(appSecurityConfig.logLevel);
+const rateLimiters = createRateLimiters(appSecurityConfig.rateLimit);
 const sessionStore = new MySQLSessionStore({
   ...appDatabaseConfig,
   createDatabaseTable: true,
@@ -49,12 +59,17 @@ const sessionStore = new MySQLSessionStore({
 });
 
 sessionStore.on('error', (error) => {
-  console.error('Error en el almacen de sesiones MySQL.');
-  console.error(error.message);
+  securityLogger.error('session_store_error', {
+    errorName: error?.name || 'Error',
+    errorCode: error?.code || null
+  });
 });
 
-app.set('trust proxy', 1);
-app.use(helmet({ contentSecurityPolicy: false }));
+app.set('trust proxy', appSecurityConfig.production ? 1 : false);
+app.use(requestContext(securityLogger));
+app.use(securityHeaders(appSecurityConfig));
+app.use(permissionsPolicy);
+app.use(noStoreSensitiveResponses);
 app.use(express.urlencoded({ extended: true }));
 app.use(express.json({ limit: '2mb' }));
 app.use(session({
@@ -66,10 +81,21 @@ app.use(session({
   cookie: {
     httpOnly: true,
     sameSite: 'lax',
-    secure: process.env.NODE_ENV === 'production',
+    secure: appSecurityConfig.production,
     maxAge: 1000 * 60 * 60 * 8
   }
 }));
+app.use(mutationProtection(appSecurityConfig.trustedOrigins));
+
+app.use('/auth', rateLimiters.auth);
+app.use('/auth/login', rateLimiters.loginIp, rateLimiters.loginIdentity);
+app.use('/api/admin/catalogo/importaciones/plantilla.xlsx', rateLimiters.export);
+app.use('/api/exportaciones', rateLimiters.export);
+app.use('/api/inventario-inteligente/exportacion.xlsx', rateLimiters.export);
+app.use('/api/lotes/exportacion.xlsx', rateLimiters.export);
+app.use('/api/cobranza/mensaje-whatsapp/preparar', rateLimiters.whatsapp);
+app.use('/api/admin', rateLimiters.admin);
+app.use('/api', rateLimiters.api);
 
 app.use('/auth', authRoutes);
 app.use('/api/admin/catalogo', requireAuth, requireRole('superadmin'), adminCatalogRoutes);
@@ -107,28 +133,21 @@ app.get('/', requireAuth, (req, res) => {
   res.redirect(destination);
 });
 
-app.use((req, res) => {
-  res.status(404).json({ error: 'Ruta no encontrada.' });
-});
-
-app.use((err, req, res, next) => {
-  if (err.status) {
-    return res.status(err.status).json({ error: err.message, ...(err.code ? { code: err.code } : {}) });
-  }
-  console.error(err);
-  return res.status(500).json({ error: 'Ocurrio un error interno.' });
-});
+app.use(notFoundHandler);
+app.use(createErrorHandler({ logger: securityLogger, production: appSecurityConfig.production }));
 
 async function startServer() {
   try {
     if (isLocalEnvironment) logDatabaseTarget('Servidor local', appDatabaseConfig);
     await pool.query('SELECT 1');
     app.listen(PORT, () => {
-      console.log(`Sistema iniciado en puerto ${PORT}`);
+      securityLogger.info('server_started', { puerto: Number(PORT), entorno: process.env.APP_ENV || 'no_definido' });
     });
   } catch (error) {
-    console.error('No se pudo iniciar la aplicacion. Revise la configuracion y la base de datos.');
-    console.error(error.message);
+    securityLogger.error('server_start_failed', {
+      errorName: error?.name || 'Error',
+      errorCode: error?.code || null
+    });
     process.exit(1);
   }
 }

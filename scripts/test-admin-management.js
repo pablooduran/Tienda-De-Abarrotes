@@ -1,7 +1,10 @@
 const crypto = require('crypto');
 const bcrypt = require('bcryptjs');
+const fs = require('fs');
+const path = require('path');
 const { createDatabaseConnection } = require('../config/database-connection');
 const { requireLocalhostDatabase } = require('../config/env');
+const { applyTestRequestSecurity } = require('./http-test-security');
 
 function assert(condition, message) {
   if (!condition) throw new Error(message);
@@ -19,6 +22,7 @@ class HttpSession {
       request.headers['content-type'] = 'application/json';
       request.body = JSON.stringify(request.body);
     }
+    applyTestRequestSecurity(this.baseUrl, request);
     if (this.cookie) request.headers.cookie = this.cookie;
     const response = await fetch(`${this.baseUrl}${path}`, { ...request, redirect: 'manual' });
     const setCookie = response.headers.get('set-cookie');
@@ -46,6 +50,21 @@ function containsSensitivePassword(value) {
   return Object.entries(value).some(([key, item]) => (
     ['password', 'passwordHash', 'hash'].includes(key) || containsSensitivePassword(item)
   ));
+}
+
+function assertUniformLoginRejection(body, label, referenceBody = null, forbiddenValues = []) {
+  assert(body?.code === 'INVALID_CREDENTIALS', `${label}: no devolvio INVALID_CREDENTIALS.`);
+  assert(body?.error === 'Credenciales incorrectas.', `${label}: expuso un mensaje de autenticacion diferente.`);
+  const unexpectedKeys = Object.keys(body || {}).filter((key) => !['error', 'code', 'requestId'].includes(key));
+  assert(unexpectedKeys.length === 0, `${label}: expuso campos internos: ${unexpectedKeys.join(', ')}.`);
+  if (referenceBody) {
+    assert(body.error === referenceBody.error && body.code === referenceBody.code,
+      `${label}: no coincide con el rechazo por contrasena incorrecta.`);
+  }
+  const serialized = JSON.stringify({ error: body?.error, code: body?.code }).toLowerCase();
+  for (const value of forbiddenValues.filter(Boolean)) {
+    assert(!serialized.includes(String(value).toLowerCase()), `${label}: expuso informacion sobre ${value}.`);
+  }
 }
 
 async function cleanup(connection, fixture) {
@@ -201,7 +220,7 @@ async function main() {
     assert(owners.length === 1 && owners[0].usuario === fixture.ownerUser, 'El propietario no quedo asociado correctamente.');
     assert(!containsSensitivePassword(owners), 'El listado de propietarios expuso informacion de contrasena.');
 
-    await expect(superSession, `/api/admin/tiendas/${fixture.idTienda}/propietarios`, {
+    const secondOwnerCreated = await expect(superSession, `/api/admin/tiendas/${fixture.idTienda}/propietarios`, {
       method: 'POST',
       body: {
         usuario: fixture.secondOwnerUser,
@@ -210,6 +229,25 @@ async function main() {
         activo: true
       }
     }, 201, 'Creacion de propietario adicional');
+
+    const wrongPasswordLogin = await expect(oldPasswordSession, '/auth/login', {
+      method: 'POST', body: { usuario: fixture.ownerUser, password: `${ownerPassword}-incorrecta` }
+    }, 401, 'Contrasena incorrecta usa respuesta uniforme');
+    assertUniformLoginRejection(wrongPasswordLogin, 'Contrasena incorrecta');
+
+    const missingUserLogin = await expect(oldPasswordSession, '/auth/login', {
+      method: 'POST', body: { usuario: `usuario_inexistente_${marker}`, password: ownerPassword }
+    }, 401, 'Usuario inexistente usa respuesta uniforme');
+    assertUniformLoginRejection(missingUserLogin, 'Usuario inexistente', wrongPasswordLogin, [
+      `usuario_inexistente_${marker}`, 'usuario', 'existente'
+    ]);
+
+    assert(secondOwnerCreated.propietario.idAdministrador, 'El propietario adicional no devolvio identificador.');
+    const authSource = fs.readFileSync(path.resolve(__dirname, '..', 'routes', 'auth.js'), 'utf8');
+    assert(authSource.includes("admin.rol === 'superadmin' && admin.idTienda !== null")
+      && authSource.includes("admin.rol === 'dueno_tienda'")
+      && (authSource.match(/return invalidCredentials\(res\);/g) || []).length >= 4,
+    'Las asociaciones invalidas de login no usan la respuesta uniforme.');
 
     await expect(ownerSession, '/auth/login', {
       method: 'POST', body: { usuario: fixture.ownerUser, password: ownerPassword }
@@ -232,9 +270,12 @@ async function main() {
       ownerSession, '/api/productos', {}, 403, 'Invalidacion de sesion por tienda inactiva'
     );
     assert(disabledStoreSession.code === 'STORE_UNAVAILABLE', 'La tienda inactiva no devolvio el codigo estable.');
-    await expect(ownerSession, '/auth/login', {
+    const disabledStoreLogin = await expect(ownerSession, '/auth/login', {
       method: 'POST', body: { usuario: fixture.ownerUser, password: ownerPassword }
-    }, 403, 'Bloqueo por tienda inactiva');
+    }, 401, 'Login nuevo bloqueado por tienda inactiva');
+    assertUniformLoginRejection(disabledStoreLogin, 'Tienda inactiva durante login', wrongPasswordLogin, [
+      fixture.ownerUser, fixture.slug, marker, 'tienda', 'suspendida', 'store_unavailable'
+    ]);
 
     await expect(superSession, `/api/admin/tiendas/${fixture.idTienda}/activar`, {
       method: 'PATCH'
@@ -251,9 +292,12 @@ async function main() {
       ownerSession, '/api/productos', {}, 401, 'Invalidacion de sesion por propietario inactivo'
     );
     assert(disabledOwnerSession.code === 'SESSION_REVOKED', 'El propietario inactivo no devolvio SESSION_REVOKED.');
-    await expect(ownerSession, '/auth/login', {
+    const disabledOwnerLogin = await expect(ownerSession, '/auth/login', {
       method: 'POST', body: { usuario: fixture.ownerUser, password: ownerPassword }
     }, 401, 'Bloqueo de propietario inactivo');
+    assertUniformLoginRejection(disabledOwnerLogin, 'Administrador inactivo durante login', wrongPasswordLogin, [
+      fixture.ownerUser, 'administrador', 'inactivo', 'session_revoked'
+    ]);
 
     await expect(superSession, `/api/admin/propietarios/${fixture.idOwner}/activar`, {
       method: 'PATCH'
@@ -271,9 +315,10 @@ async function main() {
     );
     assert(resetSession.code === 'SESSION_REVOKED', 'El restablecimiento no devolvio SESSION_REVOKED.');
 
-    await expect(oldPasswordSession, '/auth/login', {
+    const rejectedOldPassword = await expect(oldPasswordSession, '/auth/login', {
       method: 'POST', body: { usuario: fixture.ownerUser, password: ownerPassword }
     }, 401, 'Rechazo de contrasena antigua');
+    assertUniformLoginRejection(rejectedOldPassword, 'Contrasena anterior', wrongPasswordLogin);
     await expect(ownerSession, '/auth/login', {
       method: 'POST', body: { usuario: fixture.ownerUser, password: newOwnerPassword }
     }, 200, 'Aceptacion de contrasena nueva');

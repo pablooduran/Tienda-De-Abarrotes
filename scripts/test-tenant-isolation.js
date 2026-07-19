@@ -2,6 +2,7 @@ const crypto = require('crypto');
 const bcrypt = require('bcryptjs');
 const { createDatabaseConnection } = require('../config/database-connection');
 const { requireLocalhostDatabase } = require('../config/env');
+const { applyTestRequestSecurity } = require('./http-test-security');
 
 function assert(condition, message) {
   if (!condition) throw new Error(message);
@@ -20,6 +21,7 @@ class HttpSession {
       headers['content-type'] = 'application/json';
       options.body = JSON.stringify(options.body);
     }
+    applyTestRequestSecurity(this.baseUrl, { ...options, headers });
     if (this.cookie) headers.cookie = this.cookie;
     const response = await fetch(`${this.baseUrl}${path}`, { ...options, headers, redirect: 'manual' });
     const setCookie = response.headers.get('set-cookie');

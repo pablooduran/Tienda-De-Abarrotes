@@ -1,0 +1,91 @@
+const { isProductionEnvironment, parseBoolean } = require('./database-options');
+
+const LOG_LEVELS = new Set(['off', 'error', 'warn', 'info']);
+
+function integerSetting(environment, name, defaultValue, minimum, maximum) {
+  const text = String(environment[name] ?? '').trim();
+  if (!text) return defaultValue;
+  const value = Number(text);
+  if (!Number.isInteger(value) || value < minimum || value > maximum) {
+    throw new Error(`${name} debe ser un entero entre ${minimum} y ${maximum}.`);
+  }
+  return value;
+}
+
+function normalizeOrigin(value, { production = false } = {}) {
+  const text = String(value || '').trim();
+  if (!text || text.includes('*')) throw new Error('TRUSTED_ORIGINS contiene un origen vacio o comodin.');
+  let parsed;
+  try {
+    parsed = new URL(text);
+  } catch {
+    throw new Error(`TRUSTED_ORIGINS contiene un origen invalido: ${text.slice(0, 120)}.`);
+  }
+  if (!['http:', 'https:'].includes(parsed.protocol)
+    || parsed.username || parsed.password || parsed.pathname !== '/' || parsed.search || parsed.hash) {
+    throw new Error(`TRUSTED_ORIGINS debe contener solo origenes HTTP(S), sin rutas: ${text.slice(0, 120)}.`);
+  }
+  if (production && parsed.protocol !== 'https:') {
+    throw new Error('En produccion todos los TRUSTED_ORIGINS deben usar HTTPS.');
+  }
+  return parsed.origin;
+}
+
+function trustedOrigins(environment = process.env) {
+  const production = isProductionEnvironment(environment);
+  const configured = String(environment.TRUSTED_ORIGINS || '').trim();
+  if (!configured) {
+    if (production) throw new Error('En produccion TRUSTED_ORIGINS es obligatorio.');
+    const port = integerSetting(environment, 'PORT', 3000, 1, 65535);
+    return Object.freeze([
+      `http://localhost:${port}`,
+      `http://127.0.0.1:${port}`
+    ]);
+  }
+  const origins = configured.split(',').map((origin) => normalizeOrigin(origin, { production }));
+  if (new Set(origins).size !== origins.length) {
+    throw new Error('TRUSTED_ORIGINS contiene origenes duplicados.');
+  }
+  return Object.freeze(origins);
+}
+
+function webSecurityConfig(environment = process.env) {
+  const production = isProductionEnvironment(environment);
+  const testEnvironment = String(environment.APP_ENV || '').trim().toLowerCase() === 'test';
+  const rateLimitEnabled = parseBoolean(
+    environment.RATE_LIMIT_ENABLED,
+    'RATE_LIMIT_ENABLED',
+    !testEnvironment
+  );
+  if (production && !rateLimitEnabled) {
+    throw new Error('En produccion RATE_LIMIT_ENABLED debe ser true.');
+  }
+  const logLevel = String(environment.SECURITY_LOG_LEVEL || (production ? 'info' : 'warn')).trim().toLowerCase();
+  if (!LOG_LEVELS.has(logLevel)) {
+    throw new Error('SECURITY_LOG_LEVEL debe ser off, error, warn o info.');
+  }
+  const windowMs = integerSetting(environment, 'RATE_LIMIT_WINDOW_MS', 15 * 60 * 1000, 1000, 24 * 60 * 60 * 1000);
+  return Object.freeze({
+    production,
+    trustedOrigins: trustedOrigins(environment),
+    rateLimit: Object.freeze({
+      enabled: rateLimitEnabled,
+      windowMs,
+      apiMax: integerSetting(environment, 'RATE_LIMIT_MAX', 3000, 10, 100000),
+      loginIpMax: integerSetting(environment, 'LOGIN_RATE_LIMIT_MAX', 10, 2, 1000),
+      loginIdentityMax: integerSetting(environment, 'LOGIN_IDENTITY_RATE_LIMIT_MAX', 6, 2, 1000),
+      authMax: integerSetting(environment, 'AUTH_RATE_LIMIT_MAX', 120, 5, 10000),
+      adminMax: integerSetting(environment, 'ADMIN_RATE_LIMIT_MAX', 600, 10, 10000),
+      exportMax: integerSetting(environment, 'EXPORT_RATE_LIMIT_MAX', 30, 1, 1000),
+      whatsappMax: integerSetting(environment, 'WHATSAPP_RATE_LIMIT_MAX', 60, 1, 1000)
+    }),
+    logLevel
+  });
+}
+
+module.exports = {
+  integerSetting,
+  normalizeOrigin,
+  trustedOrigins,
+  webSecurityConfig
+};

@@ -1193,9 +1193,9 @@ router.get('/reportes/:tipo', async (req, res, next) => {
 
 router.use((err, req, res, next) => {
   const status = err.status || 500;
-  if (status >= 500) console.error(err);
+  if (status >= 500) return next(err);
   res.status(status).json({
-    error: status >= 500 ? 'Ocurrio un error interno.' : err.message
+    error: err.message
   });
 });
 

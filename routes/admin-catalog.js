@@ -477,8 +477,7 @@ router.use((error, req, res, next) => {
       ...(error.details ? { duplicados: error.details } : {})
     });
   }
-  console.error('Error en catalogo maestro administrativo:', error.message);
-  return res.status(500).json({ error: 'No se pudo completar la operacion del catalogo maestro.' });
+  return next(error);
 });
 
 module.exports = router;

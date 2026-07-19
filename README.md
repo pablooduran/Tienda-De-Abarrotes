@@ -414,6 +414,44 @@ npm.cmd run test:timezone-tls
 
 La prueba no inicia el servidor ni modifica datos. Valida configuraciones TLS sinteticas, parseo y formato local, medianoche, rangos semiabiertos, independencia de `TZ` del sistema operativo, round-trip de `DATE/DATETIME` y compatibilidad con `ONLY_FULL_GROUP_BY`.
 
+### Seguridad HTTP
+
+El sistema es same-origin y no habilita CORS global. Toda solicitud `POST`, `PUT`, `PATCH` o `DELETE` debe proceder de un origen incluido en `TRUSTED_ORIGINS` y enviar `X-Requested-With: XMLHttpRequest`. El frontend incorpora este encabezado mediante un unico cliente HTTP. En produccion, `TRUSTED_ORIGINS` es obligatorio, solo admite origenes HTTPS exactos y nunca acepta comodines.
+
+Helmet aplica una CSP sin `unsafe-inline` ni `unsafe-eval` para scripts. Los recursos se limitan al propio origen; se bloquean objetos y marcos, y HSTS se activa solamente en produccion HTTPS. Las respuestas autenticadas y de API usan `Cache-Control: no-store`.
+
+Los limites HTTP se configuran con:
+
+```text
+RATE_LIMIT_ENABLED=true
+RATE_LIMIT_WINDOW_MS=900000
+RATE_LIMIT_MAX=3000
+LOGIN_RATE_LIMIT_MAX=10
+LOGIN_IDENTITY_RATE_LIMIT_MAX=6
+AUTH_RATE_LIMIT_MAX=120
+ADMIN_RATE_LIMIT_MAX=600
+EXPORT_RATE_LIMIT_MAX=30
+WHATSAPP_RATE_LIMIT_MAX=60
+SECURITY_LOG_LEVEL=info
+```
+
+El login mantiene contadores separados por IP y por el hash de la combinacion IP + usuario normalizado. Las credenciales inexistentes, incorrectas o no disponibles devuelven la misma respuesta. Un exceso produce HTTP `429`, codigo `TOO_MANY_LOGIN_ATTEMPTS` y `Retry-After`. `APP_ENV=test` puede desactivar los limites con `RATE_LIMIT_ENABLED=false`; produccion no.
+
+La primera version usa el almacen en memoria de `express-rate-limit`. El limite se aplica por proceso y se reinicia al reiniciar la instancia; antes de escalar horizontalmente debe sustituirse por un almacen compartido, como Redis. No se presenta este contador como bloqueo distribuido o permanente.
+
+Cada respuesta incluye `X-Request-Id`. Los errores publicos incluyen una referencia sin stack, SQL, rutas internas ni secretos. El registro de seguridad usa la hora local de negocio, no guarda bodies completos y redacta contrasenas, hashes, cookies, tokens, autorizacion, secretos, certificados y contenido de WhatsApp.
+
+En Render, configure `TRUSTED_ORIGINS` con el dominio HTTPS publico exacto y conserve `trust proxy=1`, ya que existe un unico proxy frontal administrado. En local, el proxy no se confia y se admiten de forma explicita `http://localhost:3000` y `http://127.0.0.1:3000`. No agregue certificados, secretos ni archivos `.env` a Git.
+
+La prueba de seguridad usa servidores efimeros aislados: no requiere MySQL, no modifica datos y no necesita credenciales. El comprobador es estatico.
+
+```powershell
+npm.cmd run check:web-security
+npm.cmd run test:web-security
+```
+
+Despues de iniciar el servidor local, las pruebas funcionales existentes ya envian el origen y encabezado requeridos mediante `scripts/http-test-security.js`.
+
 Los cobros posteriores se registran con una cabecera `cobroFiado` y una distribucion `pagoFiado` por deuda. Cada distribucion vinculada a una venta produce un unico `pagoVenta`; los reintentos con la misma `claveOperacion` devuelven el cobro existente sin duplicar dinero ni saldos. WhatsApp se limita a preparar texto y un enlace `wa.me`: nunca envia ni marca mensajes como enviados automaticamente.
 
 ### Validacion del frontend de clientes y cobranza

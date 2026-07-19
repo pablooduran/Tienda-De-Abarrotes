@@ -4,6 +4,7 @@ const ExcelJS = require('exceljs');
 const { createDatabaseConnection } = require('../config/database-connection');
 const { requireLocalhostDatabase } = require('../config/env');
 const { formatLocalDate, formatLocalDateTime } = require('../utils/local-datetime');
+const { applyTestRequestSecurity } = require('./http-test-security');
 
 let currentTestStage = 'inicio';
 
@@ -23,6 +24,7 @@ class HttpSession {
       request.headers['content-type'] = 'application/json';
       request.body = JSON.stringify(request.body);
     }
+    applyTestRequestSecurity(this.baseUrl, request);
     if (this.cookie) request.headers.cookie = this.cookie;
     const response = await fetch(`${this.baseUrl}${path}`, request);
     const setCookie = response.headers.get('set-cookie');

@@ -564,8 +564,7 @@ router.use((error, req, res, next) => {
     return res.status(409).json({ error: `Ya existe un registro con ese ${field}.` });
   }
   if (error.status) return res.status(error.status).json({ error: error.message });
-  console.error('Error en administracion de plataforma:', error.message);
-  return res.status(500).json({ error: 'No se pudo completar la operacion administrativa.' });
+  return next(error);
 });
 
 module.exports = router;

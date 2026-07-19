@@ -4,6 +4,7 @@ const { createDatabaseConnection } = require('../config/database-connection');
 const { requireLocalhostDatabase } = require('../config/env');
 const { insertStockMovement } = require('../services/stock-movement-service');
 const { addLocalDays, formatLocalDateTime, getLocalNow } = require('../utils/local-datetime');
+const { applyTestRequestSecurity } = require('./http-test-security');
 
 function assert(condition, message) {
   if (!condition) throw new Error(message);
@@ -21,6 +22,7 @@ class HttpSession {
       request.headers['content-type'] = 'application/json';
       request.body = JSON.stringify(request.body);
     }
+    applyTestRequestSecurity(this.baseUrl, request);
     if (this.cookie) request.headers.cookie = this.cookie;
     const response = await fetch(`${this.baseUrl}${path}`, { ...request, redirect: 'manual' });
     const setCookie = response.headers.get('set-cookie');
