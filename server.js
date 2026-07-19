@@ -75,28 +75,35 @@ app.use('/auth', authRoutes);
 app.use('/api/admin/catalogo', requireAuth, requireRole('superadmin'), adminCatalogRoutes);
 app.use('/api/admin', requireAuth, requireRole('superadmin'), adminRoutes);
 app.use('/api/catalogo-maestro', requireAuth, requireTenant, resolveSubscription, requireActiveSubscription, masterCatalogRoutes);
-app.use('/api', requireAuth, requireTenant, resolveSubscription, requireActiveSubscription, financeRoutes);
-app.use('/api', requireAuth, requireTenant, resolveSubscription, requireActiveSubscription, inventoryIntelligenceRoutes);
-app.use('/api', requireAuth, requireTenant, resolveSubscription, requireActiveSubscription, lotRoutes);
-app.use('/api', requireAuth, requireTenant, resolveSubscription, requireActiveSubscription, customerCreditRoutes);
-app.use('/api', requireAuth, requireTenant, resolveSubscription, requireActiveSubscription, posRoutes);
-app.use('/api', requireAuth, requireTenant, resolveSubscription, requireActiveSubscription, stockRoutes);
-app.use('/api', requireAuth, requireTenant, resolveSubscription, requireActiveSubscription, apiRoutes);
+app.use(
+  '/api',
+  requireAuth,
+  requireTenant,
+  resolveSubscription,
+  requireActiveSubscription,
+  financeRoutes,
+  inventoryIntelligenceRoutes,
+  lotRoutes,
+  customerCreditRoutes,
+  posRoutes,
+  stockRoutes,
+  apiRoutes
+);
 
 app.get('/app.html', requireAuth, (req, res) => {
-  if (req.session.admin.rol !== 'dueno_tienda') return res.redirect('/admin.html');
+  if (req.auth.rol !== 'dueno_tienda') return res.redirect('/admin.html');
   res.sendFile(path.join(__dirname, 'public', 'app.html'));
 });
 
 app.get('/admin.html', requireAuth, (req, res) => {
-  if (req.session.admin.rol !== 'superadmin') return res.redirect('/app.html');
+  if (req.auth.rol !== 'superadmin') return res.redirect('/app.html');
   return res.sendFile(path.join(__dirname, 'public', 'admin.html'));
 });
 
 app.use(express.static(path.join(__dirname, 'public')));
 
 app.get('/', requireAuth, (req, res) => {
-  const destination = req.session.admin.rol === 'superadmin' ? '/admin.html' : '/app.html';
+  const destination = req.auth.rol === 'superadmin' ? '/admin.html' : '/app.html';
   res.redirect(destination);
 });
 

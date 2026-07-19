@@ -228,7 +228,10 @@ async function main() {
     await expect(superSession, `/api/admin/tiendas/${fixture.idTienda}/desactivar`, {
       method: 'PATCH', body: { estado: 'suspendida' }
     }, 200, 'Desactivacion de tienda');
-    await ownerSession.request('/auth/logout', { method: 'POST' });
+    const disabledStoreSession = await expect(
+      ownerSession, '/api/productos', {}, 403, 'Invalidacion de sesion por tienda inactiva'
+    );
+    assert(disabledStoreSession.code === 'STORE_UNAVAILABLE', 'La tienda inactiva no devolvio el codigo estable.');
     await expect(ownerSession, '/auth/login', {
       method: 'POST', body: { usuario: fixture.ownerUser, password: ownerPassword }
     }, 403, 'Bloqueo por tienda inactiva');
@@ -236,6 +239,7 @@ async function main() {
     await expect(superSession, `/api/admin/tiendas/${fixture.idTienda}/activar`, {
       method: 'PATCH'
     }, 200, 'Reactivacion de tienda');
+    await expect(ownerSession, '/api/productos', {}, 401, 'La reactivacion no revive la sesion anterior');
     await expect(ownerSession, '/auth/login', {
       method: 'POST', body: { usuario: fixture.ownerUser, password: ownerPassword }
     }, 200, 'Login despues de reactivar tienda');
@@ -243,7 +247,10 @@ async function main() {
     await expect(superSession, `/api/admin/propietarios/${fixture.idOwner}/desactivar`, {
       method: 'PATCH'
     }, 200, 'Desactivacion de propietario');
-    await ownerSession.request('/auth/logout', { method: 'POST' });
+    const disabledOwnerSession = await expect(
+      ownerSession, '/api/productos', {}, 401, 'Invalidacion de sesion por propietario inactivo'
+    );
+    assert(disabledOwnerSession.code === 'SESSION_REVOKED', 'El propietario inactivo no devolvio SESSION_REVOKED.');
     await expect(ownerSession, '/auth/login', {
       method: 'POST', body: { usuario: fixture.ownerUser, password: ownerPassword }
     }, 401, 'Bloqueo de propietario inactivo');
@@ -251,11 +258,18 @@ async function main() {
     await expect(superSession, `/api/admin/propietarios/${fixture.idOwner}/activar`, {
       method: 'PATCH'
     }, 200, 'Reactivacion de propietario');
+    await expect(ownerSession, '/auth/login', {
+      method: 'POST', body: { usuario: fixture.ownerUser, password: ownerPassword }
+    }, 200, 'Login antes del restablecimiento');
     const passwordReset = await expect(superSession, `/api/admin/propietarios/${fixture.idOwner}/restablecer-password`, {
       method: 'PATCH',
       body: { password: newOwnerPassword, confirmacionPassword: newOwnerPassword }
     }, 200, 'Restablecimiento de contrasena');
     assert(!containsSensitivePassword(passwordReset), 'El restablecimiento expuso informacion de contrasena.');
+    const resetSession = await expect(
+      ownerSession, '/api/productos', {}, 401, 'Restablecimiento invalida sesion existente'
+    );
+    assert(resetSession.code === 'SESSION_REVOKED', 'El restablecimiento no devolvio SESSION_REVOKED.');
 
     await expect(oldPasswordSession, '/auth/login', {
       method: 'POST', body: { usuario: fixture.ownerUser, password: ownerPassword }

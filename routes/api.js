@@ -67,8 +67,8 @@ router.use((req, res, next) => {
 router.get('/contexto', (req, res) => {
   const context = req.subscriptionContext;
   res.json({
-    usuario: req.session.admin.usuario,
-    rol: req.session.admin.rol,
+    usuario: req.auth.usuario,
+    rol: req.auth.rol,
     tienda: context.tienda,
     plan: context.plan ? { codigo: context.plan.codigo, nombre: context.plan.nombre } : null,
     suscripcion: context.suscripcion,

@@ -29,13 +29,15 @@ CREATE TABLE IF NOT EXISTS administrador (
   password VARCHAR(255) NOT NULL,
   rol ENUM('superadmin','dueno_tienda') NOT NULL DEFAULT 'dueno_tienda',
   activo TINYINT(1) NOT NULL DEFAULT 1,
+  versionSesion INT UNSIGNED NOT NULL DEFAULT 1,
   UNIQUE KEY uq_administrador_tienda_id (idTienda, idAdministrador),
   KEY idx_administrador_tienda_activo (idTienda, activo),
   CONSTRAINT fk_administrador_tienda FOREIGN KEY (idTienda) REFERENCES tienda(idTienda),
   CONSTRAINT chk_administrador_rol_tienda CHECK (
     (rol = 'superadmin' AND idTienda IS NULL)
     OR (rol = 'dueno_tienda' AND idTienda IS NOT NULL)
-  )
+  ),
+  CONSTRAINT chk_administrador_version_sesion CHECK (versionSesion >= 1)
 );
 
 CREATE TABLE IF NOT EXISTS plan (

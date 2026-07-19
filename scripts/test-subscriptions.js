@@ -554,11 +554,15 @@ async function main() {
     await expect(superSession, `/api/admin/tiendas/${fixture.basicStore}/desactivar`, {
       method: 'PATCH', body: { estado: 'inactiva' }
     }, 200, 'Desactivacion administrativa');
-    await basicSession.request('/auth/logout', { method: 'POST' });
+    const revokedStoreSession = await expect(
+      basicSession, '/api/productos', {}, 403, 'Sesion existente bloqueada por tienda inactiva'
+    );
+    assert(revokedStoreSession.code === 'STORE_UNAVAILABLE', 'La tienda inactiva no devolvio STORE_UNAVAILABLE.');
     await expect(basicSession, '/auth/login', {
       method: 'POST', body: { usuario: basic.body.propietario.usuario, password: basic.password }
     }, 403, 'Tienda inactiva bloquea login');
     await expect(superSession, `/api/admin/tiendas/${fixture.basicStore}/activar`, { method: 'PATCH' }, 200, 'Reactivacion administrativa');
+    await expect(basicSession, '/api/productos', {}, 401, 'Reactivar no revive la sesion anterior');
 
     console.log('Prueba de planes y suscripciones completada correctamente.');
   } finally {

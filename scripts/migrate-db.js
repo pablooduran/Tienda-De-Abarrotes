@@ -524,6 +524,17 @@ const migrationRequirements = {
       ['plantillaCobranzaTienda', 'fk_plantillaCobranza_tienda', ['idTienda'], 'tienda', ['idTienda'], 'RESTRICT', 'RESTRICT'],
       ['plantillaCobranzaTienda', 'fk_plantillaCobranza_administrador', ['idTienda', 'idAdministradorActualiza'], 'administrador', ['idTienda', 'idAdministrador'], 'RESTRICT', 'RESTRICT']
     ]
+  },
+  '013_seguridad_sesiones.sql': {
+    columns: {
+      administrador: ['versionSesion']
+    },
+    columnTypes: {
+      administrador: { versionSesion: 'int' }
+    },
+    checks: [
+      ['administrador', 'chk_administrador_version_sesion']
+    ]
   }
 };
 
@@ -806,6 +817,20 @@ async function requirementsSatisfied(connection, file) {
   if (file === '012_clientes_fiados_comunicacion.sql') {
     const estado012 = await inspect012State(connection, false, { log: false });
     return estado012.estructuraCompleta && estado012.datosValidos;
+  }
+  if (file === '013_seguridad_sesiones.sql') {
+    const details = await normalizedColumnDetails(connection, 'administrador', ['versionSesion']);
+    const definitionValid = columnDefinitionMatches(details.versionsesion, {
+      type: 'int unsigned', nullable: false, defaultValue: 1, extra: ''
+    });
+    if (!definitionValid
+      || !await normalizedHasConstraint(
+        connection, 'administrador', 'chk_administrador_version_sesion', 'CHECK'
+      )) return false;
+    const [[invalid]] = await connection.query(
+      'SELECT COUNT(*) total FROM administrador WHERE versionSesion IS NULL OR versionSesion<1'
+    );
+    return Number(invalid.total) === 0;
   }
   const requirements = migrationRequirements[file];
   if (!requirements) return false;
@@ -1401,7 +1426,7 @@ async function structureElementExists(connection, element, file = null) {
     const details = await normalizedColumnDetails(connection, element.table, [element.name]);
     return columnDefinitionMatches(details[normalizedIdentifier(element.name)], element.expected);
   }
-  if (['011_lotes_vencimientos.sql', '012_clientes_fiados_comunicacion.sql'].includes(file)) {
+  if (['011_lotes_vencimientos.sql', '012_clientes_fiados_comunicacion.sql', '013_seguridad_sesiones.sql'].includes(file)) {
     if (element.type === 'columna') {
       const details = await normalizedColumnDetails(connection, element.table, [element.name]);
       return Boolean(details[normalizedIdentifier(element.name)]);
@@ -2664,7 +2689,7 @@ async function main() {
               ? !(estado011.estructuraCompleta && estado011.datosValidos)
               : file === '012_clientes_fiados_comunicacion.sql'
                 ? !(estado012.estructuraCompleta && estado012.datosValidos)
-            : ['004_multitienda_base.sql', '005_planes_suscripciones.sql', '007_movimientos_stock.sql', '008_punto_venta_pagos.sql', '009_finanzas_reportes_caja.sql'].includes(file)
+            : ['004_multitienda_base.sql', '005_planes_suscripciones.sql', '007_movimientos_stock.sql', '008_punto_venta_pagos.sql', '009_finanzas_reportes_caja.sql', '013_seguridad_sesiones.sql'].includes(file)
             && !await requirementsSatisfied(connection, file);
         if (registeredMigrationIsIncomplete) {
           throw new Error(`La migracion ${file} figura en schema_migrations, pero su estructura o sus datos estan incompletos. No se aplicaron cambios adicionales.`);
@@ -2686,7 +2711,8 @@ async function main() {
         if ([
           '010_inteligencia_inventario.sql',
           '011_lotes_vencimientos.sql',
-          '012_clientes_fiados_comunicacion.sql'
+          '012_clientes_fiados_comunicacion.sql',
+          '013_seguridad_sesiones.sql'
         ].includes(file)) {
           await connection.query('INSERT IGNORE INTO schema_migrations (nombre) VALUES (?)', [file]);
           const [finalRecord] = await connection.query(
@@ -2702,11 +2728,13 @@ async function main() {
             if (!estado011.migracion011Registrada || !estado011.estructuraCompleta || !estado011.datosValidos) {
               throw new Error('La migracion 011 no pudo confirmar su registro y estado fisico final.');
             }
-          } else {
+          } else if (file === '012_clientes_fiados_comunicacion.sql') {
             estado012 = await inspect012State(connection, finalRecord.length > 0);
             if (!estado012.migracion012Registrada || !estado012.estructuraCompleta || !estado012.datosValidos) {
               throw new Error('La migracion 012 no pudo confirmar su registro y estado fisico final.');
             }
+          } else if (finalRecord.length !== 1 || !await requirementsSatisfied(connection, file)) {
+            throw new Error('La migracion 013 no pudo confirmar su registro y estado fisico final.');
           }
         } else {
           await connection.query('INSERT INTO schema_migrations (nombre) VALUES (?)', [file]);
@@ -2754,7 +2782,7 @@ async function main() {
           console.log('Datos multi-tienda validados antes de crear indices y restricciones.');
         }
 
-        const element = ['004_multitienda_base.sql', '006_catalogo_maestro.sql', '007_movimientos_stock.sql', '008_punto_venta_pagos.sql', '009_finanzas_reportes_caja.sql', '010_inteligencia_inventario.sql', '011_lotes_vencimientos.sql', '012_clientes_fiados_comunicacion.sql'].includes(file)
+        const element = ['004_multitienda_base.sql', '006_catalogo_maestro.sql', '007_movimientos_stock.sql', '008_punto_venta_pagos.sql', '009_finanzas_reportes_caja.sql', '010_inteligencia_inventario.sql', '011_lotes_vencimientos.sql', '012_clientes_fiados_comunicacion.sql', '013_seguridad_sesiones.sql'].includes(file)
           ? structureElementFromStatement(statement)
           : null;
         if (element && await structureElementExists(connection, element, file)) {
@@ -2828,7 +2856,8 @@ async function main() {
       if ([
         '010_inteligencia_inventario.sql',
         '011_lotes_vencimientos.sql',
-        '012_clientes_fiados_comunicacion.sql'
+        '012_clientes_fiados_comunicacion.sql',
+        '013_seguridad_sesiones.sql'
       ].includes(file)) {
         await connection.query('INSERT IGNORE INTO schema_migrations (nombre) VALUES (?)', [file]);
         const [finalRecord] = await connection.query(
@@ -2844,11 +2873,13 @@ async function main() {
           if (!estado011.migracion011Registrada || !estado011.estructuraCompleta || !estado011.datosValidos) {
             throw new Error('La migracion 011 no pudo confirmar su registro y estado fisico final.');
           }
-        } else {
+        } else if (file === '012_clientes_fiados_comunicacion.sql') {
           estado012 = await inspect012State(connection, finalRecord.length > 0);
           if (!estado012.migracion012Registrada || !estado012.estructuraCompleta || !estado012.datosValidos) {
             throw new Error('La migracion 012 no pudo confirmar su registro y estado fisico final.');
           }
+        } else if (finalRecord.length !== 1 || !await requirementsSatisfied(connection, file)) {
+          throw new Error('La migracion 013 no pudo confirmar su registro y estado fisico final.');
         }
       } else {
         await connection.query('INSERT INTO schema_migrations (nombre) VALUES (?)', [file]);

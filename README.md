@@ -84,6 +84,9 @@ Migraciones actuales, en orden:
 8. `008_punto_venta_pagos.sql`: punto de venta, pagos por metodo, comprobantes, codigo de barras local y compatibilidad con fiados.
 9. `009_finanzas_reportes_caja.sql`: gastos, origen del costo historico, reportes financieros, exportaciones y cierres de caja opcionales.
 10. `010_inteligencia_inventario.sql`: configuracion de analisis, seguimiento de productos, indices y permisos de inteligencia de inventario.
+11. `011_lotes_vencimientos.sql`: control opcional por lotes, vencimientos, FEFO/FIFO y trazabilidad por movimiento.
+12. `012_clientes_fiados_comunicacion.sql`: clientes ampliados, configuracion de credito, cobros y seguimiento de cobranza.
+13. `013_seguridad_sesiones.sql`: version de sesion por administrador para revocar accesos despues de cambios criticos.
 
 Antes y despues de aplicar la migracion multi-tienda sobre una base local, puede obtener una comprobacion de solo lectura:
 
@@ -357,6 +360,19 @@ npm.cmd run test:customers-credit
 ```
 
 La prueba cubre perfiles ampliados, documentos normalizados, limites individuales y de tienda, politicas de deuda vencida, fechas prometidas, cobros especificos y acumulados, deuda oculta, idempotencia, concurrencia, estado de cuenta, alertas, seguimientos y mensajes preparados para WhatsApp. Tambien confirma aislamiento entre tiendas, permisos por plan, continuidad de cobros tras un downgrade y que ningun pago modifica stock, lotes o movimientos de inventario. Usa solamente tiendas y credenciales temporales en una base local cuyo nombre contenga `prueba` o `test`, y elimina todos los datos que crea.
+
+### Seguridad y revocacion de sesiones
+
+La migracion `013` agrega `administrador.versionSesion`. Cada peticion autenticada contrasta el administrador, su rol, asociacion, tienda y version contra la base. Desactivar una cuenta o tienda, cambiar el usuario o restablecer una contrasena invalida las sesiones anteriores.
+
+```powershell
+$env:APP_ENV='local'
+$env:DB_HOST='localhost'
+npm.cmd run db:check-session-security
+npm.cmd run test:session-revocation
+```
+
+El comprobador es de solo lectura y reconoce estados pre, parcial y post migracion. La prueba requiere el servidor local y una base cuyo nombre contenga `prueba` o `test`; usa cuentas y tiendas temporales sin imprimir contrasenas ni identificadores de sesion.
 
 Los cobros posteriores se registran con una cabecera `cobroFiado` y una distribucion `pagoFiado` por deuda. Cada distribucion vinculada a una venta produce un unico `pagoVenta`; los reintentos con la misma `claveOperacion` devuelven el cobro existente sin duplicar dinero ni saldos. WhatsApp se limita a preparar texto y un enlace `wa.me`: nunca envia ni marca mensajes como enviados automaticamente.
 

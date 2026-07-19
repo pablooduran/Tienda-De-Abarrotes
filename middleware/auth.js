@@ -1,19 +1,31 @@
-function isAuthenticated(req) {
-  const admin = req.session?.admin;
-  if (!admin || !admin.id || !admin.usuario || !['dueno_tienda', 'superadmin'].includes(admin.rol)) return false;
-  if (admin.rol === 'superadmin') return admin.idTienda === null;
-  const idTienda = Number(admin.idTienda);
-  return Number.isInteger(idTienda) && idTienda > 0;
+const { destroyRequestSession, validateSession } = require('../services/session-validation-service');
+
+function expectsJson(req) {
+  return req.originalUrl.startsWith('/api') || req.originalUrl.startsWith('/auth');
 }
 
-function requireAuth(req, res, next) {
-  if (isAuthenticated(req)) return next();
+async function requireAuth(req, res, next) {
+  try {
+    if (req.auth) return next();
+    const validation = await validateSession(req.session?.admin);
+    if (validation.valid) {
+      req.auth = validation.context;
+      return next();
+    }
 
-  if (req.originalUrl.startsWith('/api')) {
-    return res.status(401).json({ error: 'Debe iniciar sesion.' });
+    await destroyRequestSession(req, res);
+    if (expectsJson(req)) {
+      return res.status(validation.status).json({
+        error: validation.code === 'STORE_UNAVAILABLE'
+          ? 'La tienda asociada no esta disponible.'
+          : 'La sesion ya no es valida. Inicie sesion nuevamente.',
+        code: validation.code
+      });
+    }
+    return res.redirect('/login.html');
+  } catch (error) {
+    return next(error);
   }
-
-  return res.redirect('/login.html');
 }
 
-module.exports = { isAuthenticated, requireAuth };
+module.exports = { requireAuth };
