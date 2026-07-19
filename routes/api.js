@@ -350,18 +350,19 @@ router.post('/productos', async (req, res, next) => {
     await connection.beginTransaction();
     await lockTenantForLimit(connection, idTienda);
     await enforcePlanLimit(connection, idTienda, 'productos');
+    const fechaInicioSeguimiento = formatLocalDateTime();
     if (data.idProveedor) {
       await requireTenantRecord(connection, 'proveedor', 'idProveedor', data.idProveedor, idTienda);
     }
     const [result] = await connection.query(
       `INSERT INTO producto
        (idTienda, nombre, idProveedor, codigoBarras, categoria, unidadMedida, unidadesPorPaquete,
-        paquetesPorCaja, precioVenta, precioVentaPaquete, stock, stockMinimo, stockUnidadesTotal,
+        paquetesPorCaja, precioVenta, precioVentaPaquete, stock, stockMinimo, fechaInicioSeguimiento, stockUnidadesTotal,
         ultimoPrecioCompra, permiteVentaPorPaquete, permiteVentaPorUnidad)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [idTienda, data.nombre, data.idProveedor, data.codigoBarras, data.categoria, data.unidadMedida,
         data.unidadesPorPaquete, data.paquetesPorCaja, data.precioVenta, data.precioVentaPaquete,
-        data.stockUnidadesTotal, data.stockMinimo, data.stockUnidadesTotal, data.ultimoPrecioCompra,
+        data.stockUnidadesTotal, data.stockMinimo, fechaInicioSeguimiento, data.stockUnidadesTotal, data.ultimoPrecioCompra,
         data.permiteVentaPorPaquete, data.permiteVentaPorUnidad]
     );
     if (data.stockUnidadesTotal > 0) {

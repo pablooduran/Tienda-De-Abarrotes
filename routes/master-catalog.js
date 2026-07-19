@@ -4,6 +4,7 @@ const { requirePlanFeature } = require('../middleware/subscription');
 const { enforcePlanLimit } = require('../services/subscription-service');
 const { insertStockMovement, movementKey } = require('../services/stock-movement-service');
 const { normalizeBarcode } = require('../services/pos-sale-service');
+const { formatLocalDateTime } = require('../utils/local-datetime');
 const {
   LOCAL_CATEGORIES,
   booleanValue,
@@ -165,6 +166,7 @@ router.post('/agregar', asyncRoute(async (req, res) => {
 
     const providerCache = new Set();
     const created = [];
+    const fechaInicioSeguimiento = formatLocalDateTime();
     for (let index = 0; index < items.length; index += 1) {
       const item = items[index];
       const master = masterMap.get(ids[index]);
@@ -207,11 +209,13 @@ router.post('/agregar', asyncRoute(async (req, res) => {
         `INSERT INTO producto
           (idTienda, nombre, idProveedor, idProductoMaestro, codigoBarras, categoria, unidadMedida,
            unidadesPorPaquete, paquetesPorCaja, precioVenta, precioVentaPaquete, stock, stockMinimo,
-           stockUnidadesTotal, ultimoPrecioCompra, permiteVentaPorPaquete, permiteVentaPorUnidad)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?, ?, ?, ?, ?)`,
+           fechaInicioSeguimiento, stockUnidadesTotal, ultimoPrecioCompra,
+           permiteVentaPorPaquete, permiteVentaPorUnidad)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [idTienda, nombre, idProveedor, master.idProductoMaestro, codigoBarras,
           localCategory(item.categoriaLocal, master.categoriaMaestra), unidadMedida,
-          unidadesPorPaquete, precioVenta, precioVentaPaquete, stock, stockMinimo, stock, precioCompra,
+          unidadesPorPaquete, precioVenta, precioVentaPaquete, stock, stockMinimo,
+          fechaInicioSeguimiento, stock, precioCompra,
           permiteVentaPorPaquete, permiteVentaPorUnidad]
       );
       if (stock > 0) {

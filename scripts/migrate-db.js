@@ -1,6 +1,7 @@
 const fs = require('fs');
 const path = require('path');
 const { logDatabaseTarget } = require('../config/env');
+const { formatLocalDateTime } = require('../utils/local-datetime');
 const {
   createConnection,
   hasTable,
@@ -14,6 +15,23 @@ const {
   hasCheckConstraint,
   readSqlStatements
 } = require('./db-utils');
+
+const MIGRATION_LOCAL_DATETIME_TOKEN = '__MIGRATION_LOCAL_DATETIME__';
+
+function prepareMigrationStatement(file, statement, context = {}) {
+  if (file !== '010_inteligencia_inventario.sql'
+    || !statement.includes(MIGRATION_LOCAL_DATETIME_TOKEN)) {
+    return { sql: statement, params: [] };
+  }
+  if (!context.localDateTime) {
+    throw new Error('La migracion 010 requiere una marca de fecha local explicita.');
+  }
+  const occurrences = statement.split(MIGRATION_LOCAL_DATETIME_TOKEN).length - 1;
+  return {
+    sql: statement.split(MIGRATION_LOCAL_DATETIME_TOKEN).join('?'),
+    params: Array(occurrences).fill(context.localDateTime)
+  };
+}
 
 const migrationRequirements = {
   '001_mejoras_tienda.sql': {
@@ -297,6 +315,41 @@ const migrationRequirements = {
       ['cierreCaja', 'fk_cierreCaja_creador', ['idTienda', 'idAdministrador'], 'administrador', ['idTienda', 'idAdministrador'], 'RESTRICT', 'RESTRICT'],
       ['cierreCaja', 'fk_cierreCaja_anulador', ['idTienda', 'idAdministradorAnula'], 'administrador', ['idTienda', 'idAdministrador'], 'RESTRICT', 'RESTRICT']
     ]
+  },
+  '010_inteligencia_inventario.sql': {
+    columns: {
+      configuracionInventarioTienda: [
+        'idTienda', 'periodoAnalisisDias', 'diasHistorialMinimo', 'diasReposicionDefault',
+        'diasCoberturaDefault', 'diasProductoNuevo', 'creadoEn', 'actualizadoEn',
+        'idAdministradorActualiza'
+      ],
+      producto: [
+        'diasReposicion', 'diasCoberturaObjetivo', 'presentacionCompraSugerida',
+        'fechaInicioSeguimiento'
+      ]
+    },
+    indexes: [
+      ['configuracionInventarioTienda', 'PRIMARY', ['idTienda'], true],
+      ['configuracionInventarioTienda', 'idx_configInventario_tienda_admin', ['idTienda', 'idAdministradorActualiza'], false],
+      ['producto', 'idx_producto_tienda_inventario', ['idTienda', 'activo', 'stockUnidadesTotal', 'stockMinimo'], false],
+      ['producto', 'idx_producto_tienda_categoria_activo', ['idTienda', 'categoria', 'activo'], false],
+      ['producto', 'idx_producto_tienda_proveedor_activo', ['idTienda', 'idProveedor', 'activo'], false],
+      ['producto', 'idx_producto_tienda_seguimiento', ['idTienda', 'fechaInicioSeguimiento'], false],
+      ['detalleVenta', 'idx_detalleVenta_tienda_producto_venta', ['idTienda', 'idProducto', 'idVenta'], false],
+      ['detalleCompra', 'idx_detalleCompra_tienda_producto_compra', ['idTienda', 'idProducto', 'idCompra'], false]
+    ],
+    checks: [
+      ['configuracionInventarioTienda', 'chk_configInventario_periodos'],
+      ['configuracionInventarioTienda', 'chk_configInventario_reposicion'],
+      ['configuracionInventarioTienda', 'chk_configInventario_cobertura'],
+      ['configuracionInventarioTienda', 'chk_configInventario_producto_nuevo'],
+      ['producto', 'chk_producto_dias_reposicion'],
+      ['producto', 'chk_producto_dias_cobertura']
+    ],
+    foreignKeyConstraints: [
+      ['configuracionInventarioTienda', 'fk_configInventario_tienda', ['idTienda'], 'tienda', ['idTienda'], 'RESTRICT', 'RESTRICT'],
+      ['configuracionInventarioTienda', 'fk_configInventario_administrador', ['idTienda', 'idAdministradorActualiza'], 'administrador', ['idTienda', 'idAdministrador'], 'RESTRICT', 'RESTRICT']
+    ]
   }
 };
 
@@ -550,6 +603,92 @@ async function requirementsSatisfied(connection, file) {
          AND a.fechaInicio<b.fechaFin AND b.fechaInicio<a.fechaFin`
     );
     if (Number(overlappingClosures.total) > 0) return false;
+  }
+  if (file === '010_inteligencia_inventario.sql') {
+    const [temporalColumns] = await connection.query(
+      `SELECT TABLE_NAME, COLUMN_NAME, IS_NULLABLE, COLUMN_DEFAULT, EXTRA
+       FROM information_schema.COLUMNS
+       WHERE TABLE_SCHEMA=? AND (
+         (TABLE_NAME='producto' AND COLUMN_NAME='fechaInicioSeguimiento')
+         OR (TABLE_NAME='configuracionInventarioTienda' AND COLUMN_NAME IN ('creadoEn','actualizadoEn'))
+       )`,
+      [process.env.DB_NAME]
+    );
+    const temporalColumnKey = (table, column) => `${String(table).toLocaleLowerCase('en-US')}.${String(column).toLocaleLowerCase('en-US')}`;
+    const temporalMetadata = new Map(
+      temporalColumns.map((column) => [temporalColumnKey(column.TABLE_NAME, column.COLUMN_NAME), column])
+    );
+    const trackingDate = temporalMetadata.get(temporalColumnKey('producto', 'fechaInicioSeguimiento'));
+    const configurationCreatedAt = temporalMetadata.get(temporalColumnKey('configuracionInventarioTienda', 'creadoEn'));
+    const configurationUpdatedAt = temporalMetadata.get(temporalColumnKey('configuracionInventarioTienda', 'actualizadoEn'));
+    if (!trackingDate || trackingDate.IS_NULLABLE !== 'NO' || trackingDate.COLUMN_DEFAULT !== null
+      || String(trackingDate.EXTRA || '') !== '') return false;
+    if (!configurationCreatedAt || configurationCreatedAt.IS_NULLABLE !== 'NO'
+      || configurationCreatedAt.COLUMN_DEFAULT !== null
+      || String(configurationCreatedAt.EXTRA || '') !== '') return false;
+    if (!configurationUpdatedAt || configurationUpdatedAt.IS_NULLABLE !== 'NO'
+      || configurationUpdatedAt.COLUMN_DEFAULT !== null
+      || String(configurationUpdatedAt.EXTRA || '') !== '') return false;
+    const [[storesWithoutConfiguration]] = await connection.query(
+      `SELECT COUNT(*) total FROM tienda t
+       WHERE NOT EXISTS (
+         SELECT 1 FROM configuracionInventarioTienda c WHERE c.idTienda=t.idTienda
+       )`
+    );
+    if (Number(storesWithoutConfiguration.total) > 0) return false;
+    const [[invalidConfiguration]] = await connection.query(
+      `SELECT COUNT(*) total FROM configuracionInventarioTienda c
+       LEFT JOIN tienda t ON t.idTienda=c.idTienda
+       LEFT JOIN administrador a ON a.idTienda=c.idTienda AND a.idAdministrador=c.idAdministradorActualiza
+       WHERE t.idTienda IS NULL
+          OR c.periodoAnalisisDias NOT BETWEEN 7 AND 365
+          OR c.diasHistorialMinimo NOT BETWEEN 1 AND c.periodoAnalisisDias
+          OR c.diasReposicionDefault NOT BETWEEN 0 AND 365
+          OR c.diasCoberturaDefault NOT BETWEEN 1 AND 365
+          OR c.diasProductoNuevo NOT BETWEEN 1 AND 365
+          OR (c.idAdministradorActualiza IS NOT NULL AND a.idAdministrador IS NULL)`
+    );
+    if (Number(invalidConfiguration.total) > 0) return false;
+    const [[invalidProducts]] = await connection.query(
+      `SELECT COUNT(*) total FROM producto
+       WHERE fechaInicioSeguimiento IS NULL
+          OR (diasReposicion IS NOT NULL AND diasReposicion NOT BETWEEN 0 AND 365)
+          OR (diasCoberturaObjetivo IS NOT NULL AND diasCoberturaObjetivo NOT BETWEEN 1 AND 365)
+          OR (presentacionCompraSugerida IS NOT NULL
+              AND presentacionCompraSugerida NOT IN ('unidad','paquete'))`
+    );
+    if (Number(invalidProducts.total) > 0) return false;
+    const [[features]] = await connection.query(
+      `SELECT COUNT(DISTINCT codigo) total FROM funcionalidad
+       WHERE codigo IN (
+         'inventario_resumen','alertas_stock','ranking_productos','valor_inventario_basico',
+         'compras_sugeridas','rotacion_inventario','dias_cobertura',
+         'inventario_sin_movimiento','exportacion_inventario'
+       ) AND activo=1`
+    );
+    if (Number(features.total) !== 9) return false;
+    const [[planAccess]] = await connection.query(
+      `SELECT COUNT(DISTINCT CONCAT(p.codigo, ':', f.codigo)) total
+       FROM planFuncionalidad pf
+       JOIN plan p ON p.idPlan=pf.idPlan
+       JOIN funcionalidad f ON f.idFuncionalidad=pf.idFuncionalidad
+       WHERE pf.habilitada=1 AND p.activo=1 AND f.activo=1
+         AND ((p.codigo IN ('basico','avanzado')
+               AND f.codigo IN ('inventario_resumen','alertas_stock','ranking_productos','valor_inventario_basico'))
+           OR (p.codigo='avanzado'
+               AND f.codigo IN ('compras_sugeridas','rotacion_inventario','dias_cobertura',
+                                'inventario_sin_movimiento','exportacion_inventario')))`
+    );
+    if (Number(planAccess.total) !== 13) return false;
+    const [[advancedInBasic]] = await connection.query(
+      `SELECT COUNT(*) total FROM planFuncionalidad pf
+       JOIN plan p ON p.idPlan=pf.idPlan
+       JOIN funcionalidad f ON f.idFuncionalidad=pf.idFuncionalidad
+       WHERE p.codigo='basico' AND pf.habilitada=1
+         AND f.codigo IN ('compras_sugeridas','rotacion_inventario','dias_cobertura',
+                          'inventario_sin_movimiento','exportacion_inventario','vencimientos_lote')`
+    );
+    if (Number(advancedInBasic.total) > 0) return false;
   }
   return true;
 }
@@ -1052,6 +1191,46 @@ async function inspect009State(connection, recorded) {
   return estado009;
 }
 
+async function inspect010State(connection, recorded) {
+  const requirements = migrationRequirements['010_inteligencia_inventario.sql'];
+  const estado010 = {
+    migracion010Registrada: Boolean(recorded),
+    tablas: {},
+    columnas: {},
+    indices: {},
+    checks: {},
+    clavesForaneas: {},
+    estructuraCompleta: false,
+    datosValidos: false
+  };
+  for (const table of Object.keys(requirements.columns)) {
+    estado010.tablas[table] = await hasTable(connection, table);
+  }
+  for (const [table, columns] of Object.entries(requirements.columns)) {
+    estado010.columnas[table] = estado010.tablas[table] && await hasColumns(connection, table, columns);
+  }
+  for (const [table, name, columns, unique] of requirements.indexes) {
+    estado010.indices[`${table}.${name}`] = await hasIndex(connection, table, name, columns, unique);
+  }
+  for (const [table, name] of requirements.checks) {
+    estado010.checks[`${table}.${name}`] = await hasCheckConstraint(connection, table, name);
+  }
+  for (const relation of requirements.foreignKeyConstraints) {
+    estado010.clavesForaneas[`${relation[0]}.${relation[1]}`] = await hasForeignKeyConstraint(connection, ...relation);
+  }
+  estado010.estructuraCompleta = Object.values(estado010.tablas).every(Boolean)
+    && Object.values(estado010.columnas).every(Boolean)
+    && Object.values(estado010.indices).every(Boolean)
+    && Object.values(estado010.checks).every(Boolean)
+    && Object.values(estado010.clavesForaneas).every(Boolean);
+  if (estado010.estructuraCompleta) {
+    estado010.datosValidos = await requirementsSatisfied(connection, '010_inteligencia_inventario.sql');
+  }
+  console.log('Estado previo detectado para 010_inteligencia_inventario.sql:');
+  console.log(JSON.stringify(estado010, null, 2));
+  return estado010;
+}
+
 async function validateFinancialMigrationData(connection) {
   if (await hasColumns(connection, 'detalleVenta', ['origenCosto'])) {
     const [[invalidCosts]] = await connection.query(
@@ -1113,6 +1292,45 @@ async function validateFinancialMigrationData(connection) {
   }
 }
 
+async function validateInventoryIntelligenceMigrationData(connection) {
+  if (await hasColumns(connection, 'configuracionInventarioTienda', [
+    'idTienda', 'periodoAnalisisDias', 'diasHistorialMinimo', 'diasReposicionDefault',
+    'diasCoberturaDefault', 'diasProductoNuevo', 'idAdministradorActualiza'
+  ])) {
+    const [[invalidConfiguration]] = await connection.query(
+      `SELECT COUNT(*) total FROM configuracionInventarioTienda c
+       LEFT JOIN tienda t ON t.idTienda=c.idTienda
+       LEFT JOIN administrador a ON a.idTienda=c.idTienda AND a.idAdministrador=c.idAdministradorActualiza
+       WHERE t.idTienda IS NULL
+          OR c.periodoAnalisisDias NOT BETWEEN 7 AND 365
+          OR c.diasHistorialMinimo NOT BETWEEN 1 AND c.periodoAnalisisDias
+          OR c.diasReposicionDefault NOT BETWEEN 0 AND 365
+          OR c.diasCoberturaDefault NOT BETWEEN 1 AND 365
+          OR c.diasProductoNuevo NOT BETWEEN 1 AND 365
+          OR (c.idAdministradorActualiza IS NOT NULL AND a.idAdministrador IS NULL)`
+    );
+    if (Number(invalidConfiguration.total) > 0) {
+      throw new Error(`La migracion 010 no puede continuar: existen ${invalidConfiguration.total} configuraciones de inventario invalidas.`);
+    }
+  }
+  if (await hasColumns(connection, 'producto', ['diasReposicion'])) {
+    const [[invalidRestockDays]] = await connection.query(
+      'SELECT COUNT(*) total FROM producto WHERE diasReposicion IS NOT NULL AND diasReposicion NOT BETWEEN 0 AND 365'
+    );
+    if (Number(invalidRestockDays.total) > 0) {
+      throw new Error(`La migracion 010 no puede continuar: existen ${invalidRestockDays.total} productos con dias de reposicion invalidos.`);
+    }
+  }
+  if (await hasColumns(connection, 'producto', ['diasCoberturaObjetivo'])) {
+    const [[invalidCoverageDays]] = await connection.query(
+      'SELECT COUNT(*) total FROM producto WHERE diasCoberturaObjetivo IS NOT NULL AND diasCoberturaObjetivo NOT BETWEEN 1 AND 365'
+    );
+    if (Number(invalidCoverageDays.total) > 0) {
+      throw new Error(`La migracion 010 no puede continuar: existen ${invalidCoverageDays.total} productos con dias de cobertura invalidos.`);
+    }
+  }
+}
+
 function isExistingStructureError(error) {
   return [
     'ER_DUP_FIELDNAME',
@@ -1140,6 +1358,7 @@ async function main() {
     for (const file of files) {
       const [recorded] = await connection.query('SELECT nombre FROM schema_migrations WHERE nombre=?', [file]);
       let estado006 = null;
+      let estado010 = null;
       if (file === '004_multitienda_base.sql') {
         await inspect004State(connection, recorded.length > 0);
       }
@@ -1154,10 +1373,15 @@ async function main() {
       if (file === '009_finanzas_reportes_caja.sql') {
         await inspect009State(connection, recorded.length > 0);
       }
+      if (file === '010_inteligencia_inventario.sql') {
+        estado010 = await inspect010State(connection, recorded.length > 0);
+      }
       if (recorded.length) {
         const registeredMigrationIsIncomplete = file === '006_catalogo_maestro.sql'
           ? decide006Action(estado006) === 'detener'
-          : ['004_multitienda_base.sql', '005_planes_suscripciones.sql', '007_movimientos_stock.sql', '008_punto_venta_pagos.sql', '009_finanzas_reportes_caja.sql'].includes(file)
+          : file === '010_inteligencia_inventario.sql'
+            ? !(estado010.estructuraCompleta && estado010.datosValidos)
+            : ['004_multitienda_base.sql', '005_planes_suscripciones.sql', '007_movimientos_stock.sql', '008_punto_venta_pagos.sql', '009_finanzas_reportes_caja.sql'].includes(file)
             && !await requirementsSatisfied(connection, file);
         if (registeredMigrationIsIncomplete) {
           throw new Error(`La migracion ${file} figura en schema_migrations, pero su estructura o sus datos estan incompletos. No se aplicaron cambios adicionales.`);
@@ -1168,14 +1392,30 @@ async function main() {
 
       const existingMigrationIsComplete = file === '006_catalogo_maestro.sql'
         ? decide006Action(estado006) === 'registrar'
-        : await requirementsSatisfied(connection, file);
+        : file === '010_inteligencia_inventario.sql'
+          ? estado010.estructuraCompleta && estado010.datosValidos
+          : await requirementsSatisfied(connection, file);
       if (existingMigrationIsComplete) {
-        await connection.query('INSERT INTO schema_migrations (nombre) VALUES (?)', [file]);
+        if (file === '010_inteligencia_inventario.sql') {
+          await connection.query('INSERT IGNORE INTO schema_migrations (nombre) VALUES (?)', [file]);
+          const [finalRecord] = await connection.query(
+            'SELECT nombre FROM schema_migrations WHERE nombre=?', [file]
+          );
+          estado010 = await inspect010State(connection, finalRecord.length > 0);
+          if (!estado010.migracion010Registrada || !estado010.estructuraCompleta || !estado010.datosValidos) {
+            throw new Error('La migracion 010 no pudo confirmar su registro y estado fisico final.');
+          }
+        } else {
+          await connection.query('INSERT INTO schema_migrations (nombre) VALUES (?)', [file]);
+        }
         console.log(`Migracion existente registrada sin repetir cambios: ${file}`);
         continue;
       }
 
       const statements = readSqlStatements(path.join(migrationsDir, file));
+      const migrationContext = file === '010_inteligencia_inventario.sql'
+        ? { localDateTime: formatLocalDateTime() }
+        : {};
       let multitenantDataValidated = false;
       if (file === '008_punto_venta_pagos.sql') {
         await validatePosMigrationData(connection);
@@ -1184,6 +1424,10 @@ async function main() {
       if (file === '009_finanzas_reportes_caja.sql') {
         await validateFinancialMigrationData(connection);
         console.log('Datos financieros existentes validados antes de recuperar la estructura 009.');
+      }
+      if (file === '010_inteligencia_inventario.sql') {
+        await validateInventoryIntelligenceMigrationData(connection);
+        console.log('Datos de inventario existentes validados antes de recuperar la estructura 010.');
       }
       for (let index = 0; index < statements.length; index += 1) {
         const statement = statements[index];
@@ -1195,7 +1439,7 @@ async function main() {
           console.log('Datos multi-tienda validados antes de crear indices y restricciones.');
         }
 
-        const element = ['004_multitienda_base.sql', '006_catalogo_maestro.sql', '007_movimientos_stock.sql', '008_punto_venta_pagos.sql', '009_finanzas_reportes_caja.sql'].includes(file)
+        const element = ['004_multitienda_base.sql', '006_catalogo_maestro.sql', '007_movimientos_stock.sql', '008_punto_venta_pagos.sql', '009_finanzas_reportes_caja.sql', '010_inteligencia_inventario.sql'].includes(file)
           ? structureElementFromStatement(statement)
           : null;
         if (element && await structureElementExists(connection, element)) {
@@ -1215,7 +1459,8 @@ async function main() {
           if (element) {
             console.log(`Paso ${index + 1}/${statements.length}: creando ${element.type} ${element.table}.${element.name}.`);
           }
-          await connection.query(statement);
+          const executable = prepareMigrationStatement(file, statement, migrationContext);
+          await connection.query(executable.sql, executable.params);
         } catch (error) {
           if (isExistingStructureError(error) && element && await structureElementExists(connection, element)) {
             console.log(`Paso ${index + 1}/${statements.length}: elemento existente; se verificara al finalizar.`);
@@ -1240,9 +1485,14 @@ async function main() {
         console.log('Estado final validado para 006_catalogo_maestro.sql:');
         console.log(JSON.stringify(estado006, null, 2));
       }
+      if (file === '010_inteligencia_inventario.sql') {
+        estado010 = await inspect010State(connection, false);
+      }
       const migrationCompleted = file === '006_catalogo_maestro.sql'
         ? estado006.estructuraCompleta && estado006.datosValidos
-        : await requirementsSatisfied(connection, file);
+        : file === '010_inteligencia_inventario.sql'
+          ? estado010.estructuraCompleta && estado010.datosValidos
+          : await requirementsSatisfied(connection, file);
       if (!migrationCompleted) {
         const missing = await missingRequirementElements(connection, file);
         throw new Error(
@@ -1250,7 +1500,18 @@ async function main() {
           + `Elementos faltantes: ${missing.length ? missing.join(', ') : 'ninguno; revise datos y configuracion de la migracion'}.`
         );
       }
-      await connection.query('INSERT INTO schema_migrations (nombre) VALUES (?)', [file]);
+      if (file === '010_inteligencia_inventario.sql') {
+        await connection.query('INSERT IGNORE INTO schema_migrations (nombre) VALUES (?)', [file]);
+        const [finalRecord] = await connection.query(
+          'SELECT nombre FROM schema_migrations WHERE nombre=?', [file]
+        );
+        estado010 = await inspect010State(connection, finalRecord.length > 0);
+        if (!estado010.migracion010Registrada || !estado010.estructuraCompleta || !estado010.datosValidos) {
+          throw new Error('La migracion 010 no pudo confirmar su registro y estado fisico final.');
+        }
+      } else {
+        await connection.query('INSERT INTO schema_migrations (nombre) VALUES (?)', [file]);
+      }
       console.log(`Migracion aplicada: ${file}`);
     }
 

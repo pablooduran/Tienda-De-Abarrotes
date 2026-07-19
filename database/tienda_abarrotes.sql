@@ -157,6 +157,30 @@ WHERE NOT EXISTS (SELECT 1 FROM funcionalidad WHERE codigo='exportacion_reportes
 INSERT INTO funcionalidad (codigo, nombre, descripcion)
 SELECT 'dashboard_financiero', 'Dashboard financiero', 'Indicadores de ventas, cobros, costos y gastos.'
 WHERE NOT EXISTS (SELECT 1 FROM funcionalidad WHERE codigo='dashboard_financiero');
+INSERT INTO funcionalidad (codigo, nombre, descripcion)
+SELECT 'inventario_resumen', 'Resumen de inventario', 'Estado general y alertas esenciales del inventario.'
+WHERE NOT EXISTS (SELECT 1 FROM funcionalidad WHERE codigo='inventario_resumen');
+INSERT INTO funcionalidad (codigo, nombre, descripcion)
+SELECT 'alertas_stock', 'Alertas de stock', 'Productos agotados, en minimo y con stock bajo.'
+WHERE NOT EXISTS (SELECT 1 FROM funcionalidad WHERE codigo='alertas_stock');
+INSERT INTO funcionalidad (codigo, nombre, descripcion)
+SELECT 'ranking_productos', 'Ranking de productos', 'Productos con mayor y menor movimiento comercial.'
+WHERE NOT EXISTS (SELECT 1 FROM funcionalidad WHERE codigo='ranking_productos');
+INSERT INTO funcionalidad (codigo, nombre, descripcion)
+SELECT 'valor_inventario_basico', 'Valor basico del inventario', 'Valor estimado del inventario a costo y venta.'
+WHERE NOT EXISTS (SELECT 1 FROM funcionalidad WHERE codigo='valor_inventario_basico');
+INSERT INTO funcionalidad (codigo, nombre, descripcion)
+SELECT 'rotacion_inventario', 'Rotacion de inventario', 'Analisis de rotacion por producto y periodo.'
+WHERE NOT EXISTS (SELECT 1 FROM funcionalidad WHERE codigo='rotacion_inventario');
+INSERT INTO funcionalidad (codigo, nombre, descripcion)
+SELECT 'dias_cobertura', 'Dias de cobertura', 'Estimacion de dias restantes de inventario.'
+WHERE NOT EXISTS (SELECT 1 FROM funcionalidad WHERE codigo='dias_cobertura');
+INSERT INTO funcionalidad (codigo, nombre, descripcion)
+SELECT 'inventario_sin_movimiento', 'Inventario sin movimiento', 'Deteccion de productos nuevos o sin ventas recientes.'
+WHERE NOT EXISTS (SELECT 1 FROM funcionalidad WHERE codigo='inventario_sin_movimiento');
+INSERT INTO funcionalidad (codigo, nombre, descripcion)
+SELECT 'exportacion_inventario', 'Exportacion de inventario', 'Exportacion de analisis detallado del inventario.'
+WHERE NOT EXISTS (SELECT 1 FROM funcionalidad WHERE codigo='exportacion_inventario');
 
 INSERT INTO planFuncionalidad (idPlan, idFuncionalidad, habilitada)
 SELECT p.idPlan, f.idFuncionalidad, 1
@@ -213,6 +237,16 @@ SELECT p.idPlan, f.idFuncionalidad, 1
 FROM plan p
 JOIN funcionalidad f ON f.codigo IN ('rentabilidad_producto','cierre_caja')
 WHERE p.codigo='avanzado'
+  AND NOT EXISTS (
+    SELECT 1 FROM planFuncionalidad pf
+    WHERE pf.idPlan=p.idPlan AND pf.idFuncionalidad=f.idFuncionalidad
+  );
+
+INSERT INTO planFuncionalidad (idPlan, idFuncionalidad, habilitada)
+SELECT p.idPlan, f.idFuncionalidad, 1
+FROM plan p
+JOIN funcionalidad f ON f.codigo IN ('inventario_resumen','alertas_stock','ranking_productos','valor_inventario_basico')
+WHERE p.codigo='basico'
   AND NOT EXISTS (
     SELECT 1 FROM planFuncionalidad pf
     WHERE pf.idPlan=p.idPlan AND pf.idFuncionalidad=f.idFuncionalidad
@@ -332,6 +366,10 @@ CREATE TABLE IF NOT EXISTS producto (
   precioVentaPaquete DECIMAL(10,2) NULL,
   stock INT NOT NULL DEFAULT 0,
   stockMinimo INT NOT NULL DEFAULT 5,
+  diasReposicion INT NULL,
+  diasCoberturaObjetivo INT NULL,
+  presentacionCompraSugerida ENUM('unidad','paquete') NULL,
+  fechaInicioSeguimiento DATETIME NOT NULL,
   stockUnidadesTotal INT NOT NULL DEFAULT 0,
   ultimoPrecioCompra DECIMAL(10,2) NOT NULL DEFAULT 0,
   permiteVentaPorPaquete BOOLEAN NOT NULL DEFAULT TRUE,
@@ -343,6 +381,10 @@ CREATE TABLE IF NOT EXISTS producto (
   KEY idx_producto_tienda_proveedor (idTienda, idProveedor),
   KEY idx_producto_tienda_categoria_nombre (idTienda, categoria, nombre),
   KEY idx_producto_tienda_activo_nombre (idTienda, activo, nombre),
+  KEY idx_producto_tienda_inventario (idTienda, activo, stockUnidadesTotal, stockMinimo),
+  KEY idx_producto_tienda_categoria_activo (idTienda, categoria, activo),
+  KEY idx_producto_tienda_proveedor_activo (idTienda, idProveedor, activo),
+  KEY idx_producto_tienda_seguimiento (idTienda, fechaInicioSeguimiento),
   UNIQUE KEY uq_producto_tienda_codigoBarras (idTienda, codigoBarras),
   KEY idx_producto_tienda_favorito_nombre (idTienda, favoritoPos, activo, nombre),
   KEY idx_producto_productoMaestro (idProductoMaestro),
@@ -350,9 +392,35 @@ CREATE TABLE IF NOT EXISTS producto (
   CONSTRAINT fk_producto_tienda FOREIGN KEY (idTienda) REFERENCES tienda(idTienda),
   CONSTRAINT fk_producto_proveedor FOREIGN KEY (idProveedor) REFERENCES proveedor(idProveedor),
   CONSTRAINT fk_producto_tienda_proveedor FOREIGN KEY (idTienda, idProveedor) REFERENCES proveedor(idTienda, idProveedor),
+  CONSTRAINT chk_producto_dias_reposicion CHECK (diasReposicion IS NULL OR diasReposicion BETWEEN 0 AND 365),
+  CONSTRAINT chk_producto_dias_cobertura CHECK (diasCoberturaObjetivo IS NULL OR diasCoberturaObjetivo BETWEEN 1 AND 365),
   CONSTRAINT fk_producto_productoMaestro FOREIGN KEY (idProductoMaestro)
     REFERENCES productoMaestro(idProductoMaestro) ON UPDATE CASCADE ON DELETE RESTRICT
 );
+
+CREATE TABLE IF NOT EXISTS configuracionInventarioTienda (
+  idTienda INT NOT NULL PRIMARY KEY,
+  periodoAnalisisDias INT NOT NULL DEFAULT 30,
+  diasHistorialMinimo INT NOT NULL DEFAULT 14,
+  diasReposicionDefault INT NOT NULL DEFAULT 3,
+  diasCoberturaDefault INT NOT NULL DEFAULT 14,
+  diasProductoNuevo INT NOT NULL DEFAULT 30,
+  creadoEn DATETIME NOT NULL,
+  actualizadoEn DATETIME NOT NULL,
+  idAdministradorActualiza INT NULL,
+  KEY idx_configInventario_tienda_admin (idTienda, idAdministradorActualiza),
+  CONSTRAINT chk_configInventario_periodos CHECK (
+    periodoAnalisisDias BETWEEN 7 AND 365
+    AND diasHistorialMinimo BETWEEN 1 AND periodoAnalisisDias
+  ),
+  CONSTRAINT chk_configInventario_reposicion CHECK (diasReposicionDefault BETWEEN 0 AND 365),
+  CONSTRAINT chk_configInventario_cobertura CHECK (diasCoberturaDefault BETWEEN 1 AND 365),
+  CONSTRAINT chk_configInventario_producto_nuevo CHECK (diasProductoNuevo BETWEEN 1 AND 365),
+  CONSTRAINT fk_configInventario_tienda FOREIGN KEY (idTienda)
+    REFERENCES tienda(idTienda) ON UPDATE RESTRICT ON DELETE RESTRICT,
+  CONSTRAINT fk_configInventario_administrador FOREIGN KEY (idTienda, idAdministradorActualiza)
+    REFERENCES administrador(idTienda, idAdministrador) ON UPDATE RESTRICT ON DELETE RESTRICT
+) ENGINE=InnoDB;
 
 CREATE TABLE IF NOT EXISTS venta (
   idVenta INT AUTO_INCREMENT PRIMARY KEY,
@@ -410,6 +478,7 @@ CREATE TABLE IF NOT EXISTS detalleVenta (
   UNIQUE KEY uq_detalleVenta_tienda_id (idTienda, idDetalleVenta),
   KEY idx_detalleVenta_tienda_venta (idTienda, idVenta),
   KEY idx_detalleVenta_tienda_producto (idTienda, idProducto),
+  KEY idx_detalleVenta_tienda_producto_venta (idTienda, idProducto, idVenta),
   CONSTRAINT fk_detalleVenta_tienda FOREIGN KEY (idTienda) REFERENCES tienda(idTienda),
   CONSTRAINT fk_detalleVenta_venta FOREIGN KEY (idVenta) REFERENCES venta(idVenta),
   CONSTRAINT fk_detalleVenta_producto FOREIGN KEY (idProducto) REFERENCES producto(idProducto),
@@ -446,6 +515,7 @@ CREATE TABLE IF NOT EXISTS detalleCompra (
   UNIQUE KEY uq_detalleCompra_tienda_id (idTienda, idDetalleCompra),
   KEY idx_detalleCompra_tienda_compra (idTienda, idCompra),
   KEY idx_detalleCompra_tienda_producto (idTienda, idProducto),
+  KEY idx_detalleCompra_tienda_producto_compra (idTienda, idProducto, idCompra),
   CONSTRAINT fk_detalleCompra_tienda FOREIGN KEY (idTienda) REFERENCES tienda(idTienda),
   CONSTRAINT fk_detalleCompra_compra FOREIGN KEY (idCompra) REFERENCES compra(idCompra),
   CONSTRAINT fk_detalleCompra_producto FOREIGN KEY (idProducto) REFERENCES producto(idProducto),

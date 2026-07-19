@@ -104,6 +104,7 @@ async function cleanupStore(connection, idTienda) {
   await connection.query('DELETE FROM producto WHERE idTienda=?', [idTienda]);
   await connection.query('DELETE FROM cliente WHERE idTienda=?', [idTienda]);
   await connection.query('DELETE FROM proveedor WHERE idTienda=?', [idTienda]);
+  await connection.query('DELETE FROM configuracionInventarioTienda WHERE idTienda=?', [idTienda]);
   await connection.query('DELETE FROM suscripcionTienda WHERE idTienda=?', [idTienda]);
   await connection.query('DELETE FROM administrador WHERE idTienda=?', [idTienda]);
   await connection.query('DELETE FROM tienda WHERE idTienda=?', [idTienda]);

@@ -16,7 +16,7 @@ Sistema con Node.js, Express, MySQL y frontend en HTML, CSS y JavaScript. Admini
 ## Requisitos
 
 - Node.js 18 o superior.
-- MySQL 8.0.16 o superior. Las migraciones 007, 008 y 009 fueron disenadas para MySQL 8.0.46.
+- MySQL 8.0.16 o superior. Las migraciones 007, 008, 009 y 010 fueron disenadas para MySQL 8.0.46.
 - Una base local o de prueba para validar cambios antes de produccion.
 
 ## Configuracion local
@@ -83,6 +83,7 @@ Migraciones actuales, en orden:
 7. `007_movimientos_stock.sql`: historial inmutable de inventario, stock inicial, ajustes protegidos e idempotencia de ventas y compras.
 8. `008_punto_venta_pagos.sql`: punto de venta, pagos por metodo, comprobantes, codigo de barras local y compatibilidad con fiados.
 9. `009_finanzas_reportes_caja.sql`: gastos, origen del costo historico, reportes financieros, exportaciones y cierres de caja opcionales.
+10. `010_inteligencia_inventario.sql`: configuracion de analisis, seguimiento de productos, indices y permisos de inteligencia de inventario.
 
 Antes y despues de aplicar la migracion multi-tienda sobre una base local, puede obtener una comprobacion de solo lectura:
 
@@ -139,6 +140,15 @@ npm.cmd run db:check-financial-reports
 ```
 
 La migracion crea categorias de gasto editables para cada tienda, sin crear gastos ni cierres. Los costos ya guardados no se recalculan: se marcan como reales cuando existe evidencia del movimiento de venta, estimados cuando provienen de datos anteriores y desconocidos cuando no hay costo disponible. Las ventas nuevas congelan el ultimo costo de compra vigente en `detalleVenta`.
+
+Antes y despues de aplicar `010`, compruebe configuraciones, fechas de seguimiento, indices y permisos por plan:
+
+```powershell
+$env:APP_ENV='local'
+npm.cmd run db:check-inventory-intelligence
+```
+
+La inteligencia de inventario usa `stockUnidadesTotal` como saldo real y calcula recomendaciones sin registrar compras ni cambiar stock. El plan basico recibe resumen, alertas, ranking y valoracion esencial. El avanzado agrega compras sugeridas, rotacion, dias de cobertura, productos sin movimiento y exportacion Excel. Las fechas de seguimiento y configuracion se escriben explicitamente en hora local.
 
 ### Crear el primer administrador
 
@@ -218,6 +228,9 @@ No ejecute `db:init`, `db:migrate`, `db:create-admin` ni `db:seed-demo` contra p
 - El cierre de caja es opcional, no altera operaciones y solo esta disponible en el plan avanzado. QR no forma parte del efectivo fisico esperado.
 - La marca de gasto recurrente es informativa. Esta fase no genera gastos futuros ni realiza cobros automaticos.
 - Los rangos usan fecha y hora local de MySQL/servidor, sin convertir `DATETIME` mediante `toISOString`. Servidor y base deben compartir la zona horaria comercial.
+- Las recomendaciones de inventario son orientativas. Usan ventas reales de `detalleVenta`, respetan el historial observado y nunca crean compras ni movimientos de stock.
+- Cuando el historial es insuficiente, la sugerencia solo intenta alcanzar el stock minimo y se identifica con confianza insuficiente. Los paquetes siempre se redondean hacia arriba.
+- La valoracion separa productos con costo conocido de productos sin costo; un costo desconocido no se interpreta como cero real.
 
 ## Preparacion multi-tienda
 
@@ -309,3 +322,41 @@ npm.cmd run test:financial-reports
 ```
 
 La prueba valida categorias y gastos, anulacion logica, aislamiento, costos congelados por unidad y paquete, fiado y cobro posterior, descuentos, ganancia bruta y neta, compras separadas, reportes, permisos de planes, cierre de caja, exportacion Excel y neutralizacion de formulas. Solo funciona en localhost y en una base cuyo nombre contenga `prueba` o `test`; elimina los datos temporales que crea.
+
+### Prueba local de inteligencia de inventario
+
+Con `010` aplicada y el servidor local iniciado, ejecute:
+
+```powershell
+$env:APP_ENV='local'
+npm.cmd run test:inventory-intelligence
+```
+
+La prueba valida estados de stock, historial suficiente, demanda, sugerencias por unidad y paquete, dias restantes, rotacion, productos sin movimiento, valoracion, aislamiento, permisos por plan, solo lectura y exportacion Excel segura. Crea dos tiendas temporales en localhost y elimina todos los datos que genera.
+
+### Validacion manual de la interfaz de inteligencia de inventario
+
+Inicie el servidor local y abra la seccion **Inteligencia de inventario** desde el menu de la tienda. Pruebe filtros de fecha, categoria, proveedor, producto y estado; el rango maximo admitido es de 365 dias.
+
+Con una tienda de plan basico, confirme:
+
+- se muestran resumen, alertas, ranking y valoracion;
+- los productos agotados, bajos y en minimo tienen texto de estado visible;
+- los productos sin costo se informan por separado y no aparecen como costo cero conocido;
+- no aparecen controles utilizables de compras sugeridas, rotacion, productos sin movimiento ni exportacion avanzada.
+
+Con una tienda de plan avanzado, confirme:
+
+- se muestran compras sugeridas, rotacion, dias restantes y productos sin movimiento;
+- una sugerencia explica su confianza y no modifica stock ni registra una compra;
+- la configuracion general valida sus rangos y guarda los cambios;
+- la configuracion de un producto permite volver a los valores automaticos dejando campos vacios;
+- **Exportar inventario** descarga un archivo XLSX limitado a la tienda y filtros actuales.
+
+Con una suscripcion en modo de solo lectura, confirme:
+
+- los reportes y analisis continúan disponibles;
+- los botones para guardar configuracion general o por producto quedan deshabilitados u ocultos;
+- el backend rechaza cualquier intento de escritura aunque se manipule la interfaz.
+
+Revise tambien la vista en computadora, tableta y telefono: las pestañas deben desplazarse horizontalmente cuando no caben, las tablas deben conservar scroll propio y los formularios deben apilarse sin superponer textos o botones.

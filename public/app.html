@@ -11,7 +11,7 @@
     <aside class="sidebar">
       <h1 id="storeName">Mi tienda</h1>
       <div id="subscriptionSummary" class="subscription-summary" hidden></div>
-      <nav id="menu"></nav>
+      <nav id="menu" aria-label="Secciones de la tienda"></nav>
       <button id="logoutBtn" class="ghost">Cerrar sesión</button>
     </aside>
     <main class="content">
@@ -22,8 +22,8 @@
         </div>
       </header>
       <div id="subscriptionBanner" class="subscription-banner" hidden></div>
-      <div id="message" class="message"></div>
-      <section id="view"></section>
+      <div id="message" class="message" aria-live="polite"></div>
+      <section id="view" aria-live="polite"></section>
     </main>
   </div>
   <div id="modalRoot"></div>

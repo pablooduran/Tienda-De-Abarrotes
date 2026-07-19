@@ -6,6 +6,8 @@ const {
   enforcePlanLimit
 } = require('../services/subscription-service');
 const { ensureDefaultExpenseCategories } = require('../services/financial-service');
+const { ensureInventoryConfiguration } = require('../services/inventory-intelligence-service');
+const { formatLocalDateTime } = require('../utils/local-datetime');
 
 const router = express.Router();
 const STORE_STATES = new Set(['activa', 'suspendida', 'inactiva']);
@@ -195,6 +197,7 @@ router.post('/tiendas', asyncRoute(async (req, res) => {
       [tienda.nombre, tienda.slug, tienda.estado, tienda.activo]
     );
     await ensureDefaultExpenseCategories(connection, storeResult.insertId);
+    await ensureInventoryConfiguration(connection, storeResult.insertId, formatLocalDateTime());
     const passwordHash = await bcrypt.hash(propietario.password, 12);
     const [ownerResult] = await connection.query(
       `INSERT INTO administrador (idTienda, usuario, password, rol, activo)

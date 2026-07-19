@@ -2,6 +2,7 @@ const crypto = require('crypto');
 const bcrypt = require('bcryptjs');
 const mysql = require('mysql2/promise');
 const { requireEnvironment, requireLocalhostDatabase } = require('../config/env');
+const { formatLocalDateTime } = require('../utils/local-datetime');
 
 function assert(condition, message) {
   if (!condition) throw new Error(message);
@@ -84,7 +85,11 @@ const BASIC_REQUIRED_FEATURES = Object.freeze([
   'gastos',
   'reportes_financieros',
   'exportacion_reportes',
-  'dashboard_financiero'
+  'dashboard_financiero',
+  'inventario_resumen',
+  'alertas_stock',
+  'ranking_productos',
+  'valor_inventario_basico'
 ]);
 
 const ADVANCED_ONLY_FEATURES = Object.freeze([
@@ -93,6 +98,10 @@ const ADVANCED_ONLY_FEATURES = Object.freeze([
   'recordatorios_fiado',
   'cierre_caja',
   'rentabilidad_producto',
+  'rotacion_inventario',
+  'dias_cobertura',
+  'inventario_sin_movimiento',
+  'exportacion_inventario',
   'vencimientos_lote',
   'portal_clientes'
 ]);
@@ -208,6 +217,7 @@ async function cleanupStore(connection, idTienda) {
   await connection.query('DELETE FROM producto WHERE idTienda=?', [idTienda]);
   await connection.query('DELETE FROM cliente WHERE idTienda=?', [idTienda]);
   await connection.query('DELETE FROM proveedor WHERE idTienda=?', [idTienda]);
+  await connection.query('DELETE FROM configuracionInventarioTienda WHERE idTienda=?', [idTienda]);
   await connection.query('DELETE FROM suscripcionTienda WHERE idTienda=?', [idTienda]);
   await connection.query('DELETE FROM administrador WHERE idTienda=?', [idTienda]);
   await connection.query('DELETE FROM tienda WHERE idTienda=?', [idTienda]);
@@ -359,16 +369,21 @@ async function main() {
       body: { usuario: `segundo_owner_${marker}`, password: secondPassword, confirmacionPassword: secondPassword, activo: true }
     }, 409, 'Limite de propietarios basico');
 
+    const fechaInicioSeguimiento = formatLocalDateTime();
     const productRows = Array.from(
       { length: 500 },
-      (_, index) => [fixture.basicStore, `Producto limite ${marker} ${index}`, 1, 1, 0, 1]
+      (_, index) => [
+        fixture.basicStore, `Producto limite ${marker} ${index}`, 1, 1, 0, 1,
+        fechaInicioSeguimiento
+      ]
     );
     const clientRows = Array.from({ length: 500 }, (_, index) => [fixture.basicStore, `Cliente limite ${marker} ${index}`, 1]);
     const providerRows = Array.from({ length: 100 }, (_, index) => [fixture.basicStore, `Proveedor limite ${marker} ${index}`]);
     await bulkInsert(
       connection,
       'producto',
-      ['idTienda', 'nombre', 'precioVenta', 'unidadesPorPaquete', 'permiteVentaPorPaquete', 'permiteVentaPorUnidad'],
+      ['idTienda', 'nombre', 'precioVenta', 'unidadesPorPaquete', 'permiteVentaPorPaquete',
+        'permiteVentaPorUnidad', 'fechaInicioSeguimiento'],
       productRows
     );
     await bulkInsert(connection, 'cliente', ['idTienda', 'nombre', 'activo'], clientRows);

@@ -3,6 +3,7 @@ const bcrypt = require('bcryptjs');
 const ExcelJS = require('exceljs');
 const mysql = require('mysql2/promise');
 const { requireLocalhostDatabase } = require('../config/env');
+const { formatLocalDateTime } = require('../utils/local-datetime');
 
 function assert(condition, message) {
   if (!condition) throw new Error(message);
@@ -78,6 +79,7 @@ async function cleanupStore(connection, idTienda) {
   await connection.query('DELETE FROM producto WHERE idTienda=?', [idTienda]);
   await connection.query('DELETE FROM cliente WHERE idTienda=?', [idTienda]);
   await connection.query('DELETE FROM proveedor WHERE idTienda=?', [idTienda]);
+  await connection.query('DELETE FROM configuracionInventarioTienda WHERE idTienda=?', [idTienda]);
   await connection.query('DELETE FROM suscripcionTienda WHERE idTienda=?', [idTienda]);
   await connection.query('DELETE FROM administrador WHERE idTienda=?', [idTienda]);
   await connection.query('DELETE FROM tienda WHERE idTienda=?', [idTienda]);
@@ -286,10 +288,16 @@ async function main() {
     const currentCount = await connection.query('SELECT COUNT(*) total FROM producto WHERE idTienda=?', [fixture.basicStore]);
     const remaining = 500 - Number(currentCount[0][0].total);
     if (remaining > 0) {
-      const rows = Array.from({ length: remaining }, (_, index) => [fixture.basicStore, `Limite catalogo ${marker} ${index}`, 1, 1, 0, 1]);
-      const placeholders = rows.map(() => '(?,?,?,?,?,?)').join(',');
+      const fechaInicioSeguimiento = formatLocalDateTime();
+      const rows = Array.from({ length: remaining }, (_, index) => [
+        fixture.basicStore, `Limite catalogo ${marker} ${index}`, 1, 1, 0, 1, fechaInicioSeguimiento
+      ]);
+      const placeholders = rows.map(() => '(?,?,?,?,?,?,?)').join(',');
       await connection.query(
-        `INSERT INTO producto (idTienda, nombre, precioVenta, unidadesPorPaquete, permiteVentaPorPaquete, permiteVentaPorUnidad) VALUES ${placeholders}`,
+        `INSERT INTO producto
+           (idTienda, nombre, precioVenta, unidadesPorPaquete, permiteVentaPorPaquete,
+            permiteVentaPorUnidad, fechaInicioSeguimiento)
+         VALUES ${placeholders}`,
         rows.flat()
       );
     }

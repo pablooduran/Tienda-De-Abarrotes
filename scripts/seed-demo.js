@@ -1,5 +1,6 @@
 const { createConnection } = require('./db-utils');
 const { logDatabaseTarget, requireLocalhostDatabase } = require('../config/env');
+const { formatLocalDateTime } = require('../utils/local-datetime');
 
 const protectedTables = ['cliente', 'proveedor', 'producto', 'venta', 'detalleVenta', 'compra', 'detalleCompra', 'fiado', 'detalleFiado', 'pagoFiado'];
 
@@ -34,12 +35,15 @@ async function main() {
       ['Papel higienico', 'ASEO PERSONAL', 'unidad', 12, 4, 2, 120, 24, 120, 1.2, true, true],
       ['Snacks', 'SNACKS', 'bolsa', 1, 1, 5, 30, 8, 30, 3, false, true]
     ];
+    const fechaInicioSeguimiento = formatLocalDateTime();
     for (const product of products) {
       await connection.query(
         `INSERT INTO producto
-         (nombre, idProveedor, categoria, unidadMedida, unidadesPorPaquete, paquetesPorCaja, precioVenta, stock, stockMinimo, stockUnidadesTotal, ultimoPrecioCompra, permiteVentaPorPaquete, permiteVentaPorUnidad)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        [product[0], provider.insertId, ...product.slice(1)]
+         (nombre, idProveedor, categoria, unidadMedida, unidadesPorPaquete, paquetesPorCaja,
+          precioVenta, stock, stockMinimo, stockUnidadesTotal, ultimoPrecioCompra,
+          permiteVentaPorPaquete, permiteVentaPorUnidad, fechaInicioSeguimiento)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [product[0], provider.insertId, ...product.slice(1), fechaInicioSeguimiento]
       );
     }
     await connection.commit();
