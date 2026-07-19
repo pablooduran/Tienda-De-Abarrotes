@@ -411,11 +411,11 @@ async function registerSale({ idTienda, idAdministrador, body, legacyMode = fals
 }
 
 async function getSaleReceipt(idTienda, idVenta) {
-  const [[sales], [details], [payments]] = await Promise.all([
+  const [[sales], [details], [payments], [creditConfigurations]] = await Promise.all([
     pool.query(
       `SELECT v.idVenta, v.fecha, v.subtotal, v.descuento, v.total, v.montoPagado,
               v.saldoPendiente, v.estadoPago, v.tipo, v.codigoComprobante,
-              c.idCliente, COALESCE(c.nombre, 'Cliente ocasional') cliente, c.telefono,
+              c.idCliente, COALESCE(c.nombre, 'Cliente ocasional') cliente, c.telefono, c.telefonoNormalizado,
               t.nombre tienda, f.idFiado, f.saldoPendiente saldoActualFiado, f.estado estadoFiado
        FROM venta v
        JOIN tienda t ON t.idTienda=v.idTienda
@@ -436,10 +436,25 @@ async function getSaleReceipt(idTienda, idVenta) {
       `SELECT idPagoVenta, metodoPago, monto, montoRecibido, cambio, referencia, creadoEn
        FROM pagoVenta WHERE idTienda=? AND idVenta=? ORDER BY creadoEn, idPagoVenta`,
       [idTienda, idVenta]
-    )
+    ),
+    pool.query('SELECT codigoPaisWhatsApp FROM configuracionCreditoTienda WHERE idTienda=?', [idTienda])
   ]);
   if (!sales.length) throw stockError(404, 'Venta no encontrada.');
-  return { venta: sales[0], detalle: details, pagos: payments };
+  const receipt = { venta: sales[0], detalle: details, pagos: payments };
+  const countryCode = String(creditConfigurations[0]?.codigoPaisWhatsApp || '').replace(/\D/g, '');
+  const normalizedPhone = String(sales[0].telefonoNormalizado || '').replace(/\D/g, '');
+  if (!countryCode || !normalizedPhone) return { ...receipt, whatsappUrl: null };
+  const phone = normalizedPhone.startsWith(countryCode) ? normalizedPhone : `${countryCode}${normalizedPhone}`;
+  const lines = [
+    sales[0].tienda,
+    `Comprobante ${sales[0].codigoComprobante || `Venta #${sales[0].idVenta}`}`,
+    `Cliente: ${sales[0].cliente}`,
+    ...details.map((item) => `${item.nombre}: ${item.cantidad} ${item.presentacionVenta} - Bs ${Number(item.subtotal).toFixed(2)}`),
+    `Total: Bs ${Number(sales[0].total).toFixed(2)}`,
+    `Pagado: Bs ${Number(sales[0].montoPagado).toFixed(2)}`,
+    `Saldo: Bs ${Number(sales[0].saldoActualFiado ?? sales[0].saldoPendiente).toFixed(2)}`
+  ];
+  return { ...receipt, whatsappUrl: `https://wa.me/${phone}?text=${encodeURIComponent(lines.join('\n'))}` };
 }
 
 module.exports = {

@@ -1498,6 +1498,155 @@ textarea:focus-visible { outline: 3px solid rgba(40, 106, 89, .28); outline-offs
   border: 0;
 }
 
+/* Clientes, credito y cobranza */
+.credit-heading {
+  display: flex;
+  justify-content: space-between;
+  align-items: end;
+  gap: 18px;
+  margin: 0 0 14px;
+}
+.credit-heading h3 { margin: 4px 0; font-size: 24px; }
+.credit-heading p { margin: 0; color: var(--muted); }
+.customer-summary-cards,
+.collection-summary-cards { margin-bottom: 14px; }
+.customer-summary-cards .card span,
+.collection-summary-cards .card span { color: var(--muted); }
+.customer-summary-cards .card small,
+.collection-summary-cards .card small { display: block; margin-top: 4px; color: var(--muted); }
+.credit-filters {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+  align-items: end;
+}
+.collection-filters { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+.credit-filter-actions { display: flex; gap: 8px; }
+.credit-filter-actions button { flex: 1; }
+.credit-pagination {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 14px;
+}
+.customer-desktop-table td small { display: block; margin-top: 4px; color: var(--muted); }
+.customer-mobile-list,
+.collection-mobile-list { display: none; }
+.customer-card,
+.collection-card {
+  display: grid;
+  gap: 12px;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: var(--panel);
+}
+.customer-card header,
+.collection-card header,
+.profile-heading { display: flex; justify-content: space-between; align-items: start; gap: 12px; }
+.customer-card header span,
+.collection-card header span { display: block; margin-top: 4px; color: var(--muted); }
+.customer-card dl,
+.collection-card dl,
+.profile-details { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; margin: 0; }
+.customer-card dt,
+.collection-card dt,
+.profile-details dt { color: var(--muted); font-size: 12px; }
+.customer-card dd,
+.collection-card dd,
+.profile-details dd { margin: 4px 0 0; overflow-wrap: anywhere; }
+.credit-status {
+  display: inline-flex;
+  align-items: center;
+  min-height: 26px;
+  padding: 4px 8px;
+  border: 1px solid #cbd4da;
+  border-radius: 999px;
+  color: #3e4c57;
+  background: #f5f7f8;
+  font-size: 12px;
+  font-weight: 800;
+  text-transform: capitalize;
+  white-space: nowrap;
+}
+.credit-status.status-vencido,
+.credit-status.status-inactivo { color: #8f1f17; border-color: #e8aaa5; background: #fff0ef; }
+.credit-status.status-vence_hoy,
+.credit-status.status-proximo_a_vencer,
+.credit-status.status-fiado_bloqueado { color: #6f5000; border-color: #e8c65b; background: #fff8dc; }
+.credit-status.status-activo,
+.credit-status.status-pagado,
+.credit-status.status-al_dia { color: #12603d; border-color: #9dcdb8; background: #edf8f3; }
+.customer-form-sections { display: grid; gap: 16px; }
+.customer-form-sections section { padding-top: 4px; border-top: 1px solid var(--line); }
+.customer-form-sections section:first-child { border-top: 0; }
+.customer-form-sections h4 { margin: 6px 0 10px; }
+.plan-note,
+.readonly-note { border-left: 4px solid #d3a72b; background: #fffbeb; }
+.plan-note p, .readonly-note p { margin-bottom: 0; }
+.profile-heading h3 { margin: 4px 0; }
+.profile-heading p { margin: 0; color: var(--muted); }
+.profile-actions,
+.profile-tabs { display: flex; flex-wrap: wrap; gap: 8px; margin: 14px 0; }
+.profile-tabs { padding-bottom: 10px; border-bottom: 1px solid var(--line); }
+.profile-tabs button.active { background: var(--brand); }
+.profile-summary { margin-bottom: 14px; }
+.timeline-list { display: grid; gap: 8px; }
+.timeline-row,
+.statement-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 11px 0;
+  border-bottom: 1px solid var(--line);
+}
+.timeline-row span, .timeline-row p, .statement-row span { display: block; margin: 3px 0 0; color: var(--muted); }
+.payment-balance {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 14px;
+  padding: 12px;
+  border: 1px solid #cbded6;
+  border-radius: 7px;
+  background: #f4faf7;
+}
+.payment-balance strong { font-size: 24px; }
+.payment-key-note, .manual-send-note { margin-top: 12px; color: var(--muted); font-size: 12px; }
+.form-error { padding: 10px; color: var(--danger); border: 1px solid #e7aaa5; background: #fff0ef; }
+.promise-context { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; margin-bottom: 14px; }
+.promise-context > span { padding: 10px; color: var(--muted); border: 1px solid var(--line); border-radius: 6px; }
+.promise-context strong { display: block; margin-top: 4px; color: var(--ink); }
+.whatsapp-preview { margin-top: 14px; padding: 12px; border: 1px solid var(--line); border-radius: 7px; background: #f8faf9; }
+.whatsapp-preview textarea { margin-top: 6px; resize: vertical; }
+.credit-policy-help { margin-top: 14px; padding: 12px; border-left: 4px solid var(--brand); background: #f4f8f6; }
+.credit-policy-help p { margin: 6px 0; }
+.account-statement { color: #172027; background: #fff; }
+.account-statement > header { display: flex; justify-content: space-between; gap: 18px; padding-bottom: 16px; border-bottom: 2px solid #263a43; }
+.account-statement > header h2 { margin: 4px 0; }
+.account-statement > header p { margin: 0; color: #59656f; }
+.account-statement > header > div:last-child { text-align: right; }
+.account-statement > header > div:last-child span { display: block; margin-top: 5px; font-size: 24px; }
+.statement-summary { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; margin: 16px 0; }
+.statement-filters { display: grid; grid-template-columns: 1fr 1fr auto; gap: 10px; align-items: end; margin-bottom: 16px; }
+.statement-summary span { padding: 10px; border: 1px solid #d9dfe3; }
+.statement-summary strong { display: block; margin-top: 5px; }
+.statement-note { margin-top: 18px; color: #59656f; font-size: 12px; }
+.pos-credit-summary { margin-top: 10px; }
+.pos-credit-card { padding: 12px; border: 1px solid #cbded6; border-radius: 7px; background: #f4faf7; }
+.pos-credit-card > p { margin: 8px 0 0; color: var(--muted); }
+.pos-credit-metrics { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
+.pos-credit-metrics span { color: var(--muted); font-size: 12px; }
+.pos-credit-metrics strong { display: block; margin-top: 3px; color: var(--ink); font-size: 15px; }
+.pos-credit-fields { display: grid; grid-template-columns: 1fr 2fr; gap: 10px; margin-top: 12px; }
+.overdue-confirmation { margin-top: 12px; padding: 10px; border: 1px solid #e8c65b; border-radius: 6px; background: #fff8dc; }
+.pos-credit-warning { padding: 10px; color: #6f5000; border: 1px solid #e8c65b; border-radius: 6px; background: #fff8dc; }
+.receipt-credit-summary { display: grid; gap: 4px; margin-top: 12px; padding: 10px; border: 1px solid #d9dfe3; }
+.receipt-credit-summary span, .receipt-credit-summary small { display: block; }
+.loading-state, .error-state, .empty-state { text-align: center; padding: 24px; }
+.loading-state.compact, .error-state.compact { padding: 10px; }
+.error-state p { color: var(--danger); }
+
 .modal-backdrop {
   position: fixed;
   inset: 0;
@@ -1552,6 +1701,8 @@ textarea:focus-visible { outline: 3px solid rgba(40, 106, 89, .28); outline-offs
 .login-box button { width: 100%; }
 
 @media (max-width: 1100px) {
+  .credit-filters { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .collection-filters { grid-template-columns: repeat(3, minmax(0, 1fr)); }
   .layout { grid-template-columns: 210px minmax(0, 1fr); }
   .toolbar { grid-template-columns: repeat(3, minmax(0, 1fr)); }
   .modern-dashboard { grid-template-columns: 1fr; }
@@ -1577,6 +1728,10 @@ textarea:focus-visible { outline: 3px solid rgba(40, 106, 89, .28); outline-offs
 }
 
 @media (max-width: 900px) {
+  .credit-heading { align-items: stretch; flex-direction: column; }
+  .credit-filters, .collection-filters { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .profile-details, .statement-summary { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .pos-credit-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .layout {
     grid-template-columns: 1fr;
     grid-template-rows: auto minmax(0, 1fr);
@@ -1643,6 +1798,15 @@ textarea:focus-visible { outline: 3px solid rgba(40, 106, 89, .28); outline-offs
 }
 
 @media (max-width: 560px) {
+  .customer-desktop-table, .collection-desktop-table { display: none; }
+  .customer-mobile-list, .collection-mobile-list { display: grid; gap: 10px; }
+  .credit-filters, .collection-filters, .profile-details, .statement-summary,
+  .promise-context, .pos-credit-metrics, .pos-credit-fields, .statement-filters { grid-template-columns: 1fr; }
+  .credit-filter-actions, .credit-pagination, .profile-actions, .profile-tabs,
+  .timeline-row, .statement-row, .account-statement > header { display: grid; grid-template-columns: 1fr; }
+  .credit-filter-actions button, .credit-pagination button, .profile-actions button, .profile-tabs button { width: 100%; }
+  .account-statement > header > div:last-child { text-align: left; }
+  .customer-card dl, .collection-card dl { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   body { font-size: 14px; }
   .content { padding: 10px; }
   .panel, .card, .topbar { border-radius: 6px; }
@@ -1734,4 +1898,13 @@ textarea:focus-visible { outline: 3px solid rgba(40, 106, 89, .28); outline-offs
   .inventory-filter-actions button,
   .inventory-segmented button { width: 100%; }
   .inventory-segmented { display: grid; grid-template-columns: 1fr; }
+}
+
+@media print {
+  body { height: auto; overflow: visible; background: #fff; }
+  body > .layout, #message, .no-print { display: none !important; }
+  #modalRoot, .modal-backdrop { position: static; display: block; padding: 0; background: #fff; }
+  .statement-modal { width: 100%; max-height: none; overflow: visible; padding: 0; border: 0; box-shadow: none; }
+  .account-statement { width: 190mm; max-width: 100%; margin: 0 auto; font-size: 11pt; }
+  .statement-row { break-inside: avoid; }
 }

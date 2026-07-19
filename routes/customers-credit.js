@@ -198,7 +198,7 @@ router.get('/clientes', requirePlanFeature('clientes_basico'), asyncRoute(async 
     params.push(normalizePhone(req.query.telefono).normalized);
   }
   const where = conditions.join(' AND ');
-  const [[count], [rows], configuration] = await Promise.all([
+  const [[count], [rows], configuration, [summaryRows]] = await Promise.all([
     pool.query(`SELECT COUNT(*) total FROM cliente c WHERE ${where}`, params),
     pool.query(
       `SELECT c.idCliente, c.nombre, c.telefono, c.telefonoAlternativo, c.documentoIdentidad,
@@ -218,7 +218,23 @@ router.get('/clientes', requirePlanFeature('clientes_basico'), asyncRoute(async 
        ORDER BY c.nombre, c.idCliente LIMIT ? OFFSET ?`,
       [formatLocalDate(), ...params, limit, offset]
     ),
-    getCreditConfiguration(pool, tenantId(req))
+    getCreditConfiguration(pool, tenantId(req)),
+    pool.query(
+      `SELECT COALESCE(SUM(c.activo=1),0) clientesActivos,
+              COALESCE(SUM(COALESCE(d.deudaTotal,0)>0),0) clientesConDeuda,
+              COALESCE(SUM(d.deudaTotal),0) deudaTotal,
+              COALESCE(SUM(COALESCE(d.deudaVencida,0)>0),0) clientesVencidos
+       FROM cliente c
+       LEFT JOIN (
+         SELECT f.idTienda, f.idCliente, SUM(f.saldoPendiente) deudaTotal,
+                SUM(CASE WHEN COALESCE(f.fechaPrometidaPago,f.fechaVencimiento) IS NOT NULL
+                              AND COALESCE(f.fechaPrometidaPago,f.fechaVencimiento)<?
+                         THEN f.saldoPendiente ELSE 0 END) deudaVencida
+         FROM fiado f WHERE f.idTienda=? AND f.saldoPendiente>0 GROUP BY f.idTienda, f.idCliente
+       ) d ON d.idTienda=c.idTienda AND d.idCliente=c.idCliente
+       WHERE c.idTienda=?`,
+      [formatLocalDate(), tenantId(req), tenantId(req)]
+    )
   ]);
   const customers = rows.map((row) => {
     const limitCents = effectiveLimitCents(row, configuration);
@@ -233,7 +249,8 @@ router.get('/clientes', requirePlanFeature('clientes_basico'), asyncRoute(async 
     };
   });
   res.json(legacyResponse ? customers : {
-    clientes: customers, pagina: page, limite: limit, total: Number(count[0].total)
+    clientes: customers, pagina: page, limite: limit, total: Number(count[0].total),
+    resumen: summaryRows[0]
   });
 }));
 
@@ -341,32 +358,52 @@ router.get('/clientes/:id/estado-cuenta', asyncRoute(async (req, res) => {
   const snapshot = await customerSnapshot(pool, idTienda, idCliente);
   const paymentConditions = ['f.idTienda=?', 'f.idCliente=?'];
   const paymentParams = [idTienda, idCliente];
+  const debtConditions = ['f.idTienda=?', 'f.idCliente=?'];
+  const debtParams = [idTienda, idCliente];
+  const saleConditions = ['idTienda=?', 'idCliente=?'];
+  const saleParams = [idTienda, idCliente];
   if (from) { paymentConditions.push('pf.fechaPago>=?'); paymentParams.push(`${from} 00:00:00`); }
   if (to) { paymentConditions.push('pf.fechaPago<?'); paymentParams.push(`${addOneDay(to)} 00:00:00`); }
-  const [[debts], [payments], [sales]] = await Promise.all([
+  if (from) {
+    debtConditions.push('f.fechaInicio>=?'); debtParams.push(from);
+    saleConditions.push('fecha>=?'); saleParams.push(`${from} 00:00:00`);
+  }
+  if (to) {
+    debtConditions.push('f.fechaInicio<=?'); debtParams.push(to);
+    saleConditions.push('fecha<?'); saleParams.push(`${addOneDay(to)} 00:00:00`);
+  }
+  const [[debts], [payments], [sales], [debtSummaryRows], [paymentSummaryRows], [saleSummaryRows]] = await Promise.all([
     pool.query(
       `SELECT f.idFiado, f.idVenta, f.fechaInicio, f.fechaVencimiento, f.fechaPrometidaPago,
               f.totalFiado, f.totalPagado, f.saldoPendiente, f.estado, f.activo, f.cerradoEn,
               v.codigoComprobante, v.fecha fechaVenta, v.total totalVenta
        FROM fiado f LEFT JOIN venta v ON v.idTienda=f.idTienda AND v.idVenta=f.idVenta
-       WHERE f.idTienda=? AND f.idCliente=? ORDER BY f.fechaInicio DESC, f.idFiado DESC`,
-      [idTienda, idCliente]
+       WHERE ${debtConditions.join(' AND ')} ORDER BY f.fechaInicio DESC, f.idFiado DESC`,
+      debtParams
     ),
     pool.query(
       `SELECT pf.idPagoFiado, pf.idFiado, pf.fechaPago, pf.monto, pf.observacion,
-              cf.metodoPago, cf.referencia, cf.idCobroFiado
+              cf.metodoPago, cf.referencia, cf.idCobroFiado, a.usuario administrador
        FROM pagoFiado pf
        JOIN fiado f ON f.idTienda=pf.idTienda AND f.idFiado=pf.idFiado
        JOIN cobroFiado cf ON cf.idTienda=pf.idTienda AND cf.idCobroFiado=pf.idCobroFiado
+       LEFT JOIN administrador a ON a.idTienda=cf.idTienda AND a.idAdministrador=cf.idAdministrador
        WHERE ${paymentConditions.join(' AND ')}
        ORDER BY pf.fechaPago DESC, pf.idPagoFiado DESC LIMIT ? OFFSET ?`,
       [...paymentParams, limit, offset]
     ),
     pool.query(
       `SELECT idVenta, fecha, total, montoPagado, saldoPendiente, estadoPago, codigoComprobante
-       FROM venta WHERE idTienda=? AND idCliente=? ORDER BY fecha DESC, idVenta DESC LIMIT 50`,
-      [idTienda, idCliente]
-    )
+       FROM venta WHERE ${saleConditions.join(' AND ')} ORDER BY fecha DESC, idVenta DESC LIMIT 50`,
+      saleParams
+    ),
+    pool.query(`SELECT COUNT(*) cantidad, COALESCE(SUM(f.totalFiado),0) total
+      FROM fiado f WHERE ${debtConditions.join(' AND ')}`, debtParams),
+    pool.query(`SELECT COUNT(*) cantidad, COALESCE(SUM(pf.monto),0) total
+      FROM pagoFiado pf JOIN fiado f ON f.idTienda=pf.idTienda AND f.idFiado=pf.idFiado
+      WHERE ${paymentConditions.join(' AND ')}`, paymentParams),
+    pool.query(`SELECT COUNT(*) cantidad, COALESCE(SUM(total),0) total
+      FROM venta WHERE ${saleConditions.join(' AND ')}`, saleParams)
   ]);
   const warningDays = Number(snapshot.configuration.diasAvisoVencimiento);
   const debtsWithState = debts.map((debt) => ({ ...debt, estadoCobranza: collectionState(debt, formatLocalDate(), warningDays) }));
@@ -381,6 +418,11 @@ router.get('/clientes/:id/estado-cuenta', asyncRoute(async (req, res) => {
     pagos: payments,
     compras: sales,
     movimientos: movements.slice(offset, offset + limit),
+    resumenPeriodo: {
+      compras: saleSummaryRows[0],
+      fiadoGenerado: debtSummaryRows[0],
+      pagos: paymentSummaryRows[0]
+    },
     pagina: page,
     limite: limit
   });
@@ -392,12 +434,17 @@ router.get('/clientes/:id', requirePlanFeature('clientes_basico'), asyncRoute(as
   const snapshot = await customerSnapshot(pool, idTienda, idCliente);
   const [[sales], [payments], [followups]] = await Promise.all([
     pool.query('SELECT idVenta, fecha, total, montoPagado, saldoPendiente, estadoPago, codigoComprobante FROM venta WHERE idTienda=? AND idCliente=? ORDER BY fecha DESC LIMIT 20', [idTienda, idCliente]),
-    pool.query(`SELECT pf.idPagoFiado, pf.idFiado, pf.fechaPago, pf.monto, cf.metodoPago
+    pool.query(`SELECT pf.idPagoFiado, pf.idFiado, pf.fechaPago, pf.monto, cf.metodoPago,
+      a.usuario administrador
       FROM pagoFiado pf JOIN fiado f ON f.idTienda=pf.idTienda AND f.idFiado=pf.idFiado
       JOIN cobroFiado cf ON cf.idTienda=pf.idTienda AND cf.idCobroFiado=pf.idCobroFiado
+      LEFT JOIN administrador a ON a.idTienda=cf.idTienda AND a.idAdministrador=cf.idAdministrador
       WHERE f.idTienda=? AND f.idCliente=? ORDER BY pf.fechaPago DESC LIMIT 20`, [idTienda, idCliente]),
-    pool.query(`SELECT idSeguimientoCobranza, idFiado, tipo, canal, detalle, fechaCompromiso, creadoEn
-      FROM seguimientoCobranza WHERE idTienda=? AND idCliente=? ORDER BY creadoEn DESC LIMIT 20`, [idTienda, idCliente])
+    pool.query(`SELECT s.idSeguimientoCobranza, s.idFiado, s.tipo, s.canal, s.detalle,
+      s.fechaCompromiso, s.creadoEn, a.usuario administrador
+      FROM seguimientoCobranza s
+      JOIN administrador a ON a.idTienda=s.idTienda AND a.idAdministrador=s.idAdministrador
+      WHERE s.idTienda=? AND s.idCliente=? ORDER BY s.creadoEn DESC LIMIT 20`, [idTienda, idCliente])
   ]);
   res.json({ cliente: snapshot.summary, fiados: snapshot.debts, compras: sales, pagos: payments, seguimientos: followups });
 }));
@@ -482,8 +529,10 @@ router.get('/fiados/:id', asyncRoute(async (req, res) => {
       LEFT JOIN venta v ON v.idTienda=f.idTienda AND v.idVenta=f.idVenta
       WHERE f.idTienda=? AND f.idFiado=?`, [idTienda, idFiado]),
     pool.query(`SELECT pf.idPagoFiado, pf.fechaPago, pf.monto, pf.observacion,
-      cf.idCobroFiado, cf.metodoPago, cf.montoRecibido, cf.cambio, cf.referencia
+      cf.idCobroFiado, cf.metodoPago, cf.montoRecibido, cf.cambio, cf.referencia,
+      a.usuario administrador
       FROM pagoFiado pf JOIN cobroFiado cf ON cf.idTienda=pf.idTienda AND cf.idCobroFiado=pf.idCobroFiado
+      LEFT JOIN administrador a ON a.idTienda=cf.idTienda AND a.idAdministrador=cf.idAdministrador
       WHERE pf.idTienda=? AND pf.idFiado=? ORDER BY pf.fechaPago DESC`, [idTienda, idFiado]),
     pool.query(`SELECT dv.idDetalleVenta, dv.idProducto, p.nombre producto, dv.cantidad,
       dv.presentacionVenta, dv.precioVenta, dv.subtotal

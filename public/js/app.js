@@ -13,6 +13,7 @@ let posSearchTimer = null;
 let lastBarcodeScan = { value: '', at: 0 };
 let inventoryUi = { activeTab: 'resumen', rankingMode: 'ingresos', movementClass: '', data: {} };
 let lotUi = { page: 1, pages: 1, activeTab: 'lotes' };
+let customerCreditUi = null;
 
 const sections = [
   ['inicio', 'Inicio', 'Resumen general del negocio'],
@@ -20,12 +21,12 @@ const sections = [
   ['movimientosStock', 'Movimientos de stock', 'Entradas, salidas y ajustes del inventario'],
   ['inventarioInteligente', 'Inteligencia de inventario', 'Alertas, rotación y decisiones de abastecimiento'],
   ['lotesVencimientos', 'Lotes y vencimientos', 'Trazabilidad, alertas y stock vendible'],
-  ['clientes', 'Clientes', 'Registro de clientes'],
+  ['clientes', 'Clientes', 'Perfiles, credito y estados de cuenta'],
   ['proveedores', 'Proveedores', 'Registro de proveedores'],
   ['ventas', 'Punto de venta', 'Cobro rápido, pagos mixtos y comprobantes'],
   ['compras', 'Compras / stock', 'Abastecimiento por paquete o unidad'],
   ['historialVentas', 'Historial de ventas', 'Ventas realizadas y detalle'],
-  ['pagos', 'Fiados / Pagos', 'Deudas, pagos parciales e historial'],
+  ['pagos', 'Cobranza', 'Deudas, pagos, promesas y recordatorios'],
   ['gastos', 'Gastos', 'Egresos operativos y categorias'],
   ['finanzas', 'Finanzas', 'Ventas, cobros, costos y ganancias'],
   ['cierreCaja', 'Cierre de caja', 'Control de efectivo por periodo'],
@@ -167,14 +168,17 @@ function requestAdminPassword(actionText) {
 
 async function api(url, options = {}) {
   const method = String(options.method || 'GET').toUpperCase();
+  const allowReadOnlyWrite = options.allowReadOnlyWrite === true;
   if (url.startsWith('/api/')
     && state.context?.soloLectura
+    && !allowReadOnlyWrite
     && !['GET', 'HEAD', 'OPTIONS'].includes(method)) {
     throw new Error('La suscripción está en modo de solo lectura. Puedes consultar los datos, pero no realizar cambios.');
   }
+  const { allowReadOnlyWrite: _allowReadOnlyWrite, ...fetchOptions } = options;
   const response = await fetch(url, {
     headers: { 'Content-Type': 'application/json', ...(options.headers || {}) },
-    ...options
+    ...fetchOptions
   });
   if (response.status === 401) window.location.href = '/login.html';
   const data = await response.json().catch(() => ({}));
@@ -233,10 +237,10 @@ function applyReadOnlyUi() {
     '[data-finance-write]',
     '[data-inventory-write]',
     '[data-inventory-product-config]',
-    '[data-lot-write]',
-    '#payClientTotal'
+    '[data-lot-write]'
   ];
   document.querySelectorAll(selectors.join(',')).forEach((control) => {
+    if (control.closest('[data-readonly-operational]')) return;
     if (!control.disabled) {
       control.disabled = true;
       control.title = 'Acción deshabilitada mientras la cuenta está en modo de solo lectura.';
@@ -254,6 +258,26 @@ function hasFeature(code) {
   return Boolean(state.context?.caracteristicas?.includes(code));
 }
 
+function creditUi() {
+  if (!customerCreditUi) {
+    customerCreditUi = window.CustomerCreditUI.create({
+      api,
+      view,
+      modalRoot,
+      getState: () => state,
+      hasFeature,
+      escapeHtml,
+      money,
+      formatDate,
+      showError,
+      showSuccess,
+      newOperationKey,
+      localDateValue
+    });
+  }
+  return customerCreditUi;
+}
+
 function hasLotOperationalAccess() {
   return ['control_lotes', 'alertas_vencimiento', 'trazabilidad_lotes', 'exportacion_lotes', 'vencimientos_lote']
     .some(hasFeature) || Number(state.lotAccess?.productosControlados || 0) > 0;
@@ -266,6 +290,8 @@ function sectionAllowed(id) {
   if (id === 'cierreCaja') return features.includes('cierre_caja');
   if (id === 'inventarioInteligente') return features.includes('inventario_resumen');
   if (id === 'lotesVencimientos') return hasLotOperationalAccess();
+  if (id === 'clientes') return features.includes('clientes_basico');
+  if (id === 'pagos') return features.includes('fiados_basico') || features.includes('pagos_fiado');
   return true;
 }
 
@@ -749,10 +775,7 @@ async function saveCrud(event, type) {
 }
 
 async function clientes() {
-  renderCrud('clientes', state.clientes, [
-    { name: 'nombre', label: 'Nombre', required: true, upper: true },
-    { name: 'telefono', label: 'Teléfono', phone: true }
-  ], 'idCliente');
+  return creditUi().renderCustomers();
 }
 
 async function proveedores() {
@@ -1920,6 +1943,7 @@ function renderPosPaymentSummary() {
     <span>Pagado <strong>Bs ${money(payment.paid)}</strong></span>
     <span>Saldo <strong class="${payment.balance > 0 ? 'text-danger' : 'text-ok'}">Bs ${money(payment.balance)}</strong></span>
     <span>Cambio <strong>Bs ${money(payment.change)}</strong></span>`;
+  creditUi().refreshPosCredit(payment.balance);
 }
 
 function receiptText(receipt) {
@@ -1963,6 +1987,7 @@ function receiptHtml(receipt) {
         ${receipt.pagos.map((payment) => `<span>${escapeHtml(payment.metodoPago)} <strong>Bs ${money(payment.monto)}</strong></span>${payment.metodoPago === 'efectivo' && Number(payment.cambio) > 0 ? `<span>Efectivo recibido <strong>Bs ${money(payment.montoRecibido)}</strong></span><span>Cambio <strong>Bs ${money(payment.cambio)}</strong></span>` : ''}`).join('')}
         <span>Saldo pendiente <strong class="${Number(sale.saldoActualFiado ?? sale.saldoPendiente) > 0 ? 'text-danger' : 'text-ok'}">Bs ${money(sale.saldoActualFiado ?? sale.saldoPendiente)}</strong></span>
       </div>
+      ${receipt.credito && Number(receipt.credito.nuevoSaldoFiado || 0) > 0 ? `<div class="receipt-credit-summary"><strong>Resumen de crédito</strong><span>Deuda anterior: Bs ${money(receipt.credito.deudaAnterior)}</span><span>Nuevo saldo: Bs ${money(receipt.credito.nuevoSaldoFiado)}</span><span>Deuda posterior: Bs ${money(receipt.credito.deudaPosterior)}</span><span>Crédito disponible: ${receipt.credito.creditoDisponiblePosterior == null ? 'Sin límite' : `Bs ${money(receipt.credito.creditoDisponiblePosterior)}`}</span><span>Vencimiento: ${escapeHtml(receipt.credito.fechaVencimiento || 'Sin fecha')}</span>${receipt.credito.advertencias?.length ? `<small>${receipt.credito.advertencias.map(escapeHtml).join(' ')}</small>` : ''}</div>` : ''}
       <footer>Gracias por su compra.<small>Comprobante interno, no fiscal.</small></footer>
     </section>`;
 }
@@ -1979,7 +2004,7 @@ async function copyReceiptText(text) {
 
 function showSaleReceipt(receipt) {
   const text = receiptText(receipt);
-  const phone = String(receipt.venta.telefono || '').replace(/\D/g, '');
+  const whatsappUrl = receipt.whatsappUrl || '';
   modalRoot.innerHTML = `
     <div class="modal-backdrop"><div class="modal receipt-modal">
       <h3>Venta confirmada</h3>
@@ -1987,7 +2012,7 @@ function showSaleReceipt(receipt) {
       <div class="modal-actions receipt-actions">
         <button type="button" class="secondary" data-receipt-copy>Copiar texto</button>
         <button type="button" class="secondary" data-receipt-print>Imprimir</button>
-        <button type="button" ${phone ? '' : 'disabled'} data-receipt-whatsapp>WhatsApp</button>
+        <button type="button" ${whatsappUrl ? '' : 'disabled'} data-receipt-whatsapp>WhatsApp</button>
         <button type="button" data-modal-confirm>Cerrar</button>
       </div>
     </div></div>`;
@@ -1996,7 +2021,7 @@ function showSaleReceipt(receipt) {
     try { await copyReceiptText(text); showMessage('Comprobante copiado.'); } catch { showError('No se pudo copiar el comprobante.'); }
   });
   modalRoot.querySelector('[data-receipt-whatsapp]').addEventListener('click', () => {
-    if (phone) window.open(`https://wa.me/${phone}?text=${encodeURIComponent(text)}`, '_blank', 'noopener');
+    if (whatsappUrl) window.open(whatsappUrl, '_blank', 'noopener');
   });
   modalRoot.querySelector('[data-receipt-print]').addEventListener('click', () => {
     const printWindow = window.open('', '_blank', 'width=520,height=720');
@@ -2023,6 +2048,12 @@ async function submitPosSale(event) {
   }
   const idCliente = document.getElementById('posClient').value;
   if (payment.balance > 0 && !idCliente) return showError('Selecciona un cliente para dejar saldo pendiente.');
+  let creditPayload = {};
+  try {
+    creditPayload = creditUi().posCreditPayload(payment.balance);
+  } catch (error) {
+    return showError(error.message);
+  }
   if (!await confirmAction(`Registrar venta por Bs ${money(totals.total)}${payment.balance > 0 ? ` con saldo Bs ${money(payment.balance)}` : ''}?`)) return;
   const button = document.getElementById('posSubmit');
   button.disabled = true;
@@ -2036,11 +2067,21 @@ async function submitPosSale(event) {
         pagos: payment.payments,
         efectivoRecibido: payment.cashReceived,
         saldoFiado: payment.balance,
+        ...creditPayload,
         items: posCart.map((line) => ({ idProducto: line.producto.idProducto, cantidad: line.cantidad, presentacion: line.presentacion }))
       })
     });
+    data.comprobante.credito = {
+      advertencias: data.advertencias || [],
+      deudaAnterior: data.deudaAnterior,
+      nuevoSaldoFiado: data.nuevoSaldoFiado,
+      deudaPosterior: data.deudaPosterior,
+      creditoDisponiblePosterior: data.creditoDisponiblePosterior,
+      fechaVencimiento: data.fechaVencimiento
+    };
     posCart = [];
     posOperationKey = newOperationKey();
+    creditUi().resetPosCredit();
     renderPosCart();
     showSaleReceipt(data.comprobante);
     refreshCatalogs().catch(() => {});
@@ -2077,6 +2118,7 @@ async function ventas() {
           <label>Buscar cliente<input id="posClientSearch" placeholder="Nombre o teléfono"></label>
           <label>Cliente<select id="posClient"><option value="">Cliente ocasional</option>${state.clientes.map((client) => `<option value="${client.idCliente}">${escapeHtml(client.nombre)}</option>`).join('')}</select></label>
         </div>
+        <div id="posCreditSummary" class="pos-credit-summary" aria-live="polite"></div>
         <div class="pos-charge-box">
           <label>Descuento general (Bs)<input id="posDiscount" type="number" min="0" step="0.01" value="0"></label>
           <label>Forma de cobro<select id="posPaymentMode">
@@ -2119,12 +2161,17 @@ async function ventas() {
   view.querySelectorAll('[data-pos-view]').forEach((button) => button.addEventListener('click', () => loadPosProducts(button.dataset.posView)));
   document.getElementById('posPaymentMode').addEventListener('change', renderPosPaymentFields);
   document.getElementById('posDiscount').addEventListener('input', renderPosPaymentSummary);
+  document.getElementById('posClient').addEventListener('change', () => {
+    creditUi().resetPosCredit();
+    creditUi().refreshPosCredit(posPaymentDraft().balance);
+  });
   document.getElementById('posClientSearch').addEventListener('input', async (event) => {
     try {
       const clients = await api(`/api/pos/clientes?q=${encodeURIComponent(event.target.value)}`);
       const select = document.getElementById('posClient');
       const selected = select.value;
       select.innerHTML = `<option value="">Cliente ocasional</option>${clients.map((client) => `<option value="${client.idCliente}" ${String(client.idCliente) === selected ? 'selected' : ''}>${escapeHtml(client.nombre)}${client.telefono ? ` · ${escapeHtml(client.telefono)}` : ''}</option>`).join('')}`;
+      creditUi().refreshPosCredit(posPaymentDraft().balance);
     } catch (error) { showMessage(error.message, true); }
   });
   document.getElementById('posForm').addEventListener('submit', submitPosSale);
@@ -2174,7 +2221,7 @@ async function showSaleDetail(idVenta) {
         <p>${escapeHtml(v.codigoComprobante || `Venta #${v.idVenta}`)} · ${formatDate(v.fecha)} · ${escapeHtml(v.cliente)} · Bs ${money(v.total)}</p>
         <p>Pagado: <strong>Bs ${money(v.montoPagado)}</strong> · Saldo actual: <strong class="${Number(v.saldoActualFiado ?? v.saldoPendiente) > 0 ? 'text-danger' : 'text-ok'}">Bs ${money(v.saldoActualFiado ?? v.saldoPendiente)}</strong> ${statusBadge(v.estadoPago === 'pagada' ? 'pagado' : v.estadoPago)}</p>
         <p>${data.pagos.length ? data.pagos.map((payment) => `${escapeHtml(payment.metodoPago)}: <strong>Bs ${money(payment.monto)}</strong>${payment.referencia ? ` (${escapeHtml(payment.referencia)})` : ''}`).join(' · ') : 'Sin desglose de pagos para esta venta histórica.'}</p>
-        ${v.idFiado ? `<p><button type="button" class="secondary" data-open-debt="${v.idFiado}" data-client="${v.idCliente || ''}" data-client-name="${escapeHtml(v.cliente)}">Ver en Fiados/Pagos</button></p>` : ''}
+        ${v.idFiado ? `<p><button type="button" class="secondary" data-open-debt="${v.idFiado}" data-client="${v.idCliente || ''}" data-client-name="${escapeHtml(v.cliente)}">Ver en Cobranza</button></p>` : ''}
         <p><button type="button" class="secondary" data-open-receipt="${v.idVenta}">Ver comprobante</button></p>
         <div class="table-wrap"><table><thead><tr><th>Producto</th><th>Cantidad</th><th>Presentación</th><th>Unidades</th><th>Precio</th><th>Costo</th><th>Ganancia</th></tr></thead>
         <tbody>${data.detalle.map((d) => `<tr><td>${escapeHtml(d.nombre)}</td><td>${intValue(d.cantidad)}</td><td>${escapeHtml(d.presentacionVenta)}</td><td>${intValue(d.cantidadEquivalenteUnidades)}</td><td>Bs ${money(d.subtotal)}</td><td>Bs ${money(d.subtotalCosto)}</td><td>Bs ${money(d.ganancia)}</td></tr>`).join('')}</tbody></table></div>
@@ -2200,402 +2247,7 @@ async function showSaleDetail(idVenta) {
 }
 
 async function pagos() {
-  view.innerHTML = `
-    <div class="panel">
-      <form class="grid" id="pagoForm">
-        <label>Fiado activo<select name="idFiado" required>${state.fiados.filter((f) => f.estado !== 'pagado').map((f) => `<option value="${f.idFiado}">${escapeHtml(f.cliente)} - saldo Bs ${money(f.saldoPendiente)}</option>`).join('')}</select></label>
-        <label>Monto<input name="monto" type="number" step="0.01" min="0.01" required></label>
-        <label>Observación<input name="observacion"></label>
-        <button type="submit">Registrar pago</button>
-      </form>
-    </div>
-    <div class="panel filter-bar">
-      <label>Cliente<select id="debtClient">${options(state.clientes, 'idCliente', 'nombre', 'TODOS')}</select></label>
-      <label>Estado<select id="debtStatus"><option value="">TODOS</option><option value="pendiente">PENDIENTE</option><option value="parcial">PARCIAL</option><option value="pagado">PAGADO</option></select></label>
-      <label>Desde<input id="debtFrom" type="date"></label>
-      <label>Hasta<input id="debtTo" type="date"></label>
-    </div>
-    <div class="panel table-wrap" id="debtTable"></div>`;
-  wireUppercase(view);
-  document.getElementById('pagoForm').addEventListener('submit', async (event) => {
-    event.preventDefault();
-    if (!await confirmAction('¿Deseas registrar este pago de fiado?')) return;
-    try {
-      await api('/api/pagos-fiado', { method: 'POST', body: JSON.stringify(formData(event.target)) });
-      await showSuccess('Pago registrado.');
-      loadView('pagos');
-    } catch (error) { showError(error.message); }
-  });
-  ['debtClient', 'debtStatus', 'debtFrom', 'debtTo'].forEach((id) => document.getElementById(id).addEventListener('change', loadDebtFilters));
-  renderDebtTable(state.fiados);
-}
-
-async function loadDebtFilters() {
-  const query = new URLSearchParams({
-    idCliente: document.getElementById('debtClient').value,
-    estado: document.getElementById('debtStatus').value,
-    desde: document.getElementById('debtFrom').value,
-    hasta: document.getElementById('debtTo').value
-  });
-  const rows = await api(`/api/fiados?${query.toString()}`);
-  renderDebtTable(rows);
-}
-
-function renderDebtTable(rows) {
-  const target = document.getElementById('debtTable');
-  target.innerHTML = `<table><thead><tr><th>Cliente</th><th>Fecha</th><th>Total</th><th>Pagado</th><th>Saldo</th><th>Estado</th><th>Historial</th></tr></thead>
-    <tbody>${rows.map((f) => `<tr><td>${escapeHtml(f.cliente)}</td><td>${formatDate(f.fechaVenta || f.fechaInicio)}</td><td>Bs ${money(f.totalFiado)}</td><td>Bs ${money(f.totalPagado)}</td><td class="${Number(f.saldoPendiente) > 0 ? 'text-danger' : 'text-ok'}">Bs ${money(f.saldoPendiente)}</td><td>${statusBadge(f.estado)}</td><td><button class="small secondary" data-fiado="${f.idFiado}">Ver</button></td></tr>`).join('')}</tbody></table>`;
-  target.querySelectorAll('[data-fiado]').forEach((btn) => btn.addEventListener('click', () => showDebtDetail(btn.dataset.fiado)));
-}
-
-async function showDebtDetail(idFiado) {
-  try {
-    const data = await api(`/api/fiados/${idFiado}`);
-    const f = data.fiado;
-    await modal({ title: `Fiado de ${f.cliente}`, wide: true, confirmText: 'Cerrar', body: `
-      <p>Total: Bs ${money(f.totalFiado)} | Pagado: Bs ${money(f.totalPagado)} | Saldo: Bs ${money(f.saldoPendiente)} | ${statusBadge(f.estado)}</p>
-      <h4>Productos</h4><div class="table-wrap"><table><thead><tr><th>Producto</th><th>Cantidad</th><th>Presentación</th><th>Subtotal</th></tr></thead>
-      <tbody>${data.detalle.map((d) => `<tr><td>${escapeHtml(d.nombre)}</td><td>${intValue(d.cantidad)}</td><td>${escapeHtml(d.presentacionVenta || 'unidad')}</td><td>Bs ${money(d.subtotal)}</td></tr>`).join('') || '<tr><td colspan="4">Sin detalle disponible</td></tr>'}</tbody></table></div>
-      <h4>Pagos</h4><div class="table-wrap"><table><thead><tr><th>Fecha</th><th>Monto</th><th>Observación</th></tr></thead>
-      <tbody>${data.pagos.map((p) => `<tr><td>${formatDate(p.fechaPago)}</td><td>Bs ${money(p.monto)}</td><td>${escapeHtml(p.observacion || '')}</td></tr>`).join('') || '<tr><td colspan="3">Sin pagos registrados</td></tr>'}</tbody></table></div>` });
-  } catch (error) { showError(error.message); }
-}
-
-function sortDebtRows(rows) {
-  const priority = { pendiente: 1, parcial: 2, pagado: 3 };
-  return [...rows].sort((a, b) => {
-    const stateDiff = (priority[a.estado] || 9) - (priority[b.estado] || 9);
-    if (stateDiff) return stateDiff;
-    const dateA = new Date(a.fechaVenta || a.fechaInicio || 0).getTime();
-    const dateB = new Date(b.fechaVenta || b.fechaInicio || 0).getTime();
-    return dateB - dateA;
-  });
-}
-
-function debtTotalsByClient(rows) {
-  return rows.reduce((acc, row) => {
-    const key = String(row.idCliente || row.cliente || '');
-    if (!acc[key]) acc[key] = { cliente: row.cliente, totalFiado: 0, totalPagado: 0, saldo: 0, items: [] };
-    acc[key].totalFiado += Number(row.totalFiado || 0);
-    acc[key].totalPagado += Number(row.totalPagado || 0);
-    acc[key].saldo += Number(row.saldoPendiente || 0);
-    acc[key].items.push(row);
-    return acc;
-  }, {});
-}
-
-function renderDebtCards(rows) {
-  const target = document.getElementById('debtTable');
-  const sorted = sortDebtRows(rows);
-  if (!sorted.length) {
-    target.innerHTML = '<p class="muted empty-state">No hay fiados para mostrar.</p>';
-    return;
-  }
-  const totals = debtTotalsByClient(sorted);
-  target.innerHTML = sorted.map((f) => {
-    const clientTotal = totals[String(f.idCliente || f.cliente || '')] || { saldo: 0, items: [] };
-    const focused = debtFocus?.idFiado && String(debtFocus.idFiado) === String(f.idFiado);
-    const paid = f.estado === 'pagado';
-    return `<article class="debt-card estado-${escapeHtml(f.estado)} ${paid ? 'is-paid' : 'is-active'} ${focused ? 'is-focused' : ''}">
-      <div class="debt-card-main">
-        <div>
-          <strong>${escapeHtml(f.cliente)}</strong>
-          <p class="muted">${formatDate(f.fechaVenta || f.fechaInicio)} · Fiado #${f.idFiado}</p>
-          <p class="hint">Este cliente tiene ${clientTotal.items.length} fiado${clientTotal.items.length === 1 ? '' : 's'} · Saldo acumulado: <strong>Bs ${money(clientTotal.saldo)}</strong></p>
-        </div>
-        <div class="debt-card-state">${statusBadge(f.estado)}</div>
-      </div>
-      <div class="debt-card-values">
-        <span>Total<strong>Bs ${money(f.totalFiado)}</strong></span>
-        <span>Pagado<strong>Bs ${money(f.totalPagado)}</strong></span>
-        <span>Saldo<strong class="${Number(f.saldoPendiente) > 0 ? 'text-danger' : 'text-ok'}">Bs ${money(f.saldoPendiente)}</strong></span>
-      </div>
-      <div class="debt-card-actions">
-        <button class="small secondary" data-fiado="${f.idFiado}">Ver historial</button>
-        <button class="small danger" data-delete-fiado="${f.idFiado}">Ocultar fiado</button>
-      </div>
-    </article>`;
-  }).join('');
-  target.querySelectorAll('[data-fiado]').forEach((btn) => btn.addEventListener('click', () => showDebtDetail(btn.dataset.fiado)));
-  target.querySelectorAll('[data-delete-fiado]').forEach((btn) => btn.addEventListener('click', async () => {
-    const row = sorted.find((item) => String(item.idFiado) === btn.dataset.deleteFiado);
-    const password = await requestAdminPassword(`¿Deseas ocultar el fiado #${row?.idFiado || ''} de ${row?.cliente || ''}?`);
-    if (!password) return;
-    try {
-      await api(`/api/fiados/${btn.dataset.deleteFiado}`, {
-        method: 'DELETE',
-        body: JSON.stringify({ passwordAdministrador: password })
-      });
-      debtFocus = null;
-      await refreshCatalogs();
-      await showSuccess('Fiado ocultado. Los pagos e historial se conservan.');
-      if (document.getElementById('debtClient')) await loadDebtFilters();
-      else renderDebtCards(state.fiados);
-    } catch (error) { showError(error.message); }
-  }));
-}
-
-async function loadDebtFilters() {
-  const query = new URLSearchParams({
-    idCliente: document.getElementById('debtClient').value,
-    estado: document.getElementById('debtStatus').value,
-    desde: document.getElementById('debtFrom').value,
-    hasta: document.getElementById('debtTo').value
-  });
-  const rows = await api(`/api/fiados?${query.toString()}`);
-  renderDebtCards(rows);
-}
-
-async function showDebtDetail(idFiado) {
-  try {
-    const data = await api(`/api/fiados/${idFiado}`);
-    const f = data.fiado;
-    await modal({ title: `Fiado de ${f.cliente}`, wide: true, confirmText: 'Cerrar', body: `
-      <p>Total: Bs ${money(f.totalFiado)} | Pagado: Bs ${money(f.totalPagado)} | Saldo: Bs ${money(f.saldoPendiente)} | ${statusBadge(f.estado)}</p>
-      <h4>Productos</h4><div class="table-wrap"><table><thead><tr><th>Producto</th><th>Cantidad</th><th>Presentación</th><th>Subtotal</th></tr></thead>
-      <tbody>${data.detalle.map((d) => `<tr><td>${escapeHtml(d.nombre)}</td><td>${intValue(d.cantidad)}</td><td>${escapeHtml(d.presentacionVenta || 'unidad')}</td><td>Bs ${money(d.subtotal)}</td></tr>`).join('') || '<tr><td colspan="4">Sin detalle disponible</td></tr>'}</tbody></table></div>
-      <h4>Pagos</h4><div class="table-wrap"><table><thead><tr><th>Fecha</th><th>Monto</th><th>Observación</th></tr></thead>
-      <tbody>${data.pagos.map((p) => `<tr><td>${formatDate(p.fechaPago)}</td><td>Bs ${money(p.monto)}</td><td>${escapeHtml(p.observacion || '')}</td></tr>`).join('') || '<tr><td colspan="3">Sin pagos registrados</td></tr>'}</tbody></table></div>` });
-  } catch (error) { showError(error.message); }
-}
-
-async function pagos() {
-  const pendingRows = sortDebtRows(state.fiados.filter((f) => f.estado !== 'pagado'));
-  const selectedDebt = debtFocus?.idFiado || '';
-  const selectedClient = debtFocus?.idCliente || '';
-  const pendingOptions = pendingRows.length
-    ? pendingRows.map((f) => `<option value="${f.idFiado}" ${String(selectedDebt) === String(f.idFiado) ? 'selected' : ''}>${escapeHtml(f.cliente)} - saldo Bs ${money(f.saldoPendiente)}</option>`).join('')
-    : '<option value="">No hay fiados pendientes</option>';
-  view.innerHTML = `
-    <div class="panel payment-panel">
-      <div class="panel-title">
-        <div>
-          <h3>Registrar pago</h3>
-          <p class="muted">Selecciona un fiado pendiente o parcial para registrar un pago.</p>
-        </div>
-      </div>
-      <form class="grid" id="pagoForm">
-        <label>Fiado pendiente<select name="idFiado" required>${pendingOptions}</select></label>
-        <label>Monto<input name="monto" type="number" step="0.01" min="0.01" required></label>
-        <label>Observación<input name="observacion"></label>
-        <button type="submit">Registrar pago</button>
-      </form>
-    </div>
-    <div class="panel debt-tools">
-      <div class="panel-title">
-        <div>
-          <h3>Fiados / Pagos</h3>
-          <p class="muted">Pendientes y parciales aparecen primero. Los pagados quedan como historial.</p>
-        </div>
-        <div class="debt-tool-actions">
-          <button type="button" class="secondary small" id="showHiddenDebts">Ver fiados ocultos</button>
-          <button type="button" class="secondary small" id="toggleDebtFilters">Mostrar filtros</button>
-        </div>
-      </div>
-      ${debtFocus ? `<p class="focus-note">Mostrando fiados relacionados con ${escapeHtml(debtFocus.cliente || 'el cliente seleccionado')}.</p>` : ''}
-      <div class="filter-bar is-hidden" id="debtFilters">
-        <label>Cliente<select id="debtClient">${options(state.clientes, 'idCliente', 'nombre', 'Todos', selectedClient)}</select></label>
-        <label>Estado<select id="debtStatus"><option value="">Todos</option><option value="pendiente">Pendiente</option><option value="parcial">Parcial</option><option value="pagado">Pagado</option></select></label>
-        <label>Desde<input id="debtFrom" type="date"></label>
-        <label>Hasta<input id="debtTo" type="date"></label>
-      </div>
-    </div>
-    <div class="debt-list" id="debtTable"></div>`;
-  wireUppercase(view);
-  document.getElementById('pagoForm').addEventListener('submit', async (event) => {
-    event.preventDefault();
-    if (!event.target.idFiado.value) return showError('No hay fiados pendientes para registrar pago.');
-    if (!await confirmAction('¿Deseas registrar este pago de fiado?')) return;
-    try {
-      await api('/api/pagos-fiado', { method: 'POST', body: JSON.stringify(formData(event.target)) });
-      debtFocus = null;
-      await showSuccess('Pago registrado.');
-      loadView('pagos');
-    } catch (error) { showError(error.message); }
-  });
-  document.getElementById('toggleDebtFilters').addEventListener('click', () => {
-    const filters = document.getElementById('debtFilters');
-    const hidden = filters.classList.toggle('is-hidden');
-    document.getElementById('toggleDebtFilters').textContent = hidden ? 'Mostrar filtros' : 'Ocultar filtros';
-  });
-  ['debtClient', 'debtStatus', 'debtFrom', 'debtTo'].forEach((id) => document.getElementById(id).addEventListener('change', () => {
-    debtFocus = null;
-    loadDebtFilters();
-  }));
-  if (selectedClient) {
-    await loadDebtFilters();
-  } else {
-    renderDebtCards(state.fiados);
-  }
-}
-
-function clientPendingDebts(idCliente) {
-  return sortDebtRows(state.fiados.filter((f) => String(f.idCliente || '') === String(idCliente || '') && f.estado !== 'pagado'));
-}
-
-function clientDebtSummary(idCliente) {
-  const rows = clientPendingDebts(idCliente);
-  const total = rows.reduce((sum, row) => sum + Number(row.saldoPendiente || 0), 0);
-  return { rows, total };
-}
-
-function renderClientPaymentSummary() {
-  const clientSelect = document.getElementById('clientPaymentId');
-  const amountInput = document.getElementById('clientPaymentAmount');
-  const target = document.getElementById('clientDebtSummary');
-  if (!clientSelect || !target) return;
-  const { rows, total } = clientDebtSummary(clientSelect.value);
-  if (!clientSelect.value) {
-    target.innerHTML = '<p class="muted">Selecciona un cliente para ver su deuda acumulada.</p>';
-    if (amountInput) amountInput.value = '';
-    return;
-  }
-  if (!rows.length) {
-    target.innerHTML = '<p class="muted">Este cliente no tiene fiados pendientes o parciales.</p>';
-    if (amountInput) amountInput.value = '';
-    return;
-  }
-  target.innerHTML = `
-    <div class="accumulated-summary">
-      <span>Fiados pendientes/parciales<strong>${rows.length}</strong></span>
-      <span>Saldo acumulado<strong>Bs ${money(total)}</strong></span>
-      <button type="button" class="secondary small" id="payClientTotal">Pagar total acumulado</button>
-    </div>
-    <div class="mini-debt-list">
-      ${rows.slice(0, 5).map((f) => `<div><strong>#${f.idFiado}</strong><span>${formatDate(f.fechaVenta || f.fechaInicio)}</span><span>Saldo Bs ${money(f.saldoPendiente)}</span>${statusBadge(f.estado)}</div>`).join('')}
-      ${rows.length > 5 ? `<p class="hint">Y ${rows.length - 5} fiado${rows.length - 5 === 1 ? '' : 's'} más en el mismo orden.</p>` : ''}
-    </div>`;
-  document.getElementById('payClientTotal').addEventListener('click', () => {
-    amountInput.value = money(total);
-  });
-}
-
-async function pagos() {
-  const pendingRows = sortDebtRows(state.fiados.filter((f) => f.estado !== 'pagado'));
-  const selectedDebt = debtFocus?.idFiado || '';
-  const selectedClient = debtFocus?.idCliente || '';
-  const pendingOptions = pendingRows.length
-    ? pendingRows.map((f) => `<option value="${f.idFiado}" ${String(selectedDebt) === String(f.idFiado) ? 'selected' : ''}>${escapeHtml(f.cliente)} - saldo Bs ${money(f.saldoPendiente)}</option>`).join('')
-    : '<option value="">No hay fiados pendientes</option>';
-  view.innerHTML = `
-    <div class="panel payment-panel">
-      <div class="panel-title">
-        <div>
-          <h3>Registrar pago</h3>
-          <p class="muted">Puedes pagar una cuenta específica o el acumulado de un cliente.</p>
-        </div>
-      </div>
-      <form class="grid payment-form" id="pagoForm">
-        <label>Modo de pago<select name="modoPago" id="paymentMode">
-          <option value="fiado">Pagar fiado específico</option>
-          <option value="cliente">Pagar acumulado por cliente</option>
-        </select></label>
-
-        <div class="payment-mode-section wide" id="specificPaymentFields">
-          <div class="form-grid compact-fields">
-            <label>Fiado pendiente<select name="idFiado">${pendingOptions}</select></label>
-            <label>Monto<input name="monto" type="number" step="0.01" min="0.01"></label>
-            <label>Observación<input name="observacion"></label>
-          </div>
-          <button type="submit">Registrar pago</button>
-        </div>
-
-        <div class="payment-mode-section wide is-hidden" id="clientPaymentFields">
-          <div class="form-grid compact-fields">
-            <label>Cliente<select name="idCliente" id="clientPaymentId">${options(state.clientes, 'idCliente', 'nombre', 'Seleccione cliente', selectedClient)}</select></label>
-            <label>Monto acumulado<input name="montoCliente" id="clientPaymentAmount" type="number" step="0.01" min="0.01"></label>
-            <label>Observación<input name="observacionCliente" value="Pago acumulado"></label>
-          </div>
-          <div id="clientDebtSummary" class="client-debt-summary"></div>
-          <button type="submit">Registrar pago acumulado</button>
-        </div>
-      </form>
-    </div>
-    <div class="panel debt-tools">
-      <div class="panel-title">
-        <div>
-          <h3>Fiados / Pagos</h3>
-          <p class="muted">Pendientes y parciales aparecen primero. Los pagados quedan como historial.</p>
-        </div>
-        <div class="debt-tool-actions">
-          <button type="button" class="secondary small" id="showHiddenDebts">Ver fiados ocultos</button>
-          <button type="button" class="secondary small" id="toggleDebtFilters">Mostrar filtros</button>
-        </div>
-      </div>
-      ${debtFocus ? `<p class="focus-note">Mostrando fiados relacionados con ${escapeHtml(debtFocus.cliente || 'el cliente seleccionado')}.</p>` : ''}
-      <div class="filter-bar is-hidden" id="debtFilters">
-        <label>Cliente<select id="debtClient">${options(state.clientes, 'idCliente', 'nombre', 'Todos', selectedClient)}</select></label>
-        <label>Estado<select id="debtStatus"><option value="">Todos</option><option value="pendiente">Pendiente</option><option value="parcial">Parcial</option><option value="pagado">Pagado</option></select></label>
-        <label>Desde<input id="debtFrom" type="date"></label>
-        <label>Hasta<input id="debtTo" type="date"></label>
-      </div>
-    </div>
-    <div class="debt-list" id="debtTable"></div>`;
-  wireUppercase(view);
-
-  const mode = document.getElementById('paymentMode');
-  const specificFields = document.getElementById('specificPaymentFields');
-  const clientFields = document.getElementById('clientPaymentFields');
-  const togglePaymentMode = () => {
-    const clientMode = mode.value === 'cliente';
-    specificFields.classList.toggle('is-hidden', clientMode);
-    clientFields.classList.toggle('is-hidden', !clientMode);
-    if (clientMode) renderClientPaymentSummary();
-  };
-  mode.addEventListener('change', togglePaymentMode);
-  document.getElementById('clientPaymentId').addEventListener('change', renderClientPaymentSummary);
-  document.getElementById('showHiddenDebts').addEventListener('click', showHiddenDebts);
-
-  document.getElementById('pagoForm').addEventListener('submit', async (event) => {
-    event.preventDefault();
-    const form = event.target;
-    const data = formData(form);
-    const clientMode = data.modoPago === 'cliente';
-    if (clientMode) {
-      if (!data.idCliente) return showError('Selecciona un cliente para registrar el pago acumulado.');
-      const summary = clientDebtSummary(data.idCliente);
-      if (!summary.rows.length) return showError('Este cliente no tiene deudas pendientes.');
-      if (Number(data.montoCliente) <= 0) return showError('El pago debe ser mayor a cero.');
-      if (Number(data.montoCliente) > summary.total) return showError(`El pago no puede superar el saldo acumulado de Bs ${money(summary.total)}.`);
-      if (!await confirmAction('¿Deseas registrar este pago acumulado?')) return;
-      try {
-        await api('/api/pagos-fiado/cliente', {
-          method: 'POST',
-          body: JSON.stringify({ idCliente: data.idCliente, monto: data.montoCliente, observacion: data.observacionCliente })
-        });
-        debtFocus = null;
-        await refreshCatalogs();
-        await showSuccess('Pago acumulado registrado.');
-        await pagos();
-      } catch (error) { showError(error.message); }
-      return;
-    }
-
-    if (!data.idFiado) return showError('No hay fiados pendientes para registrar pago.');
-    if (Number(data.monto) <= 0) return showError('El pago debe ser mayor a cero.');
-    if (!await confirmAction('¿Deseas registrar este pago de fiado?')) return;
-    try {
-      await api('/api/pagos-fiado', { method: 'POST', body: JSON.stringify({ idFiado: data.idFiado, monto: data.monto, observacion: data.observacion }) });
-      debtFocus = null;
-      await refreshCatalogs();
-      await showSuccess('Pago registrado.');
-      await pagos();
-    } catch (error) { showError(error.message); }
-  });
-
-  document.getElementById('toggleDebtFilters').addEventListener('click', () => {
-    const filters = document.getElementById('debtFilters');
-    const hidden = filters.classList.toggle('is-hidden');
-    document.getElementById('toggleDebtFilters').textContent = hidden ? 'Mostrar filtros' : 'Ocultar filtros';
-  });
-  ['debtClient', 'debtStatus', 'debtFrom', 'debtTo'].forEach((id) => document.getElementById(id).addEventListener('change', () => {
-    debtFocus = null;
-    loadDebtFilters();
-  }));
-
-  togglePaymentMode();
-  if (selectedClient) await loadDebtFilters();
-  else renderDebtCards(state.fiados);
+  return creditUi().renderCollections(debtFocus);
 }
 
 function localDateValue(value = new Date()) {

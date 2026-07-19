@@ -360,6 +360,24 @@ La prueba cubre perfiles ampliados, documentos normalizados, limites individuale
 
 Los cobros posteriores se registran con una cabecera `cobroFiado` y una distribucion `pagoFiado` por deuda. Cada distribucion vinculada a una venta produce un unico `pagoVenta`; los reintentos con la misma `claveOperacion` devuelven el cobro existente sin duplicar dinero ni saldos. WhatsApp se limita a preparar texto y un enlace `wa.me`: nunca envia ni marca mensajes como enviados automaticamente.
 
+### Validacion del frontend de clientes y cobranza
+
+La interfaz conserva **Clientes** y presenta las deudas bajo **Cobranza**. La prueba estatica no inicia el servidor ni usa la base de datos:
+
+```powershell
+npm.cmd run test:customers-credit-frontend
+```
+
+Con un plan basico, confirme que se pueden consultar clientes, deuda y estado de cuenta, y registrar pagos de deuda existente. Los limites personalizados, alertas, seguimientos y recordatorios deben aparecer bloqueados o ausentes segun sus funciones.
+
+Con un plan avanzado, confirme el alta y edicion ampliada, configuracion de credito, alertas, promesas, seguimientos y preparacion de WhatsApp. Abrir WhatsApp no debe registrar un envio; **Marcar como enviado manualmente** es una accion separada.
+
+En el POS, seleccione un cliente y verifique deuda, limite, credito disponible y fecha de vencimiento. El cliente ocasional solo puede pagar al contado. Una politica de advertencia debe exigir confirmacion y motivo; una politica de bloqueo debe permitir cambiar la venta a contado.
+
+Para pagos especificos y acumulados, pruebe efectivo, cambio, otros metodos y un reintento de red. La clave de operacion debe mantenerse durante el mismo intento y renovarse al abrir otro pago. En modo de solo lectura por downgrade, la consulta permanece disponible y el cobro de deuda existente sigue el permiso operativo del backend.
+
+Revise la interfaz a 360, 768 y 1366 px. En movil, clientes y cuentas se muestran como tarjetas sin desplazamiento horizontal obligatorio. El estado de cuenta se imprime desde el navegador con estilos A4; no se genera PDF ni XLSX.
+
 ### Validacion manual de la interfaz de inteligencia de inventario
 
 Inicie el servidor local y abra la seccion **Inteligencia de inventario** desde el menu de la tienda. Pruebe filtros de fecha, categoria, proveedor, producto y estado; el rango maximo admitido es de 365 dias.
