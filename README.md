@@ -115,6 +115,101 @@ Migraciones actuales, en orden:
 12. `012_clientes_fiados_comunicacion.sql`: clientes ampliados, configuracion de credito, cobros y seguimiento de cobranza.
 13. `013_seguridad_sesiones.sql`: version de sesion por administrador para revocar accesos despues de cambios criticos.
 
+### Migraciones historicas 001-003
+
+Los archivos `001_mejoras_tienda.sql`, `002_mejoras_stock_reportes.sql` y
+`003_borrado_logico.sql` conservan su contenido e identificador historicos. Los dos primeros
+incluyen `USE tienda_abarrotes` y 002/003 usan construcciones antiguas de `ALTER TABLE`; por
+esa razon `db:migrate` no ejecuta su SQL bruto. Un adaptador aplica operaciones equivalentes,
+una por una, exclusivamente sobre `DB_NAME`, comprobando la precondicion y la postcondicion
+de cada paso. Cada `ALTER TABLE` es una unidad recuperable independiente; no se confia en una
+transaccion global para revertir toda la secuencia DDL.
+
+El detector distingue estos estados:
+
+- `pre`: esquema base valido sin elementos de la migracion.
+- `parcial-recuperable`: hay pasos correctos y los restantes son aditivos e inequivocos.
+- `parcial-bloqueante`: hay datos que impedirian una FK o un `NOT NULL` y requieren revision.
+- `completa-no-registrada`: estructura y datos completos; `db:migrate` puede adoptar y registrar.
+- `post`: registro y estado fisico completos.
+- `inconsistente`: registro sin estructura completa o definiciones incompatibles; el migrador se detiene.
+
+La validacion es semantica y depende de la etapa real. En una base historica aislada se exige
+la relacion simple propia de 001. Si `004_multitienda_base.sql` esta registrada, se exige en su
+lugar la FK e indice compuestos por tienda; conservar solo la forma simple ya no basta. Del mismo
+modo, 002 acepta ampliaciones `DECIMAL` que no pierdan escala ni digitos enteros, y cuando 011 esta
+registrada comprueba la precision final `DECIMAL(14,6)` de los costos que esa migracion amplio. El
+diagnostico informa el constraint, indice o definicion real que satisface cada requisito. El
+adaptador nunca reemplaza una estructura moderna valida por su forma historica menos estricta.
+
+En este contexto `pre` significa que existen las tablas base de la aplicacion anterior a 001.
+Una base totalmente vacia debe inicializarse con `db:init`; las migraciones historicas no inventan
+ese esquema base ni cargan datos de demostracion.
+
+La comprobacion es de solo lectura:
+
+```powershell
+$env:APP_ENV='local'
+npm.cmd run db:check-legacy-migrations
+```
+
+Una migracion no se registra hasta que estructura, indices, claves foraneas y datos hayan sido
+reinspeccionados. Si ya figura registrada pero esta incompleta, no se intenta una reparacion
+silenciosa: haga un respaldo, revise los elementos exactos informados y ensaye la recuperacion
+sobre una copia. No edite `schema_migrations` en la base real para forzar el avance.
+
+`database/tienda_abarrotes.sql` representa una instalacion nueva con el estado final post-013.
+Aunque ese archivo conserva `CREATE DATABASE` y `USE` para uso manual explicito, el migrador
+no lo carga. Las migraciones y los comprobadores siempre usan la base validada en `DB_NAME`,
+por lo que tambien funcionan con nombres de base distintos a `tienda_abarrotes`.
+
+La prueba automatizada crea y elimina solamente bases aleatorias con el prefijo
+`tmp_tienda_legacy_`, exige MySQL local y rechaza expresamente las bases habituales:
+
+```powershell
+$env:APP_ENV='local'
+npm.cmd run test:legacy-migrations
+```
+
+#### Ensayo posterior sobre una copia local
+
+El siguiente procedimiento se ejecuta solo cuando exista un respaldo verificado. `-p` solicita
+la contrasena de forma interactiva; no la escriba en el comando ni en el historial. El nombre
+temporal debe conservar el prefijo indicado.
+
+```powershell
+$origen = $env:DB_NAME
+$copia = 'tmp_tienda_legacy_rehearsal_' + (Get-Date -Format 'yyyyMMddHHmmss')
+$dump = Join-Path $env:TEMP ($copia + '.sql')
+if ($copia -notmatch '^tmp_tienda_legacy_rehearsal_[0-9]{14}$') { throw 'Nombre temporal inseguro' }
+
+mysqldump --host=$env:DB_HOST --port=$env:DB_PORT --user=$env:DB_USER -p --no-tablespaces --single-transaction --routines --triggers $origen > $dump
+mysql --host=$env:DB_HOST --port=$env:DB_PORT --user=$env:DB_USER -p -e "CREATE DATABASE ``$copia`` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci"
+mysql --host=$env:DB_HOST --port=$env:DB_PORT --user=$env:DB_USER -p $copia < $dump
+
+$env:DB_NAME = $copia
+npm.cmd run db:check-legacy-migrations
+
+# Solo en la copia, elimine registros para simular adopcion o recuperacion.
+mysql --host=$env:DB_HOST --port=$env:DB_PORT --user=$env:DB_USER -p $copia -e "DELETE FROM schema_migrations WHERE nombre IN ('001_mejoras_tienda.sql','002_mejoras_stock_reportes.sql','003_borrado_logico.sql')"
+npm.cmd run db:check-legacy-migrations
+npm.cmd run db:migrate
+npm.cmd run db:check-legacy-migrations
+
+# Compare conteos comerciales con el origen antes de limpiar la copia.
+mysql --host=$env:DB_HOST --port=$env:DB_PORT --user=$env:DB_USER -p $origen -e "SELECT 'producto' tabla,COUNT(*) total FROM producto UNION ALL SELECT 'venta',COUNT(*) FROM venta UNION ALL SELECT 'fiado',COUNT(*) FROM fiado"
+mysql --host=$env:DB_HOST --port=$env:DB_PORT --user=$env:DB_USER -p $copia -e "SELECT 'producto' tabla,COUNT(*) total FROM producto UNION ALL SELECT 'venta',COUNT(*) FROM venta UNION ALL SELECT 'fiado',COUNT(*) FROM fiado"
+
+if ($copia -notmatch '^tmp_tienda_legacy_rehearsal_[0-9]{14}$') { throw 'Nombre temporal inseguro' }
+mysql --host=$env:DB_HOST --port=$env:DB_PORT --user=$env:DB_USER -p -e "DROP DATABASE ``$copia``"
+Remove-Item -LiteralPath $dump
+$env:DB_NAME = $origen
+```
+
+Restaure `DB_NAME` al valor habitual despues del ensayo. Una estructura registrada pero
+incompleta debe analizarse con el comprobador; no elimine su registro fuera de una copia
+temporal controlada.
+
 Antes y despues de aplicar la migracion multi-tienda sobre una base local, puede obtener una comprobacion de solo lectura:
 
 ```powershell

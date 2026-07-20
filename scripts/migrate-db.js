@@ -15,6 +15,11 @@ const {
   hasCheckConstraint,
   readSqlStatements
 } = require('./db-utils');
+const {
+  inspectLegacyMigration,
+  isLegacyMigration,
+  migrateLegacyMigration
+} = require('./migration-state/legacy-migrations');
 
 const MIGRATION_LOCAL_DATETIME_TOKEN = '__MIGRATION_LOCAL_DATETIME__';
 
@@ -38,31 +43,6 @@ function prepareMigrationStatement(file, statement, context = {}) {
 }
 
 const migrationRequirements = {
-  '001_mejoras_tienda.sql': {
-    columns: {
-      producto: ['idProveedor', 'categoria', 'unidadesPorPaquete'],
-      venta: ['tipo'],
-      fiado: ['idVenta']
-    },
-    columnTypes: { producto: { stock: 'int', stockMinimo: 'int' } },
-    foreignKeys: [
-      ['producto', 'idProveedor', 'proveedor', 'idProveedor'],
-      ['fiado', 'idVenta', 'venta', 'idVenta']
-    ]
-  },
-  '002_mejoras_stock_reportes.sql': {
-    columns: {
-      producto: ['paquetesPorCaja', 'stockUnidadesTotal', 'ultimoPrecioCompra', 'permiteVentaPorPaquete', 'permiteVentaPorUnidad'],
-      detalleVenta: ['costoUnitario', 'subtotalCosto', 'ganancia', 'presentacionVenta', 'cantidadEquivalenteUnidades'],
-      detalleCompra: ['presentacionCompra', 'cantidadEquivalenteUnidades']
-    }
-  },
-  '003_borrado_logico.sql': {
-    columns: {
-      cliente: ['activo', 'eliminadoEn'],
-      fiado: ['activo', 'eliminadoEn']
-    }
-  },
   '004_multitienda_base.sql': {
     columns: {
       tienda: ['idTienda', 'nombre', 'slug', 'activo', 'estado', 'creadoEn', 'actualizadoEn'],
@@ -2652,6 +2632,19 @@ async function main() {
     const files = fs.readdirSync(migrationsDir).filter((file) => file.endsWith('.sql')).sort();
 
     for (const file of files) {
+      if (isLegacyMigration(file)) {
+        const initialState = await inspectLegacyMigration(connection, file, {
+          schemaName: process.env.DB_NAME
+        });
+        console.log(`Estado fisico de ${file}:`);
+        console.log(JSON.stringify(initialState, null, 2));
+        const result = await migrateLegacyMigration(connection, file, {
+          schemaName: process.env.DB_NAME,
+          log: (message) => console.log(message)
+        });
+        console.log(`Decision para ${file}: ${result.action}. Estado final: ${result.state.estado}.`);
+        continue;
+      }
       const [recorded] = await connection.query('SELECT nombre FROM schema_migrations WHERE nombre=?', [file]);
       let estado006 = null;
       let estado010 = null;

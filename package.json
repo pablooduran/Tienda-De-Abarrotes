@@ -22,6 +22,7 @@
     "db:check-customers-credit": "node scripts/check-customers-credit.js",
     "db:check-session-security": "node scripts/check-session-security.js",
     "db:check-timezone-tls": "node scripts/check-timezone-tls.js",
+    "db:check-legacy-migrations": "node scripts/check-legacy-migrations.js",
     "test:tenant-isolation": "node scripts/test-tenant-isolation.js",
     "test:admin-management": "node scripts/test-admin-management.js",
     "test:subscriptions": "node scripts/test-subscriptions.js",
@@ -36,6 +37,7 @@
     "test:session-revocation": "node scripts/test-session-revocation.js",
     "test:timezone-tls": "node scripts/test-timezone-tls.js",
     "test:web-security": "node scripts/test-web-security.js",
+    "test:legacy-migrations": "node scripts/test-legacy-migrations.js",
     "check:web-security": "node scripts/check-web-security.js"
   },
   "dependencies": {
