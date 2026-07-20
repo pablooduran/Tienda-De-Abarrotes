@@ -1,4 +1,5 @@
 const express = require('express');
+const bcrypt = require('bcryptjs');
 const pool = require('../config/db');
 const { requirePlanFeature } = require('../middleware/subscription');
 const { enforcePlanLimit } = require('../services/subscription-service');
@@ -17,6 +18,7 @@ const {
   normalizeDocument,
   normalizePhone,
   parseLocalDate,
+  setCustomerVisibility,
   summarizeDebts
 } = require('../services/customer-credit-service');
 const { collectCustomerDebt, collectSpecificDebt } = require('../services/debt-collection-service');
@@ -35,6 +37,7 @@ const TEMPLATE_VARIABLES = new Set(['tienda', 'cliente', 'saldo', 'vencimiento',
 const COLLECTION_STATES = new Set(['vencido', 'vence_hoy', 'proximo_a_vencer', 'al_dia', 'sin_fecha', 'pagado']);
 const STORED_DEBT_STATES = new Set(['pendiente', 'parcial', 'pagado']);
 const CUSTOMER_HISTORY_LIMIT = 20;
+const CUSTOMER_STATES = new Set(['activos', 'ocultos', 'todos']);
 
 function asyncRoute(handler) {
   return (req, res, next) => Promise.resolve(handler(req, res, next)).catch(next);
@@ -42,6 +45,25 @@ function asyncRoute(handler) {
 
 function tenantId(req) {
   return req.tenant.idTienda;
+}
+
+function administratorPassword(body = {}) {
+  return body.passwordAdministrador || body.adminPassword || body.contrasena || body.password || '';
+}
+
+async function requireAdministratorPassword(req) {
+  const password = administratorPassword(req.body);
+  if (!password) throw creditError(400, 'Debes ingresar la contrasena del administrador.', 'ADMIN_PASSWORD_REQUIRED');
+  const idAdministrador = req.session?.admin?.id;
+  if (!idAdministrador) throw creditError(401, 'La sesion no es valida.', 'AUTH_REQUIRED');
+  const [rows] = await pool.query(
+    `SELECT password FROM administrador
+     WHERE idAdministrador=? AND idTienda=? AND rol='dueno_tienda' AND activo=1`,
+    [idAdministrador, tenantId(req)]
+  );
+  if (!rows.length || !await bcrypt.compare(password, rows[0].password)) {
+    throw creditError(403, 'Contrasena de administrador incorrecta.', 'INVALID_ADMIN_PASSWORD');
+  }
 }
 
 function positiveId(value, label = 'El identificador') {
@@ -202,6 +224,7 @@ function publicCustomer(row, configuration, debts = []) {
     aceptaRecordatorios: Boolean(row.aceptaRecordatorios),
     horarioPreferido: row.horarioPreferido,
     activo: Boolean(row.activo),
+    eliminadoEn: row.eliminadoEn,
     creadoEn: row.creadoEn,
     actualizadoEn: row.actualizadoEn,
     deudaActual: centsToDecimal(summary.openCents),
@@ -233,7 +256,8 @@ async function customerSnapshot(connection, idTienda, idCliente, { lock = false 
       `SELECT idCliente, nombre, telefono, telefonoAlternativo, telefonoNormalizado,
               documentoIdentidad, documentoNormalizado, correo, direccion, notas,
               limiteCredito, permiteFiado, diasCreditoDefault, canalPreferido,
-              aceptaRecordatorios, horarioPreferido, activo, creadoEn, actualizadoEn
+              aceptaRecordatorios, horarioPreferido, activo, eliminadoEn,
+              creadoEn, actualizadoEn
        FROM cliente WHERE idTienda=? AND idCliente=?`,
       [idTienda, idCliente]
     ))[0][0];
@@ -248,24 +272,28 @@ async function customerSnapshot(connection, idTienda, idCliente, { lock = false 
   return { customer, debts, configuration, summary: publicCustomer(customer, configuration, debts) };
 }
 
-router.get('/clientes/ocultos', requirePlanFeature('clientes_basico'), asyncRoute(async (req, res) => {
-  const [rows] = await pool.query(
-    `SELECT idCliente, nombre, telefono, documentoIdentidad, permiteFiado, eliminadoEn
-     FROM cliente WHERE idTienda=? AND activo=0 ORDER BY eliminadoEn DESC, nombre`,
-    [tenantId(req)]
-  );
-  res.json(rows);
-}));
+function customerState(query, forcedState = null) {
+  if (forcedState) return forcedState;
+  const requested = String(cleanText(query.estado, 20) || '').toLowerCase();
+  if (requested && !CUSTOMER_STATES.has(requested)) {
+    throw creditError(400, 'El estado de clientes no es valido.', 'INVALID_CUSTOMER_STATE');
+  }
+  if (requested) return requested;
+  const legacyActive = booleanFilter(query.activo, 'El filtro de actividad');
+  if (legacyActive !== null) return legacyActive === 1 ? 'activos' : 'ocultos';
+  return 'activos';
+}
 
-router.get('/clientes', requirePlanFeature('clientes_basico'), asyncRoute(async (req, res) => {
-  const legacyResponse = !['pagina', 'page', 'limite', 'limit'].some((key) => req.query[key] !== undefined);
+async function listCustomers(req, res, options = {}) {
+  const legacyResponse = options.legacyResponse === true
+    || !['pagina', 'page', 'limite', 'limit'].some((key) => req.query[key] !== undefined);
   const { page, limit, offset } = legacyResponse
     ? { page: 1, limit: 500, offset: 0 }
     : pagination(req.query);
   const conditions = ['c.idTienda=?'];
   const params = [tenantId(req)];
   const text = cleanText(req.query.texto || req.query.q, 100);
-  const active = booleanFilter(req.query.activo, 'El filtro de actividad');
+  const state = customerState(req.query, options.forcedState);
   const allowsCredit = booleanFilter(req.query.permiteFiado, 'El filtro de fiado');
   const hasDebt = booleanFilter(req.query.conDeuda, 'El filtro de deuda');
   const overdue = booleanFilter(req.query.vencido, 'El filtro de vencimiento');
@@ -275,7 +303,8 @@ router.get('/clientes', requirePlanFeature('clientes_basico'), asyncRoute(async 
     const pattern = `%${text}%`;
     params.push(pattern, pattern, pattern, pattern, pattern);
   }
-  if (active !== null) { conditions.push('c.activo=?'); params.push(active); }
+  if (state === 'activos') conditions.push('c.activo=1');
+  if (state === 'ocultos') conditions.push('c.activo=0');
   if (allowsCredit !== null) { conditions.push('c.permiteFiado=?'); params.push(allowsCredit); }
   if (hasDebt !== null) {
     conditions.push(`${hasDebt ? '' : 'NOT '}EXISTS (
@@ -305,7 +334,7 @@ router.get('/clientes', requirePlanFeature('clientes_basico'), asyncRoute(async 
     pool.query(
       `SELECT c.idCliente, c.nombre, c.telefono, c.telefonoAlternativo, c.documentoIdentidad,
               c.correo, c.limiteCredito, c.permiteFiado, c.diasCreditoDefault,
-              c.canalPreferido, c.aceptaRecordatorios, c.activo,
+              c.canalPreferido, c.aceptaRecordatorios, c.activo, c.eliminadoEn,
               (SELECT COALESCE(SUM(f.saldoPendiente),0) FROM fiado f
                WHERE f.idTienda=c.idTienda AND f.idCliente=c.idCliente AND f.saldoPendiente>0) deudaActual,
               (SELECT COALESCE(SUM(f.saldoPendiente),0) FROM fiado f
@@ -322,20 +351,25 @@ router.get('/clientes', requirePlanFeature('clientes_basico'), asyncRoute(async 
     ),
     getCreditConfiguration(pool, tenantId(req)),
     pool.query(
-      `SELECT COALESCE(SUM(c.activo=1),0) clientesActivos,
-              COALESCE(SUM(COALESCE(d.deudaTotal,0)>0),0) clientesConDeuda,
-              COALESCE(SUM(d.deudaTotal),0) deudaTotal,
-              COALESCE(SUM(COALESCE(d.deudaVencida,0)>0),0) clientesVencidos
-       FROM cliente c
-       LEFT JOIN (
-         SELECT f.idTienda, f.idCliente, SUM(f.saldoPendiente) deudaTotal,
-                SUM(CASE WHEN COALESCE(f.fechaPrometidaPago,f.fechaVencimiento) IS NOT NULL
-                              AND COALESCE(f.fechaPrometidaPago,f.fechaVencimiento)<?
-                         THEN f.saldoPendiente ELSE 0 END) deudaVencida
-         FROM fiado f WHERE f.idTienda=? AND f.saldoPendiente>0 GROUP BY f.idTienda, f.idCliente
-       ) d ON d.idTienda=c.idTienda AND d.idCliente=c.idCliente
-       WHERE c.idTienda=?`,
-      [formatLocalDate(), tenantId(req), tenantId(req)]
+      `SELECT COUNT(*) clientesFiltrados,
+              COALESCE(SUM(c.activo=1),0) clientesActivos,
+              COALESCE(SUM(c.activo=0),0) clientesOcultos,
+              COALESCE(SUM(EXISTS (
+                SELECT 1 FROM fiado fd WHERE fd.idTienda=c.idTienda
+                  AND fd.idCliente=c.idCliente AND fd.saldoPendiente>0
+              )),0) clientesConDeuda,
+              COALESCE(SUM((
+                SELECT COALESCE(SUM(fs.saldoPendiente),0) FROM fiado fs
+                WHERE fs.idTienda=c.idTienda AND fs.idCliente=c.idCliente AND fs.saldoPendiente>0
+              )),0) deudaTotal,
+              COALESCE(SUM(EXISTS (
+                SELECT 1 FROM fiado fv WHERE fv.idTienda=c.idTienda
+                  AND fv.idCliente=c.idCliente AND fv.saldoPendiente>0
+                  AND COALESCE(fv.fechaPrometidaPago,fv.fechaVencimiento) IS NOT NULL
+                  AND COALESCE(fv.fechaPrometidaPago,fv.fechaVencimiento)<?
+              )),0) clientesVencidos
+       FROM cliente c WHERE ${where}`,
+      [formatLocalDate(), ...params]
     )
   ]);
   const customers = rows.map((row) => {
@@ -352,9 +386,15 @@ router.get('/clientes', requirePlanFeature('clientes_basico'), asyncRoute(async 
   });
   res.json(legacyResponse ? customers : {
     clientes: customers, pagina: page, limite: limit, total: Number(count[0].total),
-    resumen: summaryRows[0]
+    estado: state, resumen: summaryRows[0]
   });
-}));
+}
+
+router.get('/clientes/ocultos', requirePlanFeature('clientes_basico'), asyncRoute((req, res) => (
+  listCustomers(req, res, { forcedState: 'ocultos', legacyResponse: true })
+)));
+
+router.get('/clientes', requirePlanFeature('clientes_basico'), asyncRoute((req, res) => listCustomers(req, res)));
 
 router.post('/clientes', requirePlanFeature('clientes_basico'), asyncRoute(async (req, res) => {
   assertAdvancedCreditFields(req);
@@ -402,7 +442,7 @@ async function updateCustomer(req, res) {
   const result = await transaction(async (connection) => {
     const idTienda = tenantId(req);
     const idCliente = positiveId(req.params.id, 'El cliente');
-    const current = await lockCustomer(connection, idTienda, idCliente);
+    const current = await lockCustomer(connection, idTienda, idCliente, { requireActive: true });
     const data = normalizeCustomerPayload(req.body, current);
     const [[duplicatePhone]] = data.telefonoNormalizado
       ? await connection.query(
@@ -435,6 +475,30 @@ async function updateCustomer(req, res) {
 
 router.patch('/clientes/:id', requirePlanFeature('clientes_basico'), asyncRoute(updateCustomer));
 router.put('/clientes/:id', requirePlanFeature('clientes_basico'), asyncRoute(updateCustomer));
+
+async function changeCustomerVisibility(req, res, active) {
+  await requireAdministratorPassword(req);
+  const result = await transaction((connection) => setCustomerVisibility(connection, {
+    idTienda: tenantId(req),
+    idCliente: positiveId(req.params.id, 'El cliente'),
+    idAdministrador: req.session.admin.id,
+    active,
+    now: formatLocalDateTime()
+  }));
+  res.json({
+    message: active
+      ? 'Cliente restaurado. Su historial y sus saldos no fueron modificados.'
+      : 'Cliente ocultado. Su historial y sus saldos se conservan.',
+    cliente: result
+  });
+}
+
+router.delete('/clientes/:id', requirePlanFeature('clientes_basico'), asyncRoute((req, res) => (
+  changeCustomerVisibility(req, res, false)
+)));
+router.patch('/clientes/:id/restaurar', requirePlanFeature('clientes_basico'), asyncRoute((req, res) => (
+  changeCustomerVisibility(req, res, true)
+)));
 
 router.get('/clientes/:id/resumen', requirePlanFeature('clientes_basico'), asyncRoute(async (req, res) => {
   const idTienda = tenantId(req);
@@ -683,6 +747,7 @@ async function listDebts(req, res, forcedActive = null) {
       `SELECT f.idFiado, f.idCliente, f.idVenta, f.fechaInicio, f.fechaVencimiento,
               f.fechaPrometidaPago, f.totalFiado, f.totalPagado, f.saldoPendiente,
               f.estado, f.activo, f.cerradoEn, c.nombre cliente, c.telefono,
+              c.activo clienteActivo, c.eliminadoEn clienteEliminadoEn,
               c.aceptaRecordatorios, c.canalPreferido,
               v.codigoComprobante, v.fecha fechaVenta
        FROM fiado f JOIN cliente c ON c.idTienda=f.idTienda AND c.idCliente=f.idCliente
@@ -697,6 +762,7 @@ async function listDebts(req, res, forcedActive = null) {
   const debts = rows.map((row) => ({
       ...row,
       aceptaRecordatorios: Boolean(row.aceptaRecordatorios),
+      clienteActivo: Boolean(row.clienteActivo),
       estadoCobranza: collectionState(row, today, Number(configuration.diasAvisoVencimiento)),
       fechaEfectiva: effectiveDebtDate(row),
       diasRestantes: effectiveDebtDate(row) ? Math.max(0, daysBetween(today, effectiveDebtDate(row))) : null,
@@ -729,7 +795,8 @@ router.get('/fiados/:id', requirePlanFeature('fiados_basico'), asyncRoute(async 
     ? pool.query('SELECT COUNT(*) total FROM seguimientoCobranza WHERE idTienda=? AND idFiado=?', [idTienda, idFiado])
     : Promise.resolve([[{ total: 0 }]]);
   const [[debts], [payments], [details], [followups], [paymentCounts], [followupCounts]] = await Promise.all([
-    pool.query(`SELECT f.*, c.nombre cliente, c.telefono, v.codigoComprobante, v.fecha fechaVenta
+    pool.query(`SELECT f.*, c.nombre cliente, c.telefono, c.activo clienteActivo,
+      c.eliminadoEn clienteEliminadoEn, v.codigoComprobante, v.fecha fechaVenta
       FROM fiado f JOIN cliente c ON c.idTienda=f.idTienda AND c.idCliente=f.idCliente
       LEFT JOIN venta v ON v.idTienda=f.idTienda AND v.idVenta=f.idVenta
       WHERE f.idTienda=? AND f.idFiado=?`, [idTienda, idFiado]),
@@ -752,7 +819,11 @@ router.get('/fiados/:id', requirePlanFeature('fiados_basico'), asyncRoute(async 
   if (!debts.length) throw creditError(404, 'Fiado no encontrado.');
   const configuration = await getCreditConfiguration(pool, idTienda);
   const response = {
-    fiado: { ...debts[0], estadoCobranza: collectionState(debts[0], formatLocalDate(), Number(configuration.diasAvisoVencimiento)) },
+    fiado: {
+      ...debts[0],
+      clienteActivo: Boolean(debts[0].clienteActivo),
+      estadoCobranza: collectionState(debts[0], formatLocalDate(), Number(configuration.diasAvisoVencimiento))
+    },
     pagos: payments,
     detalle: details,
     permisos: { seguimientoCobranza: canReadFollowups },
@@ -860,6 +931,7 @@ router.get('/cobranza/alertas', requirePlanFeature('recordatorios_fiado'), async
     pool.query(
       `SELECT f.idFiado, f.idCliente, f.fechaVencimiento, f.fechaPrometidaPago,
               f.saldoPendiente, c.nombre cliente, c.telefono, c.telefonoNormalizado,
+              c.activo clienteActivo, c.eliminadoEn clienteEliminadoEn,
               c.aceptaRecordatorios, c.canalPreferido
        FROM fiado f JOIN cliente c ON c.idTienda=f.idTienda AND c.idCliente=f.idCliente
        WHERE ${where}
@@ -876,6 +948,7 @@ router.get('/cobranza/alertas', requirePlanFeature('recordatorios_fiado'), async
     return {
       ...row,
       aceptaRecordatorios: Boolean(row.aceptaRecordatorios),
+      clienteActivo: Boolean(row.clienteActivo),
       fechaEfectiva: effectiveDate,
       estadoCobranza: collectionState(row, today, Number(configuration.diasAvisoVencimiento)),
       diasRestantes: difference === null ? null : Math.max(0, difference),

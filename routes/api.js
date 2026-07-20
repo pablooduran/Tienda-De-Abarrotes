@@ -493,14 +493,10 @@ router.delete('/productos/:id', async (req, res, next) => {
 });
 
 function crudRoutes(base, table, idField, protectedDeleteMessage) {
-  const requireEntityFeature = table === 'cliente'
-    ? requirePlanFeature('clientes_basico')
-    : (_req, _res, next) => next();
-  router.get(`/${base}`, requireEntityFeature, async (req, res, next) => {
+  router.get(`/${base}`, async (req, res, next) => {
     try {
-      const active = table === 'cliente' ? 'AND activo=1' : '';
       const [rows] = await pool.query(
-        `SELECT * FROM ${table} WHERE idTienda=? ${active} ORDER BY nombre`,
+        `SELECT * FROM ${table} WHERE idTienda=? ORDER BY nombre`,
         [tenantId(req)]
       );
       res.json(rows);
@@ -509,7 +505,7 @@ function crudRoutes(base, table, idField, protectedDeleteMessage) {
     }
   });
 
-  router.post(`/${base}`, requireEntityFeature, async (req, res, next) => {
+  router.post(`/${base}`, async (req, res, next) => {
     let connection;
     try {
       requireFields(req.body, ['nombre']);
@@ -519,20 +515,11 @@ function crudRoutes(base, table, idField, protectedDeleteMessage) {
       connection = await pool.getConnection();
       await connection.beginTransaction();
       await lockTenantForLimit(connection, idTienda);
-      await enforcePlanLimit(connection, idTienda, table === 'proveedor' ? 'proveedores' : 'clientes');
-      if (table === 'proveedor') {
-        await connection.query(
-          'INSERT INTO proveedor (idTienda, nombre, telefono, direccion) VALUES (?, ?, ?, ?)',
-          [idTienda, nombre, telefono, nullableText(req.body.direccion)]
-        );
-      } else {
-        const localDateTime = formatLocalDateTime();
-        await connection.query(
-          `INSERT INTO cliente (idTienda, nombre, telefono, creadoEn, actualizadoEn, idAdministradorCrea)
-           VALUES (?, ?, ?, ?, ?, ?)`,
-          [idTienda, nombre, telefono, localDateTime, localDateTime, req.session.admin.id]
-        );
-      }
+      await enforcePlanLimit(connection, idTienda, 'proveedores');
+      await connection.query(
+        'INSERT INTO proveedor (idTienda, nombre, telefono, direccion) VALUES (?, ?, ?, ?)',
+        [idTienda, nombre, telefono, nullableText(req.body.direccion)]
+      );
       await connection.commit();
       res.status(201).json({ message: 'Registro guardado.' });
     } catch (error) {
@@ -543,24 +530,16 @@ function crudRoutes(base, table, idField, protectedDeleteMessage) {
     }
   });
 
-  router.put(`/${base}/:id`, requireEntityFeature, async (req, res, next) => {
+  router.put(`/${base}/:id`, async (req, res, next) => {
     try {
       requireFields(req.body, ['nombre']);
       const nombre = cleanText(req.body.nombre);
       const telefono = validatePhone(req.body.telefono);
       const idTienda = tenantId(req);
-      let result;
-      if (table === 'proveedor') {
-        [result] = await pool.query(
-          'UPDATE proveedor SET nombre=?, telefono=?, direccion=? WHERE idProveedor=? AND idTienda=?',
-          [nombre, telefono, nullableText(req.body.direccion), req.params.id, idTienda]
-        );
-      } else {
-        [result] = await pool.query(
-          'UPDATE cliente SET nombre=?, telefono=? WHERE idCliente=? AND idTienda=?',
-          [nombre, telefono, req.params.id, idTienda]
-        );
-      }
+      const [result] = await pool.query(
+        'UPDATE proveedor SET nombre=?, telefono=?, direccion=? WHERE idProveedor=? AND idTienda=?',
+        [nombre, telefono, nullableText(req.body.direccion), req.params.id, idTienda]
+      );
       if (!result.affectedRows) return res.status(404).json({ error: 'Registro no encontrado.' });
       res.json({ message: 'Registro actualizado.' });
     } catch (error) {
@@ -568,18 +547,8 @@ function crudRoutes(base, table, idField, protectedDeleteMessage) {
     }
   });
 
-  router.delete(`/${base}/:id`, requireEntityFeature, async (req, res, next) => {
+  router.delete(`/${base}/:id`, async (req, res, next) => {
     try {
-      if (table === 'cliente') {
-        await requireAdminPassword(req);
-        const [result] = await pool.query(
-          `UPDATE cliente SET activo=0, eliminadoEn=?, actualizadoEn=?, idAdministradorActualiza=?
-           WHERE idCliente=? AND idTienda=? AND activo=1`,
-          [formatLocalDateTime(), formatLocalDateTime(), req.session.admin.id, req.params.id, tenantId(req)]
-        );
-        if (!result.affectedRows) return res.status(404).json({ error: 'Cliente no encontrado o ya está oculto.' });
-        return res.json({ message: 'Cliente ocultado. El historial se conserva.' });
-      }
       const [result] = await pool.query(
         `DELETE FROM ${table} WHERE ${idField}=? AND idTienda=?`,
         [req.params.id, tenantId(req)]
@@ -594,50 +563,6 @@ function crudRoutes(base, table, idField, protectedDeleteMessage) {
   });
 }
 
-router.get('/clientes/ocultos', requirePlanFeature('clientes_basico'), async (req, res, next) => {
-  try {
-    const [rows] = await pool.query(
-      'SELECT * FROM cliente WHERE idTienda=? AND activo=0 ORDER BY eliminadoEn DESC, nombre',
-      [tenantId(req)]
-    );
-    res.json(rows);
-  } catch (error) {
-    next(error);
-  }
-});
-
-router.patch('/clientes/:id/restaurar', requirePlanFeature('clientes_basico'), async (req, res, next) => {
-  let connection;
-  try {
-    await requireAdminPassword(req);
-    const idTienda = tenantId(req);
-    connection = await pool.getConnection();
-    await connection.beginTransaction();
-    await lockTenantForLimit(connection, idTienda);
-    const [hidden] = await connection.query(
-      'SELECT idCliente FROM cliente WHERE idCliente=? AND idTienda=? AND activo=0 FOR UPDATE',
-      [req.params.id, idTienda]
-    );
-    if (!hidden.length) throw notFound('Cliente oculto no encontrado.');
-    await enforcePlanLimit(connection, idTienda, 'clientes');
-    const [result] = await connection.query(
-      `UPDATE cliente SET activo=1, eliminadoEn=NULL, actualizadoEn=?, idAdministradorActualiza=?
-       WHERE idCliente=? AND idTienda=? AND activo=0`,
-      [formatLocalDateTime(), req.session.admin.id, req.params.id, idTienda]
-    );
-    if (!result.affectedRows) throw notFound('Cliente oculto no encontrado.');
-    await connection.commit();
-    res.json({ message: 'Cliente restaurado.' });
-  } catch (error) {
-    if (connection) await connection.rollback();
-    if (error.status) return res.status(error.status).json({ error: error.message });
-    next(error);
-  } finally {
-    if (connection) connection.release();
-  }
-});
-
-crudRoutes('clientes', 'cliente', 'idCliente', 'No se puede eliminar el cliente porque tiene ventas o fiados asociados.');
 crudRoutes('proveedores', 'proveedor', 'idProveedor', 'No se puede eliminar el proveedor porque tiene compras o productos asociados.');
 
 async function validateItems(connection, items, type, idTienda) {

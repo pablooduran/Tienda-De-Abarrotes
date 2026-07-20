@@ -4,6 +4,7 @@ const {
   formatLocalDateTime,
   parseLocalDate: parseBusinessDate
 } = require('../utils/local-datetime');
+const { enforcePlanLimit } = require('./subscription-service');
 
 const CREDIT_POLICIES = new Set(['permitir', 'advertir', 'bloquear']);
 const COMMUNICATION_CHANNELS = new Set(['ninguno', 'whatsapp', 'telefono', 'correo', 'presencial']);
@@ -144,7 +145,8 @@ async function lockCustomer(connection, idTienda, idCliente, { requireActive = f
     `SELECT idCliente, nombre, telefono, telefonoNormalizado, telefonoAlternativo,
             documentoIdentidad, documentoNormalizado, correo, direccion, notas,
             limiteCredito, permiteFiado, diasCreditoDefault, canalPreferido,
-            aceptaRecordatorios, horarioPreferido, activo, creadoEn, actualizadoEn
+            aceptaRecordatorios, horarioPreferido, activo, eliminadoEn,
+            creadoEn, actualizadoEn, idAdministradorActualiza
      FROM cliente
      WHERE idTienda=? AND idCliente=?
      FOR UPDATE`,
@@ -154,6 +156,43 @@ async function lockCustomer(connection, idTienda, idCliente, { requireActive = f
     throw creditError(404, 'Cliente no encontrado o inactivo.', 'CUSTOMER_NOT_FOUND');
   }
   return rows[0];
+}
+
+async function setCustomerVisibility(connection, input) {
+  const targetActive = input.active === true ? 1 : 0;
+  await connection.query('SELECT idTienda FROM tienda WHERE idTienda=? FOR UPDATE', [input.idTienda]);
+  const customer = await lockCustomer(connection, input.idTienda, input.idCliente);
+  if (Number(customer.activo) === targetActive) {
+    throw targetActive
+      ? creditError(409, 'El cliente ya esta activo.', 'CUSTOMER_ALREADY_ACTIVE')
+      : creditError(409, 'El cliente ya esta oculto.', 'CUSTOMER_ALREADY_HIDDEN');
+  }
+  if (targetActive === 1) await enforcePlanLimit(connection, input.idTienda, 'clientes');
+
+  const [[history]] = await connection.query(
+    `SELECT COUNT(*) fiados, COALESCE(SUM(saldoPendiente),0) saldoPendiente
+     FROM fiado WHERE idTienda=? AND idCliente=?`,
+    [input.idTienda, input.idCliente]
+  );
+  const now = input.now || formatLocalDateTime();
+  const [result] = await connection.query(
+    `UPDATE cliente
+     SET activo=?, eliminadoEn=?, actualizadoEn=?, idAdministradorActualiza=?
+     WHERE idTienda=? AND idCliente=? AND activo=?`,
+    [targetActive, targetActive ? null : now, now, input.idAdministrador,
+      input.idTienda, input.idCliente, targetActive ? 0 : 1]
+  );
+  if (result.affectedRows !== 1) {
+    throw creditError(409, 'El estado del cliente cambio durante la operacion.', 'CUSTOMER_STATE_CHANGED');
+  }
+  return {
+    idCliente: customer.idCliente,
+    activo: Boolean(targetActive),
+    eliminadoEn: targetActive ? null : now,
+    fiados: Number(history.fiados || 0),
+    saldoPendiente: history.saldoPendiente,
+    actualizadoEn: now
+  };
 }
 
 async function lockCustomerDebts(connection, idTienda, idCliente) {
@@ -346,6 +385,7 @@ module.exports = {
   normalizePhone,
   parseLocalDate,
   recordOverdueCreditConfirmation,
+  setCustomerVisibility,
   summarizeDebts,
   validateNewCredit
 };

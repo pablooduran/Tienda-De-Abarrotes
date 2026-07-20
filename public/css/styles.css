@@ -1582,13 +1582,23 @@ textarea:focus-visible { outline: 3px solid rgba(40, 106, 89, .28); outline-offs
   white-space: nowrap;
 }
 .credit-status.status-vencido,
-.credit-status.status-inactivo { color: #8f1f17; border-color: #e8aaa5; background: #fff0ef; }
+.credit-status.status-inactivo,
+.credit-status.status-oculto { color: #8f1f17; border-color: #e8aaa5; background: #fff0ef; }
 .credit-status.status-vence_hoy,
 .credit-status.status-proximo_a_vencer,
 .credit-status.status-fiado_bloqueado { color: #6f5000; border-color: #e8c65b; background: #fff8dc; }
 .credit-status.status-activo,
 .credit-status.status-pagado,
 .credit-status.status-al_dia { color: #12603d; border-color: #9dcdb8; background: #edf8f3; }
+.customer-hidden { background: #f7f7f5; }
+.customer-hidden > td { color: #59635f; }
+.hidden-customer-note {
+  margin-top: 14px;
+  padding: 12px 14px;
+  border-left: 4px solid #a14238;
+  background: #fff5f3;
+}
+.hidden-customer-note p { margin: 4px 0 0; }
 .customer-form-sections { display: grid; gap: 16px; }
 .customer-form-sections section { padding-top: 4px; border-top: 1px solid var(--line); }
 .customer-form-sections section:first-child { border-top: 0; }

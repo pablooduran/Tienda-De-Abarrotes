@@ -227,7 +227,9 @@ function applyReadOnlyUi() {
     '[data-delete]',
     '[data-adjust-stock]',
     '[data-restore-product]',
-    '[data-restore-client]',
+    '[data-customer-hide]',
+    '[data-customer-restore]',
+    '[data-profile-restore]',
     '[data-restore-debt]',
     '[data-delete-fiado]',
     '[data-product]',
@@ -270,7 +272,9 @@ function creditUi() {
       showError,
       showSuccess,
       newOperationKey,
-      localDateValue
+      localDateValue,
+      requestAdminPassword,
+      refreshCatalogs
     });
   }
   return customerCreditUi;
@@ -630,20 +634,16 @@ async function inicio() {
 }
 
 function renderCrud(type, rows, fields, idField) {
-  const hiddenButton = type === 'clientes'
-    ? '<div class="safe-delete-tools"><button type="button" class="secondary small" id="showHiddenClients">Ver clientes ocultos</button></div>'
-    : '';
   const formHtml = (row = {}) => `
     <form class="grid" id="${type}Form" data-id="${row[idField] || ''}">
       ${fields.map((field) => `<label>${field.label}<input name="${field.name}" value="${escapeHtml(row[field.name] || '')}" ${field.phone ? 'inputmode="numeric" pattern="[0-9]*"' : ''} ${field.required ? 'required' : ''}></label>`).join('')}
       <button type="submit">${row[idField] ? 'Actualizar' : 'Guardar'}</button>
     </form>`;
-  view.innerHTML = `<div class="panel">${formHtml()}${hiddenButton}</div><div class="panel table-wrap"><table>
+  view.innerHTML = `<div class="panel">${formHtml()}</div><div class="panel table-wrap"><table>
     <thead><tr>${fields.map((f) => `<th>${f.label}</th>`).join('')}<th>Acciones</th></tr></thead>
     <tbody>${rows.map((row) => `<tr>${fields.map((f) => `<td>${escapeHtml(row[f.name] || '')}</td>`).join('')}<td class="actions"><button class="small secondary" data-edit="${row[idField]}">Editar</button><button class="small danger" data-delete="${row[idField]}">Eliminar</button></td></tr>`).join('')}</tbody>
   </table></div>`;
   wireUppercase(view);
-  if (type === 'clientes') document.getElementById('showHiddenClients').addEventListener('click', showHiddenClients);
   view.querySelector(`#${type}Form`).addEventListener('submit', async (event) => saveCrud(event, type));
   view.querySelectorAll('[data-edit]').forEach((btn) => btn.addEventListener('click', () => {
     const row = rows.find((item) => String(item[idField]) === btn.dataset.edit);
@@ -652,65 +652,13 @@ function renderCrud(type, rows, fields, idField) {
     view.querySelector(`#${type}Form`).addEventListener('submit', async (event) => saveCrud(event, type));
   }));
   view.querySelectorAll('[data-delete]').forEach((btn) => btn.addEventListener('click', async () => {
-    let requestOptions = { method: 'DELETE' };
-    if (type === 'clientes') {
-      const row = rows.find((item) => String(item[idField]) === btn.dataset.delete);
-      const password = await requestAdminPassword(`¿Deseas ocultar el cliente ${row?.nombre || ''}?`);
-      if (!password) return;
-      requestOptions = {
-        method: 'DELETE',
-        body: JSON.stringify({ passwordAdministrador: password })
-      };
-    } else if (!await confirmAction('¿Deseas eliminar este registro?', true)) {
-      return;
-    }
+    if (!await confirmAction('¿Deseas eliminar este registro?', true)) return;
     try {
-      await api(`/api/${type}/${btn.dataset.delete}`, requestOptions);
-      await showSuccess(type === 'clientes' ? 'Cliente ocultado. El historial se conserva.' : 'Registro eliminado.');
+      await api(`/api/${type}/${btn.dataset.delete}`, { method: 'DELETE' });
+      await showSuccess('Registro eliminado.');
       loadView(type);
     } catch (error) { showError(error.message); }
   }));
-}
-
-async function showHiddenClients() {
-  try {
-    const rows = await api('/api/clientes/ocultos');
-    modalRoot.innerHTML = `
-      <div class="modal-backdrop">
-        <div class="modal modal-wide">
-          <h3>Clientes ocultos</h3>
-          <div class="modal-body">
-            ${rows.length ? `<div class="hidden-record-list">${rows.map((client) => `
-              <article class="hidden-record">
-                <div>
-                  <strong>${escapeHtml(client.nombre)}</strong>
-                  <p class="muted">Oculto${client.eliminadoEn ? `: ${formatDate(client.eliminadoEn)}` : ''}</p>
-                  <p class="hint">Teléfono: ${escapeHtml(client.telefono || 'Sin teléfono')}</p>
-                </div>
-                <button type="button" class="small secondary" data-restore-client="${client.idCliente}">Restaurar</button>
-              </article>`).join('')}</div>` : '<p class="muted empty-state">No hay clientes ocultos.</p>'}
-          </div>
-          <div class="modal-actions">
-            <button type="button" class="secondary" data-modal-cancel>Cerrar</button>
-          </div>
-        </div>
-      </div>`;
-    modalRoot.querySelector('[data-modal-cancel]').addEventListener('click', () => { modalRoot.innerHTML = ''; });
-    modalRoot.querySelectorAll('[data-restore-client]').forEach((btn) => btn.addEventListener('click', async () => {
-      const client = rows.find((item) => String(item.idCliente) === btn.dataset.restoreClient);
-      const password = await requestAdminPassword(`¿Deseas restaurar el cliente ${client?.nombre || ''}?`);
-      if (!password) return showHiddenClients();
-      try {
-        await api(`/api/clientes/${btn.dataset.restoreClient}/restaurar`, {
-          method: 'PATCH',
-          body: JSON.stringify({ passwordAdministrador: password })
-        });
-        await refreshCatalogs();
-        await showSuccess('Cliente restaurado.');
-        loadView('clientes');
-      } catch (error) { showError(error.message); }
-    }));
-  } catch (error) { showError(error.message); }
 }
 
 async function showHiddenDebts() {

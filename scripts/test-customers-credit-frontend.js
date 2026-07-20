@@ -8,6 +8,9 @@ const appJs = read('public/js/app.js');
 const creditJs = read('public/js/customer-credit-ui.js');
 const creditRoutes = read('routes/customers-credit.js');
 const apiRoutes = read('routes/api.js');
+const creditService = read('services/customer-credit-service.js');
+const posRoutes = read('routes/pos.js');
+const posService = read('services/pos-sale-service.js');
 const css = read('public/css/styles.css');
 
 const checks = [];
@@ -29,6 +32,36 @@ check('Formulario ampliado de cliente', includesAll(creditJs, [
   'telefonoAlternativo', 'documentoIdentidad', 'correo', 'direccion', 'limiteCredito',
   'diasCreditoDefault', 'canalPreferido', 'aceptaRecordatorios', 'horarioPreferido', 'notas'
 ]));
+check('Filtro explicito de estado de clientes', includesAll(creditJs + creditRoutes, [
+  "customerFilters: { estado: 'activos' }", "option('activos', 'Activos'", "option('ocultos', 'Ocultos'",
+  "option('todos', 'Todos'", "new Set(['activos', 'ocultos', 'todos'])", "INVALID_CUSTOMER_STATE"
+]));
+check('Cambio de estado reinicia la paginacion', creditJs.includes('ui.customerPage = 1;')
+  && creditJs.includes('await renderCustomers();'));
+check('Acciones ocultar y restaurar en UI nueva', includesAll(creditJs, [
+  'data-customer-hide', 'data-customer-restore', 'data-profile-restore', 'Ocultar cliente', 'Restaurar cliente'
+]));
+check('Cliente oculto tiene badge y fecha', creditJs.includes("statusBadge(customer.activo ? 'activo' : 'oculto')")
+  && creditJs.includes('customer.eliminadoEn') && css.includes('.status-oculto'));
+check('Confirmacion explica preservacion de historial', includesAll(creditJs, [
+  'No se eliminara su historial', 'no se modificaran ventas, fiados o pagos', 'seguira visible y podra cobrarse'
+]));
+check('Ocultar y restaurar evitan doble envio', creditJs.includes("setBusy(button, true, restore ? 'Restaurando...' : 'Ocultando...')")
+  && creditJs.includes('button?.disabled'));
+check('Ruta nueva es canonica y la heredada no duplica SQL',
+  creditRoutes.includes("router.delete('/clientes/:id'")
+  && creditRoutes.includes("router.patch('/clientes/:id/restaurar'")
+  && !apiRoutes.includes("router.get('/clientes/ocultos'")
+  && !apiRoutes.includes("router.patch('/clientes/:id/restaurar'"));
+check('Servicio central preserva el historial', creditService.includes('async function setCustomerVisibility')
+  && creditService.includes('SET activo=?, eliminadoEn=?, actualizadoEn=?, idAdministradorActualiza=?')
+  && !/DELETE\s+FROM\s+cliente/i.test(creditRoutes + creditService));
+check('POS excluye y valida clientes ocultos', posRoutes.includes('FROM cliente WHERE idTienda=? AND activo=1')
+  && posService.includes("lockCustomer(connection, idTienda, idCliente, { requireActive: true })"));
+check('Cobranza identifica clientes ocultos sin perder pagos', creditRoutes.includes('c.activo clienteActivo')
+  && creditJs.includes('row.clienteActivo') && creditJs.includes('data-debt-pay'));
+check('Codigo visual heredado de clientes ocultos retirado',
+  !appJs.includes('showHiddenClients') && !appJs.includes('data-restore-client'));
 check('No envia idTienda', !/idTienda\s*:/.test(creditJs));
 check('Pagos especifico y acumulado', includesAll(creditJs, [
   '/api/fiados/${debt.idFiado}/pagos', '/api/pagos-fiado/cliente'

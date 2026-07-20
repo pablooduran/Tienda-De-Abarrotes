@@ -557,6 +557,8 @@ La interfaz conserva **Clientes** y presenta las deudas bajo **Cobranza**. La pr
 npm.cmd run test:customers-credit-frontend
 ```
 
+El listado canonico `GET /api/clientes` acepta `estado=activos|ocultos|todos`; si se omite, devuelve solo activos. `DELETE /api/clientes/:id` oculta y `PATCH /api/clientes/:id/restaurar` restaura, siempre dentro de la tienda autenticada, con `clientes_basico` y confirmacion de la contrasena administrativa. La ruta de compatibilidad `GET /api/clientes/ocultos` delega al mismo listado. Ocultar nunca borra ni modifica ventas, fiados, pagos o seguimientos: una deuda existente sigue visible y cobrable desde **Cobranza**, mientras el cliente queda fuera del POS y no puede recibir ventas nuevas hasta ser restaurado.
+
 Con un plan basico y una suscripcion activa, confirme que se pueden consultar clientes, deuda y estado de cuenta, y registrar pagos de deuda existente. El detalle basico nunca incluye seguimientos de cobranza; la respuesta informa la capacidad `permisos.seguimientoCobranza`. Los limites personalizados, seguimientos y recordatorios deben aparecer bloqueados o ausentes segun sus funciones.
 
 Con un plan avanzado, confirme el alta y edicion ampliada, configuracion de credito, alertas, promesas, seguimientos y preparacion de WhatsApp. Abrir WhatsApp no debe registrar un envio; **Marcar como enviado manualmente** es una accion separada.

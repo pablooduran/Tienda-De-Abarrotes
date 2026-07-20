@@ -154,8 +154,12 @@ async function cleanupStore(connection, idTienda) {
 async function cleanup(connection, fixture) {
   if (!connection) return;
   const [stores] = await connection.query('SELECT idTienda FROM tienda WHERE slug LIKE ?', [`tienda-credito-%-${fixture.marker}`]);
-  const ids = new Set([fixture.advancedStore, fixture.basicStore, fixture.otherStore, ...stores.map((row) => row.idTienda)].filter(Boolean));
+  const ids = new Set([
+    fixture.advancedStore, fixture.basicStore, fixture.otherStore, fixture.noFeatureStore,
+    ...stores.map((row) => row.idTienda)
+  ].filter(Boolean));
   for (const idTienda of ids) await cleanupStore(connection, idTienda);
+  if (fixture.noFeaturePlan) await connection.query('DELETE FROM plan WHERE idPlan=?', [fixture.noFeaturePlan]);
   if (fixture.superUser) await connection.query('DELETE FROM administrador WHERE usuario=?', [fixture.superUser]);
 }
 
@@ -210,25 +214,40 @@ async function main() {
     const concurrent = new HttpSession(baseUrl);
     const basic = new HttpSession(baseUrl);
     const other = new HttpSession(baseUrl);
+    const noFeature = new HttpSession(baseUrl);
     await expect(superSession, '/auth/login', { method: 'POST', body: { usuario: fixture.superUser, password: superPassword } }, 200, 'Login superadmin');
     const plans = await resolveTestPlans(connection, superSession);
+    const temporaryPlanCode = `sin-clientes-${marker}`;
+    const now = formatLocalDateTime();
+    const [temporaryPlan] = await connection.query(
+      `INSERT INTO plan
+       (codigo,nombre,descripcion,activo,precioMensual,duracionDias,limitePropietarios,
+        limiteProductos,limiteClientes,limiteProveedores,creadoEn,actualizadoEn)
+       VALUES (?,?,?,1,0,30,1,50,50,20,?,?)`,
+      [temporaryPlanCode, `Plan sin clientes ${marker}`, 'Plan temporal aislado para permisos.', now, now]
+    );
+    fixture.noFeaturePlan = temporaryPlan.insertId;
     const advancedStore = storePayload(marker, 'avanzada', plans.advanced.codigo);
     const basicStore = storePayload(marker, 'basica', plans.basic.codigo);
     const otherStore = storePayload(marker, 'aislada', plans.advanced.codigo);
+    const noFeatureStore = storePayload(marker, 'sin-clientes', temporaryPlanCode);
     const advancedCreated = await expect(superSession, '/api/admin/tiendas', { method: 'POST', body: advancedStore.body }, 201, 'Crear tienda avanzada');
     const basicCreated = await expect(superSession, '/api/admin/tiendas', { method: 'POST', body: basicStore.body }, 201, 'Crear tienda basica');
     const otherCreated = await expect(superSession, '/api/admin/tiendas', { method: 'POST', body: otherStore.body }, 201, 'Crear tienda aislada');
+    const noFeatureCreated = await expect(superSession, '/api/admin/tiendas', { method: 'POST', body: noFeatureStore.body }, 201, 'Crear tienda sin clientes');
     fixture.advancedStore = advancedCreated.tienda.idTienda;
     fixture.basicStore = basicCreated.tienda.idTienda;
     fixture.otherStore = otherCreated.tienda.idTienda;
+    fixture.noFeatureStore = noFeatureCreated.tienda.idTienda;
     await expect(advanced, '/auth/login', { method: 'POST', body: { usuario: advancedStore.body.propietario.usuario, password: advancedStore.password } }, 200, 'Login avanzado');
     await expect(concurrent, '/auth/login', { method: 'POST', body: { usuario: advancedStore.body.propietario.usuario, password: advancedStore.password } }, 200, 'Login concurrente');
     await expect(basic, '/auth/login', { method: 'POST', body: { usuario: basicStore.body.propietario.usuario, password: basicStore.password } }, 200, 'Login basico');
     await expect(other, '/auth/login', { method: 'POST', body: { usuario: otherStore.body.propietario.usuario, password: otherStore.password } }, 200, 'Login otra tienda');
+    await expect(noFeature, '/auth/login', { method: 'POST', body: { usuario: noFeatureStore.body.propietario.usuario, password: noFeatureStore.password } }, 200, 'Login sin clientes');
     const cashObservationStart = formatLocalDateTime();
 
-    assert(await scalar(connection, 'SELECT COUNT(*) total FROM configuracionCreditoTienda WHERE idTienda IN (?,?,?)',
-      [fixture.advancedStore, fixture.basicStore, fixture.otherStore]) === 3,
+    assert(await scalar(connection, 'SELECT COUNT(*) total FROM configuracionCreditoTienda WHERE idTienda IN (?,?,?,?)',
+      [fixture.advancedStore, fixture.basicStore, fixture.otherStore, fixture.noFeatureStore]) === 4,
     'Las tiendas nuevas no recibieron configuracion de credito.');
 
     const product = await createProduct(advanced, marker, 'principal');
@@ -582,12 +601,144 @@ async function main() {
     const basicHiddenCustomer = await expect(basic, '/api/clientes', { method: 'POST', body: {
       nombre: `Cliente ocultable ${marker}`, telefono: '71111112'
     } }, 201, 'Cliente para ocultar y restaurar');
-    await expect(basic, `/api/clientes/${basicHiddenCustomer.idCliente}`, {
+    const defaultActiveList = await expect(basic, '/api/clientes', {}, 200, 'Listado predeterminado de clientes activos');
+    assert(defaultActiveList.some((item) => Number(item.idCliente) === Number(basicCustomer.idCliente))
+      && defaultActiveList.every((item) => item.activo === true),
+    'El listado sin estado no quedo limitado a clientes activos.');
+    const [[historyBeforeHide]] = await connection.query(
+      `SELECT c.activo, c.eliminadoEn,
+              (SELECT COUNT(*) FROM venta v WHERE v.idTienda=c.idTienda AND v.idCliente=c.idCliente) ventas,
+              (SELECT COUNT(*) FROM fiado f WHERE f.idTienda=c.idTienda AND f.idCliente=c.idCliente) fiados,
+              (SELECT COUNT(*) FROM pagoFiado pf JOIN fiado f
+               ON f.idTienda=pf.idTienda AND f.idFiado=pf.idFiado
+               WHERE f.idTienda=c.idTienda AND f.idCliente=c.idCliente) pagos,
+              (SELECT COALESCE(SUM(f.saldoPendiente),0) FROM fiado f
+               WHERE f.idTienda=c.idTienda AND f.idCliente=c.idCliente) saldo
+       FROM cliente c WHERE c.idTienda=? AND c.idCliente=?`,
+      [fixture.basicStore, basicCustomer.idCliente]
+    );
+    const hiddenResult = await expect(basic, `/api/clientes/${basicCustomer.idCliente}`, {
       method: 'DELETE', body: { password: basicStore.password }
     }, 200, 'Ocultar cliente con permiso basico');
-    await expect(basic, `/api/clientes/${basicHiddenCustomer.idCliente}/restaurar`, {
+    assert(hiddenResult.cliente.activo === false
+      && Number(hiddenResult.cliente.saldoPendiente) === Number(historyBeforeHide.saldo),
+    'La respuesta de ocultacion no conservo el saldo real.');
+    await expect(basic, `/api/clientes/${basicCustomer.idCliente}`, {
+      method: 'DELETE', body: { password: basicStore.password }
+    }, 409, 'Ocultar dos veces devuelve conflicto');
+    await expect(other, `/api/clientes/${basicCustomer.idCliente}`, {
+      method: 'DELETE', body: { password: otherStore.password }
+    }, 404, 'Otra tienda no oculta cliente ajeno');
+    await expect(other, `/api/clientes/${basicCustomer.idCliente}/restaurar`, {
+      method: 'PATCH', body: { password: otherStore.password }
+    }, 404, 'Otra tienda no restaura cliente ajeno');
+
+    const hiddenProfile = await expect(basic, `/api/clientes/${basicCustomer.idCliente}`, {}, 200,
+      'Ficha historica de cliente oculto');
+    assert(hiddenProfile.cliente.activo === false && hiddenProfile.cliente.eliminadoEn,
+      'La ficha no identifica al cliente oculto.');
+    await expect(basic, `/api/clientes/${basicCustomer.idCliente}`, {
+      method: 'PATCH', body: { nombre: 'No debe editarse oculto' }
+    }, 404, 'Cliente oculto no admite edicion normal');
+    const activeList = await expect(basic,
+      `/api/clientes?estado=activos&texto=${encodeURIComponent(marker)}&pagina=1&limite=20`, {}, 200,
+      'Listado activo excluye ocultos');
+    assert(!activeList.clientes.some((item) => Number(item.idCliente) === Number(basicCustomer.idCliente)),
+      'El cliente oculto continuo en el listado activo.');
+    const hiddenList = await expect(basic,
+      `/api/clientes?estado=ocultos&texto=${encodeURIComponent(marker)}&pagina=1&limite=20`, {}, 200,
+      'Listado de clientes ocultos');
+    assert(hiddenList.clientes.some((item) => Number(item.idCliente) === Number(basicCustomer.idCliente))
+      && hiddenList.clientes.every((item) => item.activo === false && item.eliminadoEn),
+    'El listado oculto no devolvio estado y fecha de ocultacion.');
+    const allCustomers = await expect(basic,
+      `/api/clientes?estado=todos&texto=${encodeURIComponent(marker)}&pagina=1&limite=1`, {}, 200,
+      'Listado de todos los estados con paginacion');
+    assert(allCustomers.total >= 2 && allCustomers.clientes.length === 1
+      && Number(allCustomers.resumen.clientesFiltrados) === allCustomers.total,
+    'El conteo o la paginacion no respetan el filtro de estado.');
+    await expect(basic, '/api/clientes?estado=ambiguo&pagina=1&limite=20', {}, 400,
+      'Estado de cliente invalido');
+
+    const posHidden = await expect(basic,
+      `/api/pos/clientes?q=${encodeURIComponent(`Cliente basico ${marker}`)}`, {}, 200,
+      'POS excluye cliente oculto');
+    assert(!(posHidden.clientes || posHidden).some((item) => Number(item.idCliente) === Number(basicCustomer.idCliente)),
+      'El selector POS devolvio un cliente oculto.');
+    await expect(basic, '/api/pos/ventas', { method: 'POST', body: saleBody(marker,
+      'fiado-cliente-oculto', basicProduct.idProducto, basicCustomer.idCliente) }, 404,
+    'Venta fiada rechaza cliente oculto');
+    const hiddenCollection = await expect(basic,
+      `/api/fiados?cliente=${basicCustomer.idCliente}&pagina=1&limite=20`, {}, 200,
+      'Cobranza conserva cliente oculto');
+    assert(hiddenCollection.fiados.some((item) => Number(item.idFiado) === Number(basicCredit.idFiado)
+      && item.clienteActivo === false),
+    'La cobranza historica oculto la deuda o no marco al cliente.');
+    const paymentWhileHidden = await expect(basic, `/api/fiados/${basicCredit.idFiado}/pagos`, {
+      method: 'POST', body: {
+        monto: 1, metodoPago: 'efectivo', claveOperacion: `cobro-cliente-oculto-${marker}`
+      }
+    }, 201, 'Cliente oculto conserva cobro de deuda existente');
+    assert(paymentWhileHidden.aplicaciones.length === 1,
+      'El cobro del cliente oculto no se aplico exactamente una vez.');
+    const [[afterHide]] = await connection.query(
+      `SELECT c.activo, c.eliminadoEn, c.idAdministradorActualiza,
+              (SELECT COUNT(*) FROM venta v WHERE v.idTienda=c.idTienda AND v.idCliente=c.idCliente) ventas,
+              (SELECT COUNT(*) FROM fiado f WHERE f.idTienda=c.idTienda AND f.idCliente=c.idCliente) fiados,
+              (SELECT COUNT(*) FROM pagoFiado pf JOIN fiado f
+               ON f.idTienda=pf.idTienda AND f.idFiado=pf.idFiado
+               WHERE f.idTienda=c.idTienda AND f.idCliente=c.idCliente) pagos,
+              (SELECT COALESCE(SUM(f.saldoPendiente),0) FROM fiado f
+               WHERE f.idTienda=c.idTienda AND f.idCliente=c.idCliente) saldo
+       FROM cliente c WHERE c.idTienda=? AND c.idCliente=?`,
+      [fixture.basicStore, basicCustomer.idCliente]
+    );
+    assert(Number(afterHide.ventas) === Number(historyBeforeHide.ventas)
+      && Number(afterHide.fiados) === Number(historyBeforeHide.fiados)
+      && Number(afterHide.pagos) === Number(historyBeforeHide.pagos) + 1
+      && Number(afterHide.saldo) === Number(historyBeforeHide.saldo) - 1
+      && afterHide.eliminadoEn && afterHide.idAdministradorActualiza,
+    'Ocultar altero historial o no preservo la auditoria minima.');
+
+    await expect(basic, `/api/clientes/${basicCustomer.idCliente}/restaurar`, {
       method: 'PATCH', body: { password: basicStore.password }
     }, 200, 'Restaurar cliente con permiso basico');
+    await expect(basic, `/api/clientes/${basicCustomer.idCliente}/restaurar`, {
+      method: 'PATCH', body: { password: basicStore.password }
+    }, 409, 'Restaurar dos veces devuelve conflicto');
+    const [[afterRestore]] = await connection.query(
+      `SELECT activo, eliminadoEn,
+              (SELECT COALESCE(SUM(saldoPendiente),0) FROM fiado f
+               WHERE f.idTienda=cliente.idTienda AND f.idCliente=cliente.idCliente) saldo
+       FROM cliente WHERE idTienda=? AND idCliente=?`,
+      [fixture.basicStore, basicCustomer.idCliente]
+    );
+    assert(Number(afterRestore.activo) === 1 && afterRestore.eliminadoEn === null
+      && Number(afterRestore.saldo) === Number(historyBeforeHide.saldo) - 1,
+    'Restaurar modifico la deuda o no limpio eliminadoEn.');
+    assert(await scalar(connection, 'SELECT COUNT(*) total FROM cliente WHERE idTienda=? AND idCliente=?',
+      [fixture.basicStore, basicCustomer.idCliente]) === 1,
+    'Ocultar o restaurar elimino fisicamente al cliente.');
+
+    const [[noFeatureOwner]] = await connection.query(
+      "SELECT idAdministrador FROM administrador WHERE idTienda=? AND rol='dueno_tienda' LIMIT 1",
+      [fixture.noFeatureStore]
+    );
+    const noFeatureNow = formatLocalDateTime();
+    const [noFeatureCustomer] = await connection.query(
+      `INSERT INTO cliente
+       (idTienda,nombre,telefono,activo,creadoEn,actualizadoEn,idAdministradorCrea)
+       VALUES (?,?,?,1,?,?,?)`,
+      [fixture.noFeatureStore, `Cliente sin funcion ${marker}`, '70001010',
+        noFeatureNow, noFeatureNow, noFeatureOwner.idAdministrador]
+    );
+    await expect(noFeature, `/api/clientes/${noFeatureCustomer.insertId}`, {
+      method: 'DELETE', body: { password: noFeatureStore.password }
+    }, 403, 'Plan sin clientes_basico no oculta');
+    await expect(noFeature, `/api/clientes/${noFeatureCustomer.insertId}/restaurar`, {
+      method: 'PATCH', body: { password: noFeatureStore.password }
+    }, 403, 'Plan sin clientes_basico no restaura');
+    assert(basicHiddenCustomer.idCliente, 'No se creo el cliente activo de comparacion.');
     const [[basicSubscription]] = await connection.query(
       'SELECT idSuscripcion,estado FROM suscripcionTienda WHERE idTienda=? ORDER BY idSuscripcion DESC LIMIT 1',
       [fixture.basicStore]

@@ -9,12 +9,13 @@
   function create(deps) {
     const {
       api, view, modalRoot, getState, hasFeature, escapeHtml: e, money, formatDate,
-      showError, showSuccess, newOperationKey, localDateValue
+      showError, showSuccess, newOperationKey, localDateValue, requestAdminPassword,
+      refreshCatalogs
     } = deps;
     const ui = {
       customerPage: 1,
       collectionPage: 1,
-      customerFilters: {},
+      customerFilters: { estado: 'activos' },
       collectionFilters: {},
       posCustomerId: null,
       posSnapshot: null,
@@ -127,7 +128,7 @@
           <label>Buscar<input name="texto" type="search" value="${e(f.texto || '')}" placeholder="Nombre, telefono o documento"></label>
           <label>Telefono<input name="telefono" value="${e(f.telefono || '')}"></label>
           <label>Documento<input name="documento" value="${e(f.documento || '')}"></label>
-          <label>Actividad<select name="activo">${option('', 'Todos', f.activo)}${option('1', 'Activos', f.activo)}${option('0', 'Inactivos', f.activo)}</select></label>
+          <label>Estado<select name="estado">${option('activos', 'Activos', f.estado)}${option('ocultos', 'Ocultos', f.estado)}${option('todos', 'Todos', f.estado)}</select></label>
           <label>Fiado<select name="permiteFiado">${option('', 'Todos', f.permiteFiado)}${option('1', 'Permitido', f.permiteFiado)}${option('0', 'Bloqueado', f.permiteFiado)}</select></label>
           <label>Deuda<select name="conDeuda">${option('', 'Todos', f.conDeuda)}${option('1', 'Con deuda', f.conDeuda)}${option('0', 'Sin deuda', f.conDeuda)}</select></label>
           <label>Vencimiento<select name="vencido">${option('', 'Todos', f.vencido)}${option('1', 'Con deuda vencida', f.vencido)}${option('0', 'Sin deuda vencida', f.vencido)}</select></label>
@@ -136,12 +137,18 @@
     }
 
     function customerActions(customer) {
+      if (!customer.activo) return `<div class="actions customer-actions">
+        <button type="button" class="small secondary" data-customer-view="${customer.idCliente}">Ver ficha</button>
+        <button type="button" class="small secondary" data-customer-statement="${customer.idCliente}">Estado de cuenta</button>
+        ${!readOnly() ? `<button type="button" class="small" data-customer-restore="${customer.idCliente}">Restaurar cliente</button>` : ''}
+      </div>`;
       return `<div class="actions customer-actions">
         <button type="button" class="small secondary" data-customer-view="${customer.idCliente}">Ver ficha</button>
         ${!readOnly() ? `<button type="button" class="small secondary" data-customer-edit="${customer.idCliente}">Editar</button>` : ''}
         ${Number(customer.deudaActual || 0) > 0 && !readOnly() ? `<button type="button" class="small" data-customer-pay="${customer.idCliente}">Registrar pago</button>` : ''}
         <button type="button" class="small secondary" data-customer-statement="${customer.idCliente}">Estado de cuenta</button>
         ${can('recordatorios_fiado') && customer.aceptaRecordatorios ? `<button type="button" class="small secondary" data-customer-whatsapp="${customer.idCliente}">WhatsApp</button>` : ''}
+        ${!readOnly() ? `<button type="button" class="small danger" data-customer-hide="${customer.idCliente}">Ocultar cliente</button>` : ''}
       </div>`;
     }
 
@@ -149,15 +156,15 @@
       if (!customers.length) return '<div class="panel empty-state"><strong>No hay clientes con estos filtros.</strong><p>Prueba limpiando los filtros o registra un cliente nuevo.</p></div>';
       const desktop = `<div class="panel table-wrap customer-desktop-table"><table><thead><tr>
         <th>Cliente</th><th>Telefono</th><th>Documento</th><th>Deuda</th><th>Vencido</th><th>Limite</th><th>Credito disponible</th><th>Ultima compra</th><th>Estado</th><th>Acciones</th>
-      </tr></thead><tbody>${customers.map((customer) => `<tr>
-        <td><strong>${e(customer.nombre)}</strong>${customer.correo ? `<small>${e(customer.correo)}</small>` : ''}</td>
+      </tr></thead><tbody>${customers.map((customer) => `<tr class="${customer.activo ? '' : 'customer-hidden'}">
+        <td><strong>${e(customer.nombre)}</strong>${customer.correo ? `<small>${e(customer.correo)}</small>` : ''}${!customer.activo && customer.eliminadoEn ? `<small>Oculto: ${e(formatDate(customer.eliminadoEn))}</small>` : ''}</td>
         <td>${e(customer.telefono || 'Sin telefono')}</td><td>${e(customer.documentoIdentidad || 'Sin documento')}</td>
         <td>Bs ${money(customer.deudaActual)}</td><td>${Number(customer.deudaVencida || 0) > 0 ? `<strong class="text-danger">Bs ${money(customer.deudaVencida)}</strong>` : 'Bs 0.00'}</td>
         <td>${valueOrUnknown(customer.limiteEfectivo, 'Bs ')}</td><td>${valueOrUnknown(customer.creditoDisponible, 'Bs ')}</td>
-        <td>${customer.ultimaCompra ? e(formatDate(customer.ultimaCompra)) : 'Sin compras'}</td><td>${statusBadge(customer.activo ? (customer.permiteFiado ? 'activo' : 'fiado_bloqueado') : 'inactivo')}</td>
+        <td>${customer.ultimaCompra ? e(formatDate(customer.ultimaCompra)) : 'Sin compras'}</td><td>${statusBadge(customer.activo ? (customer.permiteFiado ? 'activo' : 'fiado_bloqueado') : 'oculto')}</td>
         <td>${customerActions(customer)}</td></tr>`).join('')}</tbody></table></div>`;
-      const mobile = `<div class="customer-mobile-list">${customers.map((customer) => `<article class="customer-card">
-        <header><div><strong>${e(customer.nombre)}</strong><span>${e(customer.telefono || 'Sin telefono')}</span></div>${statusBadge(customer.activo ? 'activo' : 'inactivo')}</header>
+      const mobile = `<div class="customer-mobile-list">${customers.map((customer) => `<article class="customer-card ${customer.activo ? '' : 'customer-hidden'}">
+        <header><div><strong>${e(customer.nombre)}</strong><span>${e(customer.telefono || 'Sin telefono')}</span>${!customer.activo && customer.eliminadoEn ? `<span>Oculto: ${e(formatDate(customer.eliminadoEn))}</span>` : ''}</div>${statusBadge(customer.activo ? 'activo' : 'oculto')}</header>
         <dl><div><dt>Deuda</dt><dd>Bs ${money(customer.deudaActual)}</dd></div><div><dt>Vencida</dt><dd>Bs ${money(customer.deudaVencida)}</dd></div><div><dt>Credito disponible</dt><dd>${valueOrUnknown(customer.creditoDisponible, 'Bs ')}</dd></div></dl>
         ${customerActions(customer)}</article>`).join('')}</div>`;
       return desktop + mobile;
@@ -184,11 +191,13 @@
         const debt = Number(summary.deudaTotal ?? customers.reduce((sum, item) => sum + Number(item.deudaActual || 0), 0));
         const overdue = Number(summary.clientesVencidos ?? customers.filter((item) => Number(item.deudaVencida || 0) > 0).length);
         const active = Number(summary.clientesActivos ?? customers.filter((item) => item.activo).length);
+        const hidden = Number(summary.clientesOcultos ?? customers.filter((item) => !item.activo).length);
         const withDebt = Number(summary.clientesConDeuda ?? customers.filter((item) => Number(item.deudaActual || 0) > 0).length);
         view.innerHTML = `
           <div class="credit-heading"><div><span class="eyebrow">Clientes</span><h3>Relaciones claras, cuentas al dia</h3><p>Consulta deuda, credito y actividad sin perder el historial.</p></div>
             <div class="actions">${!readOnly() ? '<button type="button" data-new-customer>Agregar cliente</button>' : ''}${can('limites_credito') ? '<button type="button" class="secondary" data-credit-config>Configurar credito</button>' : ''}</div></div>
           <div class="cards customer-summary-cards"><article class="card"><span>Clientes activos</span><strong>${active}</strong></article>
+            <article class="card"><span>Clientes ocultos</span><strong>${hidden}</strong></article>
             <article class="card"><span>Clientes con deuda</span><strong>${withDebt}</strong></article>
             <article class="card"><span>Deuda total</span><strong>Bs ${money(debt)}</strong></article>
             <article class="card"><span>Clientes vencidos</span><strong>${overdue}</strong></article>
@@ -212,7 +221,7 @@
         renderCustomers();
       });
       view.querySelector('[data-clear-customer-filters]')?.addEventListener('click', () => {
-        ui.customerFilters = {};
+        ui.customerFilters = { estado: 'activos' };
         ui.customerPage = 1;
         renderCustomers();
       });
@@ -225,6 +234,43 @@
       view.querySelectorAll('[data-customer-pay]').forEach((button) => button.addEventListener('click', () => openPayment({ idCliente: button.dataset.customerPay })));
       view.querySelectorAll('[data-customer-statement]').forEach((button) => button.addEventListener('click', () => openStatement(button.dataset.customerStatement)));
       view.querySelectorAll('[data-customer-whatsapp]').forEach((button) => button.addEventListener('click', () => openWhatsApp({ idCliente: button.dataset.customerWhatsapp })));
+      view.querySelectorAll('[data-customer-hide]').forEach((button) => button.addEventListener('click', () => changeCustomerState(
+        customers.find((item) => String(item.idCliente) === button.dataset.customerHide), false, button
+      )));
+      view.querySelectorAll('[data-customer-restore]').forEach((button) => button.addEventListener('click', () => changeCustomerState(
+        customers.find((item) => String(item.idCliente) === button.dataset.customerRestore), true, button
+      )));
+    }
+
+    async function changeCustomerState(customer, restore, button) {
+      if (!customer || readOnly() || button?.disabled) return;
+      const debt = Number(customer.deudaActual || 0);
+      const action = restore ? 'restaurar' : 'ocultar';
+      const debtNotice = debt > 0
+        ? ` Conserva una deuda de Bs ${money(debt)}, que seguira visible y podra cobrarse.`
+        : '';
+      const password = await requestAdminPassword(
+        restore
+          ? `¿Deseas restaurar a ${customer.nombre}? Recuperara el acceso normal sin alterar su historial.${debtNotice}`
+          : `¿Deseas ocultar a ${customer.nombre}? No se eliminara su historial y no se modificaran ventas, fiados o pagos.${debtNotice}`
+      );
+      if (!password) return;
+      setBusy(button, true, restore ? 'Restaurando...' : 'Ocultando...');
+      try {
+        const result = await api(`/api/clientes/${customer.idCliente}${restore ? '/restaurar' : ''}`, {
+          method: restore ? 'PATCH' : 'DELETE',
+          body: JSON.stringify({ passwordAdministrador: password })
+        });
+        modalRoot.innerHTML = '';
+        ui.customerPage = 1;
+        await refreshCatalogs();
+        await renderCustomers();
+        await showSuccess(result.message || `Cliente ${restore ? 'restaurado' : 'ocultado'}.`);
+      } catch (error) {
+        showError(error.message || `No se pudo ${action} el cliente.`);
+      } finally {
+        if (button?.isConnected) setBusy(button, false);
+      }
     }
 
     function customerFormBody(customer = {}) {
@@ -330,8 +376,9 @@
         const tabs = ['resumen', 'compras', 'fiados', 'pagos'];
         if (data.permisos?.seguimientoCobranza) tabs.push('seguimiento');
         modalRoot.innerHTML = `<div class="modal-backdrop"><section class="modal modal-wide customer-profile-modal" role="dialog" aria-modal="true" aria-label="Ficha de ${e(customer.nombre)}">
-          <div class="profile-heading"><div><span class="eyebrow">Ficha de cliente</span><h3>${e(customer.nombre)}</h3><p>${e(customer.telefono || 'Sin telefono')} · ${e(customer.documentoIdentidad || 'Sin documento')}</p></div>${statusBadge(customer.activo ? 'activo' : 'inactivo')}</div>
-          <div class="profile-actions"><button type="button" class="secondary" data-profile-statement>Estado de cuenta</button>${Number(customer.deudaActual) > 0 && !readOnly() ? '<button type="button" data-profile-pay>Registrar pago</button>' : ''}${can('recordatorios_fiado') && customer.aceptaRecordatorios ? '<button type="button" class="secondary" data-profile-whatsapp>WhatsApp</button>' : ''}</div>
+          <div class="profile-heading"><div><span class="eyebrow">Ficha de cliente</span><h3>${e(customer.nombre)}</h3><p>${e(customer.telefono || 'Sin telefono')} · ${e(customer.documentoIdentidad || 'Sin documento')}</p></div>${statusBadge(customer.activo ? 'activo' : 'oculto')}</div>
+          ${customer.activo ? '' : `<div class="hidden-customer-note"><strong>Cliente oculto.</strong><p>Su historial y sus deudas se conservan${customer.eliminadoEn ? ` desde ${e(formatDate(customer.eliminadoEn))}` : ''}. Restauralo antes de editarlo o usarlo en una venta nueva.</p></div>`}
+          <div class="profile-actions"><button type="button" class="secondary" data-profile-statement>Estado de cuenta</button>${customer.activo && Number(customer.deudaActual) > 0 && !readOnly() ? '<button type="button" data-profile-pay>Registrar pago</button>' : ''}${customer.activo && can('recordatorios_fiado') && customer.aceptaRecordatorios ? '<button type="button" class="secondary" data-profile-whatsapp>WhatsApp</button>' : ''}${!customer.activo && !readOnly() ? '<button type="button" data-profile-restore>Restaurar cliente</button>' : ''}</div>
           <nav class="profile-tabs" aria-label="Secciones de la ficha">${tabs.map((tab) => `<button type="button" class="secondary" data-profile-tab="${tab}">${e(statusText(tab))}</button>`).join('')}</nav>
           <div class="modal-body" data-profile-content>${profileTabBody(data, 'resumen')}</div>
           <div class="modal-actions"><button type="button" class="secondary" data-modal-cancel>Cerrar</button></div>
@@ -346,6 +393,7 @@
         modalRoot.querySelector('[data-profile-statement]').addEventListener('click', () => openStatement(idCliente));
         modalRoot.querySelector('[data-profile-pay]')?.addEventListener('click', () => openPayment({ idCliente }));
         modalRoot.querySelector('[data-profile-whatsapp]')?.addEventListener('click', () => openWhatsApp({ idCliente }));
+        modalRoot.querySelector('[data-profile-restore]')?.addEventListener('click', (event) => changeCustomerState(customer, true, event.currentTarget));
       } catch (error) { showError(error.message); }
     }
 
@@ -436,9 +484,9 @@
       return `<div class="actions">
         ${Number(row.saldoPendiente || 0) > 0 && !readOnly() ? `<button type="button" class="small" data-debt-pay="${row.idFiado}">Registrar pago</button>` : ''}
         ${Number(row.saldoPendiente || 0) > 0 && !readOnly() ? `<button type="button" class="small secondary" data-customer-pay-accum="${row.idCliente}">Pago acumulado</button>` : ''}
-        ${Number(row.saldoPendiente || 0) > 0 && can('seguimiento_cobranza') && !readOnly() ? `<button type="button" class="small secondary" data-debt-promise="${row.idFiado}">Registrar promesa</button>` : ''}
-        ${can('seguimiento_cobranza') && !readOnly() ? `<button type="button" class="small secondary" data-debt-followup="${row.idFiado}" data-customer="${row.idCliente}">Seguimiento</button>` : ''}
-        ${can('recordatorios_fiado') && row.aceptaRecordatorios !== false ? `<button type="button" class="small secondary" data-debt-whatsapp="${row.idFiado}" data-customer="${row.idCliente}">WhatsApp</button>` : ''}
+        ${row.clienteActivo && Number(row.saldoPendiente || 0) > 0 && can('seguimiento_cobranza') && !readOnly() ? `<button type="button" class="small secondary" data-debt-promise="${row.idFiado}">Registrar promesa</button>` : ''}
+        ${row.clienteActivo && can('seguimiento_cobranza') && !readOnly() ? `<button type="button" class="small secondary" data-debt-followup="${row.idFiado}" data-customer="${row.idCliente}">Seguimiento</button>` : ''}
+        ${row.clienteActivo && can('recordatorios_fiado') && row.aceptaRecordatorios !== false ? `<button type="button" class="small secondary" data-debt-whatsapp="${row.idFiado}" data-customer="${row.idCliente}">WhatsApp</button>` : ''}
         <button type="button" class="small secondary" data-debt-statement="${row.idCliente}">Estado de cuenta</button>
         <button type="button" class="small secondary" data-debt-customer="${row.idCliente}">Ver cliente</button>
       </div>`;
@@ -447,8 +495,8 @@
     function collectionRowsMarkup(rows) {
       if (!rows.length) return '<div class="panel empty-state"><strong>No hay cuentas en este estado.</strong><p>Los filtros actuales no devolvieron resultados.</p></div>';
       return `<div class="panel collection-desktop-table table-wrap"><table><thead><tr><th>Cliente</th><th>Telefono</th><th>Saldo</th><th>Vencimiento</th><th>Promesa</th><th>Estado</th><th>Tiempo</th><th>Acciones</th></tr></thead><tbody>${rows.map((row) => `<tr>
-        <td><strong>${e(row.cliente)}</strong></td><td>${e(row.telefono || 'Sin telefono')}</td><td>Bs ${money(row.saldoPendiente)}</td><td>${e(dateText(row.fechaVencimiento) || 'Sin fecha')}</td><td>${e(dateText(row.fechaPrometidaPago) || 'Sin promesa')}</td><td>${statusBadge(row.estadoCobranza || row.estado)}</td><td>${row.diasAtraso ? `${e(row.diasAtraso)} dias de atraso` : row.diasRestantes !== null && row.diasRestantes !== undefined ? `${e(row.diasRestantes)} dias restantes` : 'Sin calculo'}</td><td>${collectionActions(row)}</td></tr>`).join('')}</tbody></table></div>
-        <div class="collection-mobile-list">${rows.map((row) => `<article class="collection-card"><header><div><strong>${e(row.cliente)}</strong><span>${e(row.telefono || 'Sin telefono')}</span></div>${statusBadge(row.estadoCobranza || row.estado)}</header><dl><div><dt>Saldo</dt><dd>Bs ${money(row.saldoPendiente)}</dd></div><div><dt>Vencimiento</dt><dd>${e(dateText(row.fechaVencimiento) || 'Sin fecha')}</dd></div><div><dt>Promesa</dt><dd>${e(dateText(row.fechaPrometidaPago) || 'Sin promesa')}</dd></div></dl>${collectionActions(row)}</article>`).join('')}</div>`;
+        <td><strong>${e(row.cliente)}</strong>${row.clienteActivo ? '' : `<small>${statusBadge('oculto')}</small>`}</td><td>${e(row.telefono || 'Sin telefono')}</td><td>Bs ${money(row.saldoPendiente)}</td><td>${e(dateText(row.fechaVencimiento) || 'Sin fecha')}</td><td>${e(dateText(row.fechaPrometidaPago) || 'Sin promesa')}</td><td>${statusBadge(row.estadoCobranza || row.estado)}</td><td>${row.diasAtraso ? `${e(row.diasAtraso)} dias de atraso` : row.diasRestantes !== null && row.diasRestantes !== undefined ? `${e(row.diasRestantes)} dias restantes` : 'Sin calculo'}</td><td>${collectionActions(row)}</td></tr>`).join('')}</tbody></table></div>
+        <div class="collection-mobile-list">${rows.map((row) => `<article class="collection-card ${row.clienteActivo ? '' : 'customer-hidden'}"><header><div><strong>${e(row.cliente)}</strong><span>${e(row.telefono || 'Sin telefono')}</span>${row.clienteActivo ? '' : '<span>Cliente oculto</span>'}</div>${statusBadge(row.estadoCobranza || row.estado)}</header><dl><div><dt>Saldo</dt><dd>Bs ${money(row.saldoPendiente)}</dd></div><div><dt>Vencimiento</dt><dd>${e(dateText(row.fechaVencimiento) || 'Sin fecha')}</dd></div><div><dt>Promesa</dt><dd>${e(dateText(row.fechaPrometidaPago) || 'Sin promesa')}</dd></div></dl>${collectionActions(row)}</article>`).join('')}</div>`;
     }
 
     async function renderCollections(focus = null) {
