@@ -112,12 +112,33 @@ function modal({ title: modalTitle, body, confirmText = 'Aceptar', cancelText = 
   });
 }
 
+function modalFocusableElements() {
+  return Array.from(modalRoot.querySelectorAll(
+    'button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), a[href], [tabindex]:not([tabindex="-1"])'
+  )).filter((element) => !element.hidden && element.getAttribute('aria-hidden') !== 'true');
+}
+
 document.addEventListener('keydown', (event) => {
-  if (event.key !== 'Escape' || !modalRoot.firstElementChild) return;
-  const close = modalRoot.querySelector('[data-modal-cancel], [data-modal-confirm]');
-  if (close) {
+  if (!modalRoot.firstElementChild) return;
+  if (event.key === 'Escape') {
+    const close = modalRoot.querySelector('[data-modal-cancel], [data-modal-confirm]');
+    if (close) {
+      event.preventDefault();
+      close.click();
+    }
+    return;
+  }
+  if (event.key !== 'Tab') return;
+  const focusable = modalFocusableElements();
+  if (!focusable.length) return;
+  const first = focusable[0];
+  const last = focusable[focusable.length - 1];
+  if (event.shiftKey && document.activeElement === first) {
     event.preventDefault();
-    close.click();
+    last.focus();
+  } else if (!event.shiftKey && document.activeElement === last) {
+    event.preventDefault();
+    first.focus();
   }
 });
 function showError(text) { return modal({ title: 'No se pudo completar', body: `<p>${escapeHtml(text)}</p>`, confirmText: 'Entendido', danger: true }); }
@@ -126,9 +147,10 @@ function confirmAction(text, danger = false) { return modal({ title: 'Confirmar 
 
 function requestAdminPassword(actionText) {
   return new Promise((resolve) => {
+    const returnFocus = document.activeElement;
     modalRoot.innerHTML = `
       <div class="modal-backdrop">
-        <div class="modal">
+        <div class="modal" role="dialog" aria-modal="true" aria-label="Confirmar cambio de visibilidad">
           <h3>Confirmar eliminación segura</h3>
           <div class="modal-body">
             <p>${escapeHtml(actionText)}</p>
@@ -145,6 +167,7 @@ function requestAdminPassword(actionText) {
     input.focus();
     const close = (value) => {
       modalRoot.innerHTML = '';
+      returnFocus?.focus?.();
       resolve(value);
     };
     modalRoot.querySelector('[data-modal-cancel]').addEventListener('click', () => close(null));
@@ -271,6 +294,7 @@ function creditUi() {
       formatDate,
       showError,
       showSuccess,
+      showMessage,
       newOperationKey,
       localDateValue,
       requestAdminPassword,
@@ -1953,7 +1977,7 @@ function showSaleReceipt(receipt) {
   const text = receiptText(receipt);
   const whatsappUrl = receipt.whatsappUrl || '';
   modalRoot.innerHTML = `
-    <div class="modal-backdrop"><div class="modal receipt-modal">
+    <div class="modal-backdrop"><div class="modal receipt-modal" role="dialog" aria-modal="true" aria-label="Venta confirmada">
       <h3>Venta confirmada</h3>
       <div class="modal-body">${receiptHtml(receipt)}</div>
       <div class="modal-actions receipt-actions">
@@ -1975,6 +1999,7 @@ function showSaleReceipt(receipt) {
     window.addEventListener('afterprint', () => document.body.classList.remove('printing-receipt'), { once: true });
     window.print();
   });
+  modalRoot.querySelector('button:not([disabled])')?.focus();
 }
 
 async function submitPosSale(event) {

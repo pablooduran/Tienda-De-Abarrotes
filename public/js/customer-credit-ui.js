@@ -19,7 +19,7 @@
   function create(deps) {
     const {
       api, view, modalRoot, getState, hasFeature, escapeHtml: e, money, formatDate,
-      showError, showSuccess, newOperationKey, localDateValue, requestAdminPassword,
+      showError, showSuccess, showMessage, newOperationKey, localDateValue, requestAdminPassword,
       refreshCatalogs, secureFetch, errorFromResponse
     } = deps;
     const ui = {
@@ -107,9 +107,9 @@
         link.click();
         link.remove();
         URL.revokeObjectURL(objectUrl);
-        await showSuccess('Exportacion generada correctamente.');
+        showMessage('Exportacion generada correctamente.');
       } catch (error) {
-        showError(error.message || 'No se pudo generar la exportacion.');
+        showMessage(error.message || 'No se pudo generar la exportacion.', true);
       } finally {
         if (button.isConnected) setBusy(button, false);
       }
@@ -123,14 +123,18 @@
       if (message) target.focus();
     }
 
+    function focusCurrentModal() {
+      modalRoot.querySelector('.modal button:not([disabled]), .modal input:not([type="hidden"]):not([disabled]), .modal select:not([disabled]), .modal textarea:not([disabled])')?.focus();
+    }
+
     function openFormModal({ title, body, submitText = 'Guardar', wide = false, onOpen, onSubmit }) {
       return new Promise((resolve) => {
         const returnFocus = document.activeElement;
         modalRoot.innerHTML = `
           <div class="modal-backdrop">
-            <form class="modal ${wide ? 'modal-wide' : ''}" data-credit-modal role="dialog" aria-modal="true" aria-label="${e(title)}">
+            <form class="modal ${wide ? 'modal-wide' : ''}" data-credit-modal role="dialog" aria-modal="true" aria-label="${e(title)}" aria-describedby="creditFormError">
               <h3>${e(title)}</h3>
-              <div class="modal-body">${body}<p class="form-error" data-form-error tabindex="-1" hidden></p></div>
+              <div class="modal-body">${body}<p class="form-error" id="creditFormError" data-form-error role="alert" aria-live="assertive" tabindex="-1" hidden></p></div>
               <div class="modal-actions">
                 <button type="button" class="secondary" data-modal-cancel>Cancelar</button>
                 <button type="submit" data-modal-submit>${e(submitText)}</button>
@@ -282,8 +286,9 @@
     }
 
     async function renderSegmentation() {
+      ui.collectionRequest += 1;
       const request = ++ui.segmentationRequest;
-      view.innerHTML = '<div class="panel loading-state">Calculando segmentacion...</div>';
+      view.innerHTML = '<div class="panel loading-state" role="status" aria-live="polite">Calculando segmentacion...</div>';
       try {
         const query = filterQuery(ui.segmentationFilters, { page: ui.segmentationPage });
         const data = await api(`/api/clientes/segmentacion?${query}`);
@@ -295,7 +300,7 @@
         wireSegmentationView();
       } catch (error) {
         if (request !== ui.segmentationRequest) return;
-        view.innerHTML = `<div class="panel error-state"><strong>No se pudo calcular la segmentacion.</strong><p>${e(error.message)}</p><div class="actions"><button type="button" data-retry-segmentation>Reintentar</button><button type="button" class="secondary" data-back-customers>Volver a clientes</button></div></div>`;
+        view.innerHTML = `<div class="panel error-state" role="alert"><strong>No se pudo calcular la segmentacion.</strong><p>${e(error.message)}</p><div class="actions"><button type="button" data-retry-segmentation>Reintentar</button><button type="button" class="secondary" data-back-customers>Volver a clientes</button></div></div>`;
         view.querySelector('[data-retry-segmentation]')?.addEventListener('click', renderSegmentation);
         view.querySelector('[data-back-customers]')?.addEventListener('click', renderCustomers);
       }
@@ -328,7 +333,9 @@
     }
 
     async function renderCustomers() {
-      view.innerHTML = '<div class="panel loading-state">Cargando clientes...</div>';
+      ui.segmentationRequest += 1;
+      ui.collectionRequest += 1;
+      view.innerHTML = '<div class="panel loading-state" role="status" aria-live="polite">Cargando clientes...</div>';
       try {
         const query = new URLSearchParams({ pagina: ui.customerPage, limite: 20 });
         Object.entries(ui.customerFilters).forEach(([key, value]) => { if (value !== '') query.set(key, value); });
@@ -354,7 +361,7 @@
           ${readOnly() ? '<div class="panel readonly-note"><strong>Modo de solo lectura.</strong><p>Puedes consultar perfiles, deuda y estados de cuenta. Las altas, ediciones y cobros estan deshabilitados hasta reactivar la suscripcion.</p></div>' : ''}`;
         wireCustomerView(customers);
       } catch (error) {
-        view.innerHTML = `<div class="panel error-state"><strong>No se pudieron cargar los clientes.</strong><p>${e(error.message)}</p><button type="button" data-retry-customers>Reintentar</button></div>`;
+        view.innerHTML = `<div class="panel error-state" role="alert"><strong>No se pudieron cargar los clientes.</strong><p>${e(error.message)}</p><button type="button" data-retry-customers>Reintentar</button></div>`;
         view.querySelector('[data-retry-customers]')?.addEventListener('click', renderCustomers);
       }
     }
@@ -555,6 +562,7 @@
         modalRoot.querySelector('[data-profile-pay]')?.addEventListener('click', () => openPayment({ idCliente }));
         modalRoot.querySelector('[data-profile-whatsapp]')?.addEventListener('click', () => openWhatsApp({ idCliente }));
         modalRoot.querySelector('[data-profile-restore]')?.addEventListener('click', (event) => changeCustomerState(customer, true, event.currentTarget));
+        focusCurrentModal();
       } catch (error) { showError(error.message); }
     }
 
@@ -663,12 +671,13 @@
     }
 
     async function renderCollections(focus = null) {
+      ui.segmentationRequest += 1;
       if (focus?.idCliente) {
         ui.collectionFilters.cliente = focus.idCliente;
         ui.collectionPage = 1;
       }
       const request = ++ui.collectionRequest;
-      view.innerHTML = '<div class="panel loading-state">Cargando cobranza...</div>';
+      view.innerHTML = '<div class="panel loading-state" role="status" aria-live="polite">Cargando cobranza...</div>';
       try {
         const advancedAlerts = can('recordatorios_fiado');
         const query = new URLSearchParams({ pagina: ui.collectionPage, limite: 20 });
@@ -689,7 +698,7 @@
         wireCollectionView(rows);
       } catch (error) {
         if (request !== ui.collectionRequest) return;
-        view.innerHTML = `<div class="panel error-state"><strong>No se pudo cargar la cobranza.</strong><p>${e(error.message)}</p><button type="button" data-retry-collections>Reintentar</button></div>`;
+        view.innerHTML = `<div class="panel error-state" role="alert"><strong>No se pudo cargar la cobranza.</strong><p>${e(error.message)}</p><button type="button" data-retry-collections>Reintentar</button></div>`;
         view.querySelector('[data-retry-collections]')?.addEventListener('click', () => renderCollections(focus));
       }
     }
@@ -855,6 +864,7 @@
           } catch (error) { showError(error.message); }
           finally { if (button.isConnected) setBusy(button, false); }
         }));
+        focusCurrentModal();
       } catch (error) { showError(error.message); }
     }
 
@@ -871,6 +881,7 @@
         modalRoot.querySelector('[data-modal-cancel]').addEventListener('click', () => { modalRoot.innerHTML = ''; returnFocus?.focus?.(); });
         modalRoot.querySelector('[data-receipt-print]').addEventListener('click', () => window.print());
         modalRoot.querySelector('[data-receipt-whatsapp]')?.addEventListener('click', () => openWhatsApp({ idCliente: data.cliente.idCliente, idCobroFiado }));
+        focusCurrentModal();
       } catch (error) { showError(error.message); }
     }
 
@@ -996,6 +1007,7 @@
           event.currentTarget.textContent = 'Resumen copiado';
         });
         modalRoot.querySelector('[data-statement-whatsapp]')?.addEventListener('click', () => openWhatsApp({ idCliente }));
+        focusCurrentModal();
       } catch (error) { showError(error.message); }
     }
 
@@ -1015,7 +1027,7 @@
         if (ui.posLoadingCustomerId === idCliente) return;
         ui.posLoadingCustomerId = idCliente;
         const request = ++ui.posRequest;
-        target.innerHTML = '<div class="loading-state compact">Consultando credito...</div>';
+        target.innerHTML = '<div class="loading-state compact" role="status" aria-live="polite">Consultando credito...</div>';
         try {
           const [data, configuration] = await Promise.all([
             api(`/api/clientes/${idCliente}/resumen`),
@@ -1029,7 +1041,7 @@
           return refreshPosCredit(ui.posBalance);
         } catch (error) {
           ui.posLoadingCustomerId = null;
-          if (request === ui.posRequest) target.innerHTML = `<div class="error-state compact">${e(error.message)}</div>`;
+          if (request === ui.posRequest) target.innerHTML = `<div class="error-state compact" role="alert">${e(error.message)}</div>`;
           return;
         }
       }

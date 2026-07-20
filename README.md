@@ -596,6 +596,16 @@ La interfaz conserva **Clientes** y presenta las deudas bajo **Cobranza**. La pr
 npm.cmd run test:customers-credit-frontend
 ```
 
+La prueba de navegador inicia y cierra su propio servidor local, crea tiendas y usuarios temporales en la base de pruebas y controla Edge o Chrome instalado mediante `playwright-core`:
+
+```powershell
+$env:APP_ENV='local'
+$env:DB_HOST='localhost'
+npm.cmd run test:customers-credit-browser
+```
+
+La base configurada debe contener `prueba` o `test` en su nombre. No depende de un servidor previo ni descarga un navegador. Si Edge o Chrome no estan en sus rutas habituales, defina `BROWSER_EXECUTABLE_PATH`. Los XLSX y demas artefactos se guardan en una carpeta temporal y se eliminan en `finally`; al terminar tambien se cierran navegador y servidor y se limpian las tiendas temporales. La bateria recorre login, clientes, POS fiado, cobranza, comprobantes, plantillas, WhatsApp preparado, segmentacion, exportaciones, permisos, aislamiento, modo de solo lectura, teclado, impresion y vistas de 360, 768 y 1366 px.
+
 El listado canonico `GET /api/clientes` acepta `estado=activos|ocultos|todos`; si se omite, devuelve solo activos. `DELETE /api/clientes/:id` oculta y `PATCH /api/clientes/:id/restaurar` restaura, siempre dentro de la tienda autenticada, con `clientes_basico` y confirmacion de la contrasena administrativa. La ruta de compatibilidad `GET /api/clientes/ocultos` delega al mismo listado. Ocultar nunca borra ni modifica ventas, fiados, pagos o seguimientos: una deuda existente sigue visible y cobrable desde **Cobranza**, mientras el cliente queda fuera del POS y no puede recibir ventas nuevas hasta ser restaurado.
 
 Con un plan basico y una suscripcion activa, confirme que se pueden consultar clientes, deuda y estado de cuenta, y registrar pagos de deuda existente. El detalle basico nunca incluye seguimientos de cobranza; la respuesta informa la capacidad `permisos.seguimientoCobranza`. Los limites personalizados, seguimientos y recordatorios deben aparecer bloqueados o ausentes segun sus funciones.

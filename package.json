@@ -34,6 +34,7 @@
     "test:lots-expiration": "node scripts/test-lots-expiration.js",
     "test:customers-credit": "node scripts/test-customers-credit.js",
     "test:customers-credit-frontend": "node scripts/test-customers-credit-frontend.js",
+    "test:customers-credit-browser": "node scripts/test-customers-credit-browser.js",
     "test:session-revocation": "node scripts/test-session-revocation.js",
     "test:timezone-tls": "node scripts/test-timezone-tls.js",
     "test:web-security": "node scripts/test-web-security.js",
@@ -53,7 +54,8 @@
     "mysql2": "^3.11.0"
   },
   "devDependencies": {
-    "nodemon": "^3.1.4"
+    "nodemon": "^3.1.4",
+    "playwright-core": "^1.61.1"
   },
   "engines": {
     "node": ">=18"
