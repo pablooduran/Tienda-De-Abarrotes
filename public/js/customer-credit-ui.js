@@ -398,7 +398,7 @@
       if (tab === 'resumen') return `<div class="cards profile-summary"><article class="card"><span>Deuda total</span><strong>Bs ${money(customer.deudaActual)}</strong></article><article class="card"><span>Deuda vencida</span><strong>Bs ${money(customer.deudaVencida)}</strong></article><article class="card"><span>Limite efectivo</span><strong>${valueOrUnknown(customer.limiteEfectivo, 'Bs ')}</strong></article><article class="card"><span>Credito disponible</span><strong>${valueOrUnknown(customer.creditoDisponible, 'Bs ')}</strong></article></div><dl class="profile-details"><div><dt>Ultima compra</dt><dd>${data.compras?.[0]?.fecha ? e(formatDate(data.compras[0].fecha)) : 'Sin compras'}</dd></div><div><dt>Ultimo pago</dt><dd>${data.pagos?.[0]?.fechaPago ? e(formatDate(data.pagos[0].fechaPago)) : 'Sin pagos'}</dd></div><div><dt>Canal preferido</dt><dd>${e(statusText(customer.canalPreferido))}</dd></div><div><dt>Recordatorios</dt><dd>${customer.aceptaRecordatorios ? 'Aceptados' : 'No aceptados'}</dd></div></dl>`;
       if (tab === 'compras') return historyNotice(data.historial?.compras) + listOrEmpty(data.compras, (row) => `<article class="timeline-row"><div><strong>${e(row.codigoComprobante || `Venta #${row.idVenta}`)}</strong><span>${e(formatDate(row.fecha))}</span></div><strong>Bs ${money(row.total)}</strong></article>`, 'No hay compras registradas.');
       if (tab === 'fiados') return historyNotice(data.historial?.fiados) + listOrEmpty(data.fiados, (row) => `<article class="timeline-row"><div><strong>Fiado #${row.idFiado}</strong><span>${e(formatDate(row.fechaInicio))} · vence ${e(dateText(row.fechaVencimiento) || 'sin fecha')} · promesa ${e(dateText(row.fechaPrometidaPago) || 'sin promesa')}</span></div><div><strong>Bs ${money(row.saldoPendiente)}</strong>${statusBadge(row.estadoCobranza || row.estado)}</div></article>`, 'No hay fiados registrados.');
-      if (tab === 'pagos') return historyNotice(data.historial?.pagos) + listOrEmpty(data.pagos, (row) => `<article class="timeline-row"><div><strong>Pago a fiado #${row.idFiado}</strong><span>${e(formatDate(row.fechaPago))} · ${e(statusText(row.metodoPago))} · ${e(row.administrador || 'Sistema')}</span></div><strong>Bs ${money(row.monto)}</strong></article>`, 'No hay pagos registrados.');
+      if (tab === 'pagos') return historyNotice(data.historial?.pagos) + listOrEmpty(data.pagos, (row) => `<article class="timeline-row"><div><strong>Pago a fiado #${row.idFiado}</strong><span>${e(formatDate(row.fechaPago))} · ${e(statusText(row.metodoPago))} · ${e(row.administrador || 'Sistema')}</span></div><div class="timeline-actions"><strong>Bs ${money(row.monto)}</strong>${row.idCobroFiado ? `<button type="button" class="small secondary" data-receipt-id="${e(row.idCobroFiado)}">Ver comprobante</button>` : ''}</div></article>`, 'No hay pagos registrados.');
       if (tab === 'seguimiento') return data.permisos?.seguimientoCobranza
         ? historyNotice(data.historial?.seguimientos) + listOrEmpty(data.seguimientos, (row) => `<article class="timeline-row"><div><strong>${e(statusText(row.tipo))}</strong><span>${e(formatDate(row.creadoEn))} · ${e(statusText(row.canal))} · ${e(row.administrador || 'Sistema')}</span><p>${e(row.detalle)}</p></div>${row.fechaCompromiso ? `<strong>${e(dateText(row.fechaCompromiso))}</strong>` : ''}</article>`, 'No hay seguimientos registrados.')
         : '<div class="plan-note">El seguimiento de cobranza esta disponible en el plan avanzado.</div>';
@@ -437,9 +437,13 @@
         </section></div>`;
         const close = () => { modalRoot.innerHTML = ''; returnFocus?.focus?.(); };
         modalRoot.querySelector('[data-modal-cancel]').addEventListener('click', close);
+        const wireProfileContent = () => {
+          modalRoot.querySelectorAll('[data-receipt-id]').forEach((button) => button.addEventListener('click', () => openReceipt(button.dataset.receiptId)));
+        };
         modalRoot.querySelectorAll('[data-profile-tab]').forEach((button) => button.addEventListener('click', () => {
           modalRoot.querySelectorAll('[data-profile-tab]').forEach((item) => item.classList.toggle('active', item === button));
           modalRoot.querySelector('[data-profile-content]').innerHTML = profileTabBody(data, button.dataset.profileTab);
+          wireProfileContent();
         }));
         modalRoot.querySelector('[data-profile-tab="resumen"]').classList.add('active');
         modalRoot.querySelector('[data-profile-statement]').addEventListener('click', () => openStatement(idCliente));
@@ -473,7 +477,7 @@
         if (customerId) customer = (await api(`/api/clientes/${customerId}/resumen`)).cliente;
         if (!customerId) throw new Error('Selecciona un cliente o una deuda para registrar el pago.');
         const operationKey = `cobro-ui:${newOperationKey()}`;
-        await openFormModal({
+        const paymentResult = await openFormModal({
           title: debt ? `Pago de fiado #${debt.idFiado}` : `Pago acumulado de ${customer.nombre}`,
           body: paymentFields(debt, customer, customerId, operationKey), wide: true, submitText: 'Registrar pago',
           onOpen: (form) => {
@@ -519,6 +523,7 @@
             return result;
           }
         });
+        if (paymentResult?.idCobroFiado) await openReceipt(paymentResult.idCobroFiado);
       } catch (error) { showError(error.message); }
     }
 
@@ -571,7 +576,7 @@
         const rows = data.alertas || data.fiados || data;
         const summary = data.resumen || {};
         const total = Number(data.total || rows.length);
-        view.innerHTML = `<div class="credit-heading"><div><span class="eyebrow">Cobranza</span><h3>Deudas y compromisos en un solo lugar</h3><p>Los cobros se registran sin volver a afectar inventario.</p></div><div class="actions">${can('limites_credito') ? '<button type="button" class="secondary" data-credit-config>Configurar credito</button>' : ''}${can('exportacion_clientes_fiados') ? `<button type="button" class="secondary" data-export-debts ${readOnly() ? 'disabled title="La suscripcion debe estar activa para exportar."' : ''}>Exportar fiados</button>` : ''}</div></div>
+        view.innerHTML = `<div class="credit-heading"><div><span class="eyebrow">Cobranza</span><h3>Deudas y compromisos en un solo lugar</h3><p>Los cobros se registran sin volver a afectar inventario.</p></div><div class="actions">${can('recordatorios_fiado') ? '<button type="button" class="secondary" data-manage-templates>Plantillas de cobranza</button>' : ''}${can('limites_credito') ? '<button type="button" class="secondary" data-credit-config>Configurar credito</button>' : ''}${can('exportacion_clientes_fiados') ? `<button type="button" class="secondary" data-export-debts ${readOnly() ? 'disabled title="La suscripcion debe estar activa para exportar."' : ''}>Exportar fiados</button>` : ''}</div></div>
           <div class="cards collection-summary-cards"><article class="card"><span>Deuda total filtrada</span><strong>Bs ${money(summary.deudaTotal || 0)}</strong></article><article class="card"><span>Vencidos filtrados</span><strong>${Number(summary.vencidos || 0)}</strong></article><article class="card"><span>Vence hoy</span><strong>${Number(summary.venceHoy || 0)}</strong></article><article class="card"><span>Proximos</span><strong>${Number(summary.proximos || 0)}</strong></article><article class="card"><span>Sin fecha</span><strong>${Number(summary.sinFecha || 0)}</strong></article></div>
           ${advancedAlerts ? '' : '<div class="panel plan-note"><strong>Alertas y WhatsApp disponibles en plan avanzado.</strong><p>El pago y consulta de deuda existente siguen disponibles.</p></div>'}
           ${readOnly() ? '<div class="panel plan-note"><strong>Suscripcion inactiva: solo consulta.</strong><p>Puedes revisar clientes y deuda historica, pero no registrar pagos ni cambios hasta renovar.</p></div>' : ''}
@@ -586,6 +591,7 @@
 
     function wireCollectionView(rows) {
       view.querySelector('[data-credit-config]')?.addEventListener('click', openCreditConfiguration);
+      view.querySelector('[data-manage-templates]')?.addEventListener('click', openTemplateManager);
       view.querySelector('[data-export-debts]:not([disabled])')?.addEventListener('click', (event) => {
         const alertListing = can('recordatorios_fiado') && ui.collectionFilters.estado !== 'pagado';
         const query = filterQuery(ui.collectionFilters, alertListing ? { soloAbiertos: '1' } : {});
@@ -674,18 +680,121 @@
       });
     }
 
-    async function openWhatsApp({ idCliente, idFiado = null }) {
-      if (!can('recordatorios_fiado')) return showError('Los recordatorios estan disponibles en el plan avanzado.');
-      let prepared = null;
-      await openFormModal({
-        title: 'Preparar mensaje de WhatsApp',
-        body: `<div class="form-grid"><label>Tipo de mensaje<select name="tipoPlantilla">${TEMPLATE_TYPES.map((item) => option(item, statusText(item), idFiado ? 'recordatorio_previo' : 'estado_cuenta')).join('')}</select></label><label class="check"><input name="registrarPreparacion" type="checkbox"> Registrar que el recordatorio fue preparado</label></div><div class="whatsapp-preview" data-whatsapp-preview><p class="muted">El backend preparara el texto usando una plantilla activa de esta tienda.</p></div>`,
-        submitText: 'Preparar vista previa', wide: true,
+    function templateRowsMarkup(rows) {
+      if (!rows.length) return '<div class="empty-state"><p>No hay plantillas con estos filtros.</p></div>';
+      return `<div class="template-list">${rows.map((row) => `<article class="template-row ${row.activo ? '' : 'template-inactive'}">
+        <div><span class="eyebrow">${e(statusText(row.tipo))}</span><strong>${e(row.nombre)}</strong><p>${e(row.contenido)}</p><small>Actualizada: ${e(formatDate(row.actualizadoEn))}</small></div>
+        <div class="template-actions">${statusBadge(row.activo ? 'activa' : 'inactiva')}<button type="button" class="small secondary" data-template-preview="${e(row.idPlantillaCobranza)}">Vista previa</button>${readOnly() ? '' : `<button type="button" class="small secondary" data-template-edit="${e(row.idPlantillaCobranza)}">Editar</button><button type="button" class="small ${row.activo ? 'danger' : ''}" data-template-toggle="${e(row.idPlantillaCobranza)}" data-active="${row.activo ? '1' : '0'}">${row.activo ? 'Desactivar' : 'Activar'}</button>`}</div>
+      </article>`).join('')}</div>`;
+    }
+
+    async function openTemplateEditor(template = null) {
+      const type = template?.tipo || 'recordatorio_previo';
+      const variables = (await api(`/api/plantillas-cobranza?tipo=${encodeURIComponent(type)}&limite=1`)).variablesPermitidas;
+      const result = await openFormModal({
+        title: template ? 'Editar plantilla' : 'Crear plantilla', wide: true,
+        body: `<div class="form-grid template-editor"><label>Tipo<select name="tipo" ${template ? 'disabled' : ''}>${TEMPLATE_TYPES.map((item) => option(item, statusText(item), type)).join('')}</select></label><label>Nombre<input name="nombre" maxlength="100" required value="${e(template?.nombre || '')}"></label><label class="wide">Contenido<textarea name="contenido" rows="8" maxlength="2000" required>${e(template?.contenido || '')}</textarea></label><label class="check"><input name="activo" type="checkbox" ${template?.activo === false ? '' : 'checked'}> Plantilla activa</label></div><div class="template-variables"><strong>Variables permitidas</strong><p data-template-variables></p></div><div class="template-preview"><strong>Vista previa como texto</strong><pre data-template-live-preview></pre></div>`,
+        submitText: template ? 'Guardar cambios' : 'Crear plantilla',
+        onOpen: (form) => {
+          const sync = () => {
+            form.querySelector('[data-template-live-preview]').textContent = form.elements.contenido.value || 'Escribe el contenido para verlo aqui.';
+            form.querySelector('[data-template-variables]').innerHTML = (variables[form.elements.tipo.value] || []).map((item) => `<code>{{${e(item)}}}</code>`).join(' ');
+          };
+          form.elements.contenido.addEventListener('input', sync);
+          form.elements.tipo.addEventListener('change', sync);
+          sync();
+        },
         onSubmit: async (form) => {
           const fd = new FormData(form);
-          prepared = await api('/api/cobranza/mensaje-whatsapp/preparar', { method: 'POST', body: JSON.stringify({ idCliente, idFiado, tipoPlantilla: fd.get('tipoPlantilla'), registrarPreparacion: booleanValue(form, 'registrarPreparacion') }) });
+          const payload = { nombre: nullable(fd.get('nombre')), contenido: nullable(fd.get('contenido')), activo: booleanValue(form, 'activo') };
+          if (!template) payload.tipo = fd.get('tipo');
+          const response = await api(template ? `/api/plantillas-cobranza/${template.idPlantillaCobranza}` : '/api/plantillas-cobranza', {
+            method: template ? 'PATCH' : 'POST', body: JSON.stringify(payload)
+          });
+          await showSuccess(response.message || 'Plantilla guardada.');
+          return response.plantilla;
+        }
+      });
+      if (result) await openTemplateManager();
+    }
+
+    async function openTemplateManager(filters = {}) {
+      if (!can('recordatorios_fiado')) return showError('Las plantillas de cobranza estan disponibles en el plan avanzado.');
+      try {
+        const returnFocus = document.activeElement;
+        const data = await api(`/api/plantillas-cobranza?${filterQuery(filters, { limite: 100 })}`);
+        const rows = data.plantillas || [];
+        modalRoot.innerHTML = `<div class="modal-backdrop"><section class="modal modal-wide template-manager" role="dialog" aria-modal="true" aria-label="Plantillas de cobranza"><div class="credit-heading"><div><span class="eyebrow">Cobranza</span><h3>Plantillas de cobranza</h3><p>Los mensajes se preparan como texto y nunca se envian automaticamente.</p></div>${readOnly() ? '' : '<button type="button" data-template-new>Crear plantilla</button>'}</div><form class="credit-filters template-filters" data-template-filters><label>Buscar<input name="busqueda" type="search" value="${e(filters.busqueda || '')}"></label><label>Tipo<select name="tipo"><option value="">Todos</option>${TEMPLATE_TYPES.map((item) => option(item, statusText(item), filters.tipo)).join('')}</select></label><label>Estado<select name="activo">${option('', 'Todos', filters.activo)}${option('1', 'Activas', filters.activo)}${option('0', 'Inactivas', filters.activo)}</select></label><button type="submit">Aplicar</button></form><div class="modal-body">${templateRowsMarkup(rows)}</div>${readOnly() ? '<p class="plan-note">La suscripcion esta en solo lectura. Puedes consultar las plantillas, pero no modificarlas.</p>' : ''}<div class="modal-actions"><button type="button" class="secondary" data-modal-cancel>Cerrar</button></div></section></div>`;
+        const close = () => { modalRoot.innerHTML = ''; returnFocus?.focus?.(); };
+        modalRoot.querySelector('[data-modal-cancel]').addEventListener('click', close);
+        modalRoot.querySelector('[data-template-filters]').addEventListener('submit', (event) => { event.preventDefault(); openTemplateManager(Object.fromEntries(new FormData(event.currentTarget).entries())); });
+        modalRoot.querySelector('[data-template-new]')?.addEventListener('click', () => openTemplateEditor());
+        modalRoot.querySelectorAll('[data-template-edit]').forEach((button) => button.addEventListener('click', () => openTemplateEditor(rows.find((row) => String(row.idPlantillaCobranza) === button.dataset.templateEdit))));
+        modalRoot.querySelectorAll('[data-template-preview]').forEach((button) => button.addEventListener('click', () => {
+          button.closest('.template-row').querySelector('p').classList.toggle('template-preview-highlight');
+          button.textContent = 'Vista previa mostrada como texto';
+        }));
+        modalRoot.querySelectorAll('[data-template-toggle]').forEach((button) => button.addEventListener('click', async () => {
+          if (button.disabled) return;
+          const active = button.dataset.active === '1';
+          if (button.dataset.confirmed !== 'true') {
+            button.dataset.confirmed = 'true';
+            button.textContent = active ? 'Confirmar desactivacion' : 'Confirmar activacion';
+            return;
+          }
+          setBusy(button, true, active ? 'Desactivando...' : 'Activando...');
+          try {
+            const response = await api(`/api/plantillas-cobranza/${button.dataset.templateToggle}/${active ? 'desactivar' : 'activar'}`, { method: 'PATCH', body: '{}' });
+            await showSuccess(response.message);
+            await openTemplateManager(filters);
+          } catch (error) { showError(error.message); }
+          finally { if (button.isConnected) setBusy(button, false); }
+        }));
+      } catch (error) { showError(error.message); }
+    }
+
+    function receiptMarkup(data) {
+      const receipt = data.comprobante;
+      return `<article class="collection-receipt" data-print-receipt><header><div><span class="eyebrow">Comprobante de pago</span><h2>${e(data.tienda.nombre)}</h2><p>Pago registrado · ${e(formatDate(receipt.fechaCobro))}</p></div><div><span>Numero</span><strong>${e(receipt.numero)}</strong></div></header>${receipt.esLegado ? '<p class="legacy-receipt-note">Registro historico: algunos datos pueden no estar disponibles.</p>' : ''}<dl class="receipt-details"><div><dt>Cliente</dt><dd>${e(data.cliente.nombre)}</dd></div><div><dt>Monto pagado</dt><dd>Bs ${money(receipt.montoTotal)}</dd></div><div><dt>Metodo</dt><dd>${e(statusText(receipt.metodoPago))}</dd></div><div><dt>Referencia</dt><dd>${e(receipt.referencia || 'Dato no disponible')}</dd></div><div><dt>Monto recibido</dt><dd>${receipt.montoRecibido === null ? 'Dato no disponible' : `Bs ${money(receipt.montoRecibido)}`}</dd></div><div><dt>Cambio</dt><dd>Bs ${money(receipt.cambio)}</dd></div><div><dt>Saldo anterior afectado</dt><dd>Bs ${money(receipt.saldoAnterior)}</dd></div><div><dt>Saldo posterior afectado</dt><dd>Bs ${money(receipt.saldoPosterior)}</dd></div></dl><h3>Distribucion del pago</h3>${listOrEmpty(data.distribuciones, (row) => `<div class="receipt-distribution"><div><strong>Fiado #${e(row.idFiado)}</strong><span>${e(row.comprobanteVenta || 'Venta sin comprobante disponible')}</span></div><span>Bs ${money(row.monto)}</span><small>Saldo: Bs ${money(row.saldoAnterior)} a Bs ${money(row.saldoPosterior)}</small></div>`, 'No hay distribuciones disponibles.')}${receipt.observacion ? `<div class="receipt-observation"><strong>Observacion</strong><p>${e(receipt.observacion)}</p></div>` : ''}<p class="receipt-thanks">Gracias por su pago.</p><p class="statement-note">Este comprobante confirma un pago registrado. No es una factura fiscal.</p></article>`;
+    }
+
+    async function openReceipt(idCobroFiado) {
+      try {
+        const returnFocus = document.activeElement;
+        const data = await api(`/api/cobros-fiado/${encodeURIComponent(idCobroFiado)}/comprobante`);
+        modalRoot.innerHTML = `<div class="modal-backdrop"><section class="modal modal-wide receipt-modal" role="dialog" aria-modal="true" aria-label="Comprobante de pago">${receiptMarkup(data)}<div class="modal-actions no-print">${can('recordatorios_fiado') && data.cliente.activo ? '<button type="button" class="secondary" data-receipt-whatsapp>Preparar WhatsApp</button>' : ''}<button type="button" data-receipt-print>Imprimir</button><button type="button" class="secondary" data-modal-cancel>Cerrar</button></div></section></div>`;
+        modalRoot.querySelector('[data-modal-cancel]').addEventListener('click', () => { modalRoot.innerHTML = ''; returnFocus?.focus?.(); });
+        modalRoot.querySelector('[data-receipt-print]').addEventListener('click', () => window.print());
+        modalRoot.querySelector('[data-receipt-whatsapp]')?.addEventListener('click', () => openWhatsApp({ idCliente: data.cliente.idCliente, idCobroFiado }));
+      } catch (error) { showError(error.message); }
+    }
+
+    async function openWhatsApp({ idCliente, idFiado = null, idCobroFiado = null }) {
+      if (!can('recordatorios_fiado')) return showError('Los recordatorios estan disponibles en el plan avanzado.');
+      let prepared = null;
+      const templateData = await api('/api/plantillas-cobranza?activo=1&limite=100');
+      const activeTemplates = templateData.plantillas || [];
+      const allowedTypes = idCobroFiado ? ['confirmacion_pago'] : TEMPLATE_TYPES.filter((item) => item !== 'confirmacion_pago');
+      await openFormModal({
+        title: 'Preparar mensaje de WhatsApp',
+        body: `<div class="form-grid"><label>Tipo de mensaje<select name="tipoPlantilla">${allowedTypes.map((item) => option(item, statusText(item), idCobroFiado ? 'confirmacion_pago' : (idFiado ? 'recordatorio_previo' : 'estado_cuenta'))).join('')}</select></label><label>Plantilla<select name="idPlantillaCobranza"></select></label><label class="check"><input name="registrarPreparacion" type="checkbox"> Registrar que el recordatorio fue preparado</label></div><p class="hint" data-template-choice></p><div class="whatsapp-preview" data-whatsapp-preview><p class="muted">El backend preparara el texto usando una plantilla activa de esta tienda.</p></div>`,
+        submitText: 'Preparar vista previa', wide: true,
+        onOpen: (form) => {
+          const sync = () => {
+            const matches = activeTemplates.filter((item) => item.tipo === form.elements.tipoPlantilla.value);
+            form.elements.idPlantillaCobranza.innerHTML = `<option value="">Automatica: mas reciente o texto del sistema</option>${matches.map((item) => option(item.idPlantillaCobranza, item.nombre)).join('')}`;
+            form.querySelector('[data-template-choice]').textContent = matches.length
+              ? `${matches.length} plantilla(s) activa(s) disponibles para este tipo.`
+              : 'No hay plantillas activas; se usara el texto seguro del sistema.';
+          };
+          form.elements.tipoPlantilla.addEventListener('change', sync);
+          sync();
+        },
+        onSubmit: async (form) => {
+          const fd = new FormData(form);
+          prepared = await api('/api/cobranza/mensaje-whatsapp/preparar', { method: 'POST', body: JSON.stringify({ idCliente, idFiado, idCobroFiado, idPlantillaCobranza: nullable(fd.get('idPlantillaCobranza')), tipoPlantilla: fd.get('tipoPlantilla'), registrarPreparacion: booleanValue(form, 'registrarPreparacion') }) });
           const target = form.querySelector('[data-whatsapp-preview]');
-          target.innerHTML = `<label>Texto preparado<textarea readonly rows="8">${e(prepared.texto)}</textarea></label><p class="hint">${e(prepared.advertencia || '')}</p><div class="actions"><button type="button" class="secondary" data-copy-whatsapp>Copiar texto</button>${prepared.url ? '<button type="button" data-open-whatsapp>Abrir WhatsApp</button>' : ''}${can('seguimiento_cobranza') && !readOnly() ? '<button type="button" class="secondary" data-mark-manual>Marcar como enviado manualmente</button>' : ''}</div><p class="manual-send-note">Abrir WhatsApp no registra el mensaje como enviado.</p>`;
+          target.innerHTML = `<p class="hint">Plantilla usada: ${e(prepared.plantilla?.nombre || 'Texto del sistema')}.</p><label>Texto preparado<textarea readonly rows="8">${e(prepared.texto)}</textarea></label><p class="hint">${e(prepared.advertencia || '')}</p><div class="actions"><button type="button" class="secondary" data-copy-whatsapp>Copiar texto</button>${prepared.url ? '<button type="button" data-open-whatsapp>Abrir WhatsApp</button>' : ''}${can('seguimiento_cobranza') && !readOnly() ? '<button type="button" class="secondary" data-mark-manual>Marcar como enviado manualmente</button>' : ''}</div><p class="manual-send-note">Abrir WhatsApp no registra el mensaje como enviado.</p>`;
           target.querySelector('[data-copy-whatsapp]').addEventListener('click', async (event) => {
             await copyText(prepared.texto);
             event.currentTarget.textContent = 'Texto copiado';

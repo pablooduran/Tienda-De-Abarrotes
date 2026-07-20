@@ -10,6 +10,8 @@ const creditRoutes = read('routes/customers-credit.js');
 const apiRoutes = read('routes/api.js');
 const creditService = read('services/customer-credit-service.js');
 const exportService = read('services/customer-credit-export-service.js');
+const templateService = read('services/customer-credit-template-service.js');
+const receiptService = read('services/customer-credit-receipt-service.js');
 const posRoutes = read('routes/pos.js');
 const posService = read('services/pos-sale-service.js');
 const css = read('public/css/styles.css');
@@ -80,6 +82,42 @@ check('WhatsApp se prepara en backend', creditJs.includes('/api/cobranza/mensaje
 check('Abrir WhatsApp no marca envio',
   creditJs.includes('Abrir WhatsApp no registra el mensaje como enviado.')
   && creditJs.includes('data-mark-manual'));
+check('CRUD logico de plantillas conectado', includesAll(creditRoutes + creditJs, [
+  "router.get('/plantillas-cobranza'", "router.post('/plantillas-cobranza'",
+  "router.patch('/plantillas-cobranza/:id'", "/:id/activar'", "/:id/desactivar'",
+  'data-manage-templates', 'openTemplateManager', 'openTemplateEditor'
+]));
+check('Plantillas requieren recordatorios y no tienen borrado fisico',
+  (creditRoutes.match(/requirePlanFeature\('recordatorios_fiado'\)/g) || []).length >= 6
+  && !/DELETE\s+FROM\s+plantillaCobranzaTienda/i.test(creditRoutes + templateService));
+check('Variables y fallback de plantillas centralizados', includesAll(templateService, [
+  'TEMPLATE_VARIABLES', 'INTERNAL_TEMPLATES', 'fallback_interno',
+  'ORDER BY actualizadoEn DESC,idPlantillaCobranza DESC', 'PLANTILLA_VARIABLE_INVALIDA'
+]));
+check('Plantillas admiten sintaxis historica y nueva',
+  templateService.includes('doubleName || singleName') && templateService.includes('VALID_TOKEN'));
+check('Vista previa de plantillas trata contenido como texto',
+  creditJs.includes("querySelector('[data-template-live-preview]').textContent")
+  && creditJs.includes('${e(row.contenido)}'));
+check('Selector WhatsApp usa solo plantillas activas del tipo',
+  creditJs.includes("/api/plantillas-cobranza?activo=1&limite=100")
+  && creditJs.includes('activeTemplates.filter((item) => item.tipo === form.elements.tipoPlantilla.value)'));
+check('Comprobante consultable desde pago e historial', includesAll(creditRoutes + creditJs, [
+  "router.get('/cobros-fiado/:id'", "'/cobros-fiado/:id/comprobante'",
+  'data-receipt-id', 'paymentResult?.idCobroFiado', 'openReceipt'
+]));
+check('Comprobante no expone clave de operacion',
+  !receiptService.includes('claveOperacion') && !creditJs.includes('receipt.claveOperacion'));
+check('Comprobante se identifica como pago, no factura',
+  creditJs.includes('Comprobante de pago')
+  && creditJs.includes('No es una factura fiscal.')
+  && !creditJs.includes('Factura fiscal'));
+check('Comprobante imprimible oculta controles',
+  creditJs.includes('data-receipt-print') && creditJs.includes('window.print()')
+  && css.includes('.receipt-modal') && css.includes('.collection-receipt'));
+check('Confirmacion WhatsApp usa el cobro historico',
+  creditJs.includes('idCobroFiado') && creditRoutes.includes("receipt ? 'confirmacion_pago'")
+  && creditRoutes.includes('monto_pagado'));
 check('Estado de cuenta imprimible',
   creditJs.includes('/estado-cuenta') && creditJs.includes('window.print()') && css.includes('@media print'));
 check('Integracion POS de credito', includesAll(appJs + creditJs, [

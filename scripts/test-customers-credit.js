@@ -11,6 +11,10 @@ const {
 const { addLocalDays, formatLocalDate, formatLocalDateTime, parseLocalDate } = require('../utils/local-datetime');
 const { applyTestRequestSecurity } = require('./http-test-security');
 
+const TEMPLATE_TYPES_FOR_TEST = [
+  'recordatorio_previo', 'deuda_vencida', 'confirmacion_pago', 'estado_cuenta'
+];
+
 function assert(condition, message) {
   if (!condition) throw new Error(message);
 }
@@ -449,6 +453,30 @@ async function main() {
     assert(fullPayment.aplicaciones[0].estado === 'pagado'
       && Number(fullPayment.aplicaciones[0].saldoPendiente) === 0,
     'El pago total no cerro el fiado.');
+    const partialReceipt = await expect(advanced, `/api/cobros-fiado/${partial.idCobroFiado}/comprobante`, {}, 200,
+      'Comprobante de cobro parcial');
+    assert(partialReceipt.comprobante.numero && Number(partialReceipt.comprobante.montoTotal) === 3
+      && Number(partialReceipt.comprobante.saldoAnterior) === 10
+      && Number(partialReceipt.comprobante.saldoPosterior) === 7
+      && partialReceipt.distribuciones.length === 1
+      && Number(partialReceipt.distribuciones[0].monto) === 3,
+    'El comprobante parcial no reconstruyo el monto o los saldos historicos.');
+    assert(!Object.keys(partialReceipt.comprobante).some((key) => /claveoperacion/i.test(key)),
+      'El comprobante expuso la clave interna de operacion.');
+    const fullReceipt = await expect(advanced, `/api/cobros-fiado/${fullPayment.idCobroFiado}`, {}, 200,
+      'Detalle de cobro total');
+    assert(Number(fullReceipt.comprobante.saldoAnterior) === 7
+      && Number(fullReceipt.comprobante.saldoPosterior) === 0
+      && Number(fullReceipt.distribuciones[0].saldoPosterior) === 0,
+    'El comprobante total no conserva la secuencia historica del fiado.');
+    await connection.query('UPDATE cobroFiado SET esLegado=1 WHERE idTienda=? AND idCobroFiado=?',
+      [fixture.advancedStore, partial.idCobroFiado]);
+    const legacyReceipt = await expect(advanced, `/api/cobros-fiado/${partial.idCobroFiado}/comprobante`, {}, 200,
+      'Comprobante legado');
+    assert(legacyReceipt.comprobante.esLegado === true && legacyReceipt.distribuciones.length === 1,
+      'Un cobro legado no se identifico o rompio su distribucion.');
+    await connection.query('UPDATE cobroFiado SET esLegado=0 WHERE idTienda=? AND idCobroFiado=?',
+      [fixture.advancedStore, partial.idCobroFiado]);
     assert(await scalar(connection, 'SELECT stockUnidadesTotal total FROM producto WHERE idTienda=? AND idProducto=?',
       [fixture.advancedStore, product.idProducto]) === stockBeforePayment,
     'El cobro modifico el stock.');
@@ -547,6 +575,105 @@ async function main() {
       idCliente: customer.idCliente, idFiado: confirmedCredit.idFiado, tipoPlantilla: 'estado_cuenta'
     } }, 200, 'WhatsApp para copia manual');
     assert(manualCopy.url === null && manualCopy.texto, 'Sin codigo de pais no devolvio copia manual.');
+
+    const initialTemplates = await expect(advanced, '/api/plantillas-cobranza?limite=100', {}, 200,
+      'Listar plantillas propias');
+    assert(initialTemplates.plantillas.length >= 4
+      && initialTemplates.plantillas.every((item) => TEMPLATE_TYPES_FOR_TEST.includes(item.tipo)),
+    'La tienda avanzada no recibio sus plantillas iniciales o tipos validos.');
+    const createdTemplate = await expect(advanced, '/api/plantillas-cobranza', { method: 'POST', body: {
+      tipo: 'confirmacion_pago',
+      nombre: `Confirmacion ${marker}`,
+      contenido: '<b>Pago</b> {{monto_pagado}} de {{cliente}}. Saldo {{saldo_restante}}.',
+      activo: true
+    } }, 201, 'Crear plantilla valida');
+    assert(createdTemplate.plantilla.contenido.includes('<b>Pago</b>'),
+      'El HTML inocuo no se conservo como texto literal en la plantilla.');
+    await expect(advanced, '/api/plantillas-cobranza', { method: 'POST', body: {
+      tipo: 'desconocido', nombre: `Tipo ${marker}`, contenido: 'Texto'
+    } }, 400, 'Rechazar tipo de plantilla invalido');
+    await expect(advanced, '/api/plantillas-cobranza', { method: 'POST', body: {
+      tipo: 'recordatorio_previo', nombre: '', contenido: 'Texto'
+    } }, 400, 'Rechazar nombre de plantilla vacio');
+    await expect(advanced, '/api/plantillas-cobranza', { method: 'POST', body: {
+      tipo: 'recordatorio_previo', nombre: `Vacia ${marker}`, contenido: ''
+    } }, 400, 'Rechazar contenido de plantilla vacio');
+    await expect(advanced, '/api/plantillas-cobranza', { method: 'POST', body: {
+      tipo: 'recordatorio_previo', nombre: `Variable ${marker}`, contenido: 'Hola {{objeto.ruta}}'
+    } }, 400, 'Rechazar variable desconocida');
+    await expect(advanced, '/api/plantillas-cobranza', { method: 'POST', body: {
+      tipo: 'recordatorio_previo', nombre: `Script ${marker}`, contenido: '<script>alert(1)</script>'
+    } }, 400, 'Rechazar HTML ejecutable');
+    await expect(advanced, '/api/plantillas-cobranza', { method: 'POST', body: {
+      tipo: 'confirmacion_pago', nombre: `Confirmacion ${marker}`, contenido: 'Duplicada'
+    } }, 409, 'Rechazar plantilla duplicada');
+    const editedTemplate = await expect(advanced,
+      `/api/plantillas-cobranza/${createdTemplate.plantilla.idPlantillaCobranza}`, { method: 'PATCH', body: {
+        nombre: `Confirmacion editada ${marker}`,
+        contenido: 'Pago {{monto_pagado}} por {{metodo_pago}}. Referencia {{referencia}}.'
+      } }, 200, 'Editar plantilla propia');
+    assert(editedTemplate.plantilla.nombre.includes('editada'), 'La plantilla propia no se actualizo.');
+    await expect(advanced, `/api/plantillas-cobranza/${createdTemplate.plantilla.idPlantillaCobranza}`, {
+      method: 'PATCH', body: { tipo: 'deuda_vencida' }
+    }, 409, 'El tipo de plantilla es inmutable');
+    const confirmationMessage = await expect(advanced, '/api/cobranza/mensaje-whatsapp/preparar', {
+      method: 'POST', body: {
+        idCliente: customer.idCliente,
+        idCobroFiado: partial.idCobroFiado,
+        tipoPlantilla: 'confirmacion_pago',
+        idPlantillaCobranza: createdTemplate.plantilla.idPlantillaCobranza
+      }
+    }, 200, 'Preparar confirmacion de pago historica');
+    assert(confirmationMessage.enviado === false
+      && confirmationMessage.texto.includes('3.00')
+      && confirmationMessage.texto.includes('efectivo')
+      && confirmationMessage.plantilla.idPlantillaCobranza === createdTemplate.plantilla.idPlantillaCobranza,
+    'La confirmacion no uso la plantilla elegida o los datos historicos del cobro.');
+    await expect(advanced, `/api/plantillas-cobranza/${createdTemplate.plantilla.idPlantillaCobranza}/desactivar`, {
+      method: 'PATCH', body: {}
+    }, 200, 'Desactivar plantilla');
+    await expect(advanced, `/api/plantillas-cobranza/${createdTemplate.plantilla.idPlantillaCobranza}/desactivar`, {
+      method: 'PATCH', body: {}
+    }, 409, 'Desactivar plantilla repetida');
+    await expect(advanced, '/api/cobranza/mensaje-whatsapp/preparar', { method: 'POST', body: {
+      idCliente: customer.idCliente,
+      idCobroFiado: partial.idCobroFiado,
+      tipoPlantilla: 'confirmacion_pago',
+      idPlantillaCobranza: createdTemplate.plantilla.idPlantillaCobranza
+    } }, 409, 'Rechazar plantilla inactiva');
+    await expect(advanced, `/api/plantillas-cobranza/${createdTemplate.plantilla.idPlantillaCobranza}/activar`, {
+      method: 'PATCH', body: {}
+    }, 200, 'Activar plantilla');
+    await expect(advanced, `/api/plantillas-cobranza/${createdTemplate.plantilla.idPlantillaCobranza}/activar`, {
+      method: 'PATCH', body: {}
+    }, 409, 'Activar plantilla repetida');
+    const automaticConfirmation = await expect(advanced, '/api/cobranza/mensaje-whatsapp/preparar', {
+      method: 'POST', body: { idCliente: customer.idCliente, idCobroFiado: partial.idCobroFiado, tipoPlantilla: 'confirmacion_pago' }
+    }, 200, 'Fallback determinista de plantilla');
+    assert(automaticConfirmation.plantilla.idPlantillaCobranza === createdTemplate.plantilla.idPlantillaCobranza,
+      'El fallback no eligio la plantilla activa actualizada mas reciente.');
+    const activeConfirmations = await expect(advanced,
+      '/api/plantillas-cobranza?tipo=confirmacion_pago&activo=1&limite=100', {}, 200,
+      'Listar confirmaciones activas');
+    for (const template of activeConfirmations.plantillas) {
+      await expect(advanced, `/api/plantillas-cobranza/${template.idPlantillaCobranza}/desactivar`, {
+        method: 'PATCH', body: {}
+      }, 200, `Desactivar confirmacion ${template.idPlantillaCobranza}`);
+    }
+    const internalFallback = await expect(advanced, '/api/cobranza/mensaje-whatsapp/preparar', {
+      method: 'POST', body: { idCliente: customer.idCliente, idCobroFiado: partial.idCobroFiado, tipoPlantilla: 'confirmacion_pago' }
+    }, 200, 'Texto interno cuando no hay plantilla activa');
+    assert(internalFallback.plantilla.origen === 'fallback_interno' && internalFallback.texto.includes('3.00'),
+      'La ausencia de plantillas activas no uso el fallback interno seguro.');
+    await expect(advanced, `/api/plantillas-cobranza/${createdTemplate.plantilla.idPlantillaCobranza}/activar`, {
+      method: 'PATCH', body: {}
+    }, 200, 'Restaurar confirmacion activa para pruebas posteriores');
+    await expect(advanced, '/api/cobranza/mensaje-whatsapp/preparar', { method: 'POST', body: {
+      idCliente: customer.idCliente,
+      idFiado: confirmedCredit.idFiado,
+      tipoPlantilla: 'recordatorio_previo',
+      idPlantillaCobranza: createdTemplate.plantilla.idPlantillaCobranza
+    } }, 409, 'Rechazar plantilla de tipo incorrecto');
     await expect(advanced, `/api/clientes/${customer.idCliente}`, { method: 'PATCH', body: { aceptaRecordatorios: false } }, 200, 'Desactivar recordatorios');
     await expect(advanced, '/api/cobranza/mensaje-whatsapp/preparar', { method: 'POST', body: {
       idCliente: customer.idCliente, idFiado: confirmedCredit.idFiado
@@ -624,11 +751,23 @@ async function main() {
     const otherCredit = await expect(other, '/api/pos/ventas', { method: 'POST', body: saleBody(
       marker, 'fiado-otra-tienda', otherProduct.idProducto, otherCustomer.idCliente
     ) }, 201, 'Fiado de tienda aislada');
+    const otherTemplate = await expect(other, '/api/plantillas-cobranza', { method: 'POST', body: {
+      tipo: 'recordatorio_previo', nombre: `Aislada ${marker}`, contenido: 'Hola {cliente}'
+    } }, 201, 'Crear plantilla en otra tienda');
+    await expect(advanced, `/api/plantillas-cobranza/${otherTemplate.plantilla.idPlantillaCobranza}`, {
+      method: 'PATCH', body: { nombre: 'Cruce prohibido' }
+    }, 404, 'No editar plantilla de otra tienda');
+    const ownTemplatesAfterCross = await expect(advanced, '/api/plantillas-cobranza?limite=100', {}, 200,
+      'Plantillas aisladas por tienda');
+    assert(!ownTemplatesAfterCross.plantillas.some((item) => Number(item.idPlantillaCobranza) === Number(otherTemplate.plantilla.idPlantillaCobranza)),
+      'El listado de plantillas mezclo tiendas.');
     await expect(other, `/api/clientes/${customer.idCliente}`, {}, 404, 'Cliente aislado');
     await expect(other, `/api/fiados/${confirmedCredit.idFiado}`, {}, 404, 'Fiado aislado');
     await expect(other, `/api/fiados/${confirmedCredit.idFiado}/pagos`, { method: 'POST', body: {
       monto: 1, metodoPago: 'efectivo', claveOperacion: `cruce-${marker}`
     } }, 404, 'Cobro cruzado rechazado');
+    await expect(other, `/api/cobros-fiado/${partial.idCobroFiado}/comprobante`, {}, 404,
+      'Comprobante de otra tienda rechazado');
     assert(otherCustomer.idCliente, 'No se creo el cliente de aislamiento.');
 
     const customerExportResponse = await expectRaw(
@@ -790,9 +929,15 @@ async function main() {
     await expect(basic, '/api/cobranza/alertas', {}, 403, 'Recordatorios avanzados bloqueados');
     const basicCredit = await expect(basic, '/api/pos/ventas', { method: 'POST', body: saleBody(marker,
       'fiado-basico', basicProduct.idProducto, basicCustomer.idCliente) }, 201, 'Fiado basico operativo');
-    await expect(basic, `/api/fiados/${basicCredit.idFiado}/pagos`, { method: 'POST', body: {
+    const basicPayment = await expect(basic, `/api/fiados/${basicCredit.idFiado}/pagos`, { method: 'POST', body: {
       monto: 5, metodoPago: 'efectivo', claveOperacion: `cobro-basico-${marker}`
     } }, 201, 'Pago disponible en basico');
+    await expect(basic, `/api/cobros-fiado/${basicPayment.idCobroFiado}/comprobante`, {}, 200,
+      'Comprobante disponible con pagos_fiado');
+    await expect(basic, '/api/plantillas-cobranza', {}, 403,
+      'Plan basico no accede a plantillas avanzadas');
+    await expect(noFeature, `/api/cobros-fiado/${partial.idCobroFiado}/comprobante`, {}, 403,
+      'Plan sin pagos_fiado no accede a comprobantes');
     const basicProfile = await expect(basic, `/api/clientes/${basicCustomer.idCliente}`, {}, 200,
       'Detalle basico del cliente');
     assert(basicProfile.permisos.seguimientoCobranza === false
@@ -975,6 +1120,19 @@ async function main() {
       'SELECT idSuscripcion,idPlan FROM suscripcionTienda WHERE idTienda=? ORDER BY idSuscripcion DESC LIMIT 1',
       [fixture.advancedStore]
     );
+    await connection.query('UPDATE suscripcionTienda SET estado=?,actualizadoEn=? WHERE idSuscripcion=?',
+      ['suspendida', formatLocalDateTime(), advancedSubscription.idSuscripcion]);
+    await expect(advanced, '/api/plantillas-cobranza', {}, 200,
+      'Suscripcion suspendida conserva lectura de plantillas');
+    const suspendedTemplateWrite = await expect(advanced, '/api/plantillas-cobranza', { method: 'POST', body: {
+      tipo: 'recordatorio_previo', nombre: `Suspendida ${marker}`, contenido: 'No debe guardarse'
+    } }, 403, 'Suscripcion suspendida no crea plantillas');
+    assert(suspendedTemplateWrite.code === 'SUBSCRIPTION_READ_ONLY',
+      'La escritura suspendida no devolvio el contrato de solo lectura.');
+    await expect(advanced, `/api/cobros-fiado/${partial.idCobroFiado}/comprobante`, {}, 200,
+      'Suscripcion suspendida conserva comprobante historico');
+    await connection.query('UPDATE suscripcionTienda SET estado=?,actualizadoEn=? WHERE idSuscripcion=?',
+      ['activa', formatLocalDateTime(), advancedSubscription.idSuscripcion]);
     await connection.query('UPDATE suscripcionTienda SET idPlan=? WHERE idSuscripcion=?', [plans.basic.idPlan, advancedSubscription.idSuscripcion]);
     const downgradedDebt = await expect(advanced, `/api/fiados/${confirmedCredit.idFiado}`, {}, 200, 'Deuda visible tras downgrade');
     assert(downgradedDebt.permisos.seguimientoCobranza === false

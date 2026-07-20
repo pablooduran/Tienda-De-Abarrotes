@@ -30,6 +30,17 @@ const {
   exportDebts
 } = require('../services/customer-credit-export-service');
 const {
+  TEMPLATE_TYPES,
+  TEMPLATE_VARIABLES,
+  createTemplate,
+  listTemplates,
+  renderTemplate,
+  resolveActiveTemplate,
+  setTemplateActive,
+  updateTemplate
+} = require('../services/customer-credit-template-service');
+const { getCollectionReceipt } = require('../services/customer-credit-receipt-service');
+const {
   addLocalDays,
   formatLocalDate,
   formatLocalDateTime,
@@ -39,8 +50,6 @@ const {
 const router = express.Router();
 const FOLLOWUP_TYPES = new Set(['nota', 'llamada', 'mensaje_enviado_manual', 'compromiso_pago', 'visita']);
 const FOLLOWUP_CHANNELS = new Set(['ninguno', 'whatsapp', 'telefono', 'presencial', 'correo']);
-const TEMPLATE_TYPES = new Set(['recordatorio_previo', 'deuda_vencida', 'confirmacion_pago', 'estado_cuenta']);
-const TEMPLATE_VARIABLES = new Set(['tienda', 'cliente', 'saldo', 'vencimiento', 'dias_atraso', 'comprobante']);
 const CUSTOMER_HISTORY_LIMIT = 20;
 
 function asyncRoute(handler) {
@@ -555,7 +564,7 @@ router.get('/clientes/:id', requirePlanFeature('clientes_basico'), asyncRoute(as
     : Promise.resolve([[{ total: 0 }]]);
   const [[sales], [payments], [followups], [saleCount], [paymentCount], [followupCountRows]] = await Promise.all([
     pool.query('SELECT idVenta, fecha, total, montoPagado, saldoPendiente, estadoPago, codigoComprobante FROM venta WHERE idTienda=? AND idCliente=? ORDER BY fecha DESC, idVenta DESC LIMIT ?', [idTienda, idCliente, CUSTOMER_HISTORY_LIMIT]),
-    pool.query(`SELECT pf.idPagoFiado, pf.idFiado, pf.fechaPago, pf.monto, cf.metodoPago,
+    pool.query(`SELECT pf.idPagoFiado, pf.idFiado, pf.idCobroFiado, pf.fechaPago, pf.monto, cf.metodoPago,
       a.usuario administrador
       FROM pagoFiado pf JOIN fiado f ON f.idTienda=pf.idTienda AND f.idFiado=pf.idFiado
       JOIN cobroFiado cf ON cf.idTienda=pf.idTienda AND cf.idCobroFiado=pf.idCobroFiado
@@ -933,9 +942,60 @@ router.post('/cobranza/seguimientos', requirePlanFeature('seguimiento_cobranza')
   res.status(201).json({ message: 'Seguimiento registrado.', ...result });
 }));
 
+router.get('/plantillas-cobranza', requirePlanFeature('recordatorios_fiado'), asyncRoute(async (req, res) => {
+  res.json(await listTemplates(pool, tenantId(req), req.query));
+}));
+
+router.post('/plantillas-cobranza', requirePlanFeature('recordatorios_fiado'), asyncRoute(async (req, res) => {
+  const plantilla = await transaction((connection) => createTemplate(connection, {
+    idTienda: tenantId(req),
+    idAdministrador: req.session.admin.id,
+    body: req.body
+  }));
+  res.status(201).json({ message: 'Plantilla creada.', plantilla });
+}));
+
+router.patch('/plantillas-cobranza/:id', requirePlanFeature('recordatorios_fiado'), asyncRoute(async (req, res) => {
+  const plantilla = await transaction((connection) => updateTemplate(connection, {
+    idTienda: tenantId(req),
+    idAdministrador: req.session.admin.id,
+    idPlantilla: req.params.id,
+    body: req.body
+  }));
+  res.json({ message: 'Plantilla actualizada.', plantilla });
+}));
+
+async function changeTemplateState(req, res, active) {
+  const plantilla = await transaction((connection) => setTemplateActive(connection, {
+    idTienda: tenantId(req),
+    idAdministrador: req.session.admin.id,
+    idPlantilla: req.params.id,
+    active
+  }));
+  res.json({ message: active ? 'Plantilla activada.' : 'Plantilla desactivada.', plantilla });
+}
+
+router.patch('/plantillas-cobranza/:id/activar', requirePlanFeature('recordatorios_fiado'),
+  asyncRoute((req, res) => changeTemplateState(req, res, true)));
+router.patch('/plantillas-cobranza/:id/desactivar', requirePlanFeature('recordatorios_fiado'),
+  asyncRoute((req, res) => changeTemplateState(req, res, false)));
+
+async function collectionReceipt(req, res) {
+  res.json(await getCollectionReceipt(pool, tenantId(req), req.params.id));
+}
+
+router.get('/cobros-fiado/:id', requirePlanFeature('pagos_fiado'), asyncRoute(collectionReceipt));
+router.get('/cobros-fiado/:id/comprobante', requirePlanFeature('pagos_fiado'), asyncRoute(collectionReceipt));
+
 router.post('/cobranza/mensaje-whatsapp/preparar', requirePlanFeature('recordatorios_fiado'), asyncRoute(async (req, res) => {
   const idTienda = tenantId(req);
-  const idCliente = positiveId(req.body?.idCliente, 'El cliente');
+  const idCobroFiado = req.body?.idCobroFiado
+    ? positiveId(req.body.idCobroFiado, 'El cobro') : null;
+  const receipt = idCobroFiado ? await getCollectionReceipt(pool, idTienda, idCobroFiado) : null;
+  const idCliente = receipt?.cliente.idCliente || positiveId(req.body?.idCliente, 'El cliente');
+  if (receipt && req.body?.idCliente && Number(req.body.idCliente) !== Number(idCliente)) {
+    throw creditError(404, 'Cobro no encontrado para el cliente.', 'COBRO_NO_ENCONTRADO');
+  }
   const idFiado = req.body?.idFiado ? positiveId(req.body.idFiado, 'El fiado') : null;
   const configuration = await getCreditConfiguration(pool, idTienda);
   const [[customers], [stores]] = await Promise.all([
@@ -955,33 +1015,36 @@ router.post('/cobranza/mensaje-whatsapp/preparar', requirePlanFeature('recordato
     if (!debts.length) throw creditError(404, 'Fiado no encontrado para el cliente.');
     debt = debts[0];
   }
-  const type = String(req.body?.tipoPlantilla || (debt && collectionState(debt) === 'vencido' ? 'deuda_vencida' : 'recordatorio_previo'));
-  if (!TEMPLATE_TYPES.has(type)) throw creditError(400, 'El tipo de plantilla no es valido.');
+  const type = String(req.body?.tipoPlantilla || (receipt ? 'confirmacion_pago'
+    : (debt && collectionState(debt) === 'vencido' ? 'deuda_vencida' : 'recordatorio_previo')));
+  if (receipt && type !== 'confirmacion_pago') {
+    throw creditError(409, 'El comprobante solo puede usar una plantilla de confirmacion de pago.', 'PLANTILLA_TIPO_INCORRECTO');
+  }
+  if (!TEMPLATE_TYPES.includes(type)) throw creditError(400, 'El tipo de plantilla no es valido.', 'PLANTILLA_TIPO_INVALIDO');
   const templateId = req.body?.idPlantillaCobranza ? positiveId(req.body.idPlantillaCobranza, 'La plantilla') : null;
-  const templateParams = templateId ? [idTienda, templateId] : [idTienda, type];
-  const [templates] = await pool.query(
-    `SELECT idPlantillaCobranza,tipo,nombre,contenido FROM plantillaCobranzaTienda
-     WHERE idTienda=? AND ${templateId ? 'idPlantillaCobranza' : 'tipo'}=? AND activo=1
-     ORDER BY idPlantillaCobranza LIMIT 1`,
-    templateParams
-  );
-  if (!templates.length) throw creditError(404, 'Plantilla activa no encontrada.');
-  const unknownVariables = [...templates[0].contenido.matchAll(/\{([^}]+)\}/g)]
-    .map((match) => match[1]).filter((variable) => !TEMPLATE_VARIABLES.has(variable));
-  if (unknownVariables.length) throw creditError(409, 'La plantilla contiene variables no permitidas.');
-  const balance = debt ? Number(debt.saldoPendiente).toFixed(2) : (await customerSnapshot(pool, idTienda, idCliente)).summary.deudaActual;
+  const template = await resolveActiveTemplate(pool, { idTienda, idPlantilla: templateId, tipo: type });
+  const customerSummary = await customerSnapshot(pool, idTienda, idCliente);
+  const balance = debt ? Number(debt.saldoPendiente).toFixed(2) : customerSummary.summary.deudaActual;
   const dueDate = debt ? effectiveDebtDate(debt) : null;
   const lateDays = dueDate ? Math.max(0, -daysBetweenLocalDates(formatLocalDate(), dueDate)) : 0;
-  let receipt = '';
+  let saleReceipt = '';
   if (debt?.idVenta) {
     const [sales] = await pool.query('SELECT codigoComprobante FROM venta WHERE idTienda=? AND idVenta=?', [idTienda, debt.idVenta]);
-    receipt = sales[0]?.codigoComprobante || '';
+    saleReceipt = sales[0]?.codigoComprobante || '';
   }
   const values = {
     tienda: stores[0]?.nombre || 'La tienda', cliente: customer.nombre, saldo: `Bs ${balance}`,
-    vencimiento: dueDate || 'sin fecha', dias_atraso: String(lateDays), comprobante: receipt
+    telefono: customer.telefono || '', fecha: formatLocalDate(),
+    vencimiento: dueDate || 'sin fecha', fecha_vencimiento: debt?.fechaVencimiento || 'sin fecha',
+    fecha_prometida: debt?.fechaPrometidaPago || 'sin promesa', dias_atraso: String(lateDays),
+    comprobante: receipt?.comprobante.numero || saleReceipt,
+    monto_pagado: receipt ? `Bs ${Number(receipt.comprobante.montoTotal).toFixed(2)}` : '',
+    metodo_pago: receipt?.comprobante.metodoPago || '',
+    saldo_restante: receipt ? `Bs ${Number(receipt.comprobante.saldoPosterior).toFixed(2)}` : '',
+    referencia: receipt?.comprobante.referencia || '',
+    saldo_inicial: '', debitos: '', creditos: '', saldo_final: `Bs ${balance}`, periodo: ''
   };
-  const text = templates[0].contenido.replace(/\{([^}]+)\}/g, (_, variable) => values[variable] ?? '');
+  const text = renderTemplate(template, values);
   const countryCode = configuration.codigoPaisWhatsApp;
   const normalizedPhone = customer.telefonoNormalizado;
   const phone = countryCode && normalizedPhone
@@ -992,7 +1055,7 @@ router.post('/cobranza/mensaje-whatsapp/preparar', requirePlanFeature('recordato
       `INSERT INTO seguimientoCobranza
        (idTienda,idCliente,idFiado,tipo,canal,detalle,fechaCompromiso,creadoEn,idAdministrador)
        VALUES (?, ?, ?, 'recordatorio_preparado', 'whatsapp', ?, NULL, ?, ?)`,
-      [idTienda, idCliente, idFiado, `Recordatorio preparado con plantilla: ${templates[0].nombre}`,
+      [idTienda, idCliente, idFiado, `Recordatorio preparado con plantilla: ${template.nombre}`,
         formatLocalDateTime(), req.session.admin.id]
     );
   }
@@ -1001,7 +1064,14 @@ router.post('/cobranza/mensaje-whatsapp/preparar', requirePlanFeature('recordato
     url: phone ? `https://wa.me/${phone}?text=${encodeURIComponent(text)}` : null,
     advertencia: phone ? 'El mensaje esta preparado; el usuario debe confirmar el envio en WhatsApp.'
       : 'No hay codigo de pais y telefono confiables. Copie el texto manualmente.',
-    enviado: false
+    enviado: false,
+    plantilla: {
+      idPlantillaCobranza: template.idPlantillaCobranza,
+      tipo: template.tipo,
+      nombre: template.nombre,
+      origen: template.origen
+    },
+    variablesPermitidas: TEMPLATE_VARIABLES[type]
   });
 }));
 

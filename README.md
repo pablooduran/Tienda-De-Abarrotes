@@ -565,6 +565,10 @@ Despues de iniciar el servidor local, las pruebas funcionales existentes ya envi
 
 Los cobros posteriores se registran con una cabecera `cobroFiado` y una distribucion `pagoFiado` por deuda. Cada distribucion vinculada a una venta produce un unico `pagoVenta`; los reintentos con la misma `claveOperacion` devuelven el cobro existente sin duplicar dinero ni saldos. WhatsApp se limita a preparar texto y un enlace `wa.me`: nunca envia ni marca mensajes como enviados automaticamente.
 
+Las plantillas de cobranza se administran con `GET|POST /api/plantillas-cobranza`, `PATCH /api/plantillas-cobranza/:id` y las acciones `activar` o `desactivar`. Requieren `recordatorios_fiado`; las escrituras tambien requieren una suscripcion activa. El tipo de una plantilla existente es inmutable, pueden coexistir varias activas y la preparacion elige la activa actualizada mas recientemente, usando `idPlantillaCobranza` para una seleccion explicita. Si un tipo no tiene plantillas activas, se usa un texto interno seguro sin crear datos ni activar una plantilla automaticamente. Se admiten las variables historicas `{variable}` y las nuevas `{{variable}}`; las variables validas dependen del tipo y el contenido siempre se presenta como texto.
+
+Los comprobantes historicos se consultan mediante `GET /api/cobros-fiado/:id/comprobante` con `pagos_fiado`. Incluyen cabecera, distribuciones, saldos anterior y posterior de las deudas afectadas, y pueden imprimirse desde el navegador. Son comprobantes de pago internos, no facturas fiscales. No exponen `claveOperacion`. En cobros legados pueden faltar referencia, monto recibido o responsable; la interfaz muestra el dato como no disponible. Los importes, fechas y distribuciones provienen del cobro guardado, pero los nombres de tienda, cliente y responsable reflejan sus registros actuales porque el esquema no conserva snapshots textuales.
+
 ### Validacion del frontend de clientes y cobranza
 
 La interfaz conserva **Clientes** y presenta las deudas bajo **Cobranza**. La prueba estatica no inicia el servidor ni usa la base de datos:
@@ -578,6 +582,8 @@ El listado canonico `GET /api/clientes` acepta `estado=activos|ocultos|todos`; s
 Con un plan basico y una suscripcion activa, confirme que se pueden consultar clientes, deuda y estado de cuenta, y registrar pagos de deuda existente. El detalle basico nunca incluye seguimientos de cobranza; la respuesta informa la capacidad `permisos.seguimientoCobranza`. Los limites personalizados, seguimientos y recordatorios deben aparecer bloqueados o ausentes segun sus funciones.
 
 Con un plan avanzado, confirme el alta y edicion ampliada, configuracion de credito, alertas, promesas, seguimientos y preparacion de WhatsApp. Abrir WhatsApp no debe registrar un envio; **Marcar como enviado manualmente** es una accion separada.
+
+En **Cobranza**, abra **Plantillas de cobranza** y valide listado, filtros, alta, edicion, vista previa textual y activacion logica. Desactive todas las plantillas de un tipo para comprobar el fallback interno, y seleccione una plantilla activa al preparar WhatsApp. Desde la ficha del cliente, abra la pestaña **Pagos**, consulte un comprobante e imprimalo; tambien debe abrirse tras registrar un cobro nuevo. La impresion no incluye controles y muestra expresamente que no es una factura fiscal.
 
 En el POS, seleccione un cliente y verifique deuda, limite, credito disponible y fecha de vencimiento. El cliente ocasional solo puede pagar al contado. Una politica de advertencia debe exigir confirmacion y motivo; una politica de bloqueo debe permitir cambiar la venta a contado.
 

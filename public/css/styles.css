@@ -1643,6 +1643,42 @@ textarea:focus-visible { outline: 3px solid rgba(40, 106, 89, .28); outline-offs
 .whatsapp-preview textarea { margin-top: 6px; resize: vertical; }
 .credit-policy-help { margin-top: 14px; padding: 12px; border-left: 4px solid var(--brand); background: #f4f8f6; }
 .credit-policy-help p { margin: 6px 0; }
+.template-list { display: grid; gap: 10px; }
+.template-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 16px;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: #fff;
+}
+.template-row > div:first-child { min-width: 0; }
+.template-row strong, .template-row small { display: block; }
+.template-row p { margin: 8px 0; white-space: pre-wrap; overflow-wrap: anywhere; color: var(--muted); }
+.template-inactive { background: #f5f6f7; }
+.template-actions { display: flex; align-items: center; justify-content: flex-end; gap: 8px; flex-wrap: wrap; }
+.template-preview-highlight { padding: 10px; outline: 2px solid var(--brand); background: #f4f8f6; color: var(--text) !important; }
+.template-variables, .template-preview { margin-top: 12px; padding: 12px; border: 1px solid var(--line); border-radius: 7px; }
+.template-variables code { display: inline-block; margin: 5px 4px 0 0; padding: 3px 6px; border-radius: 4px; background: #eef2f3; }
+.template-preview pre { margin: 8px 0 0; white-space: pre-wrap; overflow-wrap: anywhere; font-family: inherit; }
+.timeline-actions { display: flex; align-items: center; justify-content: flex-end; gap: 8px; flex-wrap: wrap; }
+.collection-receipt { color: #172027; background: #fff; }
+.collection-receipt > header { display: flex; justify-content: space-between; gap: 18px; padding-bottom: 16px; border-bottom: 2px solid #263a43; }
+.collection-receipt > header h2 { margin: 4px 0; }
+.collection-receipt > header p { margin: 0; color: #59656f; }
+.collection-receipt > header > div:last-child { text-align: right; }
+.collection-receipt > header > div:last-child span { display: block; color: var(--muted); }
+.receipt-details { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin: 16px 0; }
+.receipt-details div { padding: 10px; background: #f4f6f7; }
+.receipt-details dt { color: var(--muted); font-size: 12px; }
+.receipt-details dd { margin: 4px 0 0; font-weight: 700; overflow-wrap: anywhere; }
+.receipt-distribution { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 4px 14px; padding: 10px 0; border-bottom: 1px solid var(--line); }
+.receipt-distribution div span, .receipt-distribution small { display: block; color: var(--muted); }
+.receipt-distribution small { grid-column: 1 / -1; }
+.receipt-observation, .legacy-receipt-note { margin-top: 14px; padding: 12px; background: #fff8dc; border-left: 4px solid #d3a81d; }
+.receipt-observation p, .legacy-receipt-note { white-space: pre-wrap; overflow-wrap: anywhere; }
+.receipt-thanks { margin-top: 20px; font-weight: 700; text-align: center; }
 .account-statement { color: #172027; background: #fff; }
 .account-statement > header { display: flex; justify-content: space-between; gap: 18px; padding-bottom: 16px; border-bottom: 2px solid #263a43; }
 .account-statement > header h2 { margin: 4px 0; }
@@ -1825,9 +1861,13 @@ textarea:focus-visible { outline: 3px solid rgba(40, 106, 89, .28); outline-offs
   .credit-filters, .collection-filters, .profile-details, .statement-summary,
   .promise-context, .pos-credit-metrics, .pos-credit-fields, .statement-filters { grid-template-columns: 1fr; }
   .credit-filter-actions, .credit-pagination, .profile-actions, .profile-tabs,
-  .timeline-row, .statement-row, .account-statement > header { display: grid; grid-template-columns: 1fr; }
+  .timeline-row, .statement-row, .account-statement > header, .template-row,
+  .collection-receipt > header, .receipt-details { display: grid; grid-template-columns: 1fr; }
   .credit-filter-actions button, .credit-pagination button, .profile-actions button, .profile-tabs button { width: 100%; }
   .account-statement > header > div:last-child { text-align: left; }
+  .collection-receipt > header > div:last-child { text-align: left; }
+  .template-actions, .timeline-actions { display: grid; justify-content: stretch; }
+  .template-actions button, .timeline-actions button { width: 100%; }
   .customer-card dl, .collection-card dl { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   body { font-size: 14px; }
   .content { padding: 10px; }
@@ -1926,8 +1966,10 @@ textarea:focus-visible { outline: 3px solid rgba(40, 106, 89, .28); outline-offs
   body { height: auto; overflow: visible; background: #fff; }
   body > .layout, #message, .no-print { display: none !important; }
   #modalRoot, .modal-backdrop { position: static; display: block; padding: 0; background: #fff; }
-  .statement-modal { width: 100%; max-height: none; overflow: visible; padding: 0; border: 0; box-shadow: none; }
+  .statement-modal, .receipt-modal { width: 100%; max-height: none; overflow: visible; padding: 0; border: 0; box-shadow: none; }
   .account-statement { width: 190mm; max-width: 100%; margin: 0 auto; font-size: 11pt; }
+  .collection-receipt { width: 110mm; max-width: 100%; margin: 0 auto; font-size: 10pt; }
+  .collection-receipt .receipt-distribution { break-inside: avoid; }
   .statement-row { break-inside: avoid; }
   body.printing-receipt > * { display: none !important; }
   body.printing-receipt #modalRoot,
