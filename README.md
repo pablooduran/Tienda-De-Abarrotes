@@ -318,15 +318,99 @@ npm start
 
 Abra `http://localhost:3000`. Para desarrollo con recarga automatica puede usar `npm run dev`.
 
-## Respaldo antes de migrar
+## Backups y recuperacion comprobada
 
-Use una base local o una copia de prueba. Ejemplo general:
+Los comandos operativos de backup funcionan solamente con `APP_ENV=local` o `test`,
+`DB_HOST=localhost` y TLS local desactivado. Produccion, hosts remotos y nombres de restauracion
+que no comiencen exactamente con `tmp_tienda_restore_` se rechazan. No ejecute `db:init`,
+`db:migrate`, `db:create-admin` ni `db:seed-demo` contra produccion sin un respaldo verificado y
+una restauracion ensayada.
 
-```bash
-mysqldump -u usuario -p nombre_base > backup_antes_de_migrar.sql
+Configure sin secretos versionados:
+
+```dotenv
+BACKUP_DIR=./backups
+MYSQLDUMP_PATH=
+MYSQL_CLIENT_PATH=
+BACKUP_RESTORE_USER=
+BACKUP_RESTORE_PASSWORD=
+BACKUP_RETENTION_DAYS=30
+BACKUP_RETENTION_COUNT=10
 ```
 
-No ejecute `db:init`, `db:migrate`, `db:create-admin` ni `db:seed-demo` contra produccion sin revisar la configuracion, tener un respaldo y probar previamente sobre una copia.
+En Windows se detectan `mysqldump.exe` y `mysql.exe` desde `PATH` y desde la instalacion
+habitual de MySQL Server 8.0. Las variables de ruta permiten indicar otra instalacion, incluso
+si contiene espacios. Las contrasenas se entregan solamente al entorno del proceso hijo mediante
+`MYSQL_PWD`; no aparecen en argumentos, manifiestos ni logs.
+
+### Crear y verificar
+
+```powershell
+$env:APP_ENV='local'
+$env:DB_HOST='localhost'
+npm.cmd run db:backup
+npm.cmd run db:verify-backup -- .\backups\BASE_AAAA-MM-DD_HHMMSS.sql
+npm.cmd run db:test-restore -- .\backups\BASE_AAAA-MM-DD_HHMMSS.sql
+```
+
+El backup usa `--single-transaction`, `--quick`, `--skip-lock-tables`, UTF-8, triggers,
+`--no-tablespaces` y `--set-gtid-purged=OFF`. Rutinas y eventos se incluyen solo cuando existen.
+El manifiesto contiene SHA-256, tamanio, versiones, commit, migraciones, motores y conteos de
+tablas criticas. Si alguna tabla no es InnoDB, el comando advierte que no puede garantizar una
+instantanea transaccional completa.
+
+La restauracion crea un nombre aleatorio `tmp_tienda_restore_*`, compara tablas, motores,
+`schema_migrations` y conteos, busca referencias huerfanas y ejecuta los comprobadores de
+migraciones historicas, sesiones, zona horaria y clientes/credito. La base temporal se elimina en
+`finally`, incluso cuando la importacion o un comprobador falla. Nunca ejecuta `db:migrate`.
+
+### Usuario local de restauracion
+
+No conceda `CREATE` o `DROP` globales al usuario de la aplicacion. Cree manualmente con `root`
+local un usuario exclusivo y limite sus permisos al prefijo temporal. Sustituya usuario, host y
+clave de forma interactiva; no guarde la clave en este archivo ni en el historial:
+
+```sql
+CREATE USER 'tienda_backup_test'@'localhost' IDENTIFIED BY 'CLAVE_LOCAL_SEGURA';
+GRANT ALL PRIVILEGES ON `tmp\_tienda\_restore\_%`.* TO 'tienda_backup_test'@'localhost';
+```
+
+Configure ese usuario mediante `BACKUP_RESTORE_USER` y `BACKUP_RESTORE_PASSWORD`. Ambas variables
+son obligatorias para restaurar; el comando nunca reutiliza las credenciales de la aplicacion para
+obtener privilegios `CREATE` o `DROP`.
+
+### Retencion local
+
+La limpieza es simulada por defecto, solo considera pares SQL/manifiesto validos dentro de
+`BACKUP_DIR`, no sigue enlaces y nunca elimina el backup mas reciente:
+
+```powershell
+npm.cmd run db:cleanup-backups
+npm.cmd run db:cleanup-backups -- --days=30 --count=10
+npm.cmd run db:cleanup-backups -- --days=30 --count=10 --apply --confirm=DELETE_VERIFIED_BACKUPS
+```
+
+Los backups contienen datos personales y comerciales. Mantengalos en disco cifrado o en un
+contenedor seguro; no los envie por correo ni WhatsApp. El almacenamiento remoto y su cifrado
+administrado se definiran durante la preparacion de produccion. No implemente cifrado casero.
+
+### Recuperacion de emergencia
+
+1. Detenga escrituras y registre el incidente sin alterar la base afectada.
+2. Conserve una copia adicional de la base daniada antes de cualquier intento.
+3. Identifique el backup y ejecute `db:verify-backup` para validar manifiesto, tamanio y SHA-256.
+4. Restaure primero en una base nueva, nunca encima de la base daniada.
+5. Ejecute `db:test-restore` y los comprobadores de solo lectura indicados en el manifiesto.
+6. Compare conteos, migraciones, clientes, ventas, fiados, pagos, stock y relaciones esenciales.
+7. Realice un smoke test local con escrituras todavia detenidas.
+8. Rote `SESSION_SECRET` para no reactivar sesiones copiadas desde el respaldo.
+9. Cambie la conexion a la base restaurada mediante configuracion controlada y reinicie el servicio.
+10. Conserve la base anterior para rollback; si falla el smoke test, revierta la conexion.
+11. Documente tiempos, responsables, backup utilizado, hash y resultado final.
+
+La prueba integral local es `npm.cmd run test:backup-restore`. Usa una carpeta temporal, restaura
+solo en `tmp_tienda_restore_*`, comprueba limpieza tras exito y fallo y no conserva dumps. Finaliza
+con codigo distinto de cero si el usuario limitado no esta configurado o no puede restaurar.
 
 ## Reglas actuales del negocio
 

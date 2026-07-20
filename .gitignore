@@ -4,6 +4,10 @@
 !.env.local.example
 node_modules/
 database/backups/
+backups/*.sql
+backups/*.json
+backups/*.partial*
+backups/*.tmp
 *.log
 .DS_Store
 Thumbs.db
