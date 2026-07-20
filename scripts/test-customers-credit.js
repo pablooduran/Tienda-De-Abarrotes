@@ -979,9 +979,11 @@ async function main() {
       && String(injectionRow.getCell(7).value).startsWith("'@"),
     'La exportacion no neutralizo =, +, - y @ en texto de usuario.');
     assert(sanitizeSpreadsheetCell('\t+CMD') === "'\t+CMD"
+      && sanitizeSpreadsheetCell('  =SUM(1,1)') === "'  =SUM(1,1)"
+      && sanitizeSpreadsheetCell('\u200b@HYPERLINK') === "'\u200b@HYPERLINK"
       && sanitizeSpreadsheetCell('Texto normal') === 'Texto normal'
       && sanitizeSpreadsheetCell(12.5) === 12.5,
-    'La neutralizacion no cubre prefijos ocultos o altera valores seguros.');
+    'La neutralizacion no cubre espacios, tabulaciones o caracteres invisibles, o altera valores seguros.');
     const safeName = safeExportFileName('estado:cuenta', '../Cliente AUX', formatLocalDate());
     assert(!/[<>:"/\\|?*\u0000-\u001f]/.test(safeName)
       && safeName.endsWith(`${formatLocalDate()}.xlsx`) && safeName.length <= 160,

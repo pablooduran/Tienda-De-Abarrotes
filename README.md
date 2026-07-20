@@ -622,7 +622,51 @@ Los listados de cobranza aplican busqueda, estado y fechas en el backend antes d
 
 El selector del POS conserva por ahora el limite operativo de 500 clientes cargados. La busqueda remota paginada para tiendas con catalogos mayores queda pendiente; no se debe aumentar el limite ni cargar todos los clientes sin paginacion.
 
-Revise la interfaz a 360, 768 y 1366 px. En movil, clientes y cuentas se muestran como tarjetas sin desplazamiento horizontal obligatorio. El estado de cuenta se imprime desde el navegador con estilos A4; no se genera PDF ni XLSX.
+Revise la interfaz a 360, 768 y 1366 px. En movil, clientes y cuentas se muestran como tarjetas sin desplazamiento horizontal obligatorio. El estado de cuenta se imprime desde el navegador con estilos A4 y puede exportarse como XLSX; no se genera PDF.
+
+### Fase 10 — estado final
+
+La Fase 10 queda implementada de extremo a extremo para clientes, credito y cobranza. Incluye perfiles ampliados, ocultacion y restauracion logica, configuracion y validacion de credito, ventas fiadas desde POS, cobros parciales, totales y acumulados idempotentes, estado de cuenta paginado, seguimientos, promesas, WhatsApp preparado, plantillas por tienda, comprobantes imprimibles, exportaciones XLSX y ocho segmentos dinamicos. Los cobros no modifican inventario y cada distribucion se reconcilia con `pagoFiado`, `cobroFiado`, `fiado`, `pagoVenta` y la venta relacionada.
+
+Los endpoints principales usan autenticacion, tenant y contexto de suscripcion globales. Los permisos especificos son:
+
+- `clientes_basico`: clientes, perfil y resumen.
+- `fiados_basico`: consulta de deuda y cobranza basica.
+- `pagos_fiado`: cobros y comprobantes historicos.
+- `estado_cuenta_basico`: estado de cuenta.
+- `limites_credito`: configuracion y campos avanzados de credito.
+- `seguimiento_cobranza`: promesas e historial de gestiones.
+- `recordatorios_fiado`: alertas, plantillas y WhatsApp preparado.
+- `exportacion_clientes_fiados`: los tres XLSX.
+- `segmentacion_clientes`: segmentacion dinamica y sus metricas globales.
+
+Las escrituras requieren una suscripcion activa. El modo de solo lectura conserva las consultas historicas, pero no permite cobros, cambios, exportaciones ni preparaciones que registren actividad. Un downgrade conserva clientes, deuda, pagos, comprobantes y estado de cuenta; deja de exponer seguimientos y herramientas avanzadas. Ningun endpoint de este modulo acepta `idTienda` del navegador.
+
+Validacion final recomendada:
+
+```powershell
+$env:APP_ENV='local'
+$env:DB_HOST='localhost'
+npm.cmd run test:customers-credit
+npm.cmd run test:customers-credit-frontend
+npm.cmd run test:customers-credit-browser
+npm.cmd run test:pos-payments
+npm.cmd run test:tenant-isolation
+npm.cmd run test:subscriptions
+npm.cmd run db:check-customers-credit
+```
+
+Limitaciones conocidas y trabajo futuro:
+
+- El selector inicial del POS carga como maximo 500 clientes; una tienda mayor necesitara busqueda remota paginada.
+- Los historiales resumidos de la ficha muestran los 20 registros mas recientes y remiten al estado de cuenta para la cronologia completa.
+- Los comprobantes no son facturas fiscales y los nombres de tienda, cliente y responsable no tienen snapshots historicos.
+- WhatsApp solo prepara texto y enlaces `https://wa.me/`; no envia mensajes automaticamente.
+- No se generan PDF, no existen anulaciones ni operaciones compensatorias y no se implementa portal publico del cliente.
+- Los segmentos se calculan con el modelo vigente, que aun no posee anulaciones de venta; no se implementa un segmento predictivo de abandono.
+- Los limites XLSX son 5000 clientes, 10000 fiados y 20000 movimientos de estado de cuenta, salvo configuracion explicita.
+
+`npm audit` informa dos entradas moderadas relacionadas: `exceljs@4.4.0` queda marcado por su dependencia transitiva `uuid@8.3.2`, afectada por `GHSA-w5hq-g745-h8pq`. No hay hallazgos altos o criticos en este informe. La correccion automatica propuesta implica un cambio mayor o una degradacion de ExcelJS, por lo que no debe ejecutarse `npm audit fix --force`; la actualizacion se evaluara de forma controlada cuando ExcelJS publique o adopte una version compatible de UUID.
 
 ### Validacion manual de la interfaz de inteligencia de inventario
 
