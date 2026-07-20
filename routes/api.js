@@ -1,6 +1,7 @@
 const express = require('express');
 const bcrypt = require('bcryptjs');
 const pool = require('../config/db');
+const { requirePlanFeature } = require('../middleware/subscription');
 const { enforcePlanLimit } = require('../services/subscription-service');
 const {
   insertStockMovement,
@@ -492,7 +493,10 @@ router.delete('/productos/:id', async (req, res, next) => {
 });
 
 function crudRoutes(base, table, idField, protectedDeleteMessage) {
-  router.get(`/${base}`, async (req, res, next) => {
+  const requireEntityFeature = table === 'cliente'
+    ? requirePlanFeature('clientes_basico')
+    : (_req, _res, next) => next();
+  router.get(`/${base}`, requireEntityFeature, async (req, res, next) => {
     try {
       const active = table === 'cliente' ? 'AND activo=1' : '';
       const [rows] = await pool.query(
@@ -505,7 +509,7 @@ function crudRoutes(base, table, idField, protectedDeleteMessage) {
     }
   });
 
-  router.post(`/${base}`, async (req, res, next) => {
+  router.post(`/${base}`, requireEntityFeature, async (req, res, next) => {
     let connection;
     try {
       requireFields(req.body, ['nombre']);
@@ -539,7 +543,7 @@ function crudRoutes(base, table, idField, protectedDeleteMessage) {
     }
   });
 
-  router.put(`/${base}/:id`, async (req, res, next) => {
+  router.put(`/${base}/:id`, requireEntityFeature, async (req, res, next) => {
     try {
       requireFields(req.body, ['nombre']);
       const nombre = cleanText(req.body.nombre);
@@ -564,7 +568,7 @@ function crudRoutes(base, table, idField, protectedDeleteMessage) {
     }
   });
 
-  router.delete(`/${base}/:id`, async (req, res, next) => {
+  router.delete(`/${base}/:id`, requireEntityFeature, async (req, res, next) => {
     try {
       if (table === 'cliente') {
         await requireAdminPassword(req);
@@ -590,7 +594,7 @@ function crudRoutes(base, table, idField, protectedDeleteMessage) {
   });
 }
 
-router.get('/clientes/ocultos', async (req, res, next) => {
+router.get('/clientes/ocultos', requirePlanFeature('clientes_basico'), async (req, res, next) => {
   try {
     const [rows] = await pool.query(
       'SELECT * FROM cliente WHERE idTienda=? AND activo=0 ORDER BY eliminadoEn DESC, nombre',
@@ -602,7 +606,7 @@ router.get('/clientes/ocultos', async (req, res, next) => {
   }
 });
 
-router.patch('/clientes/:id/restaurar', async (req, res, next) => {
+router.patch('/clientes/:id/restaurar', requirePlanFeature('clientes_basico'), async (req, res, next) => {
   let connection;
   try {
     await requireAdminPassword(req);
@@ -895,11 +899,11 @@ router.post('/compras', async (req, res, next) => {
   }
 });
 
-router.post('/fiados', (req, res) => {
+router.post('/fiados', requirePlanFeature('fiados_basico'), (req, res) => {
   res.status(410).json({ error: 'Los fiados nuevos deben registrarse desde Ventas como venta fiada.' });
 });
 
-router.get('/fiados', async (req, res, next) => {
+router.get('/fiados', requirePlanFeature('fiados_basico'), async (req, res, next) => {
   try {
     const { estado, idCliente, desde, hasta } = req.query;
     const conditions = ['f.idTienda=?', 'f.activo=1'];
@@ -935,7 +939,7 @@ router.get('/fiados', async (req, res, next) => {
   }
 });
 
-router.get('/fiados/activos', async (req, res, next) => {
+router.get('/fiados/activos', requirePlanFeature('fiados_basico'), async (req, res, next) => {
   try {
     const [rows] = await pool.query(`
       SELECT f.*, c.nombre AS cliente, v.fecha AS fechaVenta
@@ -951,7 +955,7 @@ router.get('/fiados/activos', async (req, res, next) => {
   }
 });
 
-router.get('/fiados/ocultos', async (req, res, next) => {
+router.get('/fiados/ocultos', requirePlanFeature('fiados_basico'), async (req, res, next) => {
   try {
     const [rows] = await pool.query(`
       SELECT f.*, c.nombre AS cliente, v.fecha AS fechaVenta, v.total AS totalVenta
@@ -967,7 +971,7 @@ router.get('/fiados/ocultos', async (req, res, next) => {
   }
 });
 
-router.get('/fiados/:id', async (req, res, next) => {
+router.get('/fiados/:id', requirePlanFeature('fiados_basico'), async (req, res, next) => {
   try {
     const idTienda = tenantId(req);
     const [[fiados], [pagos], [detalleVenta], [detalleFiado]] = await Promise.all([
@@ -1003,7 +1007,7 @@ router.get('/fiados/:id', async (req, res, next) => {
   }
 });
 
-router.patch('/fiados/:id/restaurar', async (req, res, next) => {
+router.patch('/fiados/:id/restaurar', requirePlanFeature('fiados_basico'), async (req, res, next) => {
   try {
     await requireAdminPassword(req);
     const [result] = await pool.query(
@@ -1018,7 +1022,7 @@ router.patch('/fiados/:id/restaurar', async (req, res, next) => {
   }
 });
 
-router.delete('/fiados/:id', async (req, res, next) => {
+router.delete('/fiados/:id', requirePlanFeature('fiados_basico'), async (req, res, next) => {
   try {
     await requireAdminPassword(req);
     const [result] = await pool.query(
@@ -1033,7 +1037,7 @@ router.delete('/fiados/:id', async (req, res, next) => {
   }
 });
 
-router.post('/pagos-fiado', async (req, res, next) => {
+router.post('/pagos-fiado', requirePlanFeature('pagos_fiado'), async (req, res, next) => {
   try {
     const result = await collectSpecificDebt({
       idTienda: tenantId(req),
@@ -1050,7 +1054,7 @@ router.post('/pagos-fiado', async (req, res, next) => {
   }
 });
 
-router.post('/pagos-fiado/cliente', async (req, res, next) => {
+router.post('/pagos-fiado/cliente', requirePlanFeature('pagos_fiado'), async (req, res, next) => {
   try {
     const result = await collectCustomerDebt({
       idTienda: tenantId(req),

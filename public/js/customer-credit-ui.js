@@ -21,7 +21,9 @@
       posConfiguration: null,
       posLoadingCustomerId: null,
       posBalance: 0,
-      posRequest: 0
+      posRequest: 0,
+      collectionRequest: 0,
+      collectionSearchTimer: null
     };
 
     const state = () => getState();
@@ -63,12 +65,12 @@
       if (message) target.focus();
     }
 
-    function openFormModal({ title, body, submitText = 'Guardar', wide = false, allowReadOnlyOperation = false, onOpen, onSubmit }) {
+    function openFormModal({ title, body, submitText = 'Guardar', wide = false, onOpen, onSubmit }) {
       return new Promise((resolve) => {
         const returnFocus = document.activeElement;
         modalRoot.innerHTML = `
           <div class="modal-backdrop">
-            <form class="modal ${wide ? 'modal-wide' : ''}" data-credit-modal ${allowReadOnlyOperation ? 'data-readonly-operational' : ''} role="dialog" aria-modal="true" aria-label="${e(title)}">
+            <form class="modal ${wide ? 'modal-wide' : ''}" data-credit-modal role="dialog" aria-modal="true" aria-label="${e(title)}">
               <h3>${e(title)}</h3>
               <div class="modal-body">${body}<p class="form-error" data-form-error tabindex="-1" hidden></p></div>
               <div class="modal-actions">
@@ -137,7 +139,7 @@
       return `<div class="actions customer-actions">
         <button type="button" class="small secondary" data-customer-view="${customer.idCliente}">Ver ficha</button>
         ${!readOnly() ? `<button type="button" class="small secondary" data-customer-edit="${customer.idCliente}">Editar</button>` : ''}
-        ${Number(customer.deudaActual || 0) > 0 ? `<button type="button" class="small" data-customer-pay="${customer.idCliente}">Registrar pago</button>` : ''}
+        ${Number(customer.deudaActual || 0) > 0 && !readOnly() ? `<button type="button" class="small" data-customer-pay="${customer.idCliente}">Registrar pago</button>` : ''}
         <button type="button" class="small secondary" data-customer-statement="${customer.idCliente}">Estado de cuenta</button>
         ${can('recordatorios_fiado') && customer.aceptaRecordatorios ? `<button type="button" class="small secondary" data-customer-whatsapp="${customer.idCliente}">WhatsApp</button>` : ''}
       </div>`;
@@ -192,7 +194,7 @@
             <article class="card"><span>Clientes vencidos</span><strong>${overdue}</strong></article>
             <article class="card"><span>Resultados filtrados</span><strong>${total}</strong></article></div>
           ${customerFiltersMarkup()}<div id="customerResults">${customerRowsMarkup(customers)}</div>${pagerMarkup(Number(data.pagina || ui.customerPage), Number(data.limite || 20), total, 'customer')}
-          ${readOnly() ? '<div class="panel readonly-note"><strong>Modo de solo lectura.</strong><p>Puedes consultar perfiles, deuda y estados de cuenta. Las altas y ediciones estan deshabilitadas.</p></div>' : ''}`;
+          ${readOnly() ? '<div class="panel readonly-note"><strong>Modo de solo lectura.</strong><p>Puedes consultar perfiles, deuda y estados de cuenta. Las altas, ediciones y cobros estan deshabilitados hasta reactivar la suscripcion.</p></div>' : ''}`;
         wireCustomerView(customers);
       } catch (error) {
         view.innerHTML = `<div class="panel error-state"><strong>No se pudieron cargar los clientes.</strong><p>${e(error.message)}</p><button type="button" data-retry-customers>Reintentar</button></div>`;
@@ -285,13 +287,23 @@
       });
     }
 
+    function historyNotice(metadata) {
+      if (!metadata) return '';
+      const shown = Number(metadata.mostrados || 0);
+      const total = Number(metadata.total || 0);
+      const limit = Number(metadata.limite || 0);
+      return `<p class="hint history-notice">Mostrando ${shown} de ${total} registros recientes${limit ? ` (limite ${limit})` : ''}.</p>`;
+    }
+
     function profileTabBody(data, tab) {
       const customer = data.cliente;
       if (tab === 'resumen') return `<div class="cards profile-summary"><article class="card"><span>Deuda total</span><strong>Bs ${money(customer.deudaActual)}</strong></article><article class="card"><span>Deuda vencida</span><strong>Bs ${money(customer.deudaVencida)}</strong></article><article class="card"><span>Limite efectivo</span><strong>${valueOrUnknown(customer.limiteEfectivo, 'Bs ')}</strong></article><article class="card"><span>Credito disponible</span><strong>${valueOrUnknown(customer.creditoDisponible, 'Bs ')}</strong></article></div><dl class="profile-details"><div><dt>Ultima compra</dt><dd>${data.compras?.[0]?.fecha ? e(formatDate(data.compras[0].fecha)) : 'Sin compras'}</dd></div><div><dt>Ultimo pago</dt><dd>${data.pagos?.[0]?.fechaPago ? e(formatDate(data.pagos[0].fechaPago)) : 'Sin pagos'}</dd></div><div><dt>Canal preferido</dt><dd>${e(statusText(customer.canalPreferido))}</dd></div><div><dt>Recordatorios</dt><dd>${customer.aceptaRecordatorios ? 'Aceptados' : 'No aceptados'}</dd></div></dl>`;
-      if (tab === 'compras') return listOrEmpty(data.compras, (row) => `<article class="timeline-row"><div><strong>${e(row.codigoComprobante || `Venta #${row.idVenta}`)}</strong><span>${e(formatDate(row.fecha))}</span></div><strong>Bs ${money(row.total)}</strong></article>`, 'No hay compras registradas.');
-      if (tab === 'fiados') return listOrEmpty(data.fiados, (row) => `<article class="timeline-row"><div><strong>Fiado #${row.idFiado}</strong><span>${e(formatDate(row.fechaInicio))} · vence ${e(dateText(row.fechaVencimiento) || 'sin fecha')} · promesa ${e(dateText(row.fechaPrometidaPago) || 'sin promesa')}</span></div><div><strong>Bs ${money(row.saldoPendiente)}</strong>${statusBadge(row.estadoCobranza || row.estado)}</div></article>`, 'No hay fiados registrados.');
-      if (tab === 'pagos') return listOrEmpty(data.pagos, (row) => `<article class="timeline-row"><div><strong>Pago a fiado #${row.idFiado}</strong><span>${e(formatDate(row.fechaPago))} · ${e(statusText(row.metodoPago))} · ${e(row.administrador || 'Sistema')}</span></div><strong>Bs ${money(row.monto)}</strong></article>`, 'No hay pagos registrados.');
-      if (tab === 'seguimiento') return can('seguimiento_cobranza') ? listOrEmpty(data.seguimientos, (row) => `<article class="timeline-row"><div><strong>${e(statusText(row.tipo))}</strong><span>${e(formatDate(row.creadoEn))} · ${e(statusText(row.canal))} · ${e(row.administrador || 'Sistema')}</span><p>${e(row.detalle)}</p></div>${row.fechaCompromiso ? `<strong>${e(dateText(row.fechaCompromiso))}</strong>` : ''}</article>`, 'No hay seguimientos registrados.') : '<div class="plan-note">El seguimiento de cobranza esta disponible en el plan avanzado.</div>';
+      if (tab === 'compras') return historyNotice(data.historial?.compras) + listOrEmpty(data.compras, (row) => `<article class="timeline-row"><div><strong>${e(row.codigoComprobante || `Venta #${row.idVenta}`)}</strong><span>${e(formatDate(row.fecha))}</span></div><strong>Bs ${money(row.total)}</strong></article>`, 'No hay compras registradas.');
+      if (tab === 'fiados') return historyNotice(data.historial?.fiados) + listOrEmpty(data.fiados, (row) => `<article class="timeline-row"><div><strong>Fiado #${row.idFiado}</strong><span>${e(formatDate(row.fechaInicio))} · vence ${e(dateText(row.fechaVencimiento) || 'sin fecha')} · promesa ${e(dateText(row.fechaPrometidaPago) || 'sin promesa')}</span></div><div><strong>Bs ${money(row.saldoPendiente)}</strong>${statusBadge(row.estadoCobranza || row.estado)}</div></article>`, 'No hay fiados registrados.');
+      if (tab === 'pagos') return historyNotice(data.historial?.pagos) + listOrEmpty(data.pagos, (row) => `<article class="timeline-row"><div><strong>Pago a fiado #${row.idFiado}</strong><span>${e(formatDate(row.fechaPago))} · ${e(statusText(row.metodoPago))} · ${e(row.administrador || 'Sistema')}</span></div><strong>Bs ${money(row.monto)}</strong></article>`, 'No hay pagos registrados.');
+      if (tab === 'seguimiento') return data.permisos?.seguimientoCobranza
+        ? historyNotice(data.historial?.seguimientos) + listOrEmpty(data.seguimientos, (row) => `<article class="timeline-row"><div><strong>${e(statusText(row.tipo))}</strong><span>${e(formatDate(row.creadoEn))} · ${e(statusText(row.canal))} · ${e(row.administrador || 'Sistema')}</span><p>${e(row.detalle)}</p></div>${row.fechaCompromiso ? `<strong>${e(dateText(row.fechaCompromiso))}</strong>` : ''}</article>`, 'No hay seguimientos registrados.')
+        : '<div class="plan-note">El seguimiento de cobranza esta disponible en el plan avanzado.</div>';
       return '';
     }
 
@@ -304,14 +316,23 @@
         const returnFocus = document.activeElement;
         const [data, debts] = await Promise.all([
           api(`/api/clientes/${idCliente}`),
-          api(`/api/fiados?cliente=${encodeURIComponent(idCliente)}`)
+          api(`/api/fiados?cliente=${encodeURIComponent(idCliente)}&pagina=1&limite=20`)
         ]);
         data.fiados = debts.fiados || debts;
+        data.historial = data.historial || {};
+        data.historial.fiados = {
+          mostrados: data.fiados.length,
+          total: Number(debts.total || data.fiados.length),
+          limite: Number(debts.pageSize || debts.limite || 20),
+          truncado: Number(debts.total || data.fiados.length) > data.fiados.length
+        };
         const customer = data.cliente;
+        const tabs = ['resumen', 'compras', 'fiados', 'pagos'];
+        if (data.permisos?.seguimientoCobranza) tabs.push('seguimiento');
         modalRoot.innerHTML = `<div class="modal-backdrop"><section class="modal modal-wide customer-profile-modal" role="dialog" aria-modal="true" aria-label="Ficha de ${e(customer.nombre)}">
           <div class="profile-heading"><div><span class="eyebrow">Ficha de cliente</span><h3>${e(customer.nombre)}</h3><p>${e(customer.telefono || 'Sin telefono')} · ${e(customer.documentoIdentidad || 'Sin documento')}</p></div>${statusBadge(customer.activo ? 'activo' : 'inactivo')}</div>
-          <div class="profile-actions"><button type="button" class="secondary" data-profile-statement>Estado de cuenta</button>${Number(customer.deudaActual) > 0 ? '<button type="button" data-profile-pay>Registrar pago</button>' : ''}${can('recordatorios_fiado') && customer.aceptaRecordatorios ? '<button type="button" class="secondary" data-profile-whatsapp>WhatsApp</button>' : ''}</div>
-          <nav class="profile-tabs" aria-label="Secciones de la ficha">${['resumen', 'compras', 'fiados', 'pagos', 'seguimiento'].map((tab) => `<button type="button" class="secondary" data-profile-tab="${tab}">${e(statusText(tab))}</button>`).join('')}</nav>
+          <div class="profile-actions"><button type="button" class="secondary" data-profile-statement>Estado de cuenta</button>${Number(customer.deudaActual) > 0 && !readOnly() ? '<button type="button" data-profile-pay>Registrar pago</button>' : ''}${can('recordatorios_fiado') && customer.aceptaRecordatorios ? '<button type="button" class="secondary" data-profile-whatsapp>WhatsApp</button>' : ''}</div>
+          <nav class="profile-tabs" aria-label="Secciones de la ficha">${tabs.map((tab) => `<button type="button" class="secondary" data-profile-tab="${tab}">${e(statusText(tab))}</button>`).join('')}</nav>
           <div class="modal-body" data-profile-content>${profileTabBody(data, 'resumen')}</div>
           <div class="modal-actions"><button type="button" class="secondary" data-modal-cancel>Cerrar</button></div>
         </section></div>`;
@@ -343,6 +364,7 @@
     }
 
     async function openPayment({ idFiado = null, idCliente = null } = {}) {
+      if (readOnly()) return showError('La suscripcion esta inactiva. Puedes consultar la deuda, pero no registrar pagos hasta renovarla.');
       let debt = null;
       let customer = null;
       try {
@@ -354,7 +376,6 @@
         await openFormModal({
           title: debt ? `Pago de fiado #${debt.idFiado}` : `Pago acumulado de ${customer.nombre}`,
           body: paymentFields(debt, customer, customerId, operationKey), wide: true, submitText: 'Registrar pago',
-          allowReadOnlyOperation: true,
           onOpen: (form) => {
             const method = form.elements.metodoPago;
             const amount = form.elements.monto;
@@ -389,7 +410,7 @@
             };
             if (!debt) payload.idCliente = customerId;
             const result = await api(debt ? `/api/fiados/${debt.idFiado}/pagos` : '/api/pagos-fiado/cliente', {
-              method: 'POST', body: JSON.stringify(payload), allowReadOnlyWrite: true
+              method: 'POST', body: JSON.stringify(payload)
             });
             const distribution = result.aplicaciones?.length
               ? ` Distribucion: ${result.aplicaciones.map((item) => `fiado #${item.idFiado}: Bs ${money(item.monto)}`).join(', ')}.` : '';
@@ -413,9 +434,9 @@
 
     function collectionActions(row) {
       return `<div class="actions">
-        ${Number(row.saldoPendiente || 0) > 0 ? `<button type="button" class="small" data-debt-pay="${row.idFiado}">Registrar pago</button>` : ''}
-        ${Number(row.saldoPendiente || 0) > 0 ? `<button type="button" class="small secondary" data-customer-pay-accum="${row.idCliente}">Pago acumulado</button>` : ''}
-        ${Number(row.saldoPendiente || 0) > 0 && can('fiados_basico') && !readOnly() ? `<button type="button" class="small secondary" data-debt-promise="${row.idFiado}">Registrar promesa</button>` : ''}
+        ${Number(row.saldoPendiente || 0) > 0 && !readOnly() ? `<button type="button" class="small" data-debt-pay="${row.idFiado}">Registrar pago</button>` : ''}
+        ${Number(row.saldoPendiente || 0) > 0 && !readOnly() ? `<button type="button" class="small secondary" data-customer-pay-accum="${row.idCliente}">Pago acumulado</button>` : ''}
+        ${Number(row.saldoPendiente || 0) > 0 && can('seguimiento_cobranza') && !readOnly() ? `<button type="button" class="small secondary" data-debt-promise="${row.idFiado}">Registrar promesa</button>` : ''}
         ${can('seguimiento_cobranza') && !readOnly() ? `<button type="button" class="small secondary" data-debt-followup="${row.idFiado}" data-customer="${row.idCliente}">Seguimiento</button>` : ''}
         ${can('recordatorios_fiado') && row.aceptaRecordatorios !== false ? `<button type="button" class="small secondary" data-debt-whatsapp="${row.idFiado}" data-customer="${row.idCliente}">WhatsApp</button>` : ''}
         <button type="button" class="small secondary" data-debt-statement="${row.idCliente}">Estado de cuenta</button>
@@ -431,32 +452,32 @@
     }
 
     async function renderCollections(focus = null) {
-      if (focus?.idCliente) ui.collectionFilters.cliente = focus.idCliente;
+      if (focus?.idCliente) {
+        ui.collectionFilters.cliente = focus.idCliente;
+        ui.collectionPage = 1;
+      }
+      const request = ++ui.collectionRequest;
       view.innerHTML = '<div class="panel loading-state">Cargando cobranza...</div>';
       try {
         const advancedAlerts = can('recordatorios_fiado');
         const query = new URLSearchParams({ pagina: ui.collectionPage, limite: 20 });
         Object.entries(ui.collectionFilters).forEach(([key, value]) => { if (value !== '') query.set(key, value); });
-        let data;
-        if (advancedAlerts && ui.collectionFilters.estado !== 'pagado') {
-          data = await api(`/api/cobranza/alertas?${query}`);
-        } else {
-          const debtQuery = new URLSearchParams({ pagina: ui.collectionPage, limite: 20 });
-          if (ui.collectionFilters.cliente) debtQuery.set('cliente', ui.collectionFilters.cliente);
-          if (ui.collectionFilters.estado === 'pagado') debtQuery.set('estado', 'pagado');
-          data = await api(`/api/fiados?${debtQuery}`);
-        }
-        let rows = data.alertas || data.fiados || data;
-        const search = String(ui.collectionFilters.busqueda || '').trim().toLocaleLowerCase();
-        if (search) rows = rows.filter((row) => `${row.cliente || ''} ${row.telefono || ''}`.toLocaleLowerCase().includes(search));
-        const totalDebt = rows.reduce((sum, row) => sum + Number(row.saldoPendiente || 0), 0);
-        const count = (name) => rows.filter((row) => (row.estadoCobranza || row.estado) === name).length;
+        const endpoint = advancedAlerts && ui.collectionFilters.estado !== 'pagado'
+          ? '/api/cobranza/alertas'
+          : '/api/fiados';
+        const data = await api(`${endpoint}?${query}`);
+        if (request !== ui.collectionRequest) return;
+        const rows = data.alertas || data.fiados || data;
+        const summary = data.resumen || {};
+        const total = Number(data.total || rows.length);
         view.innerHTML = `<div class="credit-heading"><div><span class="eyebrow">Cobranza</span><h3>Deudas y compromisos en un solo lugar</h3><p>Los cobros se registran sin volver a afectar inventario.</p></div>${can('limites_credito') ? '<button type="button" class="secondary" data-credit-config>Configurar credito</button>' : ''}</div>
-          <div class="cards collection-summary-cards"><article class="card"><span>Deuda visible</span><strong>Bs ${money(totalDebt)}</strong></article><article class="card"><span>Vencidos</span><strong>${count('vencido')}</strong></article><article class="card"><span>Vence hoy</span><strong>${count('vence_hoy')}</strong></article><article class="card"><span>Proximos</span><strong>${count('proximo_a_vencer')}</strong></article><article class="card"><span>Sin fecha</span><strong>${count('sin_fecha')}</strong></article></div>
+          <div class="cards collection-summary-cards"><article class="card"><span>Deuda total filtrada</span><strong>Bs ${money(summary.deudaTotal || 0)}</strong></article><article class="card"><span>Vencidos filtrados</span><strong>${Number(summary.vencidos || 0)}</strong></article><article class="card"><span>Vence hoy</span><strong>${Number(summary.venceHoy || 0)}</strong></article><article class="card"><span>Proximos</span><strong>${Number(summary.proximos || 0)}</strong></article><article class="card"><span>Sin fecha</span><strong>${Number(summary.sinFecha || 0)}</strong></article></div>
           ${advancedAlerts ? '' : '<div class="panel plan-note"><strong>Alertas y WhatsApp disponibles en plan avanzado.</strong><p>El pago y consulta de deuda existente siguen disponibles.</p></div>'}
-          ${collectionFiltersMarkup()}<div id="collectionResults">${collectionRowsMarkup(rows)}</div>${pagerMarkup(Number(data.pagina || ui.collectionPage), Number(data.limite || 20), Number(data.total || rows.length), 'collection')}`;
+          ${readOnly() ? '<div class="panel plan-note"><strong>Suscripcion inactiva: solo consulta.</strong><p>Puedes revisar clientes y deuda historica, pero no registrar pagos ni cambios hasta renovar.</p></div>' : ''}
+          ${collectionFiltersMarkup()}<p class="hint collection-page-count">Mostrando ${rows.length} de ${total} resultados filtrados.</p><div id="collectionResults">${collectionRowsMarkup(rows)}</div>${pagerMarkup(Number(data.page || data.pagina || ui.collectionPage), Number(data.pageSize || data.limite || 20), total, 'collection')}`;
         wireCollectionView(rows);
       } catch (error) {
+        if (request !== ui.collectionRequest) return;
         view.innerHTML = `<div class="panel error-state"><strong>No se pudo cargar la cobranza.</strong><p>${e(error.message)}</p><button type="button" data-retry-collections>Reintentar</button></div>`;
         view.querySelector('[data-retry-collections]')?.addEventListener('click', () => renderCollections(focus));
       }
@@ -464,13 +485,30 @@
 
     function wireCollectionView(rows) {
       view.querySelector('[data-credit-config]')?.addEventListener('click', openCreditConfiguration);
-      view.querySelector('#collectionFilters')?.addEventListener('submit', (event) => {
+      const filterForm = view.querySelector('#collectionFilters');
+      filterForm?.addEventListener('submit', (event) => {
         event.preventDefault();
+        clearTimeout(ui.collectionSearchTimer);
         ui.collectionFilters = Object.fromEntries(new FormData(event.currentTarget).entries());
         ui.collectionPage = 1;
         renderCollections();
       });
-      view.querySelector('[data-clear-collection-filters]')?.addEventListener('click', () => { ui.collectionFilters = {}; ui.collectionPage = 1; renderCollections(); });
+      filterForm?.elements.busqueda?.addEventListener('input', () => {
+        clearTimeout(ui.collectionSearchTimer);
+        ui.collectionRequest += 1;
+        ui.collectionSearchTimer = setTimeout(() => {
+          if (!view.contains(filterForm)) return;
+          ui.collectionFilters = Object.fromEntries(new FormData(filterForm).entries());
+          ui.collectionPage = 1;
+          renderCollections();
+        }, 350);
+      });
+      view.querySelector('[data-clear-collection-filters]')?.addEventListener('click', () => {
+        clearTimeout(ui.collectionSearchTimer);
+        ui.collectionFilters = {};
+        ui.collectionPage = 1;
+        renderCollections();
+      });
       view.querySelectorAll('[data-collection-page]').forEach((button) => button.addEventListener('click', () => { ui.collectionPage = Number(button.dataset.collectionPage); renderCollections(); }));
       view.querySelectorAll('[data-debt-pay]').forEach((button) => button.addEventListener('click', () => openPayment({ idFiado: button.dataset.debtPay })));
       view.querySelectorAll('[data-customer-pay-accum]').forEach((button) => button.addEventListener('click', () => openPayment({ idCliente: button.dataset.customerPayAccum })));
@@ -590,10 +628,11 @@
       const purchasesTotal = Number(data.resumenPeriodo?.compras?.total ?? data.compras.reduce((sum, row) => sum + Number(row.total || 0), 0));
       const generatedDebt = Number(data.resumenPeriodo?.fiadoGenerado?.total ?? [...data.fiadosAbiertos, ...data.fiadosPagados].reduce((sum, row) => sum + Number(row.totalFiado || 0), 0));
       const paymentsTotal = Number(data.resumenPeriodo?.pagos?.total ?? data.pagos.reduce((sum, row) => sum + Number(row.monto || 0), 0));
+      const page = data.paginacion || data;
       return `<section class="account-statement" id="customerAccountStatement">
         <header><div><span class="eyebrow">Estado de cuenta</span><h2>${e(customer.nombre)}</h2><p>${e(state().context?.tienda?.nombre || 'Mi tienda')} · generado ${e(formatDate(new Date()))}</p><p>Periodo: ${e(period.fechaDesde || 'inicio')} a ${e(period.fechaHasta || 'hoy')}</p></div><div><strong>Deuda actual</strong><span>Bs ${money(customer.deudaActual)}</span></div></header>
         <div class="statement-summary"><span>Compras<strong>Bs ${money(purchasesTotal)}</strong></span><span>Fiado generado<strong>Bs ${money(generatedDebt)}</strong></span><span>Pagos<strong>Bs ${money(paymentsTotal)}</strong></span><span>Deuda actual<strong>Bs ${money(customer.deudaActual)}</strong></span><span>Limite<strong>${valueOrUnknown(customer.limiteEfectivo, 'Bs ')}</strong></span><span>Credito disponible<strong>${valueOrUnknown(customer.creditoDisponible, 'Bs ')}</strong></span></div>
-        <h3>Movimientos</h3>${listOrEmpty(data.movimientos, (row) => `<article class="statement-row"><div><strong>${e(statusText(row.tipo))}</strong><span>${e(formatDate(row.fecha))}${row.idFiado ? ` · Fiado #${e(row.idFiado)}` : ''}</span></div><strong class="${row.tipo === 'pago' ? 'text-ok' : 'text-danger'}">${row.tipo === 'pago' ? '-' : '+'} Bs ${money(row.monto)}</strong></article>`, 'No hay movimientos en el periodo.')}
+        <h3>Movimientos</h3><p class="hint">Mostrando ${data.movimientos.length} de ${Number(page.total || data.movimientos.length)} movimientos, pagina ${Number(page.page || 1)} de ${Number(page.totalPages || 1)}.</p>${listOrEmpty(data.movimientos, (row) => `<article class="statement-row"><div><strong>${e(statusText(row.tipo))}</strong><span>${e(formatDate(row.fecha))}${row.idFiado ? ` · Fiado #${e(row.idFiado)}` : ''}</span></div><strong class="${row.tipo === 'pago' ? 'text-ok' : 'text-danger'}">${row.tipo === 'pago' ? '-' : '+'} Bs ${money(row.monto)}</strong></article>`, 'No hay movimientos en el periodo.')}
         <p class="statement-note">Este documento es un estado de cuenta interno y no reemplaza una factura fiscal.</p>
       </section>`;
     }
@@ -601,16 +640,20 @@
     async function openStatement(idCliente, period = {}) {
       try {
         const returnFocus = document.activeElement;
-        const query = new URLSearchParams({ pagina: 1, limite: 100 });
+        const statementPage = Number(period.pagina || 1);
+        const query = new URLSearchParams({ pagina: statementPage, limite: 100 });
         if (period.fechaDesde) query.set('fechaDesde', period.fechaDesde);
         if (period.fechaHasta) query.set('fechaHasta', period.fechaHasta);
         const data = await api(`/api/clientes/${idCliente}/estado-cuenta?${query}`);
-        modalRoot.innerHTML = `<div class="modal-backdrop"><section class="modal modal-wide statement-modal" role="dialog" aria-modal="true" aria-label="Estado de cuenta"><form class="statement-filters no-print" data-statement-filters><label>Desde<input name="fechaDesde" type="date" value="${e(period.fechaDesde || '')}"></label><label>Hasta<input name="fechaHasta" type="date" value="${e(period.fechaHasta || '')}"></label><button type="submit" class="secondary">Aplicar periodo</button></form>${statementMarkup(data, period)}<div class="modal-actions no-print"><button type="button" class="secondary" data-statement-copy>Copiar resumen</button>${can('recordatorios_fiado') ? '<button type="button" class="secondary" data-statement-whatsapp>Preparar WhatsApp</button>' : ''}<button type="button" data-statement-print>Imprimir</button><button type="button" class="secondary" data-modal-cancel>Cerrar</button></div></section></div>`;
+        modalRoot.innerHTML = `<div class="modal-backdrop"><section class="modal modal-wide statement-modal" role="dialog" aria-modal="true" aria-label="Estado de cuenta"><form class="statement-filters no-print" data-statement-filters><label>Desde<input name="fechaDesde" type="date" value="${e(period.fechaDesde || '')}"></label><label>Hasta<input name="fechaHasta" type="date" value="${e(period.fechaHasta || '')}"></label><button type="submit" class="secondary">Aplicar periodo</button></form>${statementMarkup(data, period)}<div class="credit-pagination no-print" aria-label="Paginas del estado de cuenta"><button type="button" class="secondary" data-statement-page="${statementPage - 1}" ${data.hasPreviousPage ? '' : 'disabled'}>Anterior</button><span>Pagina ${data.page} de ${data.totalPages}</span><button type="button" class="secondary" data-statement-page="${statementPage + 1}" ${data.hasNextPage ? '' : 'disabled'}>Siguiente</button></div><div class="modal-actions no-print"><button type="button" class="secondary" data-statement-copy>Copiar resumen</button>${can('recordatorios_fiado') ? '<button type="button" class="secondary" data-statement-whatsapp>Preparar WhatsApp</button>' : ''}<button type="button" data-statement-print>Imprimir</button><button type="button" class="secondary" data-modal-cancel>Cerrar</button></div></section></div>`;
         modalRoot.querySelector('[data-statement-filters]').addEventListener('submit', (event) => {
           event.preventDefault();
           const fd = new FormData(event.currentTarget);
           openStatement(idCliente, { fechaDesde: nullable(fd.get('fechaDesde')), fechaHasta: nullable(fd.get('fechaHasta')) });
         });
+        modalRoot.querySelectorAll('[data-statement-page]:not([disabled])').forEach((button) => button.addEventListener('click', () => {
+          openStatement(idCliente, { ...period, pagina: Number(button.dataset.statementPage) });
+        }));
         modalRoot.querySelector('[data-modal-cancel]').addEventListener('click', () => { modalRoot.innerHTML = ''; returnFocus?.focus?.(); });
         modalRoot.querySelector('[data-statement-print]').addEventListener('click', () => window.print());
         modalRoot.querySelector('[data-statement-copy]').addEventListener('click', async (event) => {

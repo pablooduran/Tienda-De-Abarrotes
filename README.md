@@ -557,13 +557,17 @@ La interfaz conserva **Clientes** y presenta las deudas bajo **Cobranza**. La pr
 npm.cmd run test:customers-credit-frontend
 ```
 
-Con un plan basico, confirme que se pueden consultar clientes, deuda y estado de cuenta, y registrar pagos de deuda existente. Los limites personalizados, alertas, seguimientos y recordatorios deben aparecer bloqueados o ausentes segun sus funciones.
+Con un plan basico y una suscripcion activa, confirme que se pueden consultar clientes, deuda y estado de cuenta, y registrar pagos de deuda existente. El detalle basico nunca incluye seguimientos de cobranza; la respuesta informa la capacidad `permisos.seguimientoCobranza`. Los limites personalizados, seguimientos y recordatorios deben aparecer bloqueados o ausentes segun sus funciones.
 
 Con un plan avanzado, confirme el alta y edicion ampliada, configuracion de credito, alertas, promesas, seguimientos y preparacion de WhatsApp. Abrir WhatsApp no debe registrar un envio; **Marcar como enviado manualmente** es una accion separada.
 
 En el POS, seleccione un cliente y verifique deuda, limite, credito disponible y fecha de vencimiento. El cliente ocasional solo puede pagar al contado. Una politica de advertencia debe exigir confirmacion y motivo; una politica de bloqueo debe permitir cambiar la venta a contado.
 
-Para pagos especificos y acumulados, pruebe efectivo, cambio, otros metodos y un reintento de red. La clave de operacion debe mantenerse durante el mismo intento y renovarse al abrir otro pago. En modo de solo lectura por downgrade, la consulta permanece disponible y el cobro de deuda existente sigue el permiso operativo del backend.
+Para pagos especificos y acumulados, pruebe efectivo, cambio, otros metodos y un reintento de red. La clave de operacion debe mantenerse durante el mismo intento y renovarse al abrir otro pago. En modo de solo lectura, la consulta historica permanece disponible, pero los cobros y demas escrituras quedan bloqueados hasta reactivar la suscripcion.
+
+Los listados de cobranza aplican busqueda, estado y fechas en el backend antes de paginar. Sus tarjetas resumen representan el total filtrado de la tienda; la interfaz informa por separado cuantas filas de ese total aparecen en la pagina actual. El estado de cuenta pagina una sola cronologia combinada de ventas, fiados y pagos, con orden determinista y metadatos `page`, `pageSize`, `total`, `totalPages`, `hasNextPage` y `hasPreviousPage`.
+
+El selector del POS conserva por ahora el limite operativo de 500 clientes cargados. La busqueda remota paginada para tiendas con catalogos mayores queda pendiente; no se debe aumentar el limite ni cargar todos los clientes sin paginacion.
 
 Revise la interfaz a 360, 768 y 1366 px. En movil, clientes y cuentas se muestran como tarjetas sin desplazamiento horizontal obligatorio. El estado de cuenta se imprime desde el navegador con estilos A4; no se genera PDF ni XLSX.
 

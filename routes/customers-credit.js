@@ -32,6 +32,9 @@ const FOLLOWUP_TYPES = new Set(['nota', 'llamada', 'mensaje_enviado_manual', 'co
 const FOLLOWUP_CHANNELS = new Set(['ninguno', 'whatsapp', 'telefono', 'presencial', 'correo']);
 const TEMPLATE_TYPES = new Set(['recordatorio_previo', 'deuda_vencida', 'confirmacion_pago', 'estado_cuenta']);
 const TEMPLATE_VARIABLES = new Set(['tienda', 'cliente', 'saldo', 'vencimiento', 'dias_atraso', 'comprobante']);
+const COLLECTION_STATES = new Set(['vencido', 'vence_hoy', 'proximo_a_vencer', 'al_dia', 'sin_fecha', 'pagado']);
+const STORED_DEBT_STATES = new Set(['pendiente', 'parcial', 'pagado']);
+const CUSTOMER_HISTORY_LIMIT = 20;
 
 function asyncRoute(handler) {
   return (req, res, next) => Promise.resolve(handler(req, res, next)).catch(next);
@@ -48,9 +51,103 @@ function positiveId(value, label = 'El identificador') {
 }
 
 function pagination(query, maximum = 100) {
-  const page = Math.max(1, Number.parseInt(query.pagina || query.page, 10) || 1);
-  const limit = Math.min(maximum, Math.max(1, Number.parseInt(query.limite || query.limit, 10) || 20));
+  const rawPage = query.pagina ?? query.page;
+  const rawLimit = query.limite ?? query.limit;
+  const page = rawPage === undefined || rawPage === '' ? 1 : Number(rawPage);
+  const limit = rawLimit === undefined || rawLimit === '' ? 20 : Number(rawLimit);
+  if (!Number.isInteger(page) || page < 1) throw creditError(400, 'La pagina debe ser un entero positivo.');
+  if (!Number.isInteger(limit) || limit < 1 || limit > maximum) {
+    throw creditError(400, `El limite debe ser un entero entre 1 y ${maximum}.`);
+  }
   return { page, limit, offset: (page - 1) * limit };
+}
+
+function paginationMetadata(page, pageSize, total) {
+  const totalPages = Math.max(1, Math.ceil(total / pageSize));
+  return {
+    page,
+    pageSize,
+    total,
+    totalPages,
+    hasNextPage: page < totalPages,
+    hasPreviousPage: page > 1,
+    pagina: page,
+    limite: pageSize
+  };
+}
+
+function warningThroughDate(today, warningDays) {
+  return formatLocalDate(addLocalDays(parseBusinessDate(today), warningDays));
+}
+
+function addCalculatedDebtStateFilter(conditions, params, state, options = {}) {
+  if (!state) return;
+  const allowed = options.allowStored
+    ? new Set([...COLLECTION_STATES, ...STORED_DEBT_STATES])
+    : new Set([...COLLECTION_STATES].filter((item) => item !== 'pagado'));
+  if (!allowed.has(state)) throw creditError(400, 'El estado de cobranza no es valido.');
+  const alias = options.alias || 'f';
+  const effectiveDate = `COALESCE(${alias}.fechaPrometidaPago,${alias}.fechaVencimiento)`;
+  if (options.allowStored && (state === 'pendiente' || state === 'parcial')) {
+    conditions.push(`${alias}.estado=?`);
+    params.push(state);
+    return;
+  }
+  if (state === 'pagado') {
+    conditions.push(`${alias}.saldoPendiente<=0`);
+  } else if (state === 'vencido') {
+    conditions.push(`${alias}.saldoPendiente>0 AND ${effectiveDate} IS NOT NULL AND ${effectiveDate}<?`);
+    params.push(options.today);
+  } else if (state === 'vence_hoy') {
+    conditions.push(`${alias}.saldoPendiente>0 AND ${effectiveDate}=?`);
+    params.push(options.today);
+  } else if (state === 'proximo_a_vencer') {
+    conditions.push(`${alias}.saldoPendiente>0 AND ${effectiveDate}>? AND ${effectiveDate}<=?`);
+    params.push(options.today, options.warningThrough);
+  } else if (state === 'al_dia') {
+    conditions.push(`${alias}.saldoPendiente>0 AND ${effectiveDate}>?`);
+    params.push(options.warningThrough);
+  } else if (state === 'sin_fecha') {
+    conditions.push(`${alias}.saldoPendiente>0 AND ${effectiveDate} IS NULL`);
+  }
+}
+
+function collectionSummarySql(where) {
+  return `SELECT COUNT(*) total, COALESCE(SUM(f.saldoPendiente),0) deudaTotal,
+                 COALESCE(SUM(f.saldoPendiente>0 AND COALESCE(f.fechaPrometidaPago,f.fechaVencimiento) IS NOT NULL
+                   AND COALESCE(f.fechaPrometidaPago,f.fechaVencimiento)<?),0) vencidos,
+                 COALESCE(SUM(f.saldoPendiente>0 AND COALESCE(f.fechaPrometidaPago,f.fechaVencimiento)=?),0) venceHoy,
+                 COALESCE(SUM(f.saldoPendiente>0 AND COALESCE(f.fechaPrometidaPago,f.fechaVencimiento)>?
+                   AND COALESCE(f.fechaPrometidaPago,f.fechaVencimiento)<=?),0) proximos,
+                 COALESCE(SUM(f.saldoPendiente>0 AND COALESCE(f.fechaPrometidaPago,f.fechaVencimiento)>?),0) alDia,
+                 COALESCE(SUM(f.saldoPendiente>0 AND COALESCE(f.fechaPrometidaPago,f.fechaVencimiento) IS NULL),0) sinFecha,
+                 COALESCE(SUM(f.saldoPendiente<=0),0) pagados
+          FROM fiado f JOIN cliente c ON c.idTienda=f.idTienda AND c.idCliente=f.idCliente
+          WHERE ${where}`;
+}
+
+function publicCollectionSummary(row) {
+  return {
+    deudaTotal: row.deudaTotal,
+    vencidos: Number(row.vencidos || 0),
+    venceHoy: Number(row.venceHoy || 0),
+    proximos: Number(row.proximos || 0),
+    alDia: Number(row.alDia || 0),
+    sinFecha: Number(row.sinFecha || 0),
+    pagados: Number(row.pagados || 0)
+  };
+}
+
+function historyMetadata(shown, total) {
+  return {
+    shown,
+    mostrados: shown,
+    total,
+    limit: CUSTOMER_HISTORY_LIMIT,
+    limite: CUSTOMER_HISTORY_LIMIT,
+    truncated: total > shown,
+    truncado: total > shown
+  };
 }
 
 function booleanFilter(value, label) {
@@ -339,7 +436,7 @@ async function updateCustomer(req, res) {
 router.patch('/clientes/:id', requirePlanFeature('clientes_basico'), asyncRoute(updateCustomer));
 router.put('/clientes/:id', requirePlanFeature('clientes_basico'), asyncRoute(updateCustomer));
 
-router.get('/clientes/:id/resumen', asyncRoute(async (req, res) => {
+router.get('/clientes/:id/resumen', requirePlanFeature('clientes_basico'), asyncRoute(async (req, res) => {
   const idTienda = tenantId(req);
   const idCliente = positiveId(req.params.id, 'El cliente');
   const snapshot = await customerSnapshot(pool, idTienda, idCliente);
@@ -353,7 +450,7 @@ router.get('/clientes/:id/resumen', asyncRoute(async (req, res) => {
   res.json({ cliente: snapshot.summary, compras: purchases[0], pagos: payments[0], fiadosAbiertos: Number(openDebts[0].cantidad) });
 }));
 
-router.get('/clientes/:id/estado-cuenta', asyncRoute(async (req, res) => {
+router.get('/clientes/:id/estado-cuenta', requirePlanFeature('estado_cuenta_basico'), asyncRoute(async (req, res) => {
   const idTienda = tenantId(req);
   const idCliente = positiveId(req.params.id, 'El cliente');
   const { page, limit, offset } = pagination(req.query);
@@ -365,19 +462,44 @@ router.get('/clientes/:id/estado-cuenta', asyncRoute(async (req, res) => {
   const paymentParams = [idTienda, idCliente];
   const debtConditions = ['f.idTienda=?', 'f.idCliente=?'];
   const debtParams = [idTienda, idCliente];
-  const saleConditions = ['idTienda=?', 'idCliente=?'];
+  const saleConditions = ['v.idTienda=?', 'v.idCliente=?'];
   const saleParams = [idTienda, idCliente];
+  const debtEventDate = "COALESCE(v.fecha,CONCAT(f.fechaInicio,' 00:00:00'))";
   if (from) { paymentConditions.push('pf.fechaPago>=?'); paymentParams.push(`${from} 00:00:00`); }
   if (to) { paymentConditions.push('pf.fechaPago<?'); paymentParams.push(`${addOneDay(to)} 00:00:00`); }
   if (from) {
-    debtConditions.push('f.fechaInicio>=?'); debtParams.push(from);
-    saleConditions.push('fecha>=?'); saleParams.push(`${from} 00:00:00`);
+    debtConditions.push(`${debtEventDate}>=?`); debtParams.push(`${from} 00:00:00`);
+    saleConditions.push('v.fecha>=?'); saleParams.push(`${from} 00:00:00`);
   }
   if (to) {
-    debtConditions.push('f.fechaInicio<=?'); debtParams.push(to);
-    saleConditions.push('fecha<?'); saleParams.push(`${addOneDay(to)} 00:00:00`);
+    debtConditions.push(`${debtEventDate}<?`); debtParams.push(`${addOneDay(to)} 00:00:00`);
+    saleConditions.push('v.fecha<?'); saleParams.push(`${addOneDay(to)} 00:00:00`);
   }
-  const [[debts], [payments], [sales], [debtSummaryRows], [paymentSummaryRows], [saleSummaryRows]] = await Promise.all([
+  const movementSql = `
+    SELECT 'venta' tipo, v.fecha, 1 tipoOrden, v.idVenta ordenId,
+           v.idVenta, NULL idFiado, NULL idPagoFiado, v.total monto,
+           NULL metodoPago, NULL referencia, v.codigoComprobante,
+           v.saldoPendiente, v.estadoPago
+    FROM venta v WHERE ${saleConditions.join(' AND ')}
+    UNION ALL
+    SELECT 'fiado' tipo, ${debtEventDate} fecha, 2 tipoOrden, f.idFiado ordenId,
+           f.idVenta, f.idFiado, NULL idPagoFiado, f.totalFiado monto,
+           NULL metodoPago, NULL referencia, v.codigoComprobante,
+           f.saldoPendiente, f.estado estadoPago
+    FROM fiado f LEFT JOIN venta v ON v.idTienda=f.idTienda AND v.idVenta=f.idVenta
+    WHERE ${debtConditions.join(' AND ')}
+    UNION ALL
+    SELECT 'pago' tipo, pf.fechaPago fecha, 3 tipoOrden, pf.idPagoFiado ordenId,
+           f.idVenta, pf.idFiado, pf.idPagoFiado, pf.monto,
+           cf.metodoPago, cf.referencia, v.codigoComprobante,
+           f.saldoPendiente, f.estado estadoPago
+    FROM pagoFiado pf
+    JOIN fiado f ON f.idTienda=pf.idTienda AND f.idFiado=pf.idFiado
+    JOIN cobroFiado cf ON cf.idTienda=pf.idTienda AND cf.idCobroFiado=pf.idCobroFiado
+    LEFT JOIN venta v ON v.idTienda=f.idTienda AND v.idVenta=f.idVenta
+    WHERE ${paymentConditions.join(' AND ')}`;
+  const movementParams = [...saleParams, ...debtParams, ...paymentParams];
+  const [[debts], [movementRows], [movementCountRows], [debtSummaryRows], [paymentSummaryRows], [saleSummaryRows]] = await Promise.all([
     pool.query(
       `SELECT f.idFiado, f.idVenta, f.fechaInicio, f.fechaVencimiento, f.fechaPrometidaPago,
               f.totalFiado, f.totalPagado, f.saldoPendiente, f.estado, f.activo, f.cerradoEn,
@@ -387,49 +509,54 @@ router.get('/clientes/:id/estado-cuenta', asyncRoute(async (req, res) => {
       debtParams
     ),
     pool.query(
-      `SELECT pf.idPagoFiado, pf.idFiado, pf.fechaPago, pf.monto, pf.observacion,
-              cf.metodoPago, cf.referencia, cf.idCobroFiado, a.usuario administrador
-       FROM pagoFiado pf
-       JOIN fiado f ON f.idTienda=pf.idTienda AND f.idFiado=pf.idFiado
-       JOIN cobroFiado cf ON cf.idTienda=pf.idTienda AND cf.idCobroFiado=pf.idCobroFiado
-       LEFT JOIN administrador a ON a.idTienda=cf.idTienda AND a.idAdministrador=cf.idAdministrador
-       WHERE ${paymentConditions.join(' AND ')}
-       ORDER BY pf.fechaPago DESC, pf.idPagoFiado DESC LIMIT ? OFFSET ?`,
-      [...paymentParams, limit, offset]
+      `SELECT * FROM (${movementSql}) movimientos
+       ORDER BY fecha DESC, tipoOrden DESC, ordenId DESC LIMIT ? OFFSET ?`,
+      [...movementParams, limit, offset]
     ),
-    pool.query(
-      `SELECT idVenta, fecha, total, montoPagado, saldoPendiente, estadoPago, codigoComprobante
-       FROM venta WHERE ${saleConditions.join(' AND ')} ORDER BY fecha DESC, idVenta DESC LIMIT 50`,
-      saleParams
-    ),
+    pool.query(`SELECT COUNT(*) total FROM (${movementSql}) movimientos`, movementParams),
     pool.query(`SELECT COUNT(*) cantidad, COALESCE(SUM(f.totalFiado),0) total
-      FROM fiado f WHERE ${debtConditions.join(' AND ')}`, debtParams),
+      FROM fiado f LEFT JOIN venta v ON v.idTienda=f.idTienda AND v.idVenta=f.idVenta
+      WHERE ${debtConditions.join(' AND ')}`, debtParams),
     pool.query(`SELECT COUNT(*) cantidad, COALESCE(SUM(pf.monto),0) total
       FROM pagoFiado pf JOIN fiado f ON f.idTienda=pf.idTienda AND f.idFiado=pf.idFiado
       WHERE ${paymentConditions.join(' AND ')}`, paymentParams),
     pool.query(`SELECT COUNT(*) cantidad, COALESCE(SUM(total),0) total
-      FROM venta WHERE ${saleConditions.join(' AND ')}`, saleParams)
+      FROM venta v WHERE ${saleConditions.join(' AND ')}`, saleParams)
   ]);
   const warningDays = Number(snapshot.configuration.diasAvisoVencimiento);
   const debtsWithState = debts.map((debt) => ({ ...debt, estadoCobranza: collectionState(debt, formatLocalDate(), warningDays) }));
-  const movements = [
-    ...debts.map((debt) => ({ tipo: 'fiado', fecha: debt.fechaInicio, idFiado: debt.idFiado, monto: debt.totalFiado })),
-    ...payments.map((payment) => ({ tipo: 'pago', fecha: payment.fechaPago, idFiado: payment.idFiado, monto: payment.monto, metodoPago: payment.metodoPago }))
-  ].sort((left, right) => String(right.fecha).localeCompare(String(left.fecha)));
+  const movements = movementRows.map(({ tipoOrden, ordenId, ...movement }) => movement);
+  const payments = movements.filter((movement) => movement.tipo === 'pago').map((movement) => ({
+    idPagoFiado: movement.idPagoFiado,
+    idFiado: movement.idFiado,
+    fechaPago: movement.fecha,
+    monto: movement.monto,
+    metodoPago: movement.metodoPago,
+    referencia: movement.referencia
+  }));
+  const sales = movements.filter((movement) => movement.tipo === 'venta').map((movement) => ({
+    idVenta: movement.idVenta,
+    fecha: movement.fecha,
+    total: movement.monto,
+    saldoPendiente: movement.saldoPendiente,
+    estadoPago: movement.estadoPago,
+    codigoComprobante: movement.codigoComprobante
+  }));
+  const total = Number(movementCountRows[0].total || 0);
   res.json({
     cliente: snapshot.summary,
     fiadosAbiertos: debtsWithState.filter((debt) => Number(debt.saldoPendiente) > 0),
     fiadosPagados: debtsWithState.filter((debt) => Number(debt.saldoPendiente) === 0),
     pagos: payments,
     compras: sales,
-    movimientos: movements.slice(offset, offset + limit),
+    movimientos: movements,
     resumenPeriodo: {
       compras: saleSummaryRows[0],
       fiadoGenerado: debtSummaryRows[0],
       pagos: paymentSummaryRows[0]
     },
-    pagina: page,
-    limite: limit
+    paginacion: paginationMetadata(page, limit, total),
+    ...paginationMetadata(page, limit, total)
   });
 }));
 
@@ -437,21 +564,49 @@ router.get('/clientes/:id', requirePlanFeature('clientes_basico'), asyncRoute(as
   const idTienda = tenantId(req);
   const idCliente = positiveId(req.params.id, 'El cliente');
   const snapshot = await customerSnapshot(pool, idTienda, idCliente);
-  const [[sales], [payments], [followups]] = await Promise.all([
-    pool.query('SELECT idVenta, fecha, total, montoPagado, saldoPendiente, estadoPago, codigoComprobante FROM venta WHERE idTienda=? AND idCliente=? ORDER BY fecha DESC LIMIT 20', [idTienda, idCliente]),
+  const canReadFollowups = hasFeature(req, 'seguimiento_cobranza');
+  const followupRows = canReadFollowups
+    ? pool.query(`SELECT s.idSeguimientoCobranza, s.idFiado, s.tipo, s.canal, s.detalle,
+        s.fechaCompromiso, s.creadoEn, a.usuario administrador
+        FROM seguimientoCobranza s
+        JOIN administrador a ON a.idTienda=s.idTienda AND a.idAdministrador=s.idAdministrador
+        WHERE s.idTienda=? AND s.idCliente=? ORDER BY s.creadoEn DESC LIMIT ?`,
+      [idTienda, idCliente, CUSTOMER_HISTORY_LIMIT])
+    : Promise.resolve([[]]);
+  const followupCount = canReadFollowups
+    ? pool.query('SELECT COUNT(*) total FROM seguimientoCobranza WHERE idTienda=? AND idCliente=?', [idTienda, idCliente])
+    : Promise.resolve([[{ total: 0 }]]);
+  const [[sales], [payments], [followups], [saleCount], [paymentCount], [followupCountRows]] = await Promise.all([
+    pool.query('SELECT idVenta, fecha, total, montoPagado, saldoPendiente, estadoPago, codigoComprobante FROM venta WHERE idTienda=? AND idCliente=? ORDER BY fecha DESC, idVenta DESC LIMIT ?', [idTienda, idCliente, CUSTOMER_HISTORY_LIMIT]),
     pool.query(`SELECT pf.idPagoFiado, pf.idFiado, pf.fechaPago, pf.monto, cf.metodoPago,
       a.usuario administrador
       FROM pagoFiado pf JOIN fiado f ON f.idTienda=pf.idTienda AND f.idFiado=pf.idFiado
       JOIN cobroFiado cf ON cf.idTienda=pf.idTienda AND cf.idCobroFiado=pf.idCobroFiado
       LEFT JOIN administrador a ON a.idTienda=cf.idTienda AND a.idAdministrador=cf.idAdministrador
-      WHERE f.idTienda=? AND f.idCliente=? ORDER BY pf.fechaPago DESC LIMIT 20`, [idTienda, idCliente]),
-    pool.query(`SELECT s.idSeguimientoCobranza, s.idFiado, s.tipo, s.canal, s.detalle,
-      s.fechaCompromiso, s.creadoEn, a.usuario administrador
-      FROM seguimientoCobranza s
-      JOIN administrador a ON a.idTienda=s.idTienda AND a.idAdministrador=s.idAdministrador
-      WHERE s.idTienda=? AND s.idCliente=? ORDER BY s.creadoEn DESC LIMIT 20`, [idTienda, idCliente])
+      WHERE f.idTienda=? AND f.idCliente=? ORDER BY pf.fechaPago DESC, pf.idPagoFiado DESC LIMIT ?`,
+    [idTienda, idCliente, CUSTOMER_HISTORY_LIMIT]),
+    followupRows,
+    pool.query('SELECT COUNT(*) total FROM venta WHERE idTienda=? AND idCliente=?', [idTienda, idCliente]),
+    pool.query(`SELECT COUNT(*) total FROM pagoFiado pf JOIN fiado f
+      ON f.idTienda=pf.idTienda AND f.idFiado=pf.idFiado WHERE f.idTienda=? AND f.idCliente=?`, [idTienda, idCliente]),
+    followupCount
   ]);
-  res.json({ cliente: snapshot.summary, fiados: snapshot.debts, compras: sales, pagos: payments, seguimientos: followups });
+  const response = {
+    cliente: snapshot.summary,
+    fiados: snapshot.debts,
+    compras: sales,
+    pagos: payments,
+    permisos: { seguimientoCobranza: canReadFollowups },
+    historial: {
+      compras: historyMetadata(sales.length, Number(saleCount[0].total || 0)),
+      pagos: historyMetadata(payments.length, Number(paymentCount[0].total || 0))
+    }
+  };
+  if (canReadFollowups) {
+    response.seguimientos = followups;
+    response.historial.seguimientos = historyMetadata(followups.length, Number(followupCountRows[0].total || 0));
+  }
+  res.json(response);
 }));
 
 router.get('/configuracion-credito', asyncRoute(async (req, res) => {
@@ -487,48 +642,93 @@ async function listDebts(req, res, forcedActive = null) {
     : pagination(req.query);
   const conditions = ['f.idTienda=?'];
   const params = [tenantId(req)];
+  const configuration = await getCreditConfiguration(pool, tenantId(req));
+  const today = formatLocalDate();
+  const warningThrough = warningThroughDate(today, Number(configuration.diasAvisoVencimiento));
   const active = forcedActive === null ? booleanFilter(req.query.activo, 'El filtro de actividad') : forcedActive;
   if (active !== null) { conditions.push('f.activo=?'); params.push(active); }
   if (req.query.idCliente || req.query.cliente) {
     conditions.push('f.idCliente=?'); params.push(positiveId(req.query.idCliente || req.query.cliente, 'El cliente'));
   }
-  if (req.query.estado) { conditions.push('f.estado=?'); params.push(String(req.query.estado)); }
-  if (req.query.desde) {
-    conditions.push('f.fechaInicio>=?');
-    params.push(parseLocalDate(req.query.desde, 'La fecha inicial', { allowNull: false }));
+  const search = cleanText(req.query.busqueda || req.query.texto, 100);
+  if (search) {
+    conditions.push('(c.nombre LIKE ? OR c.telefono LIKE ? OR c.telefonoNormalizado LIKE ?)');
+    const pattern = `%${search}%`;
+    params.push(pattern, pattern, pattern);
   }
-  if (req.query.hasta) {
-    conditions.push('f.fechaInicio<=?');
-    params.push(parseLocalDate(req.query.hasta, 'La fecha final', { allowNull: false }));
+  const state = String(cleanText(req.query.estado, 30) || '').toLowerCase();
+  addCalculatedDebtStateFilter(conditions, params, state, {
+    alias: 'f', today, warningThrough, allowStored: true
+  });
+  const startedFrom = req.query.desde
+    ? parseLocalDate(req.query.desde, 'La fecha inicial', { allowNull: false }) : null;
+  const startedTo = req.query.hasta
+    ? parseLocalDate(req.query.hasta, 'La fecha final', { allowNull: false }) : null;
+  if (startedFrom && startedTo && startedFrom > startedTo) {
+    throw creditError(400, 'La fecha inicial debe ser anterior a la final.');
   }
-  const [rows] = await pool.query(
-    `SELECT f.idFiado, f.idCliente, f.idVenta, f.fechaInicio, f.fechaVencimiento,
-            f.fechaPrometidaPago, f.totalFiado, f.totalPagado, f.saldoPendiente,
-            f.estado, f.activo, f.cerradoEn, c.nombre cliente, c.telefono,
-            v.codigoComprobante, v.fecha fechaVenta
-     FROM fiado f JOIN cliente c ON c.idTienda=f.idTienda AND c.idCliente=f.idCliente
-     LEFT JOIN venta v ON v.idTienda=f.idTienda AND v.idVenta=f.idVenta
-     WHERE ${conditions.join(' AND ')}
-     ORDER BY f.fechaInicio DESC, f.idFiado DESC LIMIT ? OFFSET ?`,
-    [...params, limit, offset]
-  );
-  const configuration = await getCreditConfiguration(pool, tenantId(req));
+  if (startedFrom) { conditions.push('f.fechaInicio>=?'); params.push(startedFrom); }
+  if (startedTo) { conditions.push('f.fechaInicio<=?'); params.push(startedTo); }
+  const effectiveDate = 'COALESCE(f.fechaPrometidaPago,f.fechaVencimiento)';
+  const dueFrom = req.query.venceDesde
+    ? parseLocalDate(req.query.venceDesde, 'La fecha inicial de vencimiento', { allowNull: false }) : null;
+  const dueTo = req.query.venceHasta
+    ? parseLocalDate(req.query.venceHasta, 'La fecha final de vencimiento', { allowNull: false }) : null;
+  if (dueFrom && dueTo && dueFrom > dueTo) throw creditError(400, 'La fecha inicial de vencimiento debe ser anterior a la final.');
+  if (dueFrom) { conditions.push(`${effectiveDate}>=?`); params.push(dueFrom); }
+  if (dueTo) { conditions.push(`${effectiveDate}<=?`); params.push(dueTo); }
+  const where = conditions.join(' AND ');
+  const [[rows], [summaryRows]] = await Promise.all([
+    pool.query(
+      `SELECT f.idFiado, f.idCliente, f.idVenta, f.fechaInicio, f.fechaVencimiento,
+              f.fechaPrometidaPago, f.totalFiado, f.totalPagado, f.saldoPendiente,
+              f.estado, f.activo, f.cerradoEn, c.nombre cliente, c.telefono,
+              c.aceptaRecordatorios, c.canalPreferido,
+              v.codigoComprobante, v.fecha fechaVenta
+       FROM fiado f JOIN cliente c ON c.idTienda=f.idTienda AND c.idCliente=f.idCliente
+       LEFT JOIN venta v ON v.idTienda=f.idTienda AND v.idVenta=f.idVenta
+       WHERE ${where}
+       ORDER BY ${effectiveDate} IS NULL, ${effectiveDate}, f.fechaInicio, f.idFiado
+       LIMIT ? OFFSET ?`,
+      [...params, limit, offset]
+    ),
+    pool.query(collectionSummarySql(where), [today, today, today, warningThrough, warningThrough, ...params])
+  ]);
   const debts = rows.map((row) => ({
       ...row,
-      estadoCobranza: collectionState(row, formatLocalDate(), Number(configuration.diasAvisoVencimiento)),
-      fechaEfectiva: effectiveDebtDate(row)
+      aceptaRecordatorios: Boolean(row.aceptaRecordatorios),
+      estadoCobranza: collectionState(row, today, Number(configuration.diasAvisoVencimiento)),
+      fechaEfectiva: effectiveDebtDate(row),
+      diasRestantes: effectiveDebtDate(row) ? Math.max(0, daysBetween(today, effectiveDebtDate(row))) : null,
+      diasAtraso: effectiveDebtDate(row) ? Math.max(0, -daysBetween(today, effectiveDebtDate(row))) : null
     }));
-  res.json(legacyResponse ? debts : { fiados: debts, pagina: page, limite: limit });
+  const total = Number(summaryRows[0].total || 0);
+  res.json(legacyResponse ? debts : {
+    fiados: debts,
+    resumen: publicCollectionSummary(summaryRows[0]),
+    paginacion: paginationMetadata(page, limit, total),
+    ...paginationMetadata(page, limit, total)
+  });
 }
 
-router.get('/fiados/activos', asyncRoute((req, res) => listDebts(req, res, 1)));
-router.get('/fiados/ocultos', asyncRoute((req, res) => listDebts(req, res, 0)));
-router.get('/fiados', asyncRoute((req, res) => listDebts(req, res)));
+router.get('/fiados/activos', requirePlanFeature('fiados_basico'), asyncRoute((req, res) => listDebts(req, res, 1)));
+router.get('/fiados/ocultos', requirePlanFeature('fiados_basico'), asyncRoute((req, res) => listDebts(req, res, 0)));
+router.get('/fiados', requirePlanFeature('fiados_basico'), asyncRoute((req, res) => listDebts(req, res)));
 
-router.get('/fiados/:id', asyncRoute(async (req, res) => {
+router.get('/fiados/:id', requirePlanFeature('fiados_basico'), asyncRoute(async (req, res) => {
   const idTienda = tenantId(req);
   const idFiado = positiveId(req.params.id, 'El fiado');
-  const [[debts], [payments], [details], [followups]] = await Promise.all([
+  const canReadFollowups = hasFeature(req, 'seguimiento_cobranza');
+  const followupRows = canReadFollowups
+    ? pool.query(`SELECT idSeguimientoCobranza, tipo, canal, detalle, fechaCompromiso, creadoEn
+        FROM seguimientoCobranza WHERE idTienda=? AND idFiado=?
+        ORDER BY creadoEn DESC, idSeguimientoCobranza DESC LIMIT ?`,
+      [idTienda, idFiado, CUSTOMER_HISTORY_LIMIT])
+    : Promise.resolve([[]]);
+  const followupCountRows = canReadFollowups
+    ? pool.query('SELECT COUNT(*) total FROM seguimientoCobranza WHERE idTienda=? AND idFiado=?', [idTienda, idFiado])
+    : Promise.resolve([[{ total: 0 }]]);
+  const [[debts], [payments], [details], [followups], [paymentCounts], [followupCounts]] = await Promise.all([
     pool.query(`SELECT f.*, c.nombre cliente, c.telefono, v.codigoComprobante, v.fecha fechaVenta
       FROM fiado f JOIN cliente c ON c.idTienda=f.idTienda AND c.idCliente=f.idCliente
       LEFT JOIN venta v ON v.idTienda=f.idTienda AND v.idVenta=f.idVenta
@@ -538,23 +738,33 @@ router.get('/fiados/:id', asyncRoute(async (req, res) => {
       a.usuario administrador
       FROM pagoFiado pf JOIN cobroFiado cf ON cf.idTienda=pf.idTienda AND cf.idCobroFiado=pf.idCobroFiado
       LEFT JOIN administrador a ON a.idTienda=cf.idTienda AND a.idAdministrador=cf.idAdministrador
-      WHERE pf.idTienda=? AND pf.idFiado=? ORDER BY pf.fechaPago DESC`, [idTienda, idFiado]),
+      WHERE pf.idTienda=? AND pf.idFiado=?
+      ORDER BY pf.fechaPago DESC, pf.idPagoFiado DESC LIMIT ?`, [idTienda, idFiado, CUSTOMER_HISTORY_LIMIT]),
     pool.query(`SELECT dv.idDetalleVenta, dv.idProducto, p.nombre producto, dv.cantidad,
       dv.presentacionVenta, dv.precioVenta, dv.subtotal
       FROM fiado f JOIN detalleVenta dv ON dv.idTienda=f.idTienda AND dv.idVenta=f.idVenta
       JOIN producto p ON p.idTienda=dv.idTienda AND p.idProducto=dv.idProducto
       WHERE f.idTienda=? AND f.idFiado=?`, [idTienda, idFiado]),
-    pool.query(`SELECT idSeguimientoCobranza, tipo, canal, detalle, fechaCompromiso, creadoEn
-      FROM seguimientoCobranza WHERE idTienda=? AND idFiado=? ORDER BY creadoEn DESC`, [idTienda, idFiado])
+    followupRows,
+    pool.query('SELECT COUNT(*) total FROM pagoFiado WHERE idTienda=? AND idFiado=?', [idTienda, idFiado]),
+    followupCountRows
   ]);
   if (!debts.length) throw creditError(404, 'Fiado no encontrado.');
   const configuration = await getCreditConfiguration(pool, idTienda);
-  res.json({
+  const response = {
     fiado: { ...debts[0], estadoCobranza: collectionState(debts[0], formatLocalDate(), Number(configuration.diasAvisoVencimiento)) },
     pagos: payments,
     detalle: details,
-    seguimientos: followups
-  });
+    permisos: { seguimientoCobranza: canReadFollowups },
+    historial: {
+      pagos: historyMetadata(payments.length, Number(paymentCounts[0].total || 0))
+    }
+  };
+  if (canReadFollowups) {
+    response.seguimientos = followups;
+    response.historial.seguimientos = historyMetadata(followups.length, Number(followupCounts[0].total || 0));
+  }
+  res.json(response);
 }));
 
 async function specificPayment(req, res, idFiado) {
@@ -570,10 +780,10 @@ async function specificPayment(req, res, idFiado) {
   });
 }
 
-router.post('/fiados/:id/pagos', asyncRoute((req, res) => specificPayment(req, res, req.params.id)));
-router.post('/pagos-fiado', asyncRoute((req, res) => specificPayment(req, res, req.body?.idFiado)));
+router.post('/fiados/:id/pagos', requirePlanFeature('pagos_fiado'), asyncRoute((req, res) => specificPayment(req, res, req.params.id)));
+router.post('/pagos-fiado', requirePlanFeature('pagos_fiado'), asyncRoute((req, res) => specificPayment(req, res, req.body?.idFiado)));
 
-router.post('/pagos-fiado/cliente', asyncRoute(async (req, res) => {
+router.post('/pagos-fiado/cliente', requirePlanFeature('pagos_fiado'), asyncRoute(async (req, res) => {
   const result = await collectCustomerDebt({
     idTienda: tenantId(req),
     idAdministrador: req.session.admin.id,
@@ -586,7 +796,7 @@ router.post('/pagos-fiado/cliente', asyncRoute(async (req, res) => {
   });
 }));
 
-router.patch('/fiados/:id/fecha-prometida', requirePlanFeature('fiados_basico'), asyncRoute(async (req, res) => {
+router.patch('/fiados/:id/fecha-prometida', requirePlanFeature('seguimiento_cobranza'), asyncRoute(async (req, res) => {
   const result = await transaction(async (connection) => {
     const idTienda = tenantId(req);
     const idFiado = positiveId(req.params.id, 'El fiado');
@@ -625,21 +835,41 @@ router.get('/cobranza/alertas', requirePlanFeature('recordatorios_fiado'), async
   const configuration = await getCreditConfiguration(pool, idTienda);
   const conditions = ['f.idTienda=?', 'f.saldoPendiente>0'];
   const params = [idTienda];
-  if (req.query.cliente) { conditions.push('f.idCliente=?'); params.push(positiveId(req.query.cliente, 'El cliente')); }
-  if (req.query.venceDesde) { conditions.push('COALESCE(f.fechaPrometidaPago,f.fechaVencimiento)>=?'); params.push(parseLocalDate(req.query.venceDesde, 'La fecha inicial', { allowNull: false })); }
-  if (req.query.venceHasta) { conditions.push('COALESCE(f.fechaPrometidaPago,f.fechaVencimiento)<=?'); params.push(parseLocalDate(req.query.venceHasta, 'La fecha final', { allowNull: false })); }
-  const [rows] = await pool.query(
-    `SELECT f.idFiado, f.idCliente, f.fechaVencimiento, f.fechaPrometidaPago,
-            f.saldoPendiente, c.nombre cliente, c.telefono, c.telefonoNormalizado,
-            c.aceptaRecordatorios, c.canalPreferido
-     FROM fiado f JOIN cliente c ON c.idTienda=f.idTienda AND c.idCliente=f.idCliente
-     WHERE ${conditions.join(' AND ')}
-     ORDER BY COALESCE(f.fechaPrometidaPago,f.fechaVencimiento) IS NULL,
-              COALESCE(f.fechaPrometidaPago,f.fechaVencimiento), f.idFiado
-     LIMIT ? OFFSET ?`,
-    [...params, limit, offset]
-  );
   const today = formatLocalDate();
+  const warningThrough = warningThroughDate(today, Number(configuration.diasAvisoVencimiento));
+  if (req.query.cliente) { conditions.push('f.idCliente=?'); params.push(positiveId(req.query.cliente, 'El cliente')); }
+  const search = cleanText(req.query.busqueda || req.query.texto, 100);
+  if (search) {
+    conditions.push('(c.nombre LIKE ? OR c.telefono LIKE ? OR c.telefonoNormalizado LIKE ?)');
+    const pattern = `%${search}%`;
+    params.push(pattern, pattern, pattern);
+  }
+  const dueFrom = req.query.venceDesde
+    ? parseLocalDate(req.query.venceDesde, 'La fecha inicial', { allowNull: false }) : null;
+  const dueTo = req.query.venceHasta
+    ? parseLocalDate(req.query.venceHasta, 'La fecha final', { allowNull: false }) : null;
+  if (dueFrom && dueTo && dueFrom > dueTo) throw creditError(400, 'La fecha inicial debe ser anterior a la final.');
+  if (dueFrom) { conditions.push('COALESCE(f.fechaPrometidaPago,f.fechaVencimiento)>=?'); params.push(dueFrom); }
+  if (dueTo) { conditions.push('COALESCE(f.fechaPrometidaPago,f.fechaVencimiento)<=?'); params.push(dueTo); }
+  const state = String(cleanText(req.query.estado, 30) || '').toLowerCase();
+  addCalculatedDebtStateFilter(conditions, params, state, {
+    alias: 'f', today, warningThrough, allowStored: false
+  });
+  const where = conditions.join(' AND ');
+  const [[rows], [summaryRows]] = await Promise.all([
+    pool.query(
+      `SELECT f.idFiado, f.idCliente, f.fechaVencimiento, f.fechaPrometidaPago,
+              f.saldoPendiente, c.nombre cliente, c.telefono, c.telefonoNormalizado,
+              c.aceptaRecordatorios, c.canalPreferido
+       FROM fiado f JOIN cliente c ON c.idTienda=f.idTienda AND c.idCliente=f.idCliente
+       WHERE ${where}
+       ORDER BY COALESCE(f.fechaPrometidaPago,f.fechaVencimiento) IS NULL,
+                COALESCE(f.fechaPrometidaPago,f.fechaVencimiento), f.idFiado
+       LIMIT ? OFFSET ?`,
+      [...params, limit, offset]
+    ),
+    pool.query(collectionSummarySql(where), [today, today, today, warningThrough, warningThrough, ...params])
+  ]);
   const alerts = rows.map((row) => {
     const effectiveDate = effectiveDebtDate(row);
     const difference = effectiveDate ? daysBetween(today, effectiveDate) : null;
@@ -652,8 +882,13 @@ router.get('/cobranza/alertas', requirePlanFeature('recordatorios_fiado'), async
       diasAtraso: difference === null ? null : Math.max(0, -difference)
     };
   });
-  const state = cleanText(req.query.estado, 30);
-  res.json({ alertas: state ? alerts.filter((item) => item.estadoCobranza === state) : alerts, pagina: page, limite: limit });
+  const total = Number(summaryRows[0].total || 0);
+  res.json({
+    alertas: alerts,
+    resumen: publicCollectionSummary(summaryRows[0]),
+    paginacion: paginationMetadata(page, limit, total),
+    ...paginationMetadata(page, limit, total)
+  });
 }));
 
 router.get('/cobranza/seguimientos', requirePlanFeature('seguimiento_cobranza'), asyncRoute(async (req, res) => {
@@ -665,21 +900,43 @@ router.get('/cobranza/seguimientos', requirePlanFeature('seguimiento_cobranza'),
   ]) {
     if (req.query[queryName]) { conditions.push(`${column}=?`); params.push(positiveId(req.query[queryName], label)); }
   }
-  if (req.query.tipo) { conditions.push('s.tipo=?'); params.push(String(req.query.tipo)); }
-  if (req.query.canal) { conditions.push('s.canal=?'); params.push(String(req.query.canal)); }
-  if (req.query.fechaDesde) { conditions.push('s.creadoEn>=?'); params.push(`${parseLocalDate(req.query.fechaDesde, 'La fecha inicial', { allowNull: false })} 00:00:00`); }
-  if (req.query.fechaHasta) { conditions.push('s.creadoEn<?'); params.push(`${addOneDay(parseLocalDate(req.query.fechaHasta, 'La fecha final', { allowNull: false }))} 00:00:00`); }
-  const [rows] = await pool.query(
-    `SELECT s.idSeguimientoCobranza, s.idCliente, s.idFiado, s.tipo, s.canal,
-            s.detalle, s.fechaCompromiso, s.creadoEn, c.nombre cliente, a.usuario administrador
-     FROM seguimientoCobranza s
-     JOIN cliente c ON c.idTienda=s.idTienda AND c.idCliente=s.idCliente
-     JOIN administrador a ON a.idTienda=s.idTienda AND a.idAdministrador=s.idAdministrador
-     WHERE ${conditions.join(' AND ')} ORDER BY s.creadoEn DESC, s.idSeguimientoCobranza DESC
-     LIMIT ? OFFSET ?`,
-    [...params, limit, offset]
-  );
-  res.json({ seguimientos: rows, pagina: page, limite: limit });
+  if (req.query.tipo) {
+    const type = String(req.query.tipo).toLowerCase();
+    if (!FOLLOWUP_TYPES.has(type)) throw creditError(400, 'El tipo de seguimiento no es valido.');
+    conditions.push('s.tipo=?'); params.push(type);
+  }
+  if (req.query.canal) {
+    const channel = String(req.query.canal).toLowerCase();
+    if (!FOLLOWUP_CHANNELS.has(channel)) throw creditError(400, 'El canal no es valido.');
+    conditions.push('s.canal=?'); params.push(channel);
+  }
+  const from = req.query.fechaDesde
+    ? parseLocalDate(req.query.fechaDesde, 'La fecha inicial', { allowNull: false }) : null;
+  const to = req.query.fechaHasta
+    ? parseLocalDate(req.query.fechaHasta, 'La fecha final', { allowNull: false }) : null;
+  if (from && to && from > to) throw creditError(400, 'La fecha inicial debe ser anterior a la final.');
+  if (from) { conditions.push('s.creadoEn>=?'); params.push(`${from} 00:00:00`); }
+  if (to) { conditions.push('s.creadoEn<?'); params.push(`${addOneDay(to)} 00:00:00`); }
+  const where = conditions.join(' AND ');
+  const [[rows], [countRows]] = await Promise.all([
+    pool.query(
+      `SELECT s.idSeguimientoCobranza, s.idCliente, s.idFiado, s.tipo, s.canal,
+              s.detalle, s.fechaCompromiso, s.creadoEn, c.nombre cliente, a.usuario administrador
+       FROM seguimientoCobranza s
+       JOIN cliente c ON c.idTienda=s.idTienda AND c.idCliente=s.idCliente
+       JOIN administrador a ON a.idTienda=s.idTienda AND a.idAdministrador=s.idAdministrador
+       WHERE ${where} ORDER BY s.creadoEn DESC, s.idSeguimientoCobranza DESC
+       LIMIT ? OFFSET ?`,
+      [...params, limit, offset]
+    ),
+    pool.query(`SELECT COUNT(*) total FROM seguimientoCobranza s WHERE ${where}`, params)
+  ]);
+  const total = Number(countRows[0].total || 0);
+  res.json({
+    seguimientos: rows,
+    paginacion: paginationMetadata(page, limit, total),
+    ...paginationMetadata(page, limit, total)
+  });
 }));
 
 router.post('/cobranza/seguimientos', requirePlanFeature('seguimiento_cobranza'), asyncRoute(async (req, res) => {

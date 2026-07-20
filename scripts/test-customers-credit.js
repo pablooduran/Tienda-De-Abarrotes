@@ -432,6 +432,28 @@ async function main() {
     } }, 201, 'Seguimiento de compromiso');
     const followups = await expect(advanced, `/api/cobranza/seguimientos?cliente=${customer.idCliente}`, {}, 200, 'Listar seguimientos');
     assert(followups.seguimientos.length >= 2, 'El historial inmutable no conserva seguimientos.');
+    for (let index = 0; index < 21; index += 1) {
+      await expect(advanced, '/api/cobranza/seguimientos', { method: 'POST', body: {
+        idCliente: customer.idCliente,
+        idFiado: confirmedCredit.idFiado,
+        tipo: 'nota',
+        canal: 'telefono',
+        detalle: `Nota de paginacion ${index + 1} ${marker}`
+      } }, 201, `Crear seguimiento reciente ${index + 1}`);
+    }
+    const advancedProfile = await expect(advanced, `/api/clientes/${customer.idCliente}`, {}, 200,
+      'Detalle avanzado del cliente');
+    assert(advancedProfile.permisos.seguimientoCobranza === true
+      && advancedProfile.seguimientos.length === 20
+      && advancedProfile.historial.seguimientos.total >= 21
+      && advancedProfile.historial.seguimientos.truncado === true,
+    'La ficha avanzada no informo correctamente el historial reciente truncado.');
+    const advancedDebtDetail = await expect(advanced, `/api/fiados/${confirmedCredit.idFiado}`, {}, 200,
+      'Detalle avanzado del fiado');
+    assert(advancedDebtDetail.permisos.seguimientoCobranza === true
+      && advancedDebtDetail.seguimientos.length === 20
+      && advancedDebtDetail.historial.seguimientos.truncado === true,
+    'El detalle avanzado del fiado no informo su historial reciente truncado.');
 
     const prepared = await expect(advanced, '/api/cobranza/mensaje-whatsapp/preparar', { method: 'POST', body: {
       idCliente: customer.idCliente,
@@ -454,12 +476,68 @@ async function main() {
     const account = await expect(advanced, `/api/clientes/${customer.idCliente}/estado-cuenta`, {}, 200, 'Estado de cuenta');
     assert(account.fiadosAbiertos.length > 0 && account.pagos.length > 0 && account.movimientos.length > 0,
       'El estado de cuenta no contiene deuda, pagos y movimientos.');
+    assert(new Set(account.movimientos.map((item) => item.tipo)).size >= 2,
+      'El estado de cuenta no combino los tipos de movimiento disponibles.');
+    const movementIdentity = (item) => `${item.tipo}:${item.idVenta || ''}:${item.idFiado || ''}:${item.idPagoFiado || ''}`;
+    const accountFirstPage = await expect(advanced,
+      `/api/clientes/${customer.idCliente}/estado-cuenta?pagina=1&limite=3`, {}, 200,
+      'Primera pagina del estado de cuenta');
+    const accountFirstPageRepeat = await expect(advanced,
+      `/api/clientes/${customer.idCliente}/estado-cuenta?pagina=1&limite=3`, {}, 200,
+      'Orden determinista del estado de cuenta');
+    assert(accountFirstPage.page === 1 && accountFirstPage.pageSize === 3
+      && accountFirstPage.totalPages === Math.ceil(accountFirstPage.total / 3)
+      && accountFirstPage.hasPreviousPage === false,
+    'Los metadatos de la primera pagina del estado de cuenta son incorrectos.');
+    assert(accountFirstPage.movimientos.map(movementIdentity).join('|')
+      === accountFirstPageRepeat.movimientos.map(movementIdentity).join('|'),
+    'La cronologia combinada no tiene un orden determinista.');
+    const allMovementIds = [];
+    for (let page = 1; page <= accountFirstPage.totalPages; page += 1) {
+      const accountPage = page === 1 ? accountFirstPage : await expect(advanced,
+        `/api/clientes/${customer.idCliente}/estado-cuenta?pagina=${page}&limite=3`, {}, 200,
+        `Pagina ${page} del estado de cuenta`);
+      assert(accountPage.page === page, `La pagina ${page} devolvio metadatos incorrectos.`);
+      allMovementIds.push(...accountPage.movimientos.map(movementIdentity));
+    }
+    assert(allMovementIds.length === accountFirstPage.total
+      && new Set(allMovementIds).size === accountFirstPage.total,
+    'La paginacion combinada omitio o duplico movimientos.');
     const alerts = await expect(advanced, '/api/cobranza/alertas', {}, 200, 'Alertas de cobranza');
     assert(alerts.alertas.some((item) => item.estadoCobranza === 'vencido')
       && alerts.alertas.some((item) => item.estadoCobranza === 'vence_hoy')
       && alerts.alertas.some((item) => item.estadoCobranza === 'proximo_a_vencer')
       && alerts.alertas.some((item) => item.estadoCobranza === 'sin_fecha'),
     'Las alertas no clasificaron vencidos, vence hoy, proximos y sin fecha.');
+    const expectedOverdue = await scalar(connection,
+      `SELECT COUNT(*) total FROM fiado
+       WHERE idTienda=? AND saldoPendiente>0
+         AND COALESCE(fechaPrometidaPago,fechaVencimiento) IS NOT NULL
+         AND COALESCE(fechaPrometidaPago,fechaVencimiento)<?`,
+      [fixture.advancedStore, formatLocalDate()]);
+    const expectedOverdueDebt = await scalar(connection,
+      `SELECT COALESCE(SUM(saldoPendiente),0) total FROM fiado
+       WHERE idTienda=? AND saldoPendiente>0
+         AND COALESCE(fechaPrometidaPago,fechaVencimiento) IS NOT NULL
+         AND COALESCE(fechaPrometidaPago,fechaVencimiento)<?`,
+      [fixture.advancedStore, formatLocalDate()]);
+    const overdueAlerts = await expect(advanced, '/api/cobranza/alertas?estado=vencido&pagina=1&limite=1', {}, 200,
+      'Alertas vencidas filtradas antes de paginar');
+    assert(overdueAlerts.total === expectedOverdue
+      && overdueAlerts.resumen.vencidos === expectedOverdue
+      && Number(overdueAlerts.resumen.deudaTotal) === expectedOverdueDebt
+      && overdueAlerts.alertas.every((item) => item.estadoCobranza === 'vencido'),
+    'El filtro o los totales globales de alertas vencidas no coinciden con la tienda.');
+    if (expectedOverdue > 1) {
+      assert(overdueAlerts.alertas.length === 1 && Number(overdueAlerts.resumen.deudaTotal) > Number(overdueAlerts.alertas[0].saldoPendiente),
+        'Los totales de alertas se calcularon solo con la pagina visible.');
+    }
+    const noAlertMatches = await expect(advanced,
+      `/api/cobranza/alertas?busqueda=${encodeURIComponent(`sin-coincidencia-${marker}`)}&pagina=1&limite=1`, {}, 200,
+      'Alertas sin coincidencias');
+    assert(noAlertMatches.total === 0 && noAlertMatches.alertas.length === 0,
+      'Una pagina vacia de alertas informo coincidencias globales inexistentes.');
+    await expect(advanced, '/api/cobranza/alertas?estado=no_valido', {}, 400, 'Estado de alerta invalido');
 
     const otherCustomer = await expect(other, '/api/clientes', { method: 'POST', body: {
       nombre: `Cliente aislado ${marker}`, telefono: '79999999'
@@ -482,13 +560,57 @@ async function main() {
     await expect(basic, `/api/fiados/${basicCredit.idFiado}/pagos`, { method: 'POST', body: {
       monto: 5, metodoPago: 'efectivo', claveOperacion: `cobro-basico-${marker}`
     } }, 201, 'Pago disponible en basico');
+    const basicProfile = await expect(basic, `/api/clientes/${basicCustomer.idCliente}`, {}, 200,
+      'Detalle basico del cliente');
+    assert(basicProfile.permisos.seguimientoCobranza === false
+      && !Object.prototype.hasOwnProperty.call(basicProfile, 'seguimientos')
+      && !Object.prototype.hasOwnProperty.call(basicProfile.historial, 'seguimientos'),
+    'El plan basico recibio seguimientos desde el detalle del cliente.');
+    const basicDebtDetail = await expect(basic, `/api/fiados/${basicCredit.idFiado}`, {}, 200,
+      'Detalle basico del fiado');
+    assert(basicDebtDetail.permisos.seguimientoCobranza === false
+      && !Object.prototype.hasOwnProperty.call(basicDebtDetail, 'seguimientos'),
+    'El plan basico recibio seguimientos desde el detalle del fiado.');
+    await expect(basic, '/api/cobranza/seguimientos', {}, 403, 'Seguimientos bloqueados en plan basico');
+    await expect(basic, `/api/fiados/${basicCredit.idFiado}/fecha-prometida`, { method: 'PATCH', body: {
+      fechaPrometidaPago: addDays(formatLocalDate(), 2),
+      detalle: 'El plan basico no debe crear seguimientos.',
+      canal: 'telefono'
+    } }, 403, 'Promesa bloqueada sin seguimiento de cobranza');
+    await expect(basic, `/api/clientes/${basicCustomer.idCliente}/estado-cuenta?pagina=1&limite=2`, {}, 200,
+      'Estado de cuenta disponible en plan basico');
+    const basicHiddenCustomer = await expect(basic, '/api/clientes', { method: 'POST', body: {
+      nombre: `Cliente ocultable ${marker}`, telefono: '71111112'
+    } }, 201, 'Cliente para ocultar y restaurar');
+    await expect(basic, `/api/clientes/${basicHiddenCustomer.idCliente}`, {
+      method: 'DELETE', body: { password: basicStore.password }
+    }, 200, 'Ocultar cliente con permiso basico');
+    await expect(basic, `/api/clientes/${basicHiddenCustomer.idCliente}/restaurar`, {
+      method: 'PATCH', body: { password: basicStore.password }
+    }, 200, 'Restaurar cliente con permiso basico');
+    const [[basicSubscription]] = await connection.query(
+      'SELECT idSuscripcion,estado FROM suscripcionTienda WHERE idTienda=? ORDER BY idSuscripcion DESC LIMIT 1',
+      [fixture.basicStore]
+    );
+    await connection.query('UPDATE suscripcionTienda SET estado=?,actualizadoEn=? WHERE idSuscripcion=?',
+      ['suspendida', formatLocalDateTime(), basicSubscription.idSuscripcion]);
+    await expect(basic, `/api/clientes/${basicCustomer.idCliente}`, {}, 200,
+      'Lectura historica con suscripcion suspendida');
+    await expect(basic, `/api/fiados/${basicCredit.idFiado}/pagos`, { method: 'POST', body: {
+      monto: 1, metodoPago: 'efectivo', claveOperacion: `cobro-suspendido-${marker}`
+    } }, 403, 'Cobro bloqueado con suscripcion suspendida');
+    await connection.query('UPDATE suscripcionTienda SET estado=?,actualizadoEn=? WHERE idSuscripcion=?',
+      [basicSubscription.estado, formatLocalDateTime(), basicSubscription.idSuscripcion]);
 
     const [[advancedSubscription]] = await connection.query(
       'SELECT idSuscripcion,idPlan FROM suscripcionTienda WHERE idTienda=? ORDER BY idSuscripcion DESC LIMIT 1',
       [fixture.advancedStore]
     );
     await connection.query('UPDATE suscripcionTienda SET idPlan=? WHERE idSuscripcion=?', [plans.basic.idPlan, advancedSubscription.idSuscripcion]);
-    await expect(advanced, `/api/fiados/${confirmedCredit.idFiado}`, {}, 200, 'Deuda visible tras downgrade');
+    const downgradedDebt = await expect(advanced, `/api/fiados/${confirmedCredit.idFiado}`, {}, 200, 'Deuda visible tras downgrade');
+    assert(downgradedDebt.permisos.seguimientoCobranza === false
+      && !Object.prototype.hasOwnProperty.call(downgradedDebt, 'seguimientos'),
+    'El downgrade continuo exponiendo seguimientos avanzados.');
     const downgradePayment = await expect(advanced, `/api/fiados/${confirmedCredit.idFiado}/pagos`, { method: 'POST', body: {
       monto: 1, metodoPago: 'qr', claveOperacion: `cobro-downgrade-${marker}`
     } }, 201, 'Cobro permitido tras downgrade');
