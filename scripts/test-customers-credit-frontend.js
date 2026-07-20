@@ -9,6 +9,7 @@ const creditJs = read('public/js/customer-credit-ui.js');
 const creditRoutes = read('routes/customers-credit.js');
 const apiRoutes = read('routes/api.js');
 const creditService = read('services/customer-credit-service.js');
+const exportService = read('services/customer-credit-export-service.js');
 const posRoutes = read('routes/pos.js');
 const posService = read('services/pos-sale-service.js');
 const css = read('public/css/styles.css');
@@ -26,13 +27,13 @@ check('Navegacion Clientes', appJs.includes("['clientes', 'Clientes'"));
 check('Navegacion Cobranza', appJs.includes("['pagos', 'Cobranza'"));
 check('Permisos basico y avanzado', includesAll(appJs + creditJs, [
   'clientes_basico', 'fiados_basico', 'pagos_fiado', 'recordatorios_fiado',
-  'seguimiento_cobranza', 'limites_credito'
+  'seguimiento_cobranza', 'limites_credito', 'exportacion_clientes_fiados'
 ]));
 check('Formulario ampliado de cliente', includesAll(creditJs, [
   'telefonoAlternativo', 'documentoIdentidad', 'correo', 'direccion', 'limiteCredito',
   'diasCreditoDefault', 'canalPreferido', 'aceptaRecordatorios', 'horarioPreferido', 'notas'
 ]));
-check('Filtro explicito de estado de clientes', includesAll(creditJs + creditRoutes, [
+check('Filtro explicito de estado de clientes', includesAll(creditJs + creditRoutes + creditService, [
   "customerFilters: { estado: 'activos' }", "option('activos', 'Activos'", "option('ocultos', 'Ocultos'",
   "option('todos', 'Todos'", "new Set(['activos', 'ocultos', 'todos'])", "INVALID_CUSTOMER_STATE"
 ]));
@@ -127,11 +128,37 @@ check('Estados de carga, vacio y error', includesAll(creditJs, ['loading-state',
 check('Contenido dinamico usa escape central', creditJs.includes('escapeHtml: e'));
 check('Sin listeners globales duplicados en modulo',
   (creditJs.match(/document\.addEventListener/g) || []).length === 0);
+check('Botones de exportacion completos', includesAll(creditJs, [
+  'data-export-customers', 'data-export-debts', 'data-statement-export',
+  '/api/clientes/exportacion.xlsx', '/api/fiados/exportacion.xlsx',
+  '/estado-cuenta/exportacion.xlsx'
+]));
+check('Exportacion envia filtros globales y no pagina visual',
+  creditJs.includes('filterQuery(ui.customerFilters)')
+  && creditJs.includes('filterQuery(ui.collectionFilters')
+  && !/exportacion\.xlsx\?\$\{[^}]*customerPage/.test(creditJs));
+check('Descarga evita doble envio y conserva Content-Disposition',
+  creditJs.includes('if (!button || button.disabled) return;')
+  && creditJs.includes("response.headers.get('Content-Disposition')")
+  && creditJs.includes('link.download = downloadFileName'));
+check('Exportacion requiere permisos base, avanzado y suscripcion activa', includesAll(creditRoutes, [
+  "'/clientes/exportacion.xlsx'", "'/fiados/exportacion.xlsx'",
+  "'/clientes/:id/estado-cuenta/exportacion.xlsx'", 'requireExportSubscription',
+  "requirePlanFeature('exportacion_clientes_fiados')"
+]));
+check('Servicio XLSX neutraliza formulas ocultas',
+  exportService.includes('sanitizeSpreadsheetCell')
+  && exportService.includes('[=+\\-@]')
+  && exportService.includes('\\u0000-\\u001f'));
+check('Exportaciones tienen limites sin truncamiento silencioso', includesAll(exportService, [
+  'CUSTOMER_CREDIT_EXPORT_CLIENTS_MAX_ROWS', 'CUSTOMER_CREDIT_EXPORT_DEBTS_MAX_ROWS',
+  'CUSTOMER_CREDIT_EXPORT_STATEMENT_MAX_ROWS', 'EXPORT_ROW_LIMIT_EXCEEDED', 'limit + 1'
+]));
 check('Responsive 360/768/1366 por reglas fluidas',
   css.includes('@media (max-width: 560px)')
   && css.includes('@media (max-width: 900px)')
   && css.includes('.customer-mobile-list'));
-check('Sin XLSX o PDF en frontend de credito', !/xlsx|\.pdf|application\/pdf/i.test(creditJs));
+check('Sin PDF en frontend de credito', !/\.pdf|application\/pdf/i.test(creditJs));
 check('Sin almacenamiento sensible', !/localStorage|sessionStorage/.test(creditJs));
 check('Sin fechas UTC serializadas', !creditJs.includes('toISOString('));
 check('Sin URL wa.me construida en frontend de cobranza', !creditJs.includes('https://wa.me/'));

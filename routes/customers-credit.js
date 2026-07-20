@@ -5,9 +5,13 @@ const { requirePlanFeature } = require('../middleware/subscription');
 const { enforcePlanLimit } = require('../services/subscription-service');
 const {
   centsToDecimal,
+  buildCustomerFilter,
+  buildDebtFilter,
+  buildStatementFilter,
   cleanText,
   collectionState,
   creditError,
+  daysBetweenLocalDates,
   effectiveDebtDate,
   effectiveLimitCents,
   getCreditConfiguration,
@@ -15,13 +19,16 @@ const {
   moneyToCents,
   normalizeCreditConfiguration,
   normalizeCustomerPayload,
-  normalizeDocument,
-  normalizePhone,
   parseLocalDate,
   setCustomerVisibility,
   summarizeDebts
 } = require('../services/customer-credit-service');
 const { collectCustomerDebt, collectSpecificDebt } = require('../services/debt-collection-service');
+const {
+  exportCustomerStatement,
+  exportCustomers,
+  exportDebts
+} = require('../services/customer-credit-export-service');
 const {
   addLocalDays,
   formatLocalDate,
@@ -34,10 +41,7 @@ const FOLLOWUP_TYPES = new Set(['nota', 'llamada', 'mensaje_enviado_manual', 'co
 const FOLLOWUP_CHANNELS = new Set(['ninguno', 'whatsapp', 'telefono', 'presencial', 'correo']);
 const TEMPLATE_TYPES = new Set(['recordatorio_previo', 'deuda_vencida', 'confirmacion_pago', 'estado_cuenta']);
 const TEMPLATE_VARIABLES = new Set(['tienda', 'cliente', 'saldo', 'vencimiento', 'dias_atraso', 'comprobante']);
-const COLLECTION_STATES = new Set(['vencido', 'vence_hoy', 'proximo_a_vencer', 'al_dia', 'sin_fecha', 'pagado']);
-const STORED_DEBT_STATES = new Set(['pendiente', 'parcial', 'pagado']);
 const CUSTOMER_HISTORY_LIMIT = 20;
-const CUSTOMER_STATES = new Set(['activos', 'ocultos', 'todos']);
 
 function asyncRoute(handler) {
   return (req, res, next) => Promise.resolve(handler(req, res, next)).catch(next);
@@ -45,6 +49,23 @@ function asyncRoute(handler) {
 
 function tenantId(req) {
   return req.tenant.idTienda;
+}
+
+function requireExportSubscription(req, res, next) {
+  const context = req.subscriptionContext;
+  if (context && !context.soloLectura) return next();
+  return res.status(403).json({
+    error: 'La suscripcion debe estar activa para generar exportaciones.',
+    code: 'SUBSCRIPTION_READ_ONLY',
+    estadoSuscripcion: context?.suscripcion?.estadoEfectivo || 'sin_suscripcion'
+  });
+}
+
+function sendWorkbook(res, result) {
+  res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+  res.setHeader('Content-Disposition', `attachment; filename="${result.fileName}"`);
+  res.setHeader('Cache-Control', 'no-store');
+  return res.send(Buffer.from(result.buffer));
 }
 
 function administratorPassword(body = {}) {
@@ -98,42 +119,6 @@ function paginationMetadata(page, pageSize, total) {
   };
 }
 
-function warningThroughDate(today, warningDays) {
-  return formatLocalDate(addLocalDays(parseBusinessDate(today), warningDays));
-}
-
-function addCalculatedDebtStateFilter(conditions, params, state, options = {}) {
-  if (!state) return;
-  const allowed = options.allowStored
-    ? new Set([...COLLECTION_STATES, ...STORED_DEBT_STATES])
-    : new Set([...COLLECTION_STATES].filter((item) => item !== 'pagado'));
-  if (!allowed.has(state)) throw creditError(400, 'El estado de cobranza no es valido.');
-  const alias = options.alias || 'f';
-  const effectiveDate = `COALESCE(${alias}.fechaPrometidaPago,${alias}.fechaVencimiento)`;
-  if (options.allowStored && (state === 'pendiente' || state === 'parcial')) {
-    conditions.push(`${alias}.estado=?`);
-    params.push(state);
-    return;
-  }
-  if (state === 'pagado') {
-    conditions.push(`${alias}.saldoPendiente<=0`);
-  } else if (state === 'vencido') {
-    conditions.push(`${alias}.saldoPendiente>0 AND ${effectiveDate} IS NOT NULL AND ${effectiveDate}<?`);
-    params.push(options.today);
-  } else if (state === 'vence_hoy') {
-    conditions.push(`${alias}.saldoPendiente>0 AND ${effectiveDate}=?`);
-    params.push(options.today);
-  } else if (state === 'proximo_a_vencer') {
-    conditions.push(`${alias}.saldoPendiente>0 AND ${effectiveDate}>? AND ${effectiveDate}<=?`);
-    params.push(options.today, options.warningThrough);
-  } else if (state === 'al_dia') {
-    conditions.push(`${alias}.saldoPendiente>0 AND ${effectiveDate}>?`);
-    params.push(options.warningThrough);
-  } else if (state === 'sin_fecha') {
-    conditions.push(`${alias}.saldoPendiente>0 AND ${effectiveDate} IS NULL`);
-  }
-}
-
 function collectionSummarySql(where) {
   return `SELECT COUNT(*) total, COALESCE(SUM(f.saldoPendiente),0) deudaTotal,
                  COALESCE(SUM(f.saldoPendiente>0 AND COALESCE(f.fechaPrometidaPago,f.fechaVencimiento) IS NOT NULL
@@ -170,13 +155,6 @@ function historyMetadata(shown, total) {
     truncated: total > shown,
     truncado: total > shown
   };
-}
-
-function booleanFilter(value, label) {
-  if (value === undefined || value === '') return null;
-  if (value === '1' || value === 1 || value === true || value === 'true') return 1;
-  if (value === '0' || value === 0 || value === false || value === 'false') return 0;
-  throw creditError(400, `${label} no es valido.`);
 }
 
 function hasFeature(req, code) {
@@ -272,63 +250,15 @@ async function customerSnapshot(connection, idTienda, idCliente, { lock = false 
   return { customer, debts, configuration, summary: publicCustomer(customer, configuration, debts) };
 }
 
-function customerState(query, forcedState = null) {
-  if (forcedState) return forcedState;
-  const requested = String(cleanText(query.estado, 20) || '').toLowerCase();
-  if (requested && !CUSTOMER_STATES.has(requested)) {
-    throw creditError(400, 'El estado de clientes no es valido.', 'INVALID_CUSTOMER_STATE');
-  }
-  if (requested) return requested;
-  const legacyActive = booleanFilter(query.activo, 'El filtro de actividad');
-  if (legacyActive !== null) return legacyActive === 1 ? 'activos' : 'ocultos';
-  return 'activos';
-}
-
 async function listCustomers(req, res, options = {}) {
   const legacyResponse = options.legacyResponse === true
     || !['pagina', 'page', 'limite', 'limit'].some((key) => req.query[key] !== undefined);
   const { page, limit, offset } = legacyResponse
     ? { page: 1, limit: 500, offset: 0 }
     : pagination(req.query);
-  const conditions = ['c.idTienda=?'];
-  const params = [tenantId(req)];
-  const text = cleanText(req.query.texto || req.query.q, 100);
-  const state = customerState(req.query, options.forcedState);
-  const allowsCredit = booleanFilter(req.query.permiteFiado, 'El filtro de fiado');
-  const hasDebt = booleanFilter(req.query.conDeuda, 'El filtro de deuda');
-  const overdue = booleanFilter(req.query.vencido, 'El filtro de vencimiento');
-  if (text) {
-    conditions.push(`(c.nombre LIKE ? OR c.telefono LIKE ? OR c.telefonoAlternativo LIKE ?
-      OR c.documentoIdentidad LIKE ? OR c.correo LIKE ?)`);
-    const pattern = `%${text}%`;
-    params.push(pattern, pattern, pattern, pattern, pattern);
-  }
-  if (state === 'activos') conditions.push('c.activo=1');
-  if (state === 'ocultos') conditions.push('c.activo=0');
-  if (allowsCredit !== null) { conditions.push('c.permiteFiado=?'); params.push(allowsCredit); }
-  if (hasDebt !== null) {
-    conditions.push(`${hasDebt ? '' : 'NOT '}EXISTS (
-      SELECT 1 FROM fiado fd WHERE fd.idTienda=c.idTienda AND fd.idCliente=c.idCliente AND fd.saldoPendiente>0
-    )`);
-  }
-  if (overdue !== null) {
-    conditions.push(`${overdue ? '' : 'NOT '}EXISTS (
-      SELECT 1 FROM fiado fv WHERE fv.idTienda=c.idTienda AND fv.idCliente=c.idCliente
-        AND fv.saldoPendiente>0
-        AND COALESCE(fv.fechaPrometidaPago, fv.fechaVencimiento) IS NOT NULL
-        AND COALESCE(fv.fechaPrometidaPago, fv.fechaVencimiento)<?
-    )`);
-    params.push(formatLocalDate());
-  }
-  if (req.query.documento) {
-    conditions.push('c.documentoNormalizado=?');
-    params.push(normalizeDocument(req.query.documento).normalized);
-  }
-  if (req.query.telefono) {
-    conditions.push('c.telefonoNormalizado=?');
-    params.push(normalizePhone(req.query.telefono).normalized);
-  }
-  const where = conditions.join(' AND ');
+  const { params, state, where } = buildCustomerFilter(req.query, tenantId(req), {
+    forcedState: options.forcedState
+  });
   const [[count], [rows], configuration, [summaryRows]] = await Promise.all([
     pool.query(`SELECT COUNT(*) total FROM cliente c WHERE ${where}`, params),
     pool.query(
@@ -395,6 +325,17 @@ router.get('/clientes/ocultos', requirePlanFeature('clientes_basico'), asyncRout
 )));
 
 router.get('/clientes', requirePlanFeature('clientes_basico'), asyncRoute((req, res) => listCustomers(req, res)));
+
+router.get(
+  '/clientes/exportacion.xlsx',
+  requireExportSubscription,
+  requirePlanFeature('clientes_basico'),
+  requirePlanFeature('exportacion_clientes_fiados'),
+  asyncRoute(async (req, res) => {
+    const result = await exportCustomers(pool, tenantId(req), req.query);
+    sendWorkbook(res, result);
+  })
+);
 
 router.post('/clientes', requirePlanFeature('clientes_basico'), asyncRoute(async (req, res) => {
   assertAdvancedCreditFields(req);
@@ -514,55 +455,27 @@ router.get('/clientes/:id/resumen', requirePlanFeature('clientes_basico'), async
   res.json({ cliente: snapshot.summary, compras: purchases[0], pagos: payments[0], fiadosAbiertos: Number(openDebts[0].cantidad) });
 }));
 
+router.get(
+  '/clientes/:id/estado-cuenta/exportacion.xlsx',
+  requireExportSubscription,
+  requirePlanFeature('estado_cuenta_basico'),
+  requirePlanFeature('exportacion_clientes_fiados'),
+  asyncRoute(async (req, res) => {
+    const idCliente = positiveId(req.params.id, 'El cliente');
+    const result = await exportCustomerStatement(pool, tenantId(req), idCliente, req.query);
+    sendWorkbook(res, result);
+  })
+);
+
 router.get('/clientes/:id/estado-cuenta', requirePlanFeature('estado_cuenta_basico'), asyncRoute(async (req, res) => {
   const idTienda = tenantId(req);
   const idCliente = positiveId(req.params.id, 'El cliente');
   const { page, limit, offset } = pagination(req.query);
-  const from = parseLocalDate(req.query.fechaDesde, 'La fecha inicial');
-  const to = parseLocalDate(req.query.fechaHasta, 'La fecha final');
-  if (from && to && from > to) throw creditError(400, 'La fecha inicial debe ser anterior a la final.');
   const snapshot = await customerSnapshot(pool, idTienda, idCliente);
-  const paymentConditions = ['f.idTienda=?', 'f.idCliente=?'];
-  const paymentParams = [idTienda, idCliente];
-  const debtConditions = ['f.idTienda=?', 'f.idCliente=?'];
-  const debtParams = [idTienda, idCliente];
-  const saleConditions = ['v.idTienda=?', 'v.idCliente=?'];
-  const saleParams = [idTienda, idCliente];
-  const debtEventDate = "COALESCE(v.fecha,CONCAT(f.fechaInicio,' 00:00:00'))";
-  if (from) { paymentConditions.push('pf.fechaPago>=?'); paymentParams.push(`${from} 00:00:00`); }
-  if (to) { paymentConditions.push('pf.fechaPago<?'); paymentParams.push(`${addOneDay(to)} 00:00:00`); }
-  if (from) {
-    debtConditions.push(`${debtEventDate}>=?`); debtParams.push(`${from} 00:00:00`);
-    saleConditions.push('v.fecha>=?'); saleParams.push(`${from} 00:00:00`);
-  }
-  if (to) {
-    debtConditions.push(`${debtEventDate}<?`); debtParams.push(`${addOneDay(to)} 00:00:00`);
-    saleConditions.push('v.fecha<?'); saleParams.push(`${addOneDay(to)} 00:00:00`);
-  }
-  const movementSql = `
-    SELECT 'venta' tipo, v.fecha, 1 tipoOrden, v.idVenta ordenId,
-           v.idVenta, NULL idFiado, NULL idPagoFiado, v.total monto,
-           NULL metodoPago, NULL referencia, v.codigoComprobante,
-           v.saldoPendiente, v.estadoPago
-    FROM venta v WHERE ${saleConditions.join(' AND ')}
-    UNION ALL
-    SELECT 'fiado' tipo, ${debtEventDate} fecha, 2 tipoOrden, f.idFiado ordenId,
-           f.idVenta, f.idFiado, NULL idPagoFiado, f.totalFiado monto,
-           NULL metodoPago, NULL referencia, v.codigoComprobante,
-           f.saldoPendiente, f.estado estadoPago
-    FROM fiado f LEFT JOIN venta v ON v.idTienda=f.idTienda AND v.idVenta=f.idVenta
-    WHERE ${debtConditions.join(' AND ')}
-    UNION ALL
-    SELECT 'pago' tipo, pf.fechaPago fecha, 3 tipoOrden, pf.idPagoFiado ordenId,
-           f.idVenta, pf.idFiado, pf.idPagoFiado, pf.monto,
-           cf.metodoPago, cf.referencia, v.codigoComprobante,
-           f.saldoPendiente, f.estado estadoPago
-    FROM pagoFiado pf
-    JOIN fiado f ON f.idTienda=pf.idTienda AND f.idFiado=pf.idFiado
-    JOIN cobroFiado cf ON cf.idTienda=pf.idTienda AND cf.idCobroFiado=pf.idCobroFiado
-    LEFT JOIN venta v ON v.idTienda=f.idTienda AND v.idVenta=f.idVenta
-    WHERE ${paymentConditions.join(' AND ')}`;
-  const movementParams = [...saleParams, ...debtParams, ...paymentParams];
+  const {
+    debtConditions, debtParams, movementParams, movementSql,
+    paymentConditions, paymentParams, saleConditions, saleParams
+  } = buildStatementFilter(req.query, idTienda, idCliente);
   const [[debts], [movementRows], [movementCountRows], [debtSummaryRows], [paymentSummaryRows], [saleSummaryRows]] = await Promise.all([
     pool.query(
       `SELECT f.idFiado, f.idVenta, f.fechaInicio, f.fechaVencimiento, f.fechaPrometidaPago,
@@ -704,44 +617,13 @@ async function listDebts(req, res, forcedActive = null) {
   const { page, limit, offset } = legacyResponse
     ? { page: 1, limit: 500, offset: 0 }
     : pagination(req.query);
-  const conditions = ['f.idTienda=?'];
-  const params = [tenantId(req)];
   const configuration = await getCreditConfiguration(pool, tenantId(req));
-  const today = formatLocalDate();
-  const warningThrough = warningThroughDate(today, Number(configuration.diasAvisoVencimiento));
-  const active = forcedActive === null ? booleanFilter(req.query.activo, 'El filtro de actividad') : forcedActive;
-  if (active !== null) { conditions.push('f.activo=?'); params.push(active); }
-  if (req.query.idCliente || req.query.cliente) {
-    conditions.push('f.idCliente=?'); params.push(positiveId(req.query.idCliente || req.query.cliente, 'El cliente'));
-  }
-  const search = cleanText(req.query.busqueda || req.query.texto, 100);
-  if (search) {
-    conditions.push('(c.nombre LIKE ? OR c.telefono LIKE ? OR c.telefonoNormalizado LIKE ?)');
-    const pattern = `%${search}%`;
-    params.push(pattern, pattern, pattern);
-  }
-  const state = String(cleanText(req.query.estado, 30) || '').toLowerCase();
-  addCalculatedDebtStateFilter(conditions, params, state, {
-    alias: 'f', today, warningThrough, allowStored: true
-  });
-  const startedFrom = req.query.desde
-    ? parseLocalDate(req.query.desde, 'La fecha inicial', { allowNull: false }) : null;
-  const startedTo = req.query.hasta
-    ? parseLocalDate(req.query.hasta, 'La fecha final', { allowNull: false }) : null;
-  if (startedFrom && startedTo && startedFrom > startedTo) {
-    throw creditError(400, 'La fecha inicial debe ser anterior a la final.');
-  }
-  if (startedFrom) { conditions.push('f.fechaInicio>=?'); params.push(startedFrom); }
-  if (startedTo) { conditions.push('f.fechaInicio<=?'); params.push(startedTo); }
-  const effectiveDate = 'COALESCE(f.fechaPrometidaPago,f.fechaVencimiento)';
-  const dueFrom = req.query.venceDesde
-    ? parseLocalDate(req.query.venceDesde, 'La fecha inicial de vencimiento', { allowNull: false }) : null;
-  const dueTo = req.query.venceHasta
-    ? parseLocalDate(req.query.venceHasta, 'La fecha final de vencimiento', { allowNull: false }) : null;
-  if (dueFrom && dueTo && dueFrom > dueTo) throw creditError(400, 'La fecha inicial de vencimiento debe ser anterior a la final.');
-  if (dueFrom) { conditions.push(`${effectiveDate}>=?`); params.push(dueFrom); }
-  if (dueTo) { conditions.push(`${effectiveDate}<=?`); params.push(dueTo); }
-  const where = conditions.join(' AND ');
+  const { effectiveDate, params, today, warningThrough, where } = buildDebtFilter(
+    req.query,
+    tenantId(req),
+    configuration,
+    { forcedActive, allowStored: true }
+  );
   const [[rows], [summaryRows]] = await Promise.all([
     pool.query(
       `SELECT f.idFiado, f.idCliente, f.idVenta, f.fechaInicio, f.fechaVencimiento,
@@ -765,8 +647,8 @@ async function listDebts(req, res, forcedActive = null) {
       clienteActivo: Boolean(row.clienteActivo),
       estadoCobranza: collectionState(row, today, Number(configuration.diasAvisoVencimiento)),
       fechaEfectiva: effectiveDebtDate(row),
-      diasRestantes: effectiveDebtDate(row) ? Math.max(0, daysBetween(today, effectiveDebtDate(row))) : null,
-      diasAtraso: effectiveDebtDate(row) ? Math.max(0, -daysBetween(today, effectiveDebtDate(row))) : null
+      diasRestantes: effectiveDebtDate(row) ? Math.max(0, daysBetweenLocalDates(today, effectiveDebtDate(row))) : null,
+      diasAtraso: effectiveDebtDate(row) ? Math.max(0, -daysBetweenLocalDates(today, effectiveDebtDate(row))) : null
     }));
   const total = Number(summaryRows[0].total || 0);
   res.json(legacyResponse ? debts : {
@@ -780,6 +662,17 @@ async function listDebts(req, res, forcedActive = null) {
 router.get('/fiados/activos', requirePlanFeature('fiados_basico'), asyncRoute((req, res) => listDebts(req, res, 1)));
 router.get('/fiados/ocultos', requirePlanFeature('fiados_basico'), asyncRoute((req, res) => listDebts(req, res, 0)));
 router.get('/fiados', requirePlanFeature('fiados_basico'), asyncRoute((req, res) => listDebts(req, res)));
+
+router.get(
+  '/fiados/exportacion.xlsx',
+  requireExportSubscription,
+  requirePlanFeature('fiados_basico'),
+  requirePlanFeature('exportacion_clientes_fiados'),
+  asyncRoute(async (req, res) => {
+    const result = await exportDebts(pool, tenantId(req), req.query);
+    sendWorkbook(res, result);
+  })
+);
 
 router.get('/fiados/:id', requirePlanFeature('fiados_basico'), asyncRoute(async (req, res) => {
   const idTienda = tenantId(req);
@@ -904,28 +797,13 @@ router.get('/cobranza/alertas', requirePlanFeature('recordatorios_fiado'), async
   const { page, limit, offset } = pagination(req.query);
   const idTienda = tenantId(req);
   const configuration = await getCreditConfiguration(pool, idTienda);
-  const conditions = ['f.idTienda=?', 'f.saldoPendiente>0'];
-  const params = [idTienda];
-  const today = formatLocalDate();
-  const warningThrough = warningThroughDate(today, Number(configuration.diasAvisoVencimiento));
-  if (req.query.cliente) { conditions.push('f.idCliente=?'); params.push(positiveId(req.query.cliente, 'El cliente')); }
-  const search = cleanText(req.query.busqueda || req.query.texto, 100);
-  if (search) {
-    conditions.push('(c.nombre LIKE ? OR c.telefono LIKE ? OR c.telefonoNormalizado LIKE ?)');
-    const pattern = `%${search}%`;
-    params.push(pattern, pattern, pattern);
-  }
-  const dueFrom = req.query.venceDesde
-    ? parseLocalDate(req.query.venceDesde, 'La fecha inicial', { allowNull: false }) : null;
-  const dueTo = req.query.venceHasta
-    ? parseLocalDate(req.query.venceHasta, 'La fecha final', { allowNull: false }) : null;
-  if (dueFrom && dueTo && dueFrom > dueTo) throw creditError(400, 'La fecha inicial debe ser anterior a la final.');
-  if (dueFrom) { conditions.push('COALESCE(f.fechaPrometidaPago,f.fechaVencimiento)>=?'); params.push(dueFrom); }
-  if (dueTo) { conditions.push('COALESCE(f.fechaPrometidaPago,f.fechaVencimiento)<=?'); params.push(dueTo); }
-  const state = String(cleanText(req.query.estado, 30) || '').toLowerCase();
-  addCalculatedDebtStateFilter(conditions, params, state, {
-    alias: 'f', today, warningThrough, allowStored: false
-  });
+  const { conditions, params, today, warningThrough } = buildDebtFilter(
+    req.query,
+    idTienda,
+    configuration,
+    { allowStored: false }
+  );
+  conditions.push('f.saldoPendiente>0');
   const where = conditions.join(' AND ');
   const [[rows], [summaryRows]] = await Promise.all([
     pool.query(
@@ -944,7 +822,7 @@ router.get('/cobranza/alertas', requirePlanFeature('recordatorios_fiado'), async
   ]);
   const alerts = rows.map((row) => {
     const effectiveDate = effectiveDebtDate(row);
-    const difference = effectiveDate ? daysBetween(today, effectiveDate) : null;
+    const difference = effectiveDate ? daysBetweenLocalDates(today, effectiveDate) : null;
     return {
       ...row,
       aceptaRecordatorios: Boolean(row.aceptaRecordatorios),
@@ -1093,7 +971,7 @@ router.post('/cobranza/mensaje-whatsapp/preparar', requirePlanFeature('recordato
   if (unknownVariables.length) throw creditError(409, 'La plantilla contiene variables no permitidas.');
   const balance = debt ? Number(debt.saldoPendiente).toFixed(2) : (await customerSnapshot(pool, idTienda, idCliente)).summary.deudaActual;
   const dueDate = debt ? effectiveDebtDate(debt) : null;
-  const lateDays = dueDate ? Math.max(0, -daysBetween(formatLocalDate(), dueDate)) : 0;
+  const lateDays = dueDate ? Math.max(0, -daysBetweenLocalDates(formatLocalDate(), dueDate)) : 0;
   let receipt = '';
   if (debt?.idVenta) {
     const [sales] = await pool.query('SELECT codigoComprobante FROM venta WHERE idTienda=? AND idVenta=?', [idTienda, debt.idVenta]);
@@ -1129,12 +1007,6 @@ router.post('/cobranza/mensaje-whatsapp/preparar', requirePlanFeature('recordato
 
 function addOneDay(dateText) {
   return formatLocalDate(addLocalDays(parseBusinessDate(dateText), 1));
-}
-
-function daysBetween(from, to) {
-  const [fromYear, fromMonth, fromDay] = from.split('-').map(Number);
-  const [toYear, toMonth, toDay] = to.split('-').map(Number);
-  return Math.round((Date.UTC(toYear, toMonth - 1, toDay) - Date.UTC(fromYear, fromMonth - 1, fromDay)) / 86400000);
 }
 
 module.exports = router;

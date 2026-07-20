@@ -1,7 +1,13 @@
 const crypto = require('crypto');
 const bcrypt = require('bcryptjs');
+const ExcelJS = require('exceljs');
 const { createDatabaseConnection } = require('../config/database-connection');
 const { requireLocalhostDatabase } = require('../config/env');
+const {
+  exportCustomers,
+  safeExportFileName,
+  sanitizeSpreadsheetCell
+} = require('../services/customer-credit-export-service');
 const { addLocalDays, formatLocalDate, formatLocalDateTime, parseLocalDate } = require('../utils/local-datetime');
 const { applyTestRequestSecurity } = require('./http-test-security');
 
@@ -31,6 +37,24 @@ class HttpSession {
     try { body = text ? JSON.parse(text) : null; } catch { body = text; }
     return { status: response.status, body };
   }
+
+  async requestRaw(path, options = {}) {
+    const request = { ...options, headers: { ...(options.headers || {}) }, redirect: 'manual' };
+    if (request.body && typeof request.body !== 'string') {
+      request.headers['content-type'] = 'application/json';
+      request.body = JSON.stringify(request.body);
+    }
+    applyTestRequestSecurity(this.baseUrl, request);
+    if (this.cookie) request.headers.cookie = this.cookie;
+    const response = await fetch(`${this.baseUrl}${path}`, request);
+    const cookie = response.headers.get('set-cookie');
+    if (cookie) this.cookie = cookie.split(';')[0];
+    return {
+      status: response.status,
+      headers: response.headers,
+      buffer: Buffer.from(await response.arrayBuffer())
+    };
+  }
 }
 
 function safe(value) {
@@ -47,6 +71,36 @@ async function expect(session, path, options, status, label) {
     throw new Error(`${label}: se esperaba HTTP ${status}, se obtuvo ${response.status}. Respuesta: ${JSON.stringify(safe(response.body))}`);
   }
   return response.body;
+}
+
+async function expectRaw(session, path, status, label) {
+  const response = await session.requestRaw(path);
+  if (response.status !== status) {
+    let body = response.buffer.toString('utf8');
+    try { body = JSON.parse(body); } catch { /* keep text for the diagnostic */ }
+    throw new Error(`${label}: se esperaba HTTP ${status}, se obtuvo ${response.status}. Respuesta: ${JSON.stringify(safe(body))}`);
+  }
+  return response;
+}
+
+async function workbookFrom(response, expectedFilePrefix) {
+  assert(
+    response.headers.get('content-type')?.includes('application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'),
+    'La exportacion no devolvio el Content-Type de XLSX.'
+  );
+  const disposition = response.headers.get('content-disposition') || '';
+  assert(disposition.includes('attachment;') && disposition.includes(expectedFilePrefix),
+    `Content-Disposition no contiene un nombre seguro esperado: ${disposition}`);
+  const workbook = new ExcelJS.Workbook();
+  await workbook.xlsx.load(response.buffer);
+  return workbook;
+}
+
+function findHeaderRow(sheet, label) {
+  for (let index = 1; index <= sheet.rowCount; index += 1) {
+    if (String(sheet.getRow(index).getCell(1).value || '') === label) return sheet.getRow(index);
+  }
+  throw new Error(`No se encontro el encabezado ${label} en ${sheet.name}.`);
 }
 
 async function resolveTestPlans(connection, superSession) {
@@ -70,7 +124,9 @@ async function resolveTestPlans(connection, superSession) {
     funcionalidades: featuresByPlan.get(Number(plan.idPlan)) || new Set()
   }));
   const basicFeatures = ['clientes_basico', 'fiados_basico', 'pagos_fiado', 'estado_cuenta_basico'];
-  const advancedFeatures = ['limites_credito', 'seguimiento_cobranza', 'recordatorios_fiado'];
+  const advancedFeatures = [
+    'limites_credito', 'seguimiento_cobranza', 'recordatorios_fiado', 'exportacion_clientes_fiados'
+  ];
   const advanced = availablePlans.find((plan) =>
     [...basicFeatures, ...advancedFeatures].every((feature) => plan.funcionalidades.has(feature))
   );
@@ -278,7 +334,11 @@ async function main() {
       nombre: `Cliente bloqueado ${marker}`, telefono: '70000001', permiteFiado: false
     } }, 201, 'Cliente sin fiado');
     const inactive = await expect(advanced, '/api/clientes', { method: 'POST', body: {
-      nombre: `Cliente inactivo ${marker}`, telefono: '70000002'
+      nombre: '=SUM(1,1)',
+      telefono: '+CMD 70000002',
+      documentoIdentidad: '-1+1',
+      direccion: '@HYPERLINK("https://example.invalid")',
+      notas: '\t=FORMULA_OCULTA'
     } }, 201, 'Cliente para inactivar');
     await connection.query('UPDATE cliente SET activo=0 WHERE idTienda=? AND idCliente=?', [fixture.advancedStore, inactive.idCliente]);
 
@@ -561,6 +621,9 @@ async function main() {
     const otherCustomer = await expect(other, '/api/clientes', { method: 'POST', body: {
       nombre: `Cliente aislado ${marker}`, telefono: '79999999'
     } }, 201, 'Cliente otra tienda');
+    const otherCredit = await expect(other, '/api/pos/ventas', { method: 'POST', body: saleBody(
+      marker, 'fiado-otra-tienda', otherProduct.idProducto, otherCustomer.idCliente
+    ) }, 201, 'Fiado de tienda aislada');
     await expect(other, `/api/clientes/${customer.idCliente}`, {}, 404, 'Cliente aislado');
     await expect(other, `/api/fiados/${confirmedCredit.idFiado}`, {}, 404, 'Fiado aislado');
     await expect(other, `/api/fiados/${confirmedCredit.idFiado}/pagos`, { method: 'POST', body: {
@@ -568,9 +631,160 @@ async function main() {
     } }, 404, 'Cobro cruzado rechazado');
     assert(otherCustomer.idCliente, 'No se creo el cliente de aislamiento.');
 
+    const customerExportResponse = await expectRaw(
+      advanced,
+      `/api/clientes/exportacion.xlsx?estado=activos&texto=${encodeURIComponent(marker)}`,
+      200,
+      'Exportar clientes avanzados'
+    );
+    const customerWorkbook = await workbookFrom(customerExportResponse, 'clientes_');
+    const customerSheet = customerWorkbook.getWorksheet('Clientes');
+    assert(customerSheet && customerSheet.getRow(1).getCell(1).value === 'ID cliente',
+      'La hoja de clientes no tiene el encabezado esperado.');
+    const exportedCustomerNames = customerSheet.getColumn(2).values.slice(2).map(String);
+    assert(exportedCustomerNames.length > 0
+      && exportedCustomerNames.every((name) => name.includes(marker))
+      && !exportedCustomerNames.some((name) => name.includes('Cliente aislado')),
+    'La exportacion de clientes no respeto la busqueda o mezclo tiendas.');
+    assert(customerSheet.getRow(2).getCell(1).type === ExcelJS.ValueType.Number
+      && customerSheet.getRow(2).getCell(9).value instanceof Date,
+    'Los identificadores o fechas de clientes dejaron de ser tipos XLSX reales.');
+    const customerHeaders = customerSheet.getRow(1).values.slice(1).join('|').toLowerCase();
+    assert(!/(password|hash|token|claveoperacion|idtienda)/.test(customerHeaders),
+      'La exportacion de clientes contiene columnas sensibles o del tenant.');
+
+    const noCreditExport = await workbookFrom(await expectRaw(
+      advanced,
+      '/api/clientes/exportacion.xlsx?estado=activos&permiteFiado=0',
+      200,
+      'Exportar clientes sin fiado'
+    ), 'clientes_');
+    const noCreditIds = noCreditExport.getWorksheet('Clientes').getColumn(1).values.slice(2).map(Number);
+    assert(noCreditIds.includes(Number(disabled.idCliente)),
+      'La exportacion no respeto permiteFiado=0.');
+
+    const injectionExport = await workbookFrom(await expectRaw(
+      advanced,
+      `/api/clientes/exportacion.xlsx?estado=ocultos&documento=${encodeURIComponent('-1+1')}`,
+      200,
+      'Exportar cliente con formulas potenciales'
+    ), 'clientes_');
+    const injectionRow = injectionExport.getWorksheet('Clientes').getRow(2);
+    assert(String(injectionRow.getCell(2).value).startsWith("'=")
+      && String(injectionRow.getCell(3).value).startsWith("'+")
+      && String(injectionRow.getCell(5).value).startsWith("'-")
+      && String(injectionRow.getCell(7).value).startsWith("'@"),
+    'La exportacion no neutralizo =, +, - y @ en texto de usuario.');
+    assert(sanitizeSpreadsheetCell('\t+CMD') === "'\t+CMD"
+      && sanitizeSpreadsheetCell('Texto normal') === 'Texto normal'
+      && sanitizeSpreadsheetCell(12.5) === 12.5,
+    'La neutralizacion no cubre prefijos ocultos o altera valores seguros.');
+    const safeName = safeExportFileName('estado:cuenta', '../Cliente AUX', formatLocalDate());
+    assert(!/[<>:"/\\|?*\u0000-\u001f]/.test(safeName)
+      && safeName.endsWith(`${formatLocalDate()}.xlsx`) && safeName.length <= 160,
+    `El nombre de archivo no es seguro: ${safeName}`);
+
+    const debtExportResponse = await expectRaw(
+      advanced,
+      `/api/fiados/exportacion.xlsx?estado=vencido&venceHasta=${formatLocalDate()}&soloAbiertos=1`,
+      200,
+      'Exportar fiados vencidos'
+    );
+    const debtWorkbook = await workbookFrom(debtExportResponse, 'fiados_');
+    const debtSheet = debtWorkbook.getWorksheet('Cobranza');
+    const debtHeader = findHeaderRow(debtSheet, 'ID fiado');
+    const exportedDebtRows = [];
+    for (let rowNumber = debtHeader.number + 1; rowNumber <= debtSheet.rowCount; rowNumber += 1) {
+      const row = debtSheet.getRow(rowNumber);
+      if (row.getCell(1).value !== null) exportedDebtRows.push(row);
+    }
+    assert(Number(debtSheet.getRow(2).getCell(2).value) === expectedOverdue
+      && Number(debtSheet.getRow(3).getCell(2).value) === expectedOverdueDebt
+      && exportedDebtRows.length === expectedOverdue
+      && exportedDebtRows.every((row) => row.getCell(7).value === 'vencido'),
+    'Los totales o filtros globales de la exportacion de fiados son incorrectos.');
+
+    const statementExportResponse = await expectRaw(
+      advanced,
+      `/api/clientes/${customer.idCliente}/estado-cuenta/exportacion.xlsx`,
+      200,
+      'Exportar estado de cuenta completo'
+    );
+    const statementWorkbook = await workbookFrom(statementExportResponse, 'estado_cuenta_');
+    const statementSheet = statementWorkbook.getWorksheet('Estado de cuenta');
+    const statementHeader = findHeaderRow(statementSheet, 'Fecha');
+    const statementRows = [];
+    for (let rowNumber = statementHeader.number + 1; rowNumber <= statementSheet.rowCount; rowNumber += 1) {
+      const row = statementSheet.getRow(rowNumber);
+      if (row.getCell(1).value !== null) statementRows.push(row);
+    }
+    assert(statementRows.length === accountFirstPage.total,
+      'El estado de cuenta XLSX quedo limitado a la pagina visual.');
+    for (let index = 1; index < statementRows.length; index += 1) {
+      assert(statementRows[index - 1].getCell(1).value.getTime() <= statementRows[index].getCell(1).value.getTime(),
+        'El estado de cuenta XLSX no tiene orden cronologico determinista.');
+    }
+    let expectedRunningBalance = Number(statementSheet.getRow(7).getCell(2).value || 0);
+    for (const row of statementRows) {
+      expectedRunningBalance = Number((expectedRunningBalance
+        + Number(row.getCell(7).value || 0) - Number(row.getCell(8).value || 0)).toFixed(2));
+      assert(Number(row.getCell(9).value) === expectedRunningBalance,
+        'El saldo acumulado del estado de cuenta es incorrecto.');
+    }
+    const currentCustomerDebt = await scalar(connection,
+      'SELECT COALESCE(SUM(saldoPendiente),0) total FROM fiado WHERE idTienda=? AND idCliente=?',
+      [fixture.advancedStore, customer.idCliente]);
+    assert(Number(statementSheet.getRow(8).getCell(2).value) === currentCustomerDebt
+      && expectedRunningBalance === currentCustomerDebt,
+    'El saldo final exportado no coincide con la deuda reconciliada.');
+
+    const otherCustomerExport = await workbookFrom(await expectRaw(
+      other,
+      `/api/clientes/exportacion.xlsx?estado=todos&texto=${encodeURIComponent(marker)}`,
+      200,
+      'Exportar clientes de tienda aislada'
+    ), 'clientes_');
+    const otherNames = otherCustomerExport.getWorksheet('Clientes').getColumn(2).values.slice(2).map(String);
+    assert(otherNames.includes(`Cliente aislado ${marker}`)
+      && !otherNames.includes(`Cliente credito ${marker}`),
+    'La exportacion de clientes mezclo tiendas.');
+    const otherDebtExport = await workbookFrom(await expectRaw(
+      other,
+      '/api/fiados/exportacion.xlsx?soloAbiertos=1',
+      200,
+      'Exportar fiados de tienda aislada'
+    ), 'fiados_');
+    const otherDebtSheet = otherDebtExport.getWorksheet('Cobranza');
+    const otherDebtHeader = findHeaderRow(otherDebtSheet, 'ID fiado');
+    const otherDebtIds = otherDebtSheet.getColumn(1).values.slice(otherDebtHeader.number + 1).map(Number).filter(Boolean);
+    assert(otherDebtIds.length === 1 && otherDebtIds[0] === Number(otherCredit.idFiado)
+      && !otherDebtIds.includes(Number(confirmedCredit.idFiado)),
+    'La exportacion de fiados mezclo tiendas.');
+    await expect(other, `/api/clientes/${customer.idCliente}/estado-cuenta/exportacion.xlsx`, {}, 404,
+      'Estado de cuenta de otra tienda rechazado');
+
+    let limitError = null;
+    try {
+      await exportCustomers(connection, fixture.advancedStore, { estado: 'todos', texto: marker }, {
+        limits: { customers: 1, debts: 1, statement: 1 }
+      });
+    } catch (error) {
+      limitError = error;
+    }
+    assert(limitError?.status === 413 && limitError?.code === 'EXPORT_ROW_LIMIT_EXCEEDED',
+      'Superar el limite de exportacion no produjo un error controlado sin truncamiento.');
+
     const basicCustomer = await expect(basic, '/api/clientes', { method: 'POST', body: {
       nombre: `Cliente basico ${marker}`, telefono: '71111111'
     } }, 201, 'Cliente plan basico');
+    const basicExport = await expectRaw(basic, '/api/clientes/exportacion.xlsx', 403,
+      'Plan basico no exporta clientes');
+    assert(JSON.parse(basicExport.buffer.toString('utf8')).code === 'PLAN_FEATURE_REQUIRED',
+      'El plan basico no recibio el error estable de funcionalidad para exportar.');
+    await expectRaw(basic, '/api/fiados/exportacion.xlsx', 403,
+      'Plan basico no exporta fiados');
+    await expectRaw(basic, `/api/clientes/${basicCustomer.idCliente}/estado-cuenta/exportacion.xlsx`, 403,
+      'Plan basico no exporta estado de cuenta');
     await expect(basic, '/api/configuracion-credito', {}, 200, 'Lectura operativa de configuracion basica');
     await expect(basic, '/api/configuracion-credito', { method: 'PUT', body: { limiteCreditoDefault: 20 } }, 403, 'Configuracion avanzada bloqueada');
     await expect(basic, '/api/cobranza/alertas', {}, 403, 'Recordatorios avanzados bloqueados');
@@ -747,6 +961,10 @@ async function main() {
       ['suspendida', formatLocalDateTime(), basicSubscription.idSuscripcion]);
     await expect(basic, `/api/clientes/${basicCustomer.idCliente}`, {}, 200,
       'Lectura historica con suscripcion suspendida');
+    const suspendedExport = await expectRaw(basic, '/api/clientes/exportacion.xlsx', 403,
+      'Suscripcion suspendida no exporta');
+    assert(JSON.parse(suspendedExport.buffer.toString('utf8')).code === 'SUBSCRIPTION_READ_ONLY',
+      'La exportacion con suscripcion suspendida no devolvio el contrato esperado.');
     await expect(basic, `/api/fiados/${basicCredit.idFiado}/pagos`, { method: 'POST', body: {
       monto: 1, metodoPago: 'efectivo', claveOperacion: `cobro-suspendido-${marker}`
     } }, 403, 'Cobro bloqueado con suscripcion suspendida');

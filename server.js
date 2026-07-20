@@ -93,6 +93,9 @@ app.use('/api/admin/catalogo/importaciones/plantilla.xlsx', rateLimiters.export)
 app.use('/api/exportaciones', rateLimiters.export);
 app.use('/api/inventario-inteligente/exportacion.xlsx', rateLimiters.export);
 app.use('/api/lotes/exportacion.xlsx', rateLimiters.export);
+app.use('/api/clientes/exportacion.xlsx', rateLimiters.export);
+app.use('/api/fiados/exportacion.xlsx', rateLimiters.export);
+app.use(/^\/api\/clientes\/\d+\/estado-cuenta\/exportacion\.xlsx\/?$/, rateLimiters.export);
 app.use('/api/cobranza/mensaje-whatsapp/preparar', rateLimiters.whatsapp);
 app.use('/api/admin', rateLimiters.admin);
 app.use('/api', rateLimiters.api);

@@ -10,7 +10,7 @@
     const {
       api, view, modalRoot, getState, hasFeature, escapeHtml: e, money, formatDate,
       showError, showSuccess, newOperationKey, localDateValue, requestAdminPassword,
-      refreshCatalogs
+      refreshCatalogs, secureFetch, errorFromResponse
     } = deps;
     const ui = {
       customerPage: 1,
@@ -55,6 +55,50 @@
       } else {
         button.textContent = button.dataset.originalText || button.textContent;
         button.disabled = false;
+      }
+    }
+
+    function filterQuery(filters, extra = {}) {
+      const query = new URLSearchParams();
+      Object.entries({ ...filters, ...extra }).forEach(([key, value]) => {
+        if (value !== '' && value !== null && value !== undefined) query.set(key, value);
+      });
+      return query;
+    }
+
+    function downloadFileName(response, fallback) {
+      const disposition = response.headers.get('Content-Disposition') || '';
+      const encoded = disposition.match(/filename\*=UTF-8''([^;]+)/i)?.[1];
+      if (encoded) {
+        try { return decodeURIComponent(encoded); } catch { /* use the ASCII fallback */ }
+      }
+      return disposition.match(/filename="?([^";]+)"?/i)?.[1] || fallback;
+    }
+
+    async function downloadWorkbook(url, button, fallbackName) {
+      if (!button || button.disabled) return;
+      setBusy(button, true, 'Generando...');
+      try {
+        const response = await secureFetch(url);
+        if (!response.ok) {
+          const body = await response.json().catch(() => ({}));
+          throw errorFromResponse(response, body, 'No se pudo generar la exportacion.');
+        }
+        const blob = await response.blob();
+        const objectUrl = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = objectUrl;
+        link.download = downloadFileName(response, fallbackName);
+        link.hidden = true;
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+        URL.revokeObjectURL(objectUrl);
+        await showSuccess('Exportacion generada correctamente.');
+      } catch (error) {
+        showError(error.message || 'No se pudo generar la exportacion.');
+      } finally {
+        if (button.isConnected) setBusy(button, false);
       }
     }
 
@@ -195,7 +239,7 @@
         const withDebt = Number(summary.clientesConDeuda ?? customers.filter((item) => Number(item.deudaActual || 0) > 0).length);
         view.innerHTML = `
           <div class="credit-heading"><div><span class="eyebrow">Clientes</span><h3>Relaciones claras, cuentas al dia</h3><p>Consulta deuda, credito y actividad sin perder el historial.</p></div>
-            <div class="actions">${!readOnly() ? '<button type="button" data-new-customer>Agregar cliente</button>' : ''}${can('limites_credito') ? '<button type="button" class="secondary" data-credit-config>Configurar credito</button>' : ''}</div></div>
+            <div class="actions">${!readOnly() ? '<button type="button" data-new-customer>Agregar cliente</button>' : ''}${can('limites_credito') ? '<button type="button" class="secondary" data-credit-config>Configurar credito</button>' : ''}${can('exportacion_clientes_fiados') ? `<button type="button" class="secondary" data-export-customers ${readOnly() ? 'disabled title="La suscripcion debe estar activa para exportar."' : ''}>Exportar clientes</button>` : ''}</div></div>
           <div class="cards customer-summary-cards"><article class="card"><span>Clientes activos</span><strong>${active}</strong></article>
             <article class="card"><span>Clientes ocultos</span><strong>${hidden}</strong></article>
             <article class="card"><span>Clientes con deuda</span><strong>${withDebt}</strong></article>
@@ -214,6 +258,14 @@
     function wireCustomerView(customers) {
       view.querySelector('[data-new-customer]')?.addEventListener('click', () => openCustomerForm());
       view.querySelector('[data-credit-config]')?.addEventListener('click', openCreditConfiguration);
+      view.querySelector('[data-export-customers]:not([disabled])')?.addEventListener('click', (event) => {
+        const query = filterQuery(ui.customerFilters);
+        downloadWorkbook(
+          `/api/clientes/exportacion.xlsx?${query}`,
+          event.currentTarget,
+          `clientes_${localDateValue()}.xlsx`
+        );
+      });
       view.querySelector('#customerFilters')?.addEventListener('submit', (event) => {
         event.preventDefault();
         ui.customerFilters = Object.fromEntries(new FormData(event.currentTarget).entries());
@@ -476,6 +528,7 @@
         <label>Buscar<input name="busqueda" type="search" value="${e(f.busqueda || '')}" placeholder="Cliente o telefono"></label><label>Cliente<select name="cliente"><option value="">Todos</option>${state().clientes.map((item) => option(item.idCliente, item.nombre, f.cliente)).join('')}</select></label>
         <label>Estado<select name="estado">${['', 'vencido', 'vence_hoy', 'proximo_a_vencer', 'al_dia', 'sin_fecha', 'pagado'].map((item) => option(item, item ? statusText(item) : 'Todos', f.estado)).join('')}</select></label>
         <label>Desde<input name="venceDesde" type="date" value="${e(f.venceDesde || '')}"></label><label>Hasta<input name="venceHasta" type="date" value="${e(f.venceHasta || '')}"></label>
+        <label>Saldo minimo<input name="saldoMinimo" type="number" min="0" step="0.01" value="${e(f.saldoMinimo || '')}"></label><label>Saldo maximo<input name="saldoMaximo" type="number" min="0" step="0.01" value="${e(f.saldoMaximo || '')}"></label>
         <div class="credit-filter-actions"><button type="submit">Aplicar</button><button type="button" class="secondary" data-clear-collection-filters>Limpiar</button></div>
       </form>`;
     }
@@ -518,7 +571,7 @@
         const rows = data.alertas || data.fiados || data;
         const summary = data.resumen || {};
         const total = Number(data.total || rows.length);
-        view.innerHTML = `<div class="credit-heading"><div><span class="eyebrow">Cobranza</span><h3>Deudas y compromisos en un solo lugar</h3><p>Los cobros se registran sin volver a afectar inventario.</p></div>${can('limites_credito') ? '<button type="button" class="secondary" data-credit-config>Configurar credito</button>' : ''}</div>
+        view.innerHTML = `<div class="credit-heading"><div><span class="eyebrow">Cobranza</span><h3>Deudas y compromisos en un solo lugar</h3><p>Los cobros se registran sin volver a afectar inventario.</p></div><div class="actions">${can('limites_credito') ? '<button type="button" class="secondary" data-credit-config>Configurar credito</button>' : ''}${can('exportacion_clientes_fiados') ? `<button type="button" class="secondary" data-export-debts ${readOnly() ? 'disabled title="La suscripcion debe estar activa para exportar."' : ''}>Exportar fiados</button>` : ''}</div></div>
           <div class="cards collection-summary-cards"><article class="card"><span>Deuda total filtrada</span><strong>Bs ${money(summary.deudaTotal || 0)}</strong></article><article class="card"><span>Vencidos filtrados</span><strong>${Number(summary.vencidos || 0)}</strong></article><article class="card"><span>Vence hoy</span><strong>${Number(summary.venceHoy || 0)}</strong></article><article class="card"><span>Proximos</span><strong>${Number(summary.proximos || 0)}</strong></article><article class="card"><span>Sin fecha</span><strong>${Number(summary.sinFecha || 0)}</strong></article></div>
           ${advancedAlerts ? '' : '<div class="panel plan-note"><strong>Alertas y WhatsApp disponibles en plan avanzado.</strong><p>El pago y consulta de deuda existente siguen disponibles.</p></div>'}
           ${readOnly() ? '<div class="panel plan-note"><strong>Suscripcion inactiva: solo consulta.</strong><p>Puedes revisar clientes y deuda historica, pero no registrar pagos ni cambios hasta renovar.</p></div>' : ''}
@@ -533,6 +586,15 @@
 
     function wireCollectionView(rows) {
       view.querySelector('[data-credit-config]')?.addEventListener('click', openCreditConfiguration);
+      view.querySelector('[data-export-debts]:not([disabled])')?.addEventListener('click', (event) => {
+        const alertListing = can('recordatorios_fiado') && ui.collectionFilters.estado !== 'pagado';
+        const query = filterQuery(ui.collectionFilters, alertListing ? { soloAbiertos: '1' } : {});
+        downloadWorkbook(
+          `/api/fiados/exportacion.xlsx?${query}`,
+          event.currentTarget,
+          `fiados_${localDateValue()}.xlsx`
+        );
+      });
       const filterForm = view.querySelector('#collectionFilters');
       filterForm?.addEventListener('submit', (event) => {
         event.preventDefault();
@@ -693,7 +755,7 @@
         if (period.fechaDesde) query.set('fechaDesde', period.fechaDesde);
         if (period.fechaHasta) query.set('fechaHasta', period.fechaHasta);
         const data = await api(`/api/clientes/${idCliente}/estado-cuenta?${query}`);
-        modalRoot.innerHTML = `<div class="modal-backdrop"><section class="modal modal-wide statement-modal" role="dialog" aria-modal="true" aria-label="Estado de cuenta"><form class="statement-filters no-print" data-statement-filters><label>Desde<input name="fechaDesde" type="date" value="${e(period.fechaDesde || '')}"></label><label>Hasta<input name="fechaHasta" type="date" value="${e(period.fechaHasta || '')}"></label><button type="submit" class="secondary">Aplicar periodo</button></form>${statementMarkup(data, period)}<div class="credit-pagination no-print" aria-label="Paginas del estado de cuenta"><button type="button" class="secondary" data-statement-page="${statementPage - 1}" ${data.hasPreviousPage ? '' : 'disabled'}>Anterior</button><span>Pagina ${data.page} de ${data.totalPages}</span><button type="button" class="secondary" data-statement-page="${statementPage + 1}" ${data.hasNextPage ? '' : 'disabled'}>Siguiente</button></div><div class="modal-actions no-print"><button type="button" class="secondary" data-statement-copy>Copiar resumen</button>${can('recordatorios_fiado') ? '<button type="button" class="secondary" data-statement-whatsapp>Preparar WhatsApp</button>' : ''}<button type="button" data-statement-print>Imprimir</button><button type="button" class="secondary" data-modal-cancel>Cerrar</button></div></section></div>`;
+        modalRoot.innerHTML = `<div class="modal-backdrop"><section class="modal modal-wide statement-modal" role="dialog" aria-modal="true" aria-label="Estado de cuenta"><form class="statement-filters no-print" data-statement-filters><label>Desde<input name="fechaDesde" type="date" value="${e(period.fechaDesde || '')}"></label><label>Hasta<input name="fechaHasta" type="date" value="${e(period.fechaHasta || '')}"></label><button type="submit" class="secondary">Aplicar periodo</button></form>${statementMarkup(data, period)}<div class="credit-pagination no-print" aria-label="Paginas del estado de cuenta"><button type="button" class="secondary" data-statement-page="${statementPage - 1}" ${data.hasPreviousPage ? '' : 'disabled'}>Anterior</button><span>Pagina ${data.page} de ${data.totalPages}</span><button type="button" class="secondary" data-statement-page="${statementPage + 1}" ${data.hasNextPage ? '' : 'disabled'}>Siguiente</button></div><div class="modal-actions no-print"><button type="button" class="secondary" data-statement-copy>Copiar resumen</button>${can('exportacion_clientes_fiados') ? `<button type="button" class="secondary" data-statement-export ${readOnly() ? 'disabled title="La suscripcion debe estar activa para exportar."' : ''}>Exportar XLSX</button>` : ''}${can('recordatorios_fiado') ? '<button type="button" class="secondary" data-statement-whatsapp>Preparar WhatsApp</button>' : ''}<button type="button" data-statement-print>Imprimir</button><button type="button" class="secondary" data-modal-cancel>Cerrar</button></div></section></div>`;
         modalRoot.querySelector('[data-statement-filters]').addEventListener('submit', (event) => {
           event.preventDefault();
           const fd = new FormData(event.currentTarget);
@@ -704,6 +766,17 @@
         }));
         modalRoot.querySelector('[data-modal-cancel]').addEventListener('click', () => { modalRoot.innerHTML = ''; returnFocus?.focus?.(); });
         modalRoot.querySelector('[data-statement-print]').addEventListener('click', () => window.print());
+        modalRoot.querySelector('[data-statement-export]:not([disabled])')?.addEventListener('click', (event) => {
+          const query = filterQuery({}, {
+            fechaDesde: period.fechaDesde,
+            fechaHasta: period.fechaHasta
+          });
+          downloadWorkbook(
+            `/api/clientes/${idCliente}/estado-cuenta/exportacion.xlsx?${query}`,
+            event.currentTarget,
+            `estado_cuenta_${localDateValue()}.xlsx`
+          );
+        });
         modalRoot.querySelector('[data-statement-copy]').addEventListener('click', async (event) => {
           await copyText(`Estado de cuenta de ${data.cliente.nombre}\nDeuda actual: Bs ${money(data.cliente.deudaActual)}\nFiados abiertos: ${data.fiadosAbiertos.length}`);
           event.currentTarget.textContent = 'Resumen copiado';

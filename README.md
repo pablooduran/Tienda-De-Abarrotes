@@ -483,6 +483,22 @@ npm.cmd run test:customers-credit
 
 La prueba cubre perfiles ampliados, documentos normalizados, limites individuales y de tienda, politicas de deuda vencida, fechas prometidas, cobros especificos y acumulados, deuda oculta, idempotencia, concurrencia, estado de cuenta, alertas, seguimientos y mensajes preparados para WhatsApp. Tambien confirma aislamiento entre tiendas, permisos por plan, continuidad de cobros tras un downgrade y que ningun pago modifica stock, lotes o movimientos de inventario. Usa solamente tiendas y credenciales temporales en una base local cuyo nombre contenga `prueba` o `test`, y elimina todos los datos que crea.
 
+#### Exportaciones de clientes y cobranza
+
+El plan que incluye `exportacion_clientes_fiados` puede generar XLSX desde **Clientes**, **Cobranza** y el estado de cuenta. Los endpoints canonicos son `GET /api/clientes/exportacion.xlsx`, `GET /api/fiados/exportacion.xlsx` y `GET /api/clientes/:id/estado-cuenta/exportacion.xlsx`. Requieren una suscripcion activa y, respectivamente, `clientes_basico`, `fiados_basico` o `estado_cuenta_basico`; todos usan exclusivamente la tienda autenticada.
+
+Los listados exportan el conjunto global que cumple los filtros, no solo la pagina visible. El estado de cuenta usa fechas `DATE` locales inclusivas y construye internamente un final semiabierto; muestra ventas como referencia y aplica al saldo solamente la deuda creada y sus pagos. Toda celda textual procedente de usuarios se neutraliza frente a formulas de hoja de calculo.
+
+Los limites son explicitos, configurables y nunca truncan en silencio:
+
+```text
+CUSTOMER_CREDIT_EXPORT_CLIENTS_MAX_ROWS=5000
+CUSTOMER_CREDIT_EXPORT_DEBTS_MAX_ROWS=10000
+CUSTOMER_CREDIT_EXPORT_STATEMENT_MAX_ROWS=20000
+```
+
+Al superarlos se responde HTTP `413` con `EXPORT_ROW_LIMIT_EXCEEDED`; el usuario debe reducir fechas o filtros. Los nombres de archivo y la fecha de generacion usan `America/La_Paz`.
+
 ### Seguridad y revocacion de sesiones
 
 La migracion `013` agrega `administrador.versionSesion`. Cada peticion autenticada contrasta el administrador, su rol, asociacion, tienda y version contra la base. Desactivar una cuenta o tienda, cambiar el usuario o restablecer una contrasena invalida las sesiones anteriores.

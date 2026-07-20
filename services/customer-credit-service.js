@@ -8,6 +8,9 @@ const { enforcePlanLimit } = require('./subscription-service');
 
 const CREDIT_POLICIES = new Set(['permitir', 'advertir', 'bloquear']);
 const COMMUNICATION_CHANNELS = new Set(['ninguno', 'whatsapp', 'telefono', 'correo', 'presencial']);
+const CUSTOMER_STATES = new Set(['activos', 'ocultos', 'todos']);
+const COLLECTION_STATES = new Set(['vencido', 'vence_hoy', 'proximo_a_vencer', 'al_dia', 'sin_fecha', 'pagado']);
+const STORED_DEBT_STATES = new Set(['pendiente', 'parcial', 'pagado']);
 const MAX_MONEY_CENTS = 9999999999;
 
 function creditError(status, message, code) {
@@ -103,6 +106,270 @@ function parseLocalDate(value, label, { allowNull = true } = {}) {
 
 function addLocalDays(dateText, days) {
   return formatLocalDate(shiftLocalDays(parseBusinessDate(dateText), days));
+}
+
+function queryBoolean(value, label) {
+  if (value === undefined || value === '') return null;
+  if (value === '1' || value === 1 || value === true || value === 'true') return 1;
+  if (value === '0' || value === 0 || value === false || value === 'false') return 0;
+  throw creditError(400, `${label} no es valido.`);
+}
+
+function positiveIdentifier(value, label) {
+  const number = Number(value);
+  if (!Number.isInteger(number) || number <= 0) throw creditError(400, `${label} no es valido.`);
+  return number;
+}
+
+function resolveCustomerState(query = {}, forcedState = null) {
+  if (forcedState) return forcedState;
+  const requested = String(cleanText(query.estado, 20) || '').toLowerCase();
+  if (requested && !CUSTOMER_STATES.has(requested)) {
+    throw creditError(400, 'El estado de clientes no es valido.', 'INVALID_CUSTOMER_STATE');
+  }
+  if (requested) return requested;
+  const legacyActive = queryBoolean(query.activo, 'El filtro de actividad');
+  if (legacyActive !== null) return legacyActive === 1 ? 'activos' : 'ocultos';
+  return 'activos';
+}
+
+function buildCustomerFilter(query, idTienda, { forcedState = null } = {}) {
+  const conditions = ['c.idTienda=?'];
+  const params = [idTienda];
+  const text = cleanText(query.texto || query.q, 100);
+  const state = resolveCustomerState(query, forcedState);
+  const allowsCredit = queryBoolean(query.permiteFiado, 'El filtro de fiado');
+  const hasDebt = queryBoolean(query.conDeuda, 'El filtro de deuda');
+  const overdue = queryBoolean(query.vencido, 'El filtro de vencimiento');
+  if (text) {
+    conditions.push(`(c.nombre LIKE ? OR c.telefono LIKE ? OR c.telefonoAlternativo LIKE ?
+      OR c.documentoIdentidad LIKE ? OR c.correo LIKE ?)`);
+    const pattern = `%${text}%`;
+    params.push(pattern, pattern, pattern, pattern, pattern);
+  }
+  if (state === 'activos') conditions.push('c.activo=1');
+  if (state === 'ocultos') conditions.push('c.activo=0');
+  if (allowsCredit !== null) {
+    conditions.push('c.permiteFiado=?');
+    params.push(allowsCredit);
+  }
+  if (hasDebt !== null) {
+    conditions.push(`${hasDebt ? '' : 'NOT '}EXISTS (
+      SELECT 1 FROM fiado fd WHERE fd.idTienda=c.idTienda AND fd.idCliente=c.idCliente AND fd.saldoPendiente>0
+    )`);
+  }
+  if (overdue !== null) {
+    conditions.push(`${overdue ? '' : 'NOT '}EXISTS (
+      SELECT 1 FROM fiado fv WHERE fv.idTienda=c.idTienda AND fv.idCliente=c.idCliente
+        AND fv.saldoPendiente>0
+        AND COALESCE(fv.fechaPrometidaPago, fv.fechaVencimiento) IS NOT NULL
+        AND COALESCE(fv.fechaPrometidaPago, fv.fechaVencimiento)<?
+    )`);
+    params.push(formatLocalDate());
+  }
+  if (query.documento) {
+    conditions.push('c.documentoNormalizado=?');
+    params.push(normalizeDocument(query.documento).normalized);
+  }
+  if (query.telefono) {
+    conditions.push('c.telefonoNormalizado=?');
+    params.push(normalizePhone(query.telefono).normalized);
+  }
+  return { conditions, params, state, where: conditions.join(' AND ') };
+}
+
+function addDebtStateFilter(conditions, params, state, options = {}) {
+  if (!state) return;
+  const allowed = options.allowStored
+    ? new Set([...COLLECTION_STATES, ...STORED_DEBT_STATES])
+    : new Set([...COLLECTION_STATES].filter((item) => item !== 'pagado'));
+  if (!allowed.has(state)) throw creditError(400, 'El estado de cobranza no es valido.');
+  const alias = options.alias || 'f';
+  const effectiveDate = `COALESCE(${alias}.fechaPrometidaPago,${alias}.fechaVencimiento)`;
+  if (options.allowStored && (state === 'pendiente' || state === 'parcial')) {
+    conditions.push(`${alias}.estado=?`);
+    params.push(state);
+  } else if (state === 'pagado') {
+    conditions.push(`${alias}.saldoPendiente<=0`);
+  } else if (state === 'vencido') {
+    conditions.push(`${alias}.saldoPendiente>0 AND ${effectiveDate} IS NOT NULL AND ${effectiveDate}<?`);
+    params.push(options.today);
+  } else if (state === 'vence_hoy') {
+    conditions.push(`${alias}.saldoPendiente>0 AND ${effectiveDate}=?`);
+    params.push(options.today);
+  } else if (state === 'proximo_a_vencer') {
+    conditions.push(`${alias}.saldoPendiente>0 AND ${effectiveDate}>? AND ${effectiveDate}<=?`);
+    params.push(options.today, options.warningThrough);
+  } else if (state === 'al_dia') {
+    conditions.push(`${alias}.saldoPendiente>0 AND ${effectiveDate}>?`);
+    params.push(options.warningThrough);
+  } else if (state === 'sin_fecha') {
+    conditions.push(`${alias}.saldoPendiente>0 AND ${effectiveDate} IS NULL`);
+  }
+}
+
+function buildDebtFilter(query, idTienda, configuration, { forcedActive = null, allowStored = true } = {}) {
+  const conditions = ['f.idTienda=?'];
+  const params = [idTienda];
+  const today = formatLocalDate();
+  const warningThrough = addLocalDays(today, Number(configuration.diasAvisoVencimiento));
+  const active = forcedActive === null ? queryBoolean(query.activo, 'El filtro de actividad') : forcedActive;
+  if (active !== null) {
+    conditions.push('f.activo=?');
+    params.push(active);
+  }
+  const openOnly = queryBoolean(query.soloAbiertos, 'El filtro de saldo abierto');
+  if (openOnly !== null) conditions.push(openOnly ? 'f.saldoPendiente>0' : 'f.saldoPendiente<=0');
+  const minimumBalanceCents = query.saldoMinimo === undefined || query.saldoMinimo === ''
+    ? null : moneyToCents(query.saldoMinimo, 'El saldo minimo');
+  const maximumBalanceCents = query.saldoMaximo === undefined || query.saldoMaximo === ''
+    ? null : moneyToCents(query.saldoMaximo, 'El saldo maximo');
+  if (minimumBalanceCents !== null && maximumBalanceCents !== null
+    && minimumBalanceCents > maximumBalanceCents) {
+    throw creditError(400, 'El saldo minimo no puede superar el saldo maximo.');
+  }
+  if (minimumBalanceCents !== null) {
+    conditions.push('f.saldoPendiente>=?');
+    params.push(centsToDecimal(minimumBalanceCents));
+  }
+  if (maximumBalanceCents !== null) {
+    conditions.push('f.saldoPendiente<=?');
+    params.push(centsToDecimal(maximumBalanceCents));
+  }
+  if (query.idCliente || query.cliente) {
+    conditions.push('f.idCliente=?');
+    params.push(positiveIdentifier(query.idCliente || query.cliente, 'El cliente'));
+  }
+  const search = cleanText(query.busqueda || query.texto, 100);
+  if (search) {
+    conditions.push('(c.nombre LIKE ? OR c.telefono LIKE ? OR c.telefonoNormalizado LIKE ?)');
+    const pattern = `%${search}%`;
+    params.push(pattern, pattern, pattern);
+  }
+  const state = String(cleanText(query.estado, 30) || '').toLowerCase();
+  addDebtStateFilter(conditions, params, state, {
+    alias: 'f', today, warningThrough, allowStored
+  });
+  const startedFrom = query.desde
+    ? parseLocalDate(query.desde, 'La fecha inicial', { allowNull: false }) : null;
+  const startedTo = query.hasta
+    ? parseLocalDate(query.hasta, 'La fecha final', { allowNull: false }) : null;
+  if (startedFrom && startedTo && startedFrom > startedTo) {
+    throw creditError(400, 'La fecha inicial debe ser anterior a la final.');
+  }
+  if (startedFrom) {
+    conditions.push('f.fechaInicio>=?');
+    params.push(startedFrom);
+  }
+  if (startedTo) {
+    conditions.push('f.fechaInicio<=?');
+    params.push(startedTo);
+  }
+  const effectiveDate = 'COALESCE(f.fechaPrometidaPago,f.fechaVencimiento)';
+  const dueFrom = query.venceDesde
+    ? parseLocalDate(query.venceDesde, 'La fecha inicial de vencimiento', { allowNull: false }) : null;
+  const dueTo = query.venceHasta
+    ? parseLocalDate(query.venceHasta, 'La fecha final de vencimiento', { allowNull: false }) : null;
+  if (dueFrom && dueTo && dueFrom > dueTo) {
+    throw creditError(400, 'La fecha inicial de vencimiento debe ser anterior a la final.');
+  }
+  if (dueFrom) {
+    conditions.push(`${effectiveDate}>=?`);
+    params.push(dueFrom);
+  }
+  if (dueTo) {
+    conditions.push(`${effectiveDate}<=?`);
+    params.push(dueTo);
+  }
+  return {
+    active,
+    conditions,
+    dueFrom,
+    dueTo,
+    effectiveDate,
+    params,
+    startedFrom,
+    startedTo,
+    state,
+    today,
+    warningThrough,
+    where: conditions.join(' AND ')
+  };
+}
+
+function buildStatementFilter(query, idTienda, idCliente) {
+  const from = parseLocalDate(query.fechaDesde, 'La fecha inicial');
+  const to = parseLocalDate(query.fechaHasta, 'La fecha final');
+  if (from && to && from > to) throw creditError(400, 'La fecha inicial debe ser anterior a la final.');
+  const paymentConditions = ['f.idTienda=?', 'f.idCliente=?'];
+  const paymentParams = [idTienda, idCliente];
+  const debtConditions = ['f.idTienda=?', 'f.idCliente=?'];
+  const debtParams = [idTienda, idCliente];
+  const saleConditions = ['v.idTienda=?', 'v.idCliente=?'];
+  const saleParams = [idTienda, idCliente];
+  const debtEventDate = "COALESCE(v.fecha,CONCAT(f.fechaInicio,' 00:00:00'))";
+  const fromDateTime = from ? `${from} 00:00:00` : null;
+  const toExclusive = to ? `${addLocalDays(to, 1)} 00:00:00` : null;
+  if (fromDateTime) {
+    paymentConditions.push('pf.fechaPago>=?');
+    paymentParams.push(fromDateTime);
+    debtConditions.push(`${debtEventDate}>=?`);
+    debtParams.push(fromDateTime);
+    saleConditions.push('v.fecha>=?');
+    saleParams.push(fromDateTime);
+  }
+  if (toExclusive) {
+    paymentConditions.push('pf.fechaPago<?');
+    paymentParams.push(toExclusive);
+    debtConditions.push(`${debtEventDate}<?`);
+    debtParams.push(toExclusive);
+    saleConditions.push('v.fecha<?');
+    saleParams.push(toExclusive);
+  }
+  const movementSql = `
+    SELECT 'venta' tipo, v.fecha, 1 tipoOrden, v.idVenta ordenId,
+           v.idVenta, NULL idFiado, NULL idPagoFiado, v.total monto,
+           NULL metodoPago, NULL referencia, v.codigoComprobante,
+           v.saldoPendiente, v.estadoPago
+    FROM venta v WHERE ${saleConditions.join(' AND ')}
+    UNION ALL
+    SELECT 'fiado' tipo, ${debtEventDate} fecha, 2 tipoOrden, f.idFiado ordenId,
+           f.idVenta, f.idFiado, NULL idPagoFiado, f.totalFiado monto,
+           NULL metodoPago, NULL referencia, v.codigoComprobante,
+           f.saldoPendiente, f.estado estadoPago
+    FROM fiado f LEFT JOIN venta v ON v.idTienda=f.idTienda AND v.idVenta=f.idVenta
+    WHERE ${debtConditions.join(' AND ')}
+    UNION ALL
+    SELECT 'pago' tipo, pf.fechaPago fecha, 3 tipoOrden, pf.idPagoFiado ordenId,
+           f.idVenta, pf.idFiado, pf.idPagoFiado, pf.monto,
+           cf.metodoPago, cf.referencia, v.codigoComprobante,
+           f.saldoPendiente, f.estado estadoPago
+    FROM pagoFiado pf
+    JOIN fiado f ON f.idTienda=pf.idTienda AND f.idFiado=pf.idFiado
+    JOIN cobroFiado cf ON cf.idTienda=pf.idTienda AND cf.idCobroFiado=pf.idCobroFiado
+    LEFT JOIN venta v ON v.idTienda=f.idTienda AND v.idVenta=f.idVenta
+    WHERE ${paymentConditions.join(' AND ')}`;
+  return {
+    debtConditions,
+    debtEventDate,
+    debtParams,
+    from,
+    fromDateTime,
+    movementParams: [...saleParams, ...debtParams, ...paymentParams],
+    movementSql,
+    paymentConditions,
+    paymentParams,
+    saleConditions,
+    saleParams,
+    to,
+    toExclusive
+  };
+}
+
+function daysBetweenLocalDates(from, to) {
+  const [fromYear, fromMonth, fromDay] = from.split('-').map(Number);
+  const [toYear, toMonth, toDay] = to.split('-').map(Number);
+  return Math.round((Date.UTC(toYear, toMonth - 1, toDay) - Date.UTC(fromYear, fromMonth - 1, fromDay)) / 86400000);
 }
 
 function localDateText(value) {
@@ -367,12 +634,16 @@ function normalizeCreditConfiguration(body, current) {
 
 module.exports = {
   addLocalDays,
+  buildCustomerFilter,
+  buildDebtFilter,
+  buildStatementFilter,
   centsToDecimal,
   cleanText,
   collectionState,
   creditError,
   effectiveDebtDate,
   effectiveLimitCents,
+  daysBetweenLocalDates,
   getCreditConfiguration,
   lockCustomer,
   lockCustomerDebts,

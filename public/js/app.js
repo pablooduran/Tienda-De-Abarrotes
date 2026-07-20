@@ -274,7 +274,9 @@ function creditUi() {
       newOperationKey,
       localDateValue,
       requestAdminPassword,
-      refreshCatalogs
+      refreshCatalogs,
+      secureFetch: SecurityHttp.secureFetch,
+      errorFromResponse: SecurityHttp.errorFromResponse
     });
   }
   return customerCreditUi;
