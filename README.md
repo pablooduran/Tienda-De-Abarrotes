@@ -481,7 +481,7 @@ $env:DB_HOST='localhost'
 npm.cmd run test:customers-credit
 ```
 
-La prueba cubre perfiles ampliados, documentos normalizados, limites individuales y de tienda, politicas de deuda vencida, fechas prometidas, cobros especificos y acumulados, deuda oculta, idempotencia, concurrencia, estado de cuenta, alertas, seguimientos y mensajes preparados para WhatsApp. Tambien confirma aislamiento entre tiendas, permisos por plan, continuidad de cobros tras un downgrade y que ningun pago modifica stock, lotes o movimientos de inventario. Usa solamente tiendas y credenciales temporales en una base local cuyo nombre contenga `prueba` o `test`, y elimina todos los datos que crea.
+La prueba cubre perfiles ampliados, documentos normalizados, limites individuales y de tienda, politicas de deuda vencida, fechas prometidas, cobros especificos y acumulados, deuda oculta, idempotencia, concurrencia, estado de cuenta, alertas, seguimientos, mensajes preparados para WhatsApp y los ocho segmentos dinamicos. Tambien confirma aislamiento entre tiendas, permisos por plan, continuidad de cobros tras un downgrade, filtros previos a paginacion y que ningun pago modifica stock, lotes o movimientos de inventario. Usa solamente tiendas y credenciales temporales en una base local cuyo nombre contenga `prueba` o `test`, y elimina todos los datos que crea.
 
 #### Exportaciones de clientes y cobranza
 
@@ -498,6 +498,25 @@ CUSTOMER_CREDIT_EXPORT_STATEMENT_MAX_ROWS=20000
 ```
 
 Al superarlos se responde HTTP `413` con `EXPORT_ROW_LIMIT_EXCEEDED`; el usuario debe reducir fechas o filtros. Los nombres de archivo y la fecha de generacion usan `America/La_Paz`.
+
+#### Segmentacion dinamica de clientes
+
+El plan que incluye `segmentacion_clientes` habilita `GET /api/clientes/segmentacion` y la vista **Segmentacion** dentro de Clientes. El endpoint tambien exige `clientes_basico`, obtiene siempre la tienda autenticada y calcula resultados en el momento; no guarda etiquetas ni crea una tabla de segmentos. Una suscripcion suspendida conserva la lectura historica conforme al contrato general de consultas, pero un plan sin la funcion avanzada recibe `403`.
+
+Los segmentos disponibles y sus reglas son:
+
+- `frecuentes`: al menos 5 compras en los ultimos 90 dias, valores configurables con `comprasMinimas` y `dias`.
+- `inactivos`: cliente activo sin compras durante 90 dias o sin compras registradas; `diasSinCompra` es configurable y los ocultos solo entran con `estadoCliente=ocultos|todos`.
+- `con_deuda`: suma reconciliada de `fiado.saldoPendiente` mayor que cero.
+- `vencidos`: deuda abierta, activa y no cerrada cuya `fechaVencimiento` original es anterior al dia local actual.
+- `promesa_incumplida`: deuda abierta, activa y no cerrada cuya `fechaPrometidaPago` es anterior al dia local actual.
+- `buenos_pagadores`: al menos 3 fiados cerrados y evaluables durante 365 dias, puntualidad minima de 80%, sin deuda vencida ni promesas incumplidas actuales. La puntualidad compara `DATE(cerradoEn)` con `fechaVencimiento`; fiados sin vencimiento no se inventan ni entran al denominador.
+- `mayor_compra`: ranking por total de ventas dentro del periodo, con cantidad y ticket promedio.
+- `mayor_saldo`: ranking por saldo pendiente, saldo vencido y cantidad de deudas.
+
+Los valores predeterminados pueden ajustarse mediante parametros validados; `pageSize` y `limiteResultados` admiten de 1 a 100 filas por pagina. `fechaDesde` y `fechaHasta` son fechas civiles inclusivas de `America/La_Paz`; internamente se usa un rango `DATETIME` semiabierto. La busqueda cubre nombre, telefono y documento normalizado. `estadoCliente` admite unicamente `activos`, `ocultos` o `todos`, y los campos de orden usan una lista permitida.
+
+La respuesta incluye `descripcion`, `criterios`, `parametrosAplicados`, resumen global, resultados explicados y paginacion. Los filtros y agregados se aplican antes de `LIMIT/OFFSET`; las metricas no se reconstruyen con la pagina visible. Las ventas se cuentan conforme al modelo actual, que todavia no posee anulacion de ventas. Una futura anulacion debera excluir sus operaciones mediante una regla central, no con una excepcion propia de segmentacion. Para volumenes grandes conviene medir los planes de ejecucion; los indices actuales por tienda, cliente y fecha soportan la primera version, pero una migracion futura puede incorporar indices especializados segun datos reales.
 
 ### Seguridad y revocacion de sesiones
 

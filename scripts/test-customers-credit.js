@@ -129,7 +129,8 @@ async function resolveTestPlans(connection, superSession) {
   }));
   const basicFeatures = ['clientes_basico', 'fiados_basico', 'pagos_fiado', 'estado_cuenta_basico'];
   const advancedFeatures = [
-    'limites_credito', 'seguimiento_cobranza', 'recordatorios_fiado', 'exportacion_clientes_fiados'
+    'limites_credito', 'seguimiento_cobranza', 'recordatorios_fiado', 'exportacion_clientes_fiados',
+    'segmentacion_clientes'
   ];
   const advanced = availablePlans.find((plan) =>
     [...basicFeatures, ...advancedFeatures].every((feature) => plan.funcionalidades.has(feature))
@@ -416,6 +417,28 @@ async function main() {
     const unlimitedSummary = await expect(advanced, `/api/clientes/${duplicatePhone.idCliente}/resumen`, {}, 200, 'Resumen sin limite');
     assert(unlimitedSummary.cliente.limiteEfectivo === null && unlimitedSummary.cliente.creditoDisponible === null,
       'El credito sin limite se represento como un monto finito.');
+
+    const oldCustomer = await expect(advanced, '/api/clientes', { method: 'POST', body: {
+      nombre: `Cliente compra antigua ${marker}`, telefono: '71110001'
+    } }, 201, 'Crear cliente con compra antigua');
+    const oldSale = await expect(advanced, '/api/pos/ventas', { method: 'POST', body: saleBody(
+      marker, 'compra-antigua-segmentacion', product.idProducto, oldCustomer.idCliente,
+      [{ metodoPago: 'efectivo', monto: 10 }]
+    ) }, 201, 'Crear compra para inactividad');
+    const oldPurchaseDate = formatLocalDateTime(addLocalDays(parseLocalDate(formatLocalDate()), -120));
+    await connection.query('UPDATE venta SET fecha=? WHERE idTienda=? AND idVenta=?',
+      [oldPurchaseDate, fixture.advancedStore, oldSale.idVenta]);
+
+    const punctualCustomer = await expect(advanced, '/api/clientes', { method: 'POST', body: {
+      nombre: `Cliente puntual ${marker}`, telefono: '71110002'
+    } }, 201, 'Crear cliente puntual');
+    const punctualCredit = await expect(advanced, '/api/pos/ventas', { method: 'POST', body: saleBody(
+      marker, 'fiado-puntual-segmentacion', product.idProducto, punctualCustomer.idCliente, [],
+      { fechaVencimiento: addDays(formatLocalDate(), 10) }
+    ) }, 201, 'Crear fiado puntual');
+    await expect(advanced, `/api/fiados/${punctualCredit.idFiado}/pagos`, { method: 'POST', body: {
+      monto: 10, metodoPago: 'qr', claveOperacion: `cobro-puntual-segmentacion-${marker}`
+    } }, 201, 'Cerrar fiado puntual');
 
     const stockBeforePayment = await scalar(connection,
       'SELECT stockUnidadesTotal total FROM producto WHERE idTienda=? AND idProducto=?',
@@ -746,11 +769,152 @@ async function main() {
     await expect(advanced, '/api/cobranza/alertas?estado=no_valido', {}, 400, 'Estado de alerta invalido');
 
     const otherCustomer = await expect(other, '/api/clientes', { method: 'POST', body: {
-      nombre: `Cliente aislado ${marker}`, telefono: '79999999'
+      nombre: `Cliente aislado ${marker}`, telefono: '76543210', documentoIdentidad: `CI-${marker}`
     } }, 201, 'Cliente otra tienda');
     const otherCredit = await expect(other, '/api/pos/ventas', { method: 'POST', body: saleBody(
       marker, 'fiado-otra-tienda', otherProduct.idProducto, otherCustomer.idCliente
     ) }, 201, 'Fiado de tienda aislada');
+
+    const frequent = await expect(advanced,
+      '/api/clientes/segmentacion?segmento=frecuentes&comprasMinimas=5&page=1&pageSize=20', {}, 200,
+      'Segmentar clientes frecuentes');
+    assert(frequent.resultados.some((item) => Number(item.idCliente) === Number(customer.idCliente)
+      && Number(item.cantidadCompras) >= 5 && item.motivo.includes('Frecuente:')),
+    'El cliente frecuente no cumplio el umbral o no explica el criterio aplicado.');
+    const frequentStrict = await expect(advanced,
+      '/api/clientes/segmentacion?segmento=frecuentes&comprasMinimas=100&page=1&pageSize=20', {}, 200,
+      'Umbral estricto de frecuencia');
+    assert(!frequentStrict.resultados.some((item) => Number(item.idCliente) === Number(customer.idCliente)),
+      'Un cliente por debajo del umbral aparecio como frecuente.');
+
+    const inactiveSegment = await expect(advanced,
+      '/api/clientes/segmentacion?segmento=inactivos&diasSinCompra=90&page=1&pageSize=100', {}, 200,
+      'Segmentar clientes inactivos');
+    assert(inactiveSegment.resultados.some((item) => Number(item.idCliente) === Number(noPhone.idCliente)
+      && item.ultimaCompra === null)
+      && inactiveSegment.resultados.some((item) => Number(item.idCliente) === Number(oldCustomer.idCliente)
+        && Number(item.diasDesdeUltimaCompra) >= 90)
+      && !inactiveSegment.resultados.some((item) => Number(item.idCliente) === Number(disabled.idCliente)),
+    'La inactividad no distinguio nunca compro, compra antigua y compra reciente.');
+    assert(!inactiveSegment.resultados.some((item) => Number(item.idCliente) === Number(inactive.idCliente)),
+      'Los clientes ocultos se incluyeron por defecto como inactivos.');
+    const inactiveAll = await expect(advanced,
+      '/api/clientes/segmentacion?segmento=inactivos&diasSinCompra=90&estadoCliente=todos&pageSize=100', {}, 200,
+      'Segmentacion incluye ocultos de forma explicita');
+    assert(inactiveAll.resultados.some((item) => Number(item.idCliente) === Number(inactive.idCliente) && item.activo === false),
+      'El estado todos no incluyo al cliente oculto.');
+
+    const withDebtSegment = await expect(advanced,
+      '/api/clientes/segmentacion?segmento=con_deuda&page=1&pageSize=100', {}, 200,
+      'Segmentar clientes con deuda');
+    const customerDebtRow = withDebtSegment.resultados.find((item) => Number(item.idCliente) === Number(customer.idCliente));
+    const expectedCustomerDebt = await scalar(connection,
+      'SELECT COALESCE(SUM(saldoPendiente),0) total FROM fiado WHERE idTienda=? AND idCliente=? AND saldoPendiente>0',
+      [fixture.advancedStore, customer.idCliente]);
+    assert(customerDebtRow && Number(customerDebtRow.saldoPendiente) === expectedCustomerDebt
+      && withDebtSegment.resultados.every((item) => Number(item.saldoPendiente) > 0),
+    'El segmento con deuda no coincide con el saldo canonico de cobranza.');
+    assert(!withDebtSegment.resultados.some((item) => Number(item.idCliente) === Number(punctualCustomer.idCliente)),
+      'Un cliente sin saldo aparecio en el segmento con deuda.');
+
+    const overdueSegment = await expect(advanced,
+      '/api/clientes/segmentacion?segmento=vencidos&page=1&pageSize=100', {}, 200,
+      'Segmentar clientes vencidos');
+    assert(overdueSegment.resultados.some((item) => Number(item.idCliente) === Number(customer.idCliente)
+      && Number(item.saldoVencido) > 0 && Number(item.diasMaximoAtraso) >= 1)
+      && !overdueSegment.resultados.some((item) => Number(item.idCliente) === Number(duplicatePhone.idCliente)),
+    'El segmento vencido no respeto la fecha local original o incluyo deuda futura.');
+
+    const promisedBeforeTest = addDays(formatLocalDate(), 2);
+    await connection.query('UPDATE fiado SET fechaPrometidaPago=? WHERE idTienda=? AND idFiado=?',
+      [invalidDate, fixture.advancedStore, confirmedCredit.idFiado]);
+    const brokenPromise = await expect(advanced,
+      '/api/clientes/segmentacion?segmento=promesa_incumplida&page=1&pageSize=100', {}, 200,
+      'Segmentar promesas incumplidas');
+    assert(brokenPromise.resultados.some((item) => Number(item.idCliente) === Number(customer.idCliente)
+      && String(item.fechaPrometida).slice(0, 10) === invalidDate),
+    'La promesa vencida no se clasifico con la fecha local.');
+    await connection.query('UPDATE fiado SET fechaPrometidaPago=? WHERE idTienda=? AND idFiado=?',
+      [promisedBeforeTest, fixture.advancedStore, confirmedCredit.idFiado]);
+    const futurePromise = await expect(advanced,
+      `/api/clientes/segmentacion?segmento=promesa_incumplida&busqueda=${encodeURIComponent(`Cliente puntual ${marker}`)}`, {}, 200,
+      'Promesa futura no incumplida');
+    assert(futurePromise.resultados.length === 0, 'Una promesa futura aparecio como incumplida.');
+
+    const goodPayersDefault = await expect(advanced,
+      `/api/clientes/segmentacion?segmento=buenos_pagadores&busqueda=${encodeURIComponent(`Cliente puntual ${marker}`)}`, {}, 200,
+      'Buen pagador exige historial suficiente');
+    assert(goodPayersDefault.resultados.length === 0,
+      'Un solo fiado cerrado fue suficiente para clasificar como buen pagador con los valores predeterminados.');
+    const goodPayersCustom = await expect(advanced,
+      `/api/clientes/segmentacion?segmento=buenos_pagadores&minimoFiadosCerrados=1&porcentajePuntualMinimo=80&busqueda=${encodeURIComponent(`Cliente puntual ${marker}`)}`, {}, 200,
+      'Buen pagador con umbral verificable');
+    assert(goodPayersCustom.resultados.length === 1
+      && Number(goodPayersCustom.resultados[0].porcentajePuntualidad) === 100,
+    'El porcentaje puntual de un historial evaluable no se calculo correctamente.');
+    assert(!goodPayersCustom.resultados.some((item) => Number(item.idCliente) === Number(customer.idCliente)),
+      'Un cliente con deuda vencida actual aparecio como buen pagador.');
+
+    const purchaseRanking = await expect(advanced,
+      '/api/clientes/segmentacion?segmento=mayor_compra&page=1&pageSize=100', {}, 200,
+      'Ranking por compras');
+    assert(purchaseRanking.resultados.every((item, index, rows) => index === 0
+      || Number(rows[index - 1].totalComprado) >= Number(item.totalComprado)),
+    'El ranking de compras no esta ordenado de forma descendente.');
+    const customerPurchase = purchaseRanking.resultados.find((item) => Number(item.idCliente) === Number(customer.idCliente));
+    const [[expectedPurchase]] = await connection.query(
+      `SELECT COUNT(*) cantidad, COALESCE(SUM(total),0) total
+       FROM venta WHERE idTienda=? AND idCliente=? AND fecha>=? AND fecha<?`,
+      [fixture.advancedStore, customer.idCliente,
+        formatLocalDateTime(addLocalDays(parseLocalDate(formatLocalDate()), -89)),
+        formatLocalDateTime(addLocalDays(parseLocalDate(formatLocalDate()), 1))]
+    );
+    assert(customerPurchase && Number(customerPurchase.totalComprado) === Number(expectedPurchase.total)
+      && Number(customerPurchase.ticketPromedio) === Number((Number(expectedPurchase.total) / Number(expectedPurchase.cantidad)).toFixed(2)),
+    'El total comprado o ticket promedio no coincide con las ventas del periodo.');
+    const balanceRanking = await expect(advanced,
+      '/api/clientes/segmentacion?segmento=mayor_saldo&page=1&pageSize=100', {}, 200,
+      'Ranking por saldo');
+    assert(balanceRanking.resultados.every((item, index, rows) => index === 0
+      || Number(rows[index - 1].saldoPendiente) >= Number(item.saldoPendiente)),
+    'El ranking de saldo no esta ordenado de forma descendente.');
+
+    const filteredPage = await expect(advanced,
+      `/api/clientes/segmentacion?segmento=inactivos&estadoCliente=todos&busqueda=${encodeURIComponent(marker)}&page=1&pageSize=1`, {}, 200,
+      'Filtros antes de paginar segmentacion');
+    const filteredPageRepeat = await expect(advanced,
+      `/api/clientes/segmentacion?segmento=inactivos&estadoCliente=todos&busqueda=${encodeURIComponent(marker)}&page=1&pageSize=1`, {}, 200,
+      'Orden determinista de segmentacion');
+    assert(filteredPage.paginacion.total >= filteredPage.resultados.length
+      && filteredPage.resumen.totalClientes === filteredPage.paginacion.total
+      && filteredPage.resultados.map((item) => item.idCliente).join(',')
+        === filteredPageRepeat.resultados.map((item) => item.idCliente).join(','),
+    'El conteo, filtro o el orden determinista se calculo despues de paginar.');
+
+    await expect(advanced, '/api/clientes/segmentacion?segmento=no_existe', {}, 400,
+      'Segmento invalido');
+    await expect(advanced, '/api/clientes/segmentacion?segmento=frecuentes&dias=-1', {}, 400,
+      'Rango negativo de segmentacion');
+    await expect(advanced,
+      `/api/clientes/segmentacion?segmento=frecuentes&fechaDesde=${addDays(formatLocalDate(), 1)}&fechaHasta=${formatLocalDate()}`,
+      {}, 400, 'Fechas invalidas de segmentacion');
+    await expect(advanced, '/api/clientes/segmentacion?segmento=frecuentes&pageSize=101', {}, 400,
+      'Tamano excesivo de pagina');
+    await expect(basic, '/api/clientes/segmentacion?segmento=con_deuda', {}, 403,
+      'Plan basico no accede a segmentacion');
+    const isolatedSegmentation = await expect(other,
+      `/api/clientes/segmentacion?segmento=con_deuda&busqueda=${encodeURIComponent(marker)}&pageSize=100`, {}, 200,
+      'Segmentacion aislada por tienda');
+    assert(isolatedSegmentation.resultados.some((item) => Number(item.idCliente) === Number(otherCustomer.idCliente))
+      && !isolatedSegmentation.resultados.some((item) => Number(item.idCliente) === Number(customer.idCliente))
+      && Number(isolatedSegmentation.resumen.saldoPendiente) === Number(otherCredit.nuevoSaldoFiado),
+    'La segmentacion o sus agregados mezclaron tiendas.');
+    const crossSearch = await expect(advanced,
+      `/api/clientes/segmentacion?segmento=con_deuda&busqueda=${encodeURIComponent(`Cliente aislado ${marker}`)}`, {}, 200,
+      'Busqueda no cruza tenants');
+    assert(crossSearch.resultados.length === 0 && crossSearch.resumen.totalClientes === 0,
+      'La busqueda manipulada encontro un cliente de otra tienda.');
+
     const otherTemplate = await expect(other, '/api/plantillas-cobranza', { method: 'POST', body: {
       tipo: 'recordatorio_previo', nombre: `Aislada ${marker}`, contenido: 'Hola {cliente}'
     } }, 201, 'Crear plantilla en otra tienda');
@@ -1122,6 +1286,8 @@ async function main() {
     );
     await connection.query('UPDATE suscripcionTienda SET estado=?,actualizadoEn=? WHERE idSuscripcion=?',
       ['suspendida', formatLocalDateTime(), advancedSubscription.idSuscripcion]);
+    await expect(advanced, '/api/clientes/segmentacion?segmento=con_deuda', {}, 200,
+      'Suscripcion suspendida conserva lectura de segmentacion avanzada');
     await expect(advanced, '/api/plantillas-cobranza', {}, 200,
       'Suscripcion suspendida conserva lectura de plantillas');
     const suspendedTemplateWrite = await expect(advanced, '/api/plantillas-cobranza', { method: 'POST', body: {

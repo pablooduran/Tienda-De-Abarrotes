@@ -5,6 +5,16 @@
   const FOLLOWUP_TYPES = ['nota', 'llamada', 'mensaje_enviado_manual', 'compromiso_pago', 'visita'];
   const CHANNELS = ['ninguno', 'whatsapp', 'telefono', 'presencial', 'correo'];
   const TEMPLATE_TYPES = ['recordatorio_previo', 'deuda_vencida', 'confirmacion_pago', 'estado_cuenta'];
+  const CUSTOMER_SEGMENTS = [
+    ['frecuentes', 'Clientes frecuentes'],
+    ['inactivos', 'Clientes inactivos'],
+    ['con_deuda', 'Clientes con deuda'],
+    ['vencidos', 'Clientes vencidos'],
+    ['promesa_incumplida', 'Promesa incumplida'],
+    ['buenos_pagadores', 'Buenos pagadores'],
+    ['mayor_compra', 'Mayor volumen de compra'],
+    ['mayor_saldo', 'Mayor saldo']
+  ];
 
   function create(deps) {
     const {
@@ -17,6 +27,9 @@
       collectionPage: 1,
       customerFilters: { estado: 'activos' },
       collectionFilters: {},
+      segmentationPage: 1,
+      segmentationFilters: { segmento: 'frecuentes', estadoCliente: 'activos' },
+      segmentationRequest: 0,
       posCustomerId: null,
       posSnapshot: null,
       posConfiguration: null,
@@ -223,6 +236,97 @@
       </div>`;
     }
 
+    function segmentationSpecificFilters(segment, filters) {
+      if (segment === 'frecuentes') return `<label>Dias de ventana<input name="dias" type="number" min="1" max="3650" value="${e(filters.dias || 90)}"></label><label>Compras minimas<input name="comprasMinimas" type="number" min="1" max="1000" value="${e(filters.comprasMinimas || 5)}"></label>`;
+      if (segment === 'inactivos') return `<label>Dias sin compra<input name="diasSinCompra" type="number" min="1" max="3650" value="${e(filters.diasSinCompra || 90)}"></label>`;
+      if (segment === 'buenos_pagadores') return `<label>Periodo en dias<input name="periodoDias" type="number" min="1" max="3650" value="${e(filters.periodoDias || 365)}"></label><label>Fiados cerrados minimos<input name="minimoFiadosCerrados" type="number" min="1" max="1000" value="${e(filters.minimoFiadosCerrados || 3)}"></label><label>Puntualidad minima (%)<input name="porcentajePuntualMinimo" type="number" min="0" max="100" value="${e(filters.porcentajePuntualMinimo ?? 80)}"></label>`;
+      if (segment === 'mayor_compra') return `<label>Dias de ventana<input name="dias" type="number" min="1" max="3650" value="${e(filters.dias || 90)}"></label>`;
+      return '';
+    }
+
+    function segmentationFiltersMarkup() {
+      const f = ui.segmentationFilters;
+      return `<form class="panel credit-filters segmentation-filters" id="segmentationFilters">
+        <label>Segmento<select name="segmento">${CUSTOMER_SEGMENTS.map(([value, label]) => option(value, label, f.segmento)).join('')}</select></label>
+        <label>Buscar<input name="busqueda" type="search" value="${e(f.busqueda || '')}" placeholder="Nombre, telefono o documento"></label>
+        <label>Estado del cliente<select name="estadoCliente">${option('activos', 'Activos', f.estadoCliente)}${option('ocultos', 'Ocultos', f.estadoCliente)}${option('todos', 'Todos', f.estadoCliente)}</select></label>
+        <label>Desde<input name="fechaDesde" type="date" value="${e(f.fechaDesde || '')}"></label>
+        <label>Hasta<input name="fechaHasta" type="date" value="${e(f.fechaHasta || '')}"></label>
+        <label>Saldo minimo<input name="saldoMinimo" type="number" min="0" step="0.01" value="${e(f.saldoMinimo || '')}"></label>
+        <label>Saldo maximo<input name="saldoMaximo" type="number" min="0" step="0.01" value="${e(f.saldoMaximo || '')}"></label>
+        ${segmentationSpecificFilters(f.segmento, f)}
+        <label>Resultados por pagina<select name="pageSize">${[10, 20, 50, 100].map((value) => option(value, value, f.pageSize || 20)).join('')}</select></label>
+        <div class="credit-filter-actions"><button type="submit">Aplicar</button><button type="button" class="secondary" data-clear-segmentation-filters>Restablecer</button></div>
+      </form>`;
+    }
+
+    function segmentationSummaryMarkup(summary = {}) {
+      const metrics = [
+        ['totalClientes', 'Clientes', false],
+        ['totalComprado', 'Total comprado', true],
+        ['ticketPromedio', 'Ticket promedio', true],
+        ['saldoPendiente', 'Saldo pendiente', true],
+        ['saldoVencido', 'Saldo vencido', true],
+        ['clientesConDeuda', 'Con deuda', false],
+        ['clientesVencidos', 'Vencidos', false],
+        ['porcentajePuntualPromedio', 'Puntualidad promedio', false]
+      ].filter(([key]) => summary[key] !== undefined);
+      return `<div class="cards segmentation-summary">${metrics.map(([key, label, monetary]) => `<article class="card"><span>${e(label)}</span><strong>${monetary ? `Bs ${money(summary[key])}` : key === 'porcentajePuntualPromedio' && summary[key] !== null ? `${e(summary[key])}%` : e(summary[key] ?? 'Sin datos')}</strong></article>`).join('')}</div>`;
+    }
+
+    function segmentationRowsMarkup(rows) {
+      if (!rows.length) return '<div class="panel empty-state"><strong>No hay clientes en este segmento.</strong><p>Ningun cliente cumple los criterios y filtros aplicados.</p></div>';
+      const desktop = `<div class="panel table-wrap segmentation-desktop-table"><table><thead><tr><th>Cliente</th><th>Compras</th><th>Total</th><th>Ticket</th><th>Ultima compra</th><th>Saldo</th><th>Vencido</th><th>Criterio cumplido</th><th>Accion</th></tr></thead><tbody>${rows.map((row) => `<tr class="${row.activo ? '' : 'customer-hidden'}"><td><strong>${e(row.nombre)}</strong><small>${e(row.telefono || 'Sin telefono')} · ${row.activo ? 'Activo' : 'Oculto'}</small></td><td>${e(row.cantidadCompras)}</td><td>Bs ${money(row.totalComprado)}</td><td>Bs ${money(row.ticketPromedio)}</td><td>${row.ultimaCompra ? e(formatDate(row.ultimaCompra)) : 'Nunca compro'}</td><td>Bs ${money(row.saldoPendiente)}</td><td>Bs ${money(row.saldoVencido)}</td><td><span class="segmentation-reason">${e(row.motivo)}</span></td><td><button type="button" class="small secondary" data-segment-customer="${e(row.idCliente)}">Ver ficha</button></td></tr>`).join('')}</tbody></table></div>`;
+      const mobile = `<div class="segmentation-mobile-list">${rows.map((row) => `<article class="segmentation-card ${row.activo ? '' : 'customer-hidden'}"><header><div><strong>${e(row.nombre)}</strong><span>${e(row.telefono || 'Sin telefono')}</span></div>${statusBadge(row.activo ? 'activo' : 'oculto')}</header><p class="segmentation-reason">${e(row.motivo)}</p><dl><div><dt>Compras</dt><dd>${e(row.cantidadCompras)}</dd></div><div><dt>Total</dt><dd>Bs ${money(row.totalComprado)}</dd></div><div><dt>Saldo</dt><dd>Bs ${money(row.saldoPendiente)}</dd></div><div><dt>Vencido</dt><dd>Bs ${money(row.saldoVencido)}</dd></div></dl><button type="button" class="small secondary" data-segment-customer="${e(row.idCliente)}">Ver ficha</button></article>`).join('')}</div>`;
+      return desktop + mobile;
+    }
+
+    async function renderSegmentation() {
+      const request = ++ui.segmentationRequest;
+      view.innerHTML = '<div class="panel loading-state">Calculando segmentacion...</div>';
+      try {
+        const query = filterQuery(ui.segmentationFilters, { page: ui.segmentationPage });
+        const data = await api(`/api/clientes/segmentacion?${query}`);
+        if (request !== ui.segmentationRequest) return;
+        const page = data.paginacion || {};
+        view.innerHTML = `<div class="credit-heading"><div><span class="eyebrow">Segmentacion</span><h3>Clientes agrupados por reglas verificables</h3><p>${e(data.descripcion)}</p></div><div class="actions"><button type="button" class="secondary" data-back-customers>Volver a clientes</button></div></div>
+          <div class="panel segmentation-criteria"><strong>Criterio aplicado</strong><p>${e(data.criterios)}</p><small>Periodo: ${e(data.parametrosAplicados.fechaDesde)} a ${e(data.parametrosAplicados.fechaHasta)}. Los calculos usan datos globales filtrados, no solo esta pagina.</small></div>
+          ${segmentationSummaryMarkup(data.resumen)}${segmentationFiltersMarkup()}<div id="segmentationResults">${segmentationRowsMarkup(data.resultados || [])}</div>${pagerMarkup(Number(page.page || ui.segmentationPage), Number(page.pageSize || 20), Number(page.total || 0), 'segmentation')}`;
+        wireSegmentationView();
+      } catch (error) {
+        if (request !== ui.segmentationRequest) return;
+        view.innerHTML = `<div class="panel error-state"><strong>No se pudo calcular la segmentacion.</strong><p>${e(error.message)}</p><div class="actions"><button type="button" data-retry-segmentation>Reintentar</button><button type="button" class="secondary" data-back-customers>Volver a clientes</button></div></div>`;
+        view.querySelector('[data-retry-segmentation]')?.addEventListener('click', renderSegmentation);
+        view.querySelector('[data-back-customers]')?.addEventListener('click', renderCustomers);
+      }
+    }
+
+    function wireSegmentationView() {
+      view.querySelector('[data-back-customers]')?.addEventListener('click', renderCustomers);
+      const form = view.querySelector('#segmentationFilters');
+      form?.addEventListener('submit', (event) => {
+        event.preventDefault();
+        ui.segmentationFilters = Object.fromEntries(new FormData(form).entries());
+        ui.segmentationPage = 1;
+        renderSegmentation();
+      });
+      form?.elements.segmento?.addEventListener('change', () => {
+        ui.segmentationFilters = { segmento: form.elements.segmento.value, estadoCliente: form.elements.estadoCliente.value };
+        ui.segmentationPage = 1;
+        renderSegmentation();
+      });
+      view.querySelector('[data-clear-segmentation-filters]')?.addEventListener('click', () => {
+        ui.segmentationFilters = { segmento: 'frecuentes', estadoCliente: 'activos' };
+        ui.segmentationPage = 1;
+        renderSegmentation();
+      });
+      view.querySelectorAll('[data-segmentation-page]').forEach((button) => button.addEventListener('click', () => {
+        ui.segmentationPage = Number(button.dataset.segmentationPage);
+        renderSegmentation();
+      }));
+      view.querySelectorAll('[data-segment-customer]').forEach((button) => button.addEventListener('click', () => openCustomerProfile(button.dataset.segmentCustomer)));
+    }
+
     async function renderCustomers() {
       view.innerHTML = '<div class="panel loading-state">Cargando clientes...</div>';
       try {
@@ -239,7 +343,7 @@
         const withDebt = Number(summary.clientesConDeuda ?? customers.filter((item) => Number(item.deudaActual || 0) > 0).length);
         view.innerHTML = `
           <div class="credit-heading"><div><span class="eyebrow">Clientes</span><h3>Relaciones claras, cuentas al dia</h3><p>Consulta deuda, credito y actividad sin perder el historial.</p></div>
-            <div class="actions">${!readOnly() ? '<button type="button" data-new-customer>Agregar cliente</button>' : ''}${can('limites_credito') ? '<button type="button" class="secondary" data-credit-config>Configurar credito</button>' : ''}${can('exportacion_clientes_fiados') ? `<button type="button" class="secondary" data-export-customers ${readOnly() ? 'disabled title="La suscripcion debe estar activa para exportar."' : ''}>Exportar clientes</button>` : ''}</div></div>
+            <div class="actions">${!readOnly() ? '<button type="button" data-new-customer>Agregar cliente</button>' : ''}${can('segmentacion_clientes') ? '<button type="button" class="secondary" data-customer-segmentation>Segmentacion</button>' : ''}${can('limites_credito') ? '<button type="button" class="secondary" data-credit-config>Configurar credito</button>' : ''}${can('exportacion_clientes_fiados') ? `<button type="button" class="secondary" data-export-customers ${readOnly() ? 'disabled title="La suscripcion debe estar activa para exportar."' : ''}>Exportar clientes</button>` : ''}</div></div>
           <div class="cards customer-summary-cards"><article class="card"><span>Clientes activos</span><strong>${active}</strong></article>
             <article class="card"><span>Clientes ocultos</span><strong>${hidden}</strong></article>
             <article class="card"><span>Clientes con deuda</span><strong>${withDebt}</strong></article>
@@ -257,6 +361,7 @@
 
     function wireCustomerView(customers) {
       view.querySelector('[data-new-customer]')?.addEventListener('click', () => openCustomerForm());
+      view.querySelector('[data-customer-segmentation]')?.addEventListener('click', renderSegmentation);
       view.querySelector('[data-credit-config]')?.addEventListener('click', openCreditConfiguration);
       view.querySelector('[data-export-customers]:not([disabled])')?.addEventListener('click', (event) => {
         const query = filterQuery(ui.customerFilters);
@@ -970,6 +1075,7 @@
 
     return {
       renderCustomers,
+      renderSegmentation,
       renderCollections,
       openCustomerProfile,
       openPayment,

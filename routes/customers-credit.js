@@ -40,6 +40,7 @@ const {
   updateTemplate
 } = require('../services/customer-credit-template-service');
 const { getCollectionReceipt } = require('../services/customer-credit-receipt-service');
+const { segmentCustomers } = require('../services/customer-segmentation-service');
 const {
   addLocalDays,
   formatLocalDate,
@@ -334,6 +335,15 @@ router.get('/clientes/ocultos', requirePlanFeature('clientes_basico'), asyncRout
 )));
 
 router.get('/clientes', requirePlanFeature('clientes_basico'), asyncRoute((req, res) => listCustomers(req, res)));
+
+router.get(
+  '/clientes/segmentacion',
+  requirePlanFeature('clientes_basico'),
+  requirePlanFeature('segmentacion_clientes'),
+  asyncRoute(async (req, res) => {
+    res.json(await segmentCustomers(pool, tenantId(req), req.query));
+  })
+);
 
 router.get(
   '/clientes/exportacion.xlsx',

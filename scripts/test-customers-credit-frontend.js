@@ -12,6 +12,7 @@ const creditService = read('services/customer-credit-service.js');
 const exportService = read('services/customer-credit-export-service.js');
 const templateService = read('services/customer-credit-template-service.js');
 const receiptService = read('services/customer-credit-receipt-service.js');
+const segmentationService = read('services/customer-segmentation-service.js');
 const posRoutes = read('routes/pos.js');
 const posService = read('services/pos-sale-service.js');
 const css = read('public/css/styles.css');
@@ -29,8 +30,48 @@ check('Navegacion Clientes', appJs.includes("['clientes', 'Clientes'"));
 check('Navegacion Cobranza', appJs.includes("['pagos', 'Cobranza'"));
 check('Permisos basico y avanzado', includesAll(appJs + creditJs, [
   'clientes_basico', 'fiados_basico', 'pagos_fiado', 'recordatorios_fiado',
-  'seguimiento_cobranza', 'limites_credito', 'exportacion_clientes_fiados'
+  'seguimiento_cobranza', 'limites_credito', 'exportacion_clientes_fiados', 'segmentacion_clientes'
 ]));
+check('Endpoint de segmentacion exige permisos basico y avanzado',
+  creditRoutes.includes("'/clientes/segmentacion'")
+  && creditRoutes.indexOf("requirePlanFeature('clientes_basico')", creditRoutes.indexOf("'/clientes/segmentacion'")) > 0
+  && creditRoutes.indexOf("requirePlanFeature('segmentacion_clientes')", creditRoutes.indexOf("'/clientes/segmentacion'")) > 0);
+check('Ocho segmentos explicables implementados', includesAll(segmentationService, [
+  'frecuentes', 'inactivos', 'con_deuda', 'vencidos', 'promesa_incumplida',
+  'buenos_pagadores', 'mayor_compra', 'mayor_saldo', 'criterios', 'motivo'
+]));
+check('Segmentacion filtra y agrega antes de paginar',
+  segmentationService.includes('filtrados AS (SELECT * FROM metricas WHERE ${filtered.sql})')
+  && segmentationService.includes('SELECT COUNT(*) totalClientes')
+  && segmentationService.includes('LIMIT ? OFFSET ?'));
+check('Segmentacion usa joins compuestos y no N mas uno',
+  includesAll(segmentationService, [
+    'vc.idTienda=c.idTienda AND vc.idCliente=c.idCliente',
+    'dc.idTienda=c.idTienda AND dc.idCliente=c.idCliente',
+    'gc.idTienda=c.idTienda AND gc.idCliente=c.idCliente'
+  ]) && !/for\s*\([^)]*\)\s*\{[^}]*\.query\(/s.test(segmentationService));
+check('Orden de segmentacion usa lista permitida',
+  segmentationService.includes('SORT_COLUMNS')
+  && segmentationService.includes('SEGMENTATION_ORDER_INVALID'));
+check('UI de segmentacion depende del plan avanzado',
+  creditJs.includes("can('segmentacion_clientes')")
+  && creditJs.includes('data-customer-segmentation')
+  && creditJs.includes('renderSegmentation'));
+check('UI explica criterio y usa resumen global del backend',
+  creditJs.includes('Criterio aplicado')
+  && creditJs.includes('segmentationSummaryMarkup(data.resumen)')
+  && !creditJs.includes('data.resultados.reduce'));
+check('Cambio de segmento reinicia pagina',
+  creditJs.includes('form?.elements.segmento?.addEventListener')
+  && creditJs.includes('ui.segmentationPage = 1;'));
+check('Respuestas obsoletas de segmentacion se ignoran',
+  creditJs.includes('const request = ++ui.segmentationRequest')
+  && (creditJs.match(/request !== ui\.segmentationRequest/g) || []).length >= 2);
+check('Segmentacion tiene carga, vacio, error y vista movil',
+  creditJs.includes('Calculando segmentacion...')
+  && creditJs.includes('No hay clientes en este segmento.')
+  && creditJs.includes('No se pudo calcular la segmentacion.')
+  && css.includes('.segmentation-mobile-list'));
 check('Formulario ampliado de cliente', includesAll(creditJs, [
   'telefonoAlternativo', 'documentoIdentidad', 'correo', 'direccion', 'limiteCredito',
   'diasCreditoDefault', 'canalPreferido', 'aceptaRecordatorios', 'horarioPreferido', 'notas'

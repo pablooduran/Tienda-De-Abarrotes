@@ -1526,6 +1526,24 @@ textarea:focus-visible { outline: 3px solid rgba(40, 106, 89, .28); outline-offs
 .collection-summary-cards .card span { color: var(--muted); }
 .customer-summary-cards .card small,
 .collection-summary-cards .card small { display: block; margin-top: 4px; color: var(--muted); }
+.segmentation-summary { margin-bottom: 14px; }
+.segmentation-criteria { margin-bottom: 14px; border-left: 4px solid #39735c; }
+.segmentation-criteria p { margin: 6px 0; }
+.segmentation-criteria small { color: var(--muted); }
+.segmentation-filters { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+.segmentation-mobile-list { display: none; }
+.segmentation-card {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel);
+  padding: 14px;
+}
+.segmentation-card header { display: flex; justify-content: space-between; gap: 12px; }
+.segmentation-card header span { display: block; margin-top: 4px; color: var(--muted); }
+.segmentation-card dl { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.segmentation-card dt { color: var(--muted); font-size: 12px; }
+.segmentation-card dd { margin: 2px 0 0; font-weight: 700; }
+.segmentation-reason { display: block; max-width: 34rem; color: #33483f; line-height: 1.4; }
 .credit-filters {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -1761,6 +1779,7 @@ textarea:focus-visible { outline: 3px solid rgba(40, 106, 89, .28); outline-offs
 @media (max-width: 1100px) {
   .credit-filters { grid-template-columns: repeat(3, minmax(0, 1fr)); }
   .collection-filters { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .segmentation-filters { grid-template-columns: repeat(3, minmax(0, 1fr)); }
   .layout { grid-template-columns: 210px minmax(0, 1fr); }
   .toolbar { grid-template-columns: repeat(3, minmax(0, 1fr)); }
   .modern-dashboard { grid-template-columns: 1fr; }
@@ -1787,7 +1806,7 @@ textarea:focus-visible { outline: 3px solid rgba(40, 106, 89, .28); outline-offs
 
 @media (max-width: 900px) {
   .credit-heading { align-items: stretch; flex-direction: column; }
-  .credit-filters, .collection-filters { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .credit-filters, .collection-filters, .segmentation-filters { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .profile-details, .statement-summary { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .pos-credit-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .layout {
@@ -1856,9 +1875,9 @@ textarea:focus-visible { outline: 3px solid rgba(40, 106, 89, .28); outline-offs
 }
 
 @media (max-width: 560px) {
-  .customer-desktop-table, .collection-desktop-table { display: none; }
-  .customer-mobile-list, .collection-mobile-list { display: grid; gap: 10px; }
-  .credit-filters, .collection-filters, .profile-details, .statement-summary,
+  .customer-desktop-table, .collection-desktop-table, .segmentation-desktop-table { display: none; }
+  .customer-mobile-list, .collection-mobile-list, .segmentation-mobile-list { display: grid; gap: 10px; }
+  .credit-filters, .collection-filters, .segmentation-filters, .profile-details, .statement-summary,
   .promise-context, .pos-credit-metrics, .pos-credit-fields, .statement-filters { grid-template-columns: 1fr; }
   .credit-filter-actions, .credit-pagination, .profile-actions, .profile-tabs,
   .timeline-row, .statement-row, .account-statement > header, .template-row,
@@ -1868,7 +1887,7 @@ textarea:focus-visible { outline: 3px solid rgba(40, 106, 89, .28); outline-offs
   .collection-receipt > header > div:last-child { text-align: left; }
   .template-actions, .timeline-actions { display: grid; justify-content: stretch; }
   .template-actions button, .timeline-actions button { width: 100%; }
-  .customer-card dl, .collection-card dl { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .customer-card dl, .collection-card dl, .segmentation-card dl { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   body { font-size: 14px; }
   .content { padding: 10px; }
   .panel, .card, .topbar { border-radius: 6px; }
