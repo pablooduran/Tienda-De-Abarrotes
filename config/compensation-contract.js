@@ -67,6 +67,38 @@ const SALE_SETTLEMENT_STATES = Object.freeze([
   'resuelta'
 ]);
 
+const COLLECTION_COMPENSATION_TYPES = Object.freeze([
+  'anulacion_total',
+  'correccion_metodo'
+]);
+
+const COLLECTION_OPERATION_STATES = Object.freeze([
+  'vigente',
+  'compensado'
+]);
+
+const REFUND_OBLIGATION_STATES = Object.freeze([
+  'pendiente',
+  'reembolsado',
+  'credito_a_favor',
+  'compensado'
+]);
+
+const COLLECTION_PAYMENT_METHODS = Object.freeze([
+  'efectivo',
+  'qr',
+  'transferencia',
+  'tarjeta',
+  'otro',
+  'no_especificado'
+]);
+
+const SALE_PAYMENT_METHODS = Object.freeze([
+  'efectivo',
+  'qr',
+  'no_especificado'
+]);
+
 const OPERATION_KEY_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,159}$/;
 const REQUEST_FINGERPRINT_PATTERN = /^[0-9a-f]{64}$/;
 
@@ -75,6 +107,9 @@ function isAllowed(value, allowlist) {
 }
 
 module.exports = {
+  COLLECTION_COMPENSATION_TYPES,
+  COLLECTION_OPERATION_STATES,
+  COLLECTION_PAYMENT_METHODS,
   COMPENSATION_FEATURE,
   COMPENSATION_REASONS,
   COMPENSATION_STATES,
@@ -83,8 +118,10 @@ module.exports = {
   INVENTORY_RETURN_TREATMENTS,
   OPERATION_KEY_PATTERN,
   REQUEST_FINGERPRINT_PATTERN,
+  REFUND_OBLIGATION_STATES,
   SALE_COMPENSATION_TYPES,
   SALE_OPERATION_STATES,
+  SALE_PAYMENT_METHODS,
   SALE_SETTLEMENT_STATES,
   TERMINAL_COMPENSATION_STATES,
   isCompensationReason: (value) => isAllowed(value, COMPENSATION_REASONS),

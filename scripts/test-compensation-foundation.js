@@ -165,6 +165,10 @@ function schemaWithoutCompensationFoundation() {
   const schema = fs.readFileSync(SCHEMA_FILE, 'utf8');
   return schema
     .replace(
+      /-- COMPENSATION_FINANCIAL_[A-Z_]+_START[\s\S]*?-- COMPENSATION_FINANCIAL_[A-Z_]+_END/g,
+      ''
+    )
+    .replace(
       /-- COMPENSATION_SALES_[A-Z_]+_START[\s\S]*?-- COMPENSATION_SALES_[A-Z_]+_END/g,
       ''
     )
@@ -656,9 +660,10 @@ async function main() {
     }
     const [remaining] = await temporaryServer.query(
       `SELECT SCHEMA_NAME FROM information_schema.SCHEMATA
-       WHERE SCHEMA_NAME LIKE 'tmp\\_tienda\\_restore\\_%' ESCAPE '\\\\'`
+       WHERE SCHEMA_NAME IN (${createdDatabases.map(() => '?').join(',')})`,
+      createdDatabases
     );
-    check(remaining.length === 0, 'No quedan bases temporales de C1 o restauración.');
+    check(remaining.length === 0, 'Las bases temporales propias de C1 se eliminan en finally.');
     await temporaryServer.end();
     await primaryServer.end();
   }

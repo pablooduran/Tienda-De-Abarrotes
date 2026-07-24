@@ -2,6 +2,9 @@ const crypto = require('crypto');
 const pool = require('../config/db');
 const { formatLocalDateTime } = require('../utils/local-datetime');
 const {
+  assertNoPendingSaleSettlements
+} = require('./financial-compensation-service');
+const {
   centsToDecimal,
   cleanText,
   creditError,
@@ -163,18 +166,31 @@ async function insertSalePayment(connection, input) {
 async function reconcileSales(connection, idTienda, saleIds) {
   for (const idVenta of [...new Set(saleIds.filter(Boolean))].sort((a, b) => a - b)) {
     const [[sale]] = await connection.query(
-      'SELECT total FROM venta WHERE idTienda=? AND idVenta=?',
+      'SELECT total, montoCompensado FROM venta WHERE idTienda=? AND idVenta=?',
       [idTienda, idVenta]
     );
     if (!sale) throw creditError(409, 'Venta asociada al fiado no encontrada.');
     const [[payments]] = await connection.query(
-      'SELECT COALESCE(SUM(monto),0) totalPagado FROM pagoVenta WHERE idTienda=? AND idVenta=?',
+      `SELECT COALESCE(SUM(pv.monto),0) totalPagado
+       FROM pagoVenta pv
+       LEFT JOIN detalleCompensacionCobro dcc
+         ON dcc.idTienda=pv.idTienda
+        AND dcc.idPagoVenta=pv.idPagoVenta
+       WHERE pv.idTienda=? AND pv.idVenta=?
+         AND dcc.idDetalleCompensacionCobro IS NULL`,
       [idTienda, idVenta]
     );
     const totalCents = moneyToCents(sale.total, 'El total de la venta');
+    const compensatedCents = moneyToCents(
+      sale.montoCompensado,
+      'El total compensado de la venta'
+    );
     const paidCents = moneyToCents(payments.totalPagado, 'Los pagos de la venta');
-    if (paidCents > totalCents) throw creditError(409, 'Los pagos registrados superan el total de la venta.');
-    const balanceCents = totalCents - paidCents;
+    const effectiveTotalCents = totalCents - compensatedCents;
+    if (effectiveTotalCents < 0 || paidCents > effectiveTotalCents) {
+      throw creditError(409, 'Los pagos efectivos superan el total vigente de la venta.');
+    }
+    const balanceCents = effectiveTotalCents - paidCents;
     const state = balanceCents === 0 ? 'pagada' : (paidCents > 0 ? 'parcial' : 'pendiente');
     await connection.query(
       `UPDATE venta SET montoPagado=?, saldoPendiente=?, estadoPago=?
@@ -204,6 +220,11 @@ async function executeCollection(connection, input) {
     ? debts.filter((debt) => Number(debt.idFiado) === positiveId(input.idFiado, 'El fiado'))
     : debts;
   if (!targetDebts.length) throw creditError(404, 'Fiado no encontrado.', 'DEBT_NOT_FOUND');
+  await assertNoPendingSaleSettlements(
+    connection,
+    input.idTienda,
+    targetDebts.map((debt) => Number(debt.idVenta)).filter(Boolean)
+  );
   const openDebts = targetDebts.filter((debt) => moneyToCents(debt.saldoPendiente, 'El saldo') > 0);
   if (!openDebts.length) throw creditError(409, 'No existe saldo pendiente para aplicar el cobro.', 'NO_OPEN_DEBT');
   const totalDebtCents = openDebts.reduce(

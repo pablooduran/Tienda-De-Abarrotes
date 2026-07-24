@@ -178,6 +178,8 @@ npm.cmd run test:compensation-foundation
 npm.cmd run db:check-compensations
 npm.cmd run test:sales-compensations
 npm.cmd run db:check-sales-compensations
+npm.cmd run test:financial-compensations
+npm.cmd run db:check-financial-compensations
 ```
 
 `test:compensation-foundation` crea exclusivamente bases
@@ -188,6 +190,11 @@ npm.cmd run db:check-sales-compensations
 alli, valida anulacion total, devolucion parcial y acumulada, concurrencia,
 rollback, permisos, CSRF, stock y lotes, y elimina la base en `finally`.
 `db:check-sales-compensations` es de solo lectura y requiere 015 en el destino.
+`test:financial-compensations` aplica 016 mediante el migrador real solo en una
+base temporal, prueba liquidaciones, deuda, reembolsos pendientes, cobros,
+metodos de pago, concurrencia, rollback, tenant, plan y CSRF, y compara la huella
+de la base principal antes y despues. `db:check-financial-compensations` es de
+solo lectura y requiere 016 en el destino.
 
 La ruta canonica de C2 es:
 
@@ -210,9 +217,32 @@ costo y vencimiento. `no_reintegrar` no aumenta stock.
 
 C2 no devuelve dinero ni modifica deuda automaticamente. Cada compensacion
 registra una `liquidacionCompensacionVenta` con reduccion de deuda y/o reembolso
-pendientes. Resolver esas liquidaciones, bloquear interacciones incompatibles,
-integrar reportes netos y generar comprobantes/frontends corresponde a C3 y
-subbloques posteriores.
+pendientes.
+
+C3 resuelve esas liquidaciones mediante rutas protegidas:
+
+```text
+POST /api/liquidaciones-compensacion/:idLiquidacion/resolver
+POST /api/cobros-fiado/:idCobro/compensaciones
+POST /api/pagos-venta/:idPagoVenta/compensaciones/metodo
+```
+
+La resolucion reduce deuda solo hasta el saldo vigente y registra
+`montoCompensado` sin volver negativo el fiado. Si ya existian pagos, crea una
+obligacion de reembolso `pendiente`, distribuida por pago y metodo efectivo; no
+entrega dinero automaticamente. La anulacion de un cobro conserva
+`cobroFiado`, `pagoFiado` y `pagoVenta`, crea detalles compensatorios y revierte
+sus efectos resumidos. Una correccion de metodo conserva el importe y el registro
+original, y guarda el metodo efectivo nuevo en un movimiento compensatorio.
+Las operaciones de periodos cerrados se registran en la fecha actual con una
+marca de trazabilidad. Nuevos cobros y correcciones financieras se bloquean
+mientras exista una liquidacion `pendiente_c3`.
+
+Todas las rutas de C3 exigen sesion, tenant, suscripcion activa, proteccion de
+origen/CSRF, rate limiting e `anulaciones_operativas`. La misma clave y huella
+devuelve el resultado aplicado; otra huella responde `409
+OPERATION_KEY_CONFLICT`. Reportes netos, comprobantes y frontend permanecen
+fuera de C3.
 
 ### Migraciones historicas 001-003
 

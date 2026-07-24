@@ -133,10 +133,15 @@ async function executeSql(connection, sql) {
 }
 
 function schemaBeforeC2() {
-  return fs.readFileSync(SCHEMA_FILE, 'utf8').replace(
-    /-- COMPENSATION_SALES_[A-Z_]+_START[\s\S]*?-- COMPENSATION_SALES_[A-Z_]+_END/g,
-    ''
-  );
+  return fs.readFileSync(SCHEMA_FILE, 'utf8')
+    .replace(
+      /-- COMPENSATION_FINANCIAL_[A-Z_]+_START[\s\S]*?-- COMPENSATION_FINANCIAL_[A-Z_]+_END/g,
+      ''
+    )
+    .replace(
+      /-- COMPENSATION_SALES_[A-Z_]+_START[\s\S]*?-- COMPENSATION_SALES_[A-Z_]+_END/g,
+      ''
+    );
 }
 
 function migrationNames(limit = null) {
@@ -570,10 +575,13 @@ async function startTemporaryServer(databaseName) {
       throw new Error(`El servidor temporal termino antes de iniciar. ${safeError(output.slice(-2000))}`);
     }
     try {
-      const response = await fetch(`${baseUrl}/health/ready`);
-      if (response.status === 200) return { child, baseUrl };
+      const liveResponse = await fetch(`${baseUrl}/health/live`);
+      if (liveResponse.status === 200) {
+        const sessionResponse = await fetch(`${baseUrl}/auth/status`);
+        if (sessionResponse.status === 200) return { child, baseUrl };
+      }
     } catch {
-      // The server may still be opening its listener.
+      // El listener o el store de sesiones todavia pueden estar iniciando.
     }
     await new Promise((resolve) => setTimeout(resolve, 100));
   }
@@ -1155,9 +1163,10 @@ async function main() {
     const [remaining] = await serverConnection.query(
       `SELECT SCHEMA_NAME
        FROM information_schema.SCHEMATA
-       WHERE SCHEMA_NAME LIKE 'tmp\\_tienda\\_restore\\_%' ESCAPE '\\\\'`
+       WHERE SCHEMA_NAME=?`,
+      [temporaryDatabase]
     );
-    assert(remaining.length === 0, 'No quedan bases temporales de C2 o restauracion.');
+    assert(remaining.length === 0, 'La base temporal propia de C2 se elimina en finally.');
     await serverConnection.end();
   }
 
