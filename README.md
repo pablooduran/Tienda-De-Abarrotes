@@ -366,8 +366,7 @@ La prueba aislada no usa MySQL real ni modifica datos:
 npm.cmd run test:operational-health
 ```
 
-El diagnostico interno de superadmin y el estado de backups se describen a continuacion. Las
-alertas pertenecen a B3 y no forman parte de estos endpoints.
+El diagnostico interno de superadmin y el estado de backups se describen a continuacion.
 
 ### Diagnostico interno y backups
 
@@ -402,8 +401,41 @@ npm.cmd run test:operational-backup-health
 ```
 
 Este diagnostico no sustituye una restauracion real periodica. Los backups locales tampoco
-protegen frente a la perdida completa del host; el almacenamiento externo y las alertas quedan
-pendientes para B3 y trabajo operativo posterior.
+protegen frente a la perdida completa del host.
+
+### Eventos y comprobador operativo
+
+El monitor interno mantiene en memoria el ultimo estado observado de `application`, `readiness`,
+`database`, `migrations`, `backup` y `gracefulShutdown`. La primera observacion produce
+`operational_state_initialized`; las transiciones generan eventos de degradacion, fallo,
+escalamiento, cambio de causa o recuperacion. Un sondeo con el mismo estado y codigo no vuelve a
+registrarse hasta que venza su cooldown.
+
+Los recordatorios predeterminados son 12 horas para `warn`, 30 minutos para `error` y 15 minutos
+para `critical`. Se configuran con `MONITOR_WARNING_REMINDER_MS`, `MONITOR_ERROR_REMINDER_MS` y
+`MONITOR_CRITICAL_REMINDER_MS`. El siguiente evento emitido incluye `suppressedCount` y
+`occurrenceCount`; los valores nativos de MySQL, rutas, archivos, hashes e infraestructura nunca
+forman parte del evento.
+
+El comprobador de una sola ejecucion reutiliza readiness y el estado read-only de backups:
+
+```powershell
+$env:APP_ENV='local'
+npm.cmd run check:operational-health
+```
+
+Solo admite `APP_ENV=local` y `DB_HOST=localhost`. No restaura, no escribe datos y no ejecuta
+`mysql`, `mysqldump` ni otros procesos. Sus codigos de salida son `0 healthy`, `1 degraded`,
+`2 unhealthy` y `3 configuracion o ejecucion invalida`.
+
+No existe un `setInterval` obligatorio ni un proveedor externo. Un proceso caido no puede
+alertarse a si mismo, por lo que la invocacion periodica mediante un monitor autorizado y los
+adaptadores reales de correo, webhook u otro canal quedan para una fase posterior. El tracker, la
+cache y el rate limiting son por instancia.
+
+```powershell
+npm.cmd run test:operational-monitoring
+```
 
 ## Backups y recuperacion comprobada
 
@@ -426,6 +458,9 @@ BACKUP_RETENTION_COUNT=10
 BACKUP_WARNING_HOURS=24
 BACKUP_CRITICAL_HOURS=48
 BACKUP_STATUS_CACHE_MS=300000
+MONITOR_WARNING_REMINDER_MS=43200000
+MONITOR_ERROR_REMINDER_MS=1800000
+MONITOR_CRITICAL_REMINDER_MS=900000
 ```
 
 En Windows se detectan `mysqldump.exe` y `mysql.exe` desde `PATH` y desde la instalacion
@@ -744,6 +779,9 @@ SHUTDOWN_TIMEOUT_MS=10000
 BACKUP_WARNING_HOURS=24
 BACKUP_CRITICAL_HOURS=48
 BACKUP_STATUS_CACHE_MS=300000
+MONITOR_WARNING_REMINDER_MS=43200000
+MONITOR_ERROR_REMINDER_MS=1800000
+MONITOR_CRITICAL_REMINDER_MS=900000
 SECURITY_LOG_LEVEL=info
 ```
 

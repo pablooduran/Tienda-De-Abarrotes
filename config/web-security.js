@@ -75,6 +75,27 @@ function webSecurityConfig(environment = process.env) {
   if (backupCriticalHours <= backupWarningHours) {
     throw new Error('BACKUP_CRITICAL_HOURS debe ser mayor que BACKUP_WARNING_HOURS.');
   }
+  const monitoringWarningReminderMs = integerSetting(
+    environment,
+    'MONITOR_WARNING_REMINDER_MS',
+    43200000,
+    60000,
+    604800000
+  );
+  const monitoringErrorReminderMs = integerSetting(
+    environment,
+    'MONITOR_ERROR_REMINDER_MS',
+    1800000,
+    60000,
+    86400000
+  );
+  const monitoringCriticalReminderMs = integerSetting(
+    environment,
+    'MONITOR_CRITICAL_REMINDER_MS',
+    900000,
+    60000,
+    86400000
+  );
   return Object.freeze({
     production,
     trustedOrigins: trustedOrigins(environment),
@@ -100,6 +121,11 @@ function webSecurityConfig(environment = process.env) {
       warningHours: backupWarningHours,
       criticalHours: backupCriticalHours,
       cacheMs: integerSetting(environment, 'BACKUP_STATUS_CACHE_MS', 300000, 1000, 3600000)
+    }),
+    operationalMonitoring: Object.freeze({
+      warningReminderMs: monitoringWarningReminderMs,
+      errorReminderMs: monitoringErrorReminderMs,
+      criticalReminderMs: monitoringCriticalReminderMs
     }),
     logLevel
   });

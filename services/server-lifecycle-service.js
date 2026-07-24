@@ -11,6 +11,7 @@ function createGracefulShutdown(options) {
     pool,
     sessionStore,
     logger,
+    monitor = null,
     timeoutMs = 10000,
     exit = (code) => process.exit(code),
     timers = { setTimeout, clearTimeout }
@@ -19,11 +20,23 @@ function createGracefulShutdown(options) {
     throw new Error('El cierre ordenado requiere servidor, pool y logger.');
   }
   let closing = null;
+  const lifecycleEvent = (event, details, fallbackLevel, fallbackEvent, fallbackContext) => {
+    if (monitor && typeof monitor.gracefulShutdown === 'function') {
+      monitor.gracefulShutdown(event, details);
+    } else {
+      logger[fallbackLevel](fallbackEvent, fallbackContext);
+    }
+  };
 
   return function shutdown(signal = 'UNKNOWN') {
     if (closing) return closing;
     closing = (async () => {
-      logger.info('server_shutdown_started', { signal });
+      const startedAt = Date.now();
+      lifecycleEvent('graceful_shutdown_started', {
+        currentStatus: 'degraded',
+        code: 'SHUTDOWN_STARTED',
+        severity: 'info'
+      }, 'info', 'server_shutdown_started', { signal });
       let timeout;
       const deadline = new Promise((resolve) => {
         timeout = timers.setTimeout(() => resolve('timeout'), timeoutMs);
@@ -39,18 +52,34 @@ function createGracefulShutdown(options) {
       try {
         const outcome = await Promise.race([graceful, deadline]);
         if (outcome === 'timeout') {
-          logger.error('server_shutdown_timeout', { signal, timeoutMs });
+          lifecycleEvent('graceful_shutdown_failed', {
+            currentStatus: 'unhealthy',
+            code: 'SHUTDOWN_TIMEOUT',
+            severity: 'critical',
+            durationMs: Date.now() - startedAt
+          }, 'error', 'server_shutdown_timeout', { signal, timeoutMs });
           if (typeof server?.closeAllConnections === 'function') server.closeAllConnections();
           exit(1);
           return { status: 'timeout', exitCode: 1 };
         }
         timers.clearTimeout(timeout);
-        logger.info('server_shutdown_completed', { signal });
+        lifecycleEvent('graceful_shutdown_completed', {
+          previousStatus: 'degraded',
+          currentStatus: 'healthy',
+          code: 'SHUTDOWN_COMPLETED',
+          severity: 'info',
+          durationMs: Date.now() - startedAt
+        }, 'info', 'server_shutdown_completed', { signal });
         exit(0);
         return { status: 'completed', exitCode: 0 };
       } catch (error) {
         timers.clearTimeout(timeout);
-        logger.error('server_shutdown_failed', {
+        lifecycleEvent('graceful_shutdown_failed', {
+          currentStatus: 'unhealthy',
+          code: 'SHUTDOWN_FAILED',
+          severity: 'error',
+          durationMs: Date.now() - startedAt
+        }, 'error', 'server_shutdown_failed', {
           signal,
           errorName: error?.name || 'Error',
           errorCode: typeof error?.code === 'string' ? error.code.slice(0, 80) : null
@@ -75,9 +104,13 @@ function installShutdownHandlers(processObject, shutdown) {
   };
 }
 
-async function announceInitialReadiness(healthService, logger) {
+async function announceInitialReadiness(healthService, logger, monitor = null) {
   try {
     const readiness = await healthService.readiness({ bypassCache: true });
+    if (monitor && typeof monitor.observeApplication === 'function') {
+      monitor.observeApplication('healthy', 'APPLICATION_RUNNING');
+      monitor.observeReadiness(readiness);
+    }
     const context = { status: readiness.status, durationMs: readiness.durationMs };
     if (readiness.status === 'unhealthy') {
       logger.warn('server_started_not_ready', { ...context, reason: readiness.reason });

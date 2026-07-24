@@ -10,7 +10,7 @@ function sendHealth(req, res, statusCode, payload) {
   return res.json({ ...payload, requestId: req.requestId });
 }
 
-function createHealthRouter({ healthService, logger }) {
+function createHealthRouter({ healthService, logger, monitor = null }) {
   if (!healthService || !logger) throw new Error('Las rutas health requieren servicio y logger.');
   const router = express.Router();
 
@@ -21,7 +21,9 @@ function createHealthRouter({ healthService, logger }) {
   async function ready(req, res, next) {
     try {
       const result = await healthService.readiness();
-      if (result.status === 'unhealthy') {
+      if (monitor && typeof monitor.observeReadiness === 'function') {
+        monitor.observeReadiness(result, req.requestId);
+      } else if (result.status === 'unhealthy') {
         logger.warn('readiness_failed', {
           requestId: req.requestId,
           reason: result.reason,

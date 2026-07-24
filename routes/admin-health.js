@@ -1,6 +1,6 @@
 const express = require('express');
 
-function createAdminHealthRouter({ diagnosticService, logger, slowLogMs = 1000 }) {
+function createAdminHealthRouter({ diagnosticService, logger, monitor = null, slowLogMs = 1000 }) {
   if (!diagnosticService || typeof diagnosticService.diagnose !== 'function' || !logger) {
     throw new Error('La ruta de diagnostico requiere servicio y logger.');
   }
@@ -10,7 +10,9 @@ function createAdminHealthRouter({ diagnosticService, logger, slowLogMs = 1000 }
     try {
       const diagnostic = await diagnosticService.diagnose();
       const backup = diagnostic.checks.backup;
-      if (backup.status !== 'ok') {
+      if (monitor && typeof monitor.observeDiagnostic === 'function') {
+        monitor.observeDiagnostic(diagnostic, req.requestId);
+      } else if (backup.status !== 'ok') {
         logger.warn('operational_backup_degraded', {
           requestId: req.requestId,
           component: 'backup',
@@ -19,14 +21,14 @@ function createAdminHealthRouter({ diagnosticService, logger, slowLogMs = 1000 }
           durationMs: backup.durationMs
         });
       }
-      if (diagnostic.status === 'unhealthy') {
+      if (!monitor && diagnostic.status === 'unhealthy') {
         logger.warn('operational_diagnostic_unhealthy', {
           requestId: req.requestId,
           component: diagnostic.checks.database.status === 'error' ? 'database' : 'migrations',
           status: diagnostic.status,
           durationMs: diagnostic.durationMs
         });
-      } else if (diagnostic.durationMs > slowLogMs) {
+      } else if (!monitor && diagnostic.durationMs > slowLogMs) {
         logger.warn('operational_diagnostic_slow', {
           requestId: req.requestId,
           component: 'diagnostic',

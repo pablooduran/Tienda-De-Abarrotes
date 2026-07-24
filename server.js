@@ -32,10 +32,15 @@ const { createSecurityLogger } = require('./utils/security-logger');
 const { createAdminHealthRouter } = require('./routes/admin-health');
 const { createHealthRouter } = require('./routes/health');
 const { createBackupStatusService } = require('./services/backup-status-service');
+const { createOperationalEventDispatcher } = require('./services/operational-event-dispatcher');
 const {
   createOperationalDiagnosticService,
   createOperationalHealthService
 } = require('./services/operational-health-service');
+const {
+  createOperationalMonitor,
+  createOperationalStateTracker
+} = require('./services/operational-state-tracker');
 const {
   announceInitialReadiness,
   createGracefulShutdown,
@@ -57,13 +62,30 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 const securityLogger = createSecurityLogger(appSecurityConfig.logLevel);
 const rateLimiters = createRateLimiters(appSecurityConfig.rateLimit);
+const operationalEventDispatcher = createOperationalEventDispatcher({
+  logger: securityLogger
+});
+const operationalStateTracker = createOperationalStateTracker({
+  dispatch: (event) => operationalEventDispatcher.dispatch(event),
+  warningReminderMs: appSecurityConfig.operationalMonitoring.warningReminderMs,
+  errorReminderMs: appSecurityConfig.operationalMonitoring.errorReminderMs,
+  criticalReminderMs: appSecurityConfig.operationalMonitoring.criticalReminderMs
+});
+const operationalMonitor = createOperationalMonitor({
+  tracker: operationalStateTracker,
+  dispatcher: operationalEventDispatcher
+});
 const healthService = createOperationalHealthService({
   pool,
   softLimitMs: appSecurityConfig.operationalHealth.softLimitMs,
   timeoutMs: appSecurityConfig.operationalHealth.timeoutMs,
   cacheMs: appSecurityConfig.operationalHealth.cacheMs
 });
-const healthRoutes = createHealthRouter({ healthService, logger: securityLogger });
+const healthRoutes = createHealthRouter({
+  healthService,
+  logger: securityLogger,
+  monitor: operationalMonitor
+});
 const backupStatusService = createBackupStatusService({
   warningHours: appSecurityConfig.operationalBackup.warningHours,
   criticalHours: appSecurityConfig.operationalBackup.criticalHours,
@@ -75,7 +97,8 @@ const diagnosticService = createOperationalDiagnosticService({
 });
 const adminHealthRoutes = createAdminHealthRouter({
   diagnosticService,
-  logger: securityLogger
+  logger: securityLogger,
+  monitor: operationalMonitor
 });
 const sessionStore = new MySQLSessionStore({
   createDatabaseTable: true,
@@ -180,7 +203,7 @@ function startServer() {
       puerto: Number(PORT),
       entorno: process.env.APP_ENV || 'no_definido'
     });
-    void announceInitialReadiness(healthService, securityLogger);
+    void announceInitialReadiness(healthService, securityLogger, operationalMonitor);
   });
   server.on('error', (error) => {
     securityLogger.error('server_listen_failed', {
@@ -194,6 +217,7 @@ function startServer() {
     pool,
     sessionStore,
     logger: securityLogger,
+    monitor: operationalMonitor,
     timeoutMs: appSecurityConfig.operationalHealth.shutdownTimeoutMs
   });
   installShutdownHandlers(process, shutdown);
