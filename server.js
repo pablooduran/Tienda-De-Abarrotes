@@ -29,6 +29,13 @@ const { permissionsPolicy, securityHeaders } = require('./middleware/security-he
 const { requireActiveSubscription, resolveSubscription } = require('./middleware/subscription');
 const { requireTenant } = require('./middleware/tenant');
 const { createSecurityLogger } = require('./utils/security-logger');
+const { createHealthRouter } = require('./routes/health');
+const { createOperationalHealthService } = require('./services/operational-health-service');
+const {
+  announceInitialReadiness,
+  createGracefulShutdown,
+  installShutdownHandlers
+} = require('./services/server-lifecycle-service');
 const adminCatalogRoutes = require('./routes/admin-catalog');
 const adminRoutes = require('./routes/admin');
 const apiRoutes = require('./routes/api');
@@ -45,9 +52,16 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 const securityLogger = createSecurityLogger(appSecurityConfig.logLevel);
 const rateLimiters = createRateLimiters(appSecurityConfig.rateLimit);
+const healthService = createOperationalHealthService({
+  pool,
+  softLimitMs: appSecurityConfig.operationalHealth.softLimitMs,
+  timeoutMs: appSecurityConfig.operationalHealth.timeoutMs,
+  cacheMs: appSecurityConfig.operationalHealth.cacheMs
+});
+const healthRoutes = createHealthRouter({ healthService, logger: securityLogger });
 const sessionStore = new MySQLSessionStore({
-  ...appDatabaseConfig,
   createDatabaseTable: true,
+  endConnectionOnClose: false,
   schema: {
     tableName: 'sessions',
     columnNames: {
@@ -56,7 +70,7 @@ const sessionStore = new MySQLSessionStore({
       data: 'data'
     }
   }
-});
+}, pool);
 
 sessionStore.on('error', (error) => {
   securityLogger.error('session_store_error', {
@@ -70,6 +84,7 @@ app.use(requestContext(securityLogger));
 app.use(securityHeaders(appSecurityConfig));
 app.use(permissionsPolicy);
 app.use(noStoreSensitiveResponses);
+app.use('/health', rateLimiters.health, healthRoutes);
 app.use(express.urlencoded({ extended: true }));
 app.use(express.json({ limit: '2mb' }));
 app.use(session({
@@ -139,20 +154,31 @@ app.get('/', requireAuth, (req, res) => {
 app.use(notFoundHandler);
 app.use(createErrorHandler({ logger: securityLogger, production: appSecurityConfig.production }));
 
-async function startServer() {
-  try {
-    if (isLocalEnvironment) logDatabaseTarget('Servidor local', appDatabaseConfig);
-    await pool.query('SELECT 1');
-    app.listen(PORT, () => {
-      securityLogger.info('server_started', { puerto: Number(PORT), entorno: process.env.APP_ENV || 'no_definido' });
+function startServer() {
+  if (isLocalEnvironment) logDatabaseTarget('Servidor local', appDatabaseConfig);
+  const server = app.listen(PORT, () => {
+    securityLogger.info('server_started', {
+      puerto: Number(PORT),
+      entorno: process.env.APP_ENV || 'no_definido'
     });
-  } catch (error) {
-    securityLogger.error('server_start_failed', {
+    void announceInitialReadiness(healthService, securityLogger);
+  });
+  server.on('error', (error) => {
+    securityLogger.error('server_listen_failed', {
       errorName: error?.name || 'Error',
       errorCode: error?.code || null
     });
-    process.exit(1);
-  }
+    process.exitCode = 1;
+  });
+  const shutdown = createGracefulShutdown({
+    server,
+    pool,
+    sessionStore,
+    logger: securityLogger,
+    timeoutMs: appSecurityConfig.operationalHealth.shutdownTimeoutMs
+  });
+  installShutdownHandlers(process, shutdown);
+  return server;
 }
 
 startServer();

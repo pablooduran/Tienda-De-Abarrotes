@@ -65,6 +65,11 @@ function webSecurityConfig(environment = process.env) {
     throw new Error('SECURITY_LOG_LEVEL debe ser off, error, warn o info.');
   }
   const windowMs = integerSetting(environment, 'RATE_LIMIT_WINDOW_MS', 15 * 60 * 1000, 1000, 24 * 60 * 60 * 1000);
+  const readinessSoftMs = integerSetting(environment, 'HEALTH_READINESS_SOFT_MS', 300, 10, 5000);
+  const readinessTimeoutMs = integerSetting(environment, 'HEALTH_READINESS_TIMEOUT_MS', 1500, 100, 10000);
+  if (readinessSoftMs >= readinessTimeoutMs) {
+    throw new Error('HEALTH_READINESS_SOFT_MS debe ser menor que HEALTH_READINESS_TIMEOUT_MS.');
+  }
   return Object.freeze({
     production,
     trustedOrigins: trustedOrigins(environment),
@@ -77,7 +82,14 @@ function webSecurityConfig(environment = process.env) {
       authMax: integerSetting(environment, 'AUTH_RATE_LIMIT_MAX', 120, 5, 10000),
       adminMax: integerSetting(environment, 'ADMIN_RATE_LIMIT_MAX', 600, 10, 10000),
       exportMax: integerSetting(environment, 'EXPORT_RATE_LIMIT_MAX', 30, 1, 1000),
-      whatsappMax: integerSetting(environment, 'WHATSAPP_RATE_LIMIT_MAX', 60, 1, 1000)
+      whatsappMax: integerSetting(environment, 'WHATSAPP_RATE_LIMIT_MAX', 60, 1, 1000),
+      healthMax: integerSetting(environment, 'HEALTH_RATE_LIMIT_MAX', 900, 10, 100000)
+    }),
+    operationalHealth: Object.freeze({
+      softLimitMs: readinessSoftMs,
+      timeoutMs: readinessTimeoutMs,
+      cacheMs: integerSetting(environment, 'HEALTH_READINESS_CACHE_MS', 4000, 500, 30000),
+      shutdownTimeoutMs: integerSetting(environment, 'SHUTDOWN_TIMEOUT_MS', 10000, 1000, 60000)
     }),
     logLevel
   });

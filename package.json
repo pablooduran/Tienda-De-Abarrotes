@@ -46,6 +46,7 @@
     "test:legacy-migrations": "node scripts/test-legacy-migrations.js",
     "test:backup-restore": "node scripts/test-backup-restore.js",
     "test:local-startup": "node scripts/test-local-startup.js",
+    "test:operational-health": "node scripts/test-operational-health.js",
     "check:web-security": "node scripts/check-web-security.js"
   },
   "dependencies": {

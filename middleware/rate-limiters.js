@@ -61,6 +61,10 @@ function createRateLimiters(config) {
       identifier: 'whatsapp-prepared', limit: config.whatsappMax,
       code: 'WHATSAPP_RATE_LIMIT_EXCEEDED', message: commonMessage
     }),
+    health: limiter(config, {
+      identifier: 'health-public', limit: config.healthMax,
+      code: 'HEALTH_RATE_LIMIT_EXCEEDED', message: commonMessage
+    }),
     loginIp: limiter(config, {
       identifier: 'login-ip', limit: config.loginIpMax,
       code: 'TOO_MANY_LOGIN_ATTEMPTS',

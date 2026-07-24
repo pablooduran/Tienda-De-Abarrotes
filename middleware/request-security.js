@@ -32,6 +32,7 @@ function mutationProtection(trustedOrigins) {
 
 function noStoreSensitiveResponses(req, res, next) {
   if (req.path.startsWith('/api') || req.path.startsWith('/auth')
+    || req.path.startsWith('/health')
     || ['/app.html', '/admin.html', '/'].includes(req.path)) {
     res.setHeader('Cache-Control', 'no-store, max-age=0');
     res.setHeader('Pragma', 'no-cache');

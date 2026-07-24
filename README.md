@@ -333,6 +333,42 @@ Abra `http://localhost:3000`. `npm start` no fuerza el entorno local y queda dis
 entorno configurado por el operador, incluida produccion con `APP_ENV=production`. Antes de usar
 `npm run dev`, establezca `APP_ENV=local` en esa terminal.
 
+## Healthchecks operativos
+
+Los healthchecks publicos son pequenos, no requieren sesion y se montan antes de body parsers,
+sesiones, CSRF y rutas comerciales:
+
+- `GET|HEAD /health/live`: confirma que Node y Express responden. Nunca consulta MySQL.
+- `GET|HEAD /health/ready`: ejecuta `SELECT 1` y comprueba que `schema_migrations` contenga todas
+  las migraciones SQL presentes en `database/migrations/`.
+
+Ambos devuelven `X-Request-Id` y `Cache-Control: no-store`; `HEAD` conserva codigo y cabeceras sin
+cuerpo. Liveness responde `200` mientras Express funcione. Readiness responde `200 healthy`,
+`200 degraded` cuando la latencia supera el umbral blando, o `503 unhealthy` cuando MySQL,
+`schema_migrations` o alguna migracion esperada no estan disponibles. Un `500` queda reservado
+para defectos inesperados y conserva la respuesta publica generica.
+
+Los valores predeterminados son 300 ms de umbral blando, 1500 ms de timeout duro y 4000 ms de
+cache. Se configuran mediante `HEALTH_READINESS_SOFT_MS`, `HEALTH_READINESS_TIMEOUT_MS` y
+`HEALTH_READINESS_CACHE_MS`; el umbral blando debe ser menor al timeout. El limitador independiente
+usa `HEALTH_RATE_LIMIT_MAX` dentro de la ventana HTTP existente. Ninguna respuesta muestra host,
+puerto, base, usuario, consultas, migraciones faltantes ni errores nativos de MySQL.
+
+Una configuracion invalida sigue siendo fatal. Una indisponibilidad temporal de MySQL ya no impide
+que Express escuche: liveness permanece en 200 y readiness pasa a 503 hasta que una comprobacion
+fuera de la cache confirme la recuperacion. `SIGTERM` y `SIGINT` dejan de aceptar conexiones,
+cierran el servidor y despues el pool; `SHUTDOWN_TIMEOUT_MS` limita el cierre a 10000 ms por
+defecto.
+
+La prueba aislada no usa MySQL real ni modifica datos:
+
+```powershell
+npm.cmd run test:operational-health
+```
+
+El diagnostico interno de superadmin, el estado de backups y las alertas pertenecen a los
+subbloques B2 y B3 y no forman parte de estos endpoints.
+
 ## Backups y recuperacion comprobada
 
 Los comandos operativos de backup funcionan solamente con `APP_ENV=local` o `test`,
@@ -661,6 +697,11 @@ AUTH_RATE_LIMIT_MAX=120
 ADMIN_RATE_LIMIT_MAX=600
 EXPORT_RATE_LIMIT_MAX=30
 WHATSAPP_RATE_LIMIT_MAX=60
+HEALTH_RATE_LIMIT_MAX=900
+HEALTH_READINESS_SOFT_MS=300
+HEALTH_READINESS_TIMEOUT_MS=1500
+HEALTH_READINESS_CACHE_MS=4000
+SHUTDOWN_TIMEOUT_MS=10000
 SECURITY_LOG_LEVEL=info
 ```
 

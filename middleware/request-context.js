@@ -8,7 +8,7 @@ function requestContext(logger) {
     res.setHeader('X-Request-Id', req.requestId);
     const sendJson = res.json.bind(res);
     res.json = (body) => {
-      if (res.statusCode >= 500) {
+      if (res.statusCode >= 500 && res.locals.allowOperationalHealthResponse !== true) {
         return sendJson({
           error: 'Ocurrio un error interno.',
           code: 'INTERNAL_ERROR',
@@ -27,6 +27,8 @@ function requestContext(logger) {
     const startedAt = process.hrtime.bigint();
     res.on('finish', () => {
       const durationMs = Number(process.hrtime.bigint() - startedAt) / 1e6;
+      const originalPath = String(req.originalUrl || '').split('?', 1)[0];
+      if (originalPath === '/health/live' && res.statusCode < 400) return;
       const context = requestLogContext(req, {
         estado: res.statusCode,
         duracionMs: Number(durationMs.toFixed(1))

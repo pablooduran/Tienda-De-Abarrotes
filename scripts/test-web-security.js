@@ -29,6 +29,7 @@ function rateConfig(overrides = {}) {
     adminMax: 100,
     exportMax: 100,
     whatsappMax: 100,
+    healthMax: 100,
     ...overrides
   };
 }
