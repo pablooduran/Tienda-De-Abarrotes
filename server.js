@@ -56,6 +56,7 @@ const inventoryIntelligenceRoutes = require('./routes/inventory-intelligence');
 const lotRoutes = require('./routes/lots');
 const masterCatalogRoutes = require('./routes/master-catalog');
 const posRoutes = require('./routes/pos');
+const salesCompensationRoutes = require('./routes/sales-compensations');
 const stockRoutes = require('./routes/stock');
 
 const app = express();
@@ -171,6 +172,7 @@ app.use(
   inventoryIntelligenceRoutes,
   lotRoutes,
   customerCreditRoutes,
+  salesCompensationRoutes,
   posRoutes,
   stockRoutes,
   apiRoutes

@@ -163,10 +163,15 @@ async function executeCompensationMigration(connection) {
 
 function schemaWithoutCompensationFoundation() {
   const schema = fs.readFileSync(SCHEMA_FILE, 'utf8');
-  return schema.replace(
-    /-- COMPENSATION_FOUNDATION_[A-Z_]+_START[\s\S]*?-- COMPENSATION_FOUNDATION_[A-Z_]+_END/g,
-    ''
-  );
+  return schema
+    .replace(
+      /-- COMPENSATION_SALES_[A-Z_]+_START[\s\S]*?-- COMPENSATION_SALES_[A-Z_]+_END/g,
+      ''
+    )
+    .replace(
+      /-- COMPENSATION_FOUNDATION_[A-Z_]+_START[\s\S]*?-- COMPENSATION_FOUNDATION_[A-Z_]+_END/g,
+      ''
+    );
 }
 
 function migrationNames(limit = null) {
@@ -612,7 +617,7 @@ async function main() {
     const initialConnection = await connectDatabase(initialSchema);
     try {
       await executeSqlText(initialConnection, fs.readFileSync(SCHEMA_FILE, 'utf8'));
-      await createMigrationRegistry(initialConnection, migrationNames());
+      await createMigrationRegistry(initialConnection, migrationNames(MIGRATION));
       const initialState = await inspectCompensationFoundation(initialConnection, {
         schemaName: initialSchema
       });

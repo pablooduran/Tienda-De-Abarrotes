@@ -25,6 +25,9 @@ const {
   COMPENSATION_REASONS,
   COMPENSATION_STATES,
   COMPENSATION_TYPES,
+  INVENTORY_RETURN_RESULTS,
+  INVENTORY_RETURN_TREATMENTS,
+  SALE_COMPENSATION_TYPES,
   SALE_OPERATION_STATES
 } = require('../config/compensation-contract');
 
@@ -558,6 +561,67 @@ const migrationRequirements = {
       ['operacionCompensatoria', 'fk_operacionCompensatoria_solicitante', ['idTienda', 'idAdministradorSolicitante'], 'administrador', ['idTienda', 'idAdministrador'], 'RESTRICT', 'RESTRICT'],
       ['operacionCompensatoria', 'fk_operacionCompensatoria_aprobador', ['idTienda', 'idAdministradorAprobador'], 'administrador', ['idTienda', 'idAdministrador'], 'RESTRICT', 'RESTRICT']
     ]
+  },
+  '015_compensaciones_venta_inventario.sql': {
+    columns: {
+      compensacionVenta: [
+        'idCompensacionVenta', 'idTienda', 'idOperacionCompensatoria', 'idVenta',
+        'tipoCompensacion', 'montoCompensado', 'costoCompensado', 'creadoEn'
+      ],
+      liquidacionCompensacionVenta: [
+        'idLiquidacionCompensacionVenta', 'idTienda', 'idCompensacionVenta',
+        'montoCompensado', 'montoReduccionDeudaPendiente',
+        'montoReembolsoPendiente', 'estado', 'creadoEn', 'resueltoEn'
+      ],
+      detalleCompensacionVenta: [
+        'idDetalleCompensacionVenta', 'idTienda', 'idCompensacionVenta',
+        'idDetalleVenta', 'idProducto', 'unidadesDevueltas', 'montoCompensado',
+        'costoCompensado', 'tratamientoInventario', 'resultadoInventario',
+        'idMovimientoStock', 'creadoEn'
+      ],
+      detalleCompensacionLote: [
+        'idDetalleCompensacionLote', 'idTienda', 'idProducto',
+        'idDetalleCompensacionVenta', 'idMovimientoLoteSalida',
+        'idLoteProductoOrigen', 'idLoteProductoDestino',
+        'idMovimientoLoteCompensatorio', 'unidadesDevueltas',
+        'resultadoInventario', 'costoUnitarioHistorico',
+        'fechaVencimientoHistorica', 'creadoEn'
+      ]
+    },
+    indexes: [
+      ['compensacionVenta', 'uq_compensacionVenta_tienda_id', ['idTienda', 'idCompensacionVenta'], true],
+      ['compensacionVenta', 'uq_compensacionVenta_tienda_operacion', ['idTienda', 'idOperacionCompensatoria'], true],
+      ['compensacionVenta', 'idx_compensacionVenta_tienda_venta', ['idTienda', 'idVenta', 'idCompensacionVenta'], false],
+      ['liquidacionCompensacionVenta', 'uq_liquidacionCompensacion_tienda_compensacion', ['idTienda', 'idCompensacionVenta'], true],
+      ['detalleCompensacionVenta', 'uq_detalleCompensacionVenta_tienda_id', ['idTienda', 'idProducto', 'idDetalleCompensacionVenta'], true],
+      ['detalleCompensacionVenta', 'uq_detalleCompensacionVenta_tienda_detalle', ['idTienda', 'idCompensacionVenta', 'idDetalleVenta'], true],
+      ['movimientoLote', 'uq_movimientoLote_tienda_producto_id', ['idTienda', 'idProducto', 'idMovimientoLote'], true],
+      ['detalleCompensacionLote', 'uq_detalleCompensacionLote_tienda_id', ['idTienda', 'idProducto', 'idDetalleCompensacionLote'], true],
+      ['detalleCompensacionLote', 'uq_detalleCompensacionLote_tienda_fuente', ['idTienda', 'idDetalleCompensacionVenta', 'idMovimientoLoteSalida'], true]
+    ],
+    checks: [
+      ['compensacionVenta', 'chk_compensacionVenta_montos'],
+      ['liquidacionCompensacionVenta', 'chk_liquidacionCompensacion_montos'],
+      ['liquidacionCompensacionVenta', 'chk_liquidacionCompensacion_estado'],
+      ['detalleCompensacionVenta', 'chk_detalleCompensacionVenta_valores'],
+      ['detalleCompensacionVenta', 'chk_detalleCompensacionVenta_movimiento'],
+      ['detalleCompensacionLote', 'chk_detalleCompensacionLote_unidades'],
+      ['detalleCompensacionLote', 'chk_detalleCompensacionLote_destino']
+    ],
+    foreignKeyConstraints: [
+      ['compensacionVenta', 'fk_compensacionVenta_operacion', ['idTienda', 'idOperacionCompensatoria'], 'operacionCompensatoria', ['idTienda', 'idOperacionCompensatoria'], 'RESTRICT', 'RESTRICT'],
+      ['compensacionVenta', 'fk_compensacionVenta_venta', ['idTienda', 'idVenta'], 'venta', ['idTienda', 'idVenta'], 'RESTRICT', 'RESTRICT'],
+      ['liquidacionCompensacionVenta', 'fk_liquidacionCompensacion_compensacion', ['idTienda', 'idCompensacionVenta'], 'compensacionVenta', ['idTienda', 'idCompensacionVenta'], 'RESTRICT', 'RESTRICT'],
+      ['detalleCompensacionVenta', 'fk_detalleCompensacionVenta_compensacion', ['idTienda', 'idCompensacionVenta'], 'compensacionVenta', ['idTienda', 'idCompensacionVenta'], 'RESTRICT', 'RESTRICT'],
+      ['detalleCompensacionVenta', 'fk_detalleCompensacionVenta_detalle', ['idTienda', 'idDetalleVenta'], 'detalleVenta', ['idTienda', 'idDetalleVenta'], 'RESTRICT', 'RESTRICT'],
+      ['detalleCompensacionVenta', 'fk_detalleCompensacionVenta_producto', ['idTienda', 'idProducto'], 'producto', ['idTienda', 'idProducto'], 'RESTRICT', 'RESTRICT'],
+      ['detalleCompensacionVenta', 'fk_detalleCompensacionVenta_movimiento', ['idTienda', 'idProducto', 'idMovimientoStock'], 'movimientoStock', ['idTienda', 'idProducto', 'idMovimientoStock'], 'RESTRICT', 'RESTRICT'],
+      ['detalleCompensacionLote', 'fk_detalleCompensacionLote_detalle', ['idTienda', 'idProducto', 'idDetalleCompensacionVenta'], 'detalleCompensacionVenta', ['idTienda', 'idProducto', 'idDetalleCompensacionVenta'], 'RESTRICT', 'RESTRICT'],
+      ['detalleCompensacionLote', 'fk_detalleCompensacionLote_salida', ['idTienda', 'idProducto', 'idMovimientoLoteSalida'], 'movimientoLote', ['idTienda', 'idProducto', 'idMovimientoLote'], 'RESTRICT', 'RESTRICT'],
+      ['detalleCompensacionLote', 'fk_detalleCompensacionLote_lote_origen', ['idTienda', 'idProducto', 'idLoteProductoOrigen'], 'loteProducto', ['idTienda', 'idProducto', 'idLoteProducto'], 'RESTRICT', 'RESTRICT'],
+      ['detalleCompensacionLote', 'fk_detalleCompensacionLote_lote_destino', ['idTienda', 'idProducto', 'idLoteProductoDestino'], 'loteProducto', ['idTienda', 'idProducto', 'idLoteProducto'], 'RESTRICT', 'RESTRICT'],
+      ['detalleCompensacionLote', 'fk_detalleCompensacionLote_movimiento', ['idTienda', 'idProducto', 'idMovimientoLoteCompensatorio'], 'movimientoLote', ['idTienda', 'idProducto', 'idMovimientoLote'], 'RESTRICT', 'RESTRICT']
+    ]
   }
 };
 
@@ -874,6 +938,105 @@ async function requirementsSatisfied(connection, file) {
   }
   for (const relation of requirements.foreignKeyConstraints || []) {
     if (!await hasForeignKeyConstraint(connection, ...relation)) return false;
+  }
+  if (file === '015_compensaciones_venta_inventario.sql') {
+    const expectedDefinitions = {
+      compensacionVenta: {
+        tipoCompensacion: {
+          type: `enum('${SALE_COMPENSATION_TYPES.join("','")}')`,
+          nullable: false,
+          defaultValue: null,
+          extra: ''
+        }
+      },
+      liquidacionCompensacionVenta: {
+        estado: {
+          type: "enum('sin_efecto','pendiente_c3','resuelta')",
+          nullable: false,
+          defaultValue: null,
+          extra: ''
+        }
+      },
+      detalleCompensacionVenta: {
+        tratamientoInventario: {
+          type: `enum('${INVENTORY_RETURN_TREATMENTS.join("','")}')`,
+          nullable: false,
+          defaultValue: null,
+          extra: ''
+        },
+        resultadoInventario: {
+          type: `enum('${INVENTORY_RETURN_RESULTS.join("','")}')`,
+          nullable: false,
+          defaultValue: null,
+          extra: ''
+        }
+      }
+    };
+    for (const [table, definitions] of Object.entries(expectedDefinitions)) {
+      const details = await normalizedColumnDetails(connection, table, Object.keys(definitions));
+      for (const [column, expected] of Object.entries(definitions)) {
+        if (!columnDefinitionMatches(details[normalizedIdentifier(column)], expected)) return false;
+      }
+    }
+    const [[engines]] = await connection.query(
+      `SELECT COUNT(*) total FROM information_schema.TABLES
+       WHERE TABLE_SCHEMA=?
+         AND LOWER(TABLE_NAME) IN (
+           'compensacionventa',
+           'liquidacioncompensacionventa',
+           'detallecompensacionventa',
+           'detallecompensacionlote'
+         )
+         AND LOWER(ENGINE)='innodb'`,
+      [process.env.DB_NAME]
+    );
+    const [[invalid]] = await connection.query(
+      `SELECT
+         (
+           SELECT COUNT(*) FROM compensacionVenta cv
+           JOIN operacionCompensatoria oc
+             ON oc.idTienda=cv.idTienda
+            AND oc.idOperacionCompensatoria=cv.idOperacionCompensatoria
+           WHERE oc.estado<>'aplicada'
+              OR (cv.tipoCompensacion='anulacion_total' AND oc.tipoOperacion<>'anulacion_venta')
+              OR (cv.tipoCompensacion='devolucion_parcial' AND oc.tipoOperacion<>'devolucion_venta')
+         ) operacionesInvalidas,
+         (
+           SELECT COUNT(*) FROM (
+             SELECT dcv.idTienda, dcv.idDetalleVenta
+             FROM detalleCompensacionVenta dcv
+             JOIN detalleVenta dv
+               ON dv.idTienda=dcv.idTienda
+              AND dv.idDetalleVenta=dcv.idDetalleVenta
+             GROUP BY dcv.idTienda, dcv.idDetalleVenta, dv.cantidadEquivalenteUnidades
+             HAVING SUM(dcv.unidadesDevueltas)>dv.cantidadEquivalenteUnidades
+           ) excesos
+         ) devolucionesExcedidas,
+         (
+           SELECT COUNT(*) FROM liquidacionCompensacionVenta
+           WHERE ABS(
+             montoCompensado
+             - montoReduccionDeudaPendiente
+             - montoReembolsoPendiente
+           )>=0.01
+         ) liquidacionesInvalidas,
+         (
+           SELECT COUNT(*) FROM detalleCompensacionVenta
+           WHERE (
+                  resultadoInventario IN ('no_reintegrado','aislado_no_vendible')
+                  AND idMovimientoStock IS NOT NULL
+                )
+              OR (
+                  resultadoInventario NOT IN ('no_reintegrado','aislado_no_vendible')
+                  AND idMovimientoStock IS NULL
+                )
+         ) inventarioInvalido`
+    );
+    return Number(engines.total) === 4
+      && Number(invalid.operacionesInvalidas) === 0
+      && Number(invalid.devolucionesExcedidas) === 0
+      && Number(invalid.liquidacionesInvalidas) === 0
+      && Number(invalid.inventarioInvalido) === 0;
   }
   if (file === '014_operaciones_compensatorias.sql') {
     const expectedDefinitions = {
@@ -1570,7 +1733,8 @@ async function structureElementExists(connection, element, file = null) {
     '011_lotes_vencimientos.sql',
     '012_clientes_fiados_comunicacion.sql',
     '013_seguridad_sesiones.sql',
-    '014_operaciones_compensatorias.sql'
+    '014_operaciones_compensatorias.sql',
+    '015_compensaciones_venta_inventario.sql'
   ].includes(file)) {
     if (element.type === 'columna') {
       const details = await normalizedColumnDetails(connection, element.table, [element.name]);
@@ -2854,7 +3018,8 @@ async function main() {
               '008_punto_venta_pagos.sql',
               '009_finanzas_reportes_caja.sql',
               '013_seguridad_sesiones.sql',
-              '014_operaciones_compensatorias.sql'
+              '014_operaciones_compensatorias.sql',
+              '015_compensaciones_venta_inventario.sql'
             ].includes(file)
             && !await requirementsSatisfied(connection, file);
         if (registeredMigrationIsIncomplete) {
@@ -2879,7 +3044,8 @@ async function main() {
           '011_lotes_vencimientos.sql',
           '012_clientes_fiados_comunicacion.sql',
           '013_seguridad_sesiones.sql',
-          '014_operaciones_compensatorias.sql'
+          '014_operaciones_compensatorias.sql',
+          '015_compensaciones_venta_inventario.sql'
         ].includes(file)) {
           await connection.query('INSERT IGNORE INTO schema_migrations (nombre) VALUES (?)', [file]);
           const [finalRecord] = await connection.query(
@@ -2960,7 +3126,8 @@ async function main() {
           '011_lotes_vencimientos.sql',
           '012_clientes_fiados_comunicacion.sql',
           '013_seguridad_sesiones.sql',
-          '014_operaciones_compensatorias.sql'
+          '014_operaciones_compensatorias.sql',
+          '015_compensaciones_venta_inventario.sql'
         ].includes(file)
           ? structureElementFromStatement(statement)
           : null;
@@ -3037,7 +3204,8 @@ async function main() {
         '011_lotes_vencimientos.sql',
         '012_clientes_fiados_comunicacion.sql',
         '013_seguridad_sesiones.sql',
-        '014_operaciones_compensatorias.sql'
+        '014_operaciones_compensatorias.sql',
+        '015_compensaciones_venta_inventario.sql'
       ].includes(file)) {
         await connection.query('INSERT IGNORE INTO schema_migrations (nombre) VALUES (?)', [file]);
         const [finalRecord] = await connection.query(

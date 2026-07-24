@@ -365,6 +365,7 @@ module.exports = {
   decimalToMicros,
   derivedKey,
   existingOperationLots,
+  insertLotMovement,
   lockLots,
   lockProduct,
   lotBalances,

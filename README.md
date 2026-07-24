@@ -128,8 +128,9 @@ Migraciones actuales, en orden:
 12. `012_clientes_fiados_comunicacion.sql`: clientes ampliados, configuracion de credito, cobros y seguimiento de cobranza.
 13. `013_seguridad_sesiones.sql`: version de sesion por administrador para revocar accesos despues de cambios criticos.
 14. `014_operaciones_compensatorias.sql`: contrato base, idempotencia, estados operativos y trazabilidad para futuras compensaciones.
+15. `015_compensaciones_venta_inventario.sql`: anulaciones y devoluciones de venta, liquidacion explicita y movimientos compensatorios de stock y lotes.
 
-### Base de operaciones compensatorias
+### Operaciones compensatorias de venta
 
 La migracion `014` crea `operacionCompensatoria` y separa en `venta.estadoOperacion`
 la vigencia comercial (`vigente`, `devuelta_parcial`, `anulada`) del estado de pago.
@@ -149,7 +150,9 @@ Sus estados son `solicitada`, `pendiente_aprobacion`, `aprobada`, `aplicada`,
 `rechazada`, `fallida` y `cancelada`. Los estados `aplicada`, `rechazada` y
 `cancelada` son terminales por contrato. `requiereAprobacion`, el aprobador y la
 fecha correspondiente preparan una aprobacion opcional, pero todavia no existe un
-flujo que solicite, apruebe o aplique operaciones.
+flujo general que solicite o apruebe operaciones. C2 aplica directamente
+anulaciones y devoluciones de venta autorizadas dentro de una transaccion; la
+aprobacion doble para casos sensibles queda diferida.
 
 Los motivos son una allowlist respaldada por el esquema:
 `error_cantidad`, `error_producto`, `error_cliente`, `error_metodo_pago`,
@@ -158,8 +161,8 @@ Los motivos son una allowlist respaldada por el esquema:
 
 La idempotencia queda definida por `(idTienda, claveOperacion)` y una
 `huellaSolicitud` SHA-256 hexadecimal del payload canonico. En los bloques
-comerciales futuros, la misma clave y huella devolveran la operacion existente;
-la misma clave con una huella distinta debera responder `409
+de venta, la misma clave y huella devuelve la operacion existente; la misma
+clave con una huella distinta responde `409
 OPERATION_KEY_CONFLICT`.
 
 La funcionalidad `anulaciones_operativas` queda habilitada en los planes basico y
@@ -173,19 +176,43 @@ Comprobacion y prueba aislada:
 $env:APP_ENV='local'
 npm.cmd run test:compensation-foundation
 npm.cmd run db:check-compensations
+npm.cmd run test:sales-compensations
+npm.cmd run db:check-sales-compensations
 ```
 
 `test:compensation-foundation` crea exclusivamente bases
 `tmp_tienda_restore_*`, usa el usuario auxiliar local de restauracion, prueba
 001→014, 013→014 y el esquema inicial, y elimina las bases en `finally`.
-`db:check-compensations` es de solo lectura, pero debe apuntar a una base donde
-014 ya haya sido aplicada. C1 se ensayo solo en bases temporales: no aplica 014
-automaticamente a la base principal.
+`db:check-compensations` valida C1 sobre una base con 014. La prueba
+`test:sales-compensations` crea una base `tmp_tienda_restore_*`, aplica 015 solo
+alli, valida anulacion total, devolucion parcial y acumulada, concurrencia,
+rollback, permisos, CSRF, stock y lotes, y elimina la base en `finally`.
+`db:check-sales-compensations` es de solo lectura y requiere 015 en el destino.
 
-C1 no implementa anulaciones, devoluciones, reembolsos, correcciones, endpoints,
-frontend ni ajustes de reportes. Las tablas de detalle y liquidacion, el estado
-operativo de cobros y las relaciones especificas con venta, pago, fiado, cobro,
-stock y lotes se definen en C2-C4, junto con sus transacciones y bloqueos.
+La ruta canonica de C2 es:
+
+```text
+POST /api/ventas/:idVenta/compensaciones
+```
+
+Requiere sesion vigente, tenant, suscripcion activa y
+`anulaciones_operativas`. El cuerpo exige `confirmar=true`, `claveOperacion`,
+`motivoCodigo` y `tipoCompensacion`; una anulacion total indica un tratamiento
+global y una devolucion parcial indica unidades base por detalle. Los
+tratamientos admitidos son `reintegrar_vendible`, `no_reintegrar` y
+`aislar_no_vendible`.
+
+La venta, detalles, pagos, fiados y movimientos originales no se borran ni se
+reescriben. Las reposiciones crean movimientos positivos nuevos. Una devolucion
+con lote vuelve al lote original solo si sigue disponible, no vencido y con
+capacidad; en otro caso crea un lote tecnico `reversion` bloqueado, conservando
+costo y vencimiento. `no_reintegrar` no aumenta stock.
+
+C2 no devuelve dinero ni modifica deuda automaticamente. Cada compensacion
+registra una `liquidacionCompensacionVenta` con reduccion de deuda y/o reembolso
+pendientes. Resolver esas liquidaciones, bloquear interacciones incompatibles,
+integrar reportes netos y generar comprobantes/frontends corresponde a C3 y
+subbloques posteriores.
 
 ### Migraciones historicas 001-003
 
@@ -784,7 +811,7 @@ Los segmentos disponibles y sus reglas son:
 
 Los valores predeterminados pueden ajustarse mediante parametros validados; `pageSize` y `limiteResultados` admiten de 1 a 100 filas por pagina. `fechaDesde` y `fechaHasta` son fechas civiles inclusivas de `America/La_Paz`; internamente se usa un rango `DATETIME` semiabierto. La busqueda cubre nombre, telefono y documento normalizado. `estadoCliente` admite unicamente `activos`, `ocultos` o `todos`, y los campos de orden usan una lista permitida.
 
-La respuesta incluye `descripcion`, `criterios`, `parametrosAplicados`, resumen global, resultados explicados y paginacion. Los filtros y agregados se aplican antes de `LIMIT/OFFSET`; las metricas no se reconstruyen con la pagina visible. C1 define `venta.estadoOperacion`, pero todavia no existe una anulacion ejecutable ni reportes netos; C2-C5 deberan integrar esa regla de forma central, no mediante una excepcion propia de segmentacion. Para volumenes grandes conviene medir los planes de ejecucion; los indices actuales por tienda, cliente y fecha soportan la primera version, pero una migracion futura puede incorporar indices especializados segun datos reales.
+La respuesta incluye `descripcion`, `criterios`, `parametrosAplicados`, resumen global, resultados explicados y paginacion. Los filtros y agregados se aplican antes de `LIMIT/OFFSET`; las metricas no se reconstruyen con la pagina visible. C2 ya puede cambiar `venta.estadoOperacion`, pero segmentacion y reportes aun no calculan importes netos de compensaciones; esa integracion debe hacerse de forma central en un bloque posterior. Para volumenes grandes conviene medir los planes de ejecucion; los indices actuales por tienda, cliente y fecha soportan la primera version, pero una migracion futura puede incorporar indices especializados segun datos reales.
 
 ### Seguridad y revocacion de sesiones
 
@@ -941,8 +968,8 @@ Limitaciones conocidas y trabajo futuro:
 - Los historiales resumidos de la ficha muestran los 20 registros mas recientes y remiten al estado de cuenta para la cronologia completa.
 - Los comprobantes no son facturas fiscales y los nombres de tienda, cliente y responsable no tienen snapshots historicos.
 - WhatsApp solo prepara texto y enlaces `https://wa.me/`; no envia mensajes automaticamente.
-- No se generan PDF ni existe ejecucion comercial de anulaciones o compensaciones; C1 solo aporta su contrato y estructura base. Tampoco se implementa portal publico del cliente.
-- Los segmentos se calculan con el modelo vigente y aun no aplican anulaciones porque C1 no incorpora ejecucion comercial ni reportes netos; no se implementa un segmento predictivo de abandono.
+- No se generan PDF. C2 aporta una API de anulaciones y devoluciones de venta, pero todavia no existe interfaz, comprobante ni integracion de importes netos en reportes. Tampoco se implementa portal publico del cliente.
+- Los segmentos se calculan con el modelo historico vigente y aun no descuentan compensaciones aplicadas; no se implementa un segmento predictivo de abandono.
 - Los limites XLSX son 5000 clientes, 10000 fiados y 20000 movimientos de estado de cuenta, salvo configuracion explicita.
 
 `npm audit` informa dos entradas moderadas relacionadas: `exceljs@4.4.0` queda marcado por su dependencia transitiva `uuid@8.3.2`, afectada por `GHSA-w5hq-g745-h8pq`. No hay hallazgos altos o criticos en este informe. La correccion automatica propuesta implica un cambio mayor o una degradacion de ExcelJS, por lo que no debe ejecutarse `npm audit fix --force`; la actualizacion se evaluara de forma controlada cuando ExcelJS publique o adopte una version compatible de UUID.
