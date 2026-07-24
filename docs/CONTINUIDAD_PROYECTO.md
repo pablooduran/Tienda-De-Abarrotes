@@ -112,7 +112,7 @@ El contexto de tienda proviene de la sesion validada. El navegador no debe envia
 | Endurecimiento web | Terminado | Rate limiting, login uniforme, origen/CSRF, CSP, cabeceras, logs y errores seguros. |
 | Migraciones historicas 001-003 | Terminado | Inspectores semanticos, recuperacion por pasos y prueba en bases temporales. |
 | Backups y restauracion | Terminado | Backup, manifiesto, hash, verificacion y restauracion probada en base temporal. |
-| Healthcheck, monitoreo y alertas | Parcial: B1 implementado | Liveness, readiness, arranque degradado y cierre ordenado implementados. Diagnostico interno, backups y alertas quedan en B2/B3. |
+| Healthcheck, monitoreo y alertas | Parcial: B1 y B2 implementados | Liveness, readiness, arranque/cierre, diagnostico interno de superadmin y estado read-only de backups implementados. Alertas quedan en B3. |
 | Anulaciones y compensaciones | Pendiente | No hay flujo general seguro para anular ventas, compras o pagos. |
 | Auditoria administrativa global | Parcial | Existen actores y fechas en modulos concretos, pero no una bitacora global e inmutable. |
 | Correcciones finales de stock/reposicion | Pendiente | Revision de stock vendible y reglas de sugerencia antes de produccion. |
@@ -315,6 +315,7 @@ No ejecutar pruebas funcionales sobre una base comercial ni remota. Confirmar su
 | `db:cleanup-backups` | Evalua retencion. Es dry-run por defecto; borrar exige confirmacion explicita. | Solo dentro de la carpeta configurada, sin seguir enlaces. |
 | `test:backup-restore` | Prueba guardas, backup, alteraciones, restauracion y limpieza. | Localhost, herramientas MySQL y usuario auxiliar. |
 | `test:operational-health` | Prueba liveness, readiness, cache, timeout, rate limit y cierre ordenado. | Usa dobles; no conecta a MySQL ni modifica datos. |
+| `test:operational-backup-health` | Prueba autorizacion, diagnostico, estados de backup, cache y solo lectura. | Usa archivos temporales aislados; no usa MySQL ni el directorio real de backups. |
 
 Nunca ejecutar automaticamente `db:migrate`, `db:init`, scripts de creacion de usuarios, seed, restauraciones, pruebas destructivas o limpieza efectiva de backups.
 
@@ -359,6 +360,9 @@ Solo se documentan nombres. Consultar `.env.example` y `.env.local.example`; no 
 - `HEALTH_READINESS_TIMEOUT_MS`
 - `HEALTH_READINESS_CACHE_MS`
 - `SHUTDOWN_TIMEOUT_MS`
+- `BACKUP_WARNING_HOURS`
+- `BACKUP_CRITICAL_HOURS`
+- `BACKUP_STATUS_CACHE_MS`
 - `SECURITY_LOG_LEVEL`
 
 ### Limites de exportacion
@@ -412,7 +416,7 @@ No mostrar estas variables en logs ni respuestas. Nunca versionar `.env`, `.env.
 | Inteligencia de inventario | `routes/inventory-intelligence.js`, `services/inventory-intelligence-service.js` |
 | Catalogo maestro | `routes/master-catalog.js`, `services/master-catalog-service.js` |
 | Frontend comun | `public/app.html`, `public/js/app.js`, `public/js/http-security.js`, `public/css/styles.css` |
-| Health operativo | `routes/health.js`, `services/operational-health-service.js`, `services/server-lifecycle-service.js` |
+| Health operativo | `routes/health.js`, `routes/admin-health.js`, `services/operational-health-service.js`, `services/backup-status-service.js`, `services/server-lifecycle-service.js` |
 | Migrador | `scripts/migrate-db.js`, `scripts/migration-state/legacy-migrations.js` |
 | Backups | `scripts/backup-db.js`, `scripts/backup-utils.js`, `scripts/verify-db-backup.js`, `scripts/test-db-restore.js`, `scripts/cleanup-db-backups.js` |
 
@@ -426,8 +430,8 @@ No mostrar estas variables en logs ni respuestas. Nunca versionar `.env`, `.env.
 - Los backups son locales. No hay almacenamiento remoto, cifrado propio, programacion automatica, rotacion distribuida ni monitoreo externo.
 - Los backups contienen datos sensibles y deben residir en disco cifrado o almacenamiento seguro. No enviarlos por correo o WhatsApp.
 - El rate limiting actual en memoria aplica por instancia; para escala horizontal debe migrar a almacenamiento distribuido.
-- B1 aporta liveness/readiness publicos y cierre ordenado. Aun faltan diagnostico interno,
-  estado de backups, metricas persistentes, monitoreo externo y alertas.
+- B1 y B2 aportan liveness/readiness publicos, cierre ordenado, diagnostico interno de superadmin
+  y estado read-only de backups. Aun faltan metricas persistentes, monitoreo externo y alertas.
 - No hay staging configurado ni despliegue de este estado.
 - No hay registro publico, verificacion por correo, recuperacion por correo, invitaciones ni login social.
 - No hay cobro automatizado de suscripciones comerciales.
@@ -444,7 +448,7 @@ No mostrar estas variables en logs ni respuestas. Nunca versionar `.env`, `.env.
 
 No alterar este orden sin una decision explicita:
 
-1. Completar B2/B3 de health: diagnostico interno, estado de backups y eventos de alertas.
+1. Completar B3 de health: eventos, anti-spam y preparacion de alertas sin proveedor externo.
 2. Anulaciones y operaciones compensatorias.
 3. Auditoria administrativa minima.
 4. Correcciones finales de stock y reposicion.
@@ -576,8 +580,9 @@ Estos resultados corresponden al ultimo estado conocido. Antes de iniciar el sig
 
 ## 17. Criterio de trabajo futuro
 
-El subbloque B1 de health implementa `GET|HEAD /health/live`, `GET|HEAD /health/ready`, timeout,
-cache, deduplicacion, rate limit, arranque con MySQL temporalmente caido y cierre por SIGTERM/SIGINT.
-B2 y B3 requieren autorizacion separada y deben limitarse al diagnostico interno, backups y eventos
-de alertas, sin proveedor externo. Cualquier cambio de esquema, despliegue, secreto o recurso
-externo requiere una autorizacion separada.
+El subbloque B1 implementa `GET|HEAD /health/live`, `GET|HEAD /health/ready`, timeout, cache,
+deduplicacion, rate limit, arranque degradado y cierre por SIGTERM/SIGINT. B2 agrega
+`GET /api/admin/health`, exclusivo de superadmin, y verifica el backup mas reciente en modo de solo
+lectura con umbrales de 24/48 horas y cache de cinco minutos. B3 requiere autorizacion separada y
+queda limitado a eventos y alertas sin proveedor externo. Cualquier cambio de esquema, despliegue,
+secreto o recurso externo requiere una autorizacion separada.

@@ -366,8 +366,44 @@ La prueba aislada no usa MySQL real ni modifica datos:
 npm.cmd run test:operational-health
 ```
 
-El diagnostico interno de superadmin, el estado de backups y las alertas pertenecen a los
-subbloques B2 y B3 y no forman parte de estos endpoints.
+El diagnostico interno de superadmin y el estado de backups se describen a continuacion. Las
+alertas pertenecen a B3 y no forman parte de estos endpoints.
+
+### Diagnostico interno y backups
+
+`GET /api/admin/health` requiere una sesion vigente con rol `superadmin`. Se monta antes de las
+rutas que exigen tenant o suscripcion y reutiliza readiness para informar proceso, base y
+migraciones. Tambien inspecciona en modo de solo lectura el backup elegible mas reciente dentro de
+`BACKUP_DIR`: no crea directorios, no escribe manifiestos, no ejecuta clientes MySQL y nunca
+restaura.
+
+El contrato global es:
+
+- `200 healthy`: base, migraciones y backup correctos.
+- `200 degraded`: la aplicacion puede operar, pero el backup falta, esta vencido o no supera su
+  verificacion.
+- `503 unhealthy`: MySQL no esta disponible o las migraciones esperadas no estan completas.
+- `500`: defecto inesperado del diagnostico.
+
+Un backup valido menor de 24 horas usa `BACKUP_OK`; entre 24 y 48 horas usa `BACKUP_STALE`; con
+mas de 48 horas usa `BACKUP_TOO_OLD`. Los demas codigos publicos son
+`BACKUP_MISSING`, `BACKUP_MANIFEST_MISSING`, `BACKUP_MANIFEST_INVALID`,
+`BACKUP_SIZE_MISMATCH`, `BACKUP_CHECKSUM_MISMATCH`, `BACKUP_SQL_INCOMPLETE` y
+`BACKUP_CHECK_FAILED`. La respuesta puede incluir antiguedad redondeada y conteos de migraciones,
+pero nunca nombres, rutas, hashes, infraestructura, SQL ni errores nativos.
+
+`BACKUP_WARNING_HOURS`, `BACKUP_CRITICAL_HOURS` y `BACKUP_STATUS_CACHE_MS` configuran los umbrales
+y la cache; sus valores predeterminados son 24 horas, 48 horas y cinco minutos. La cache se invalida
+si cambia el candidato, tamano o fecha de modificacion. Un fallo de backup no modifica
+`/health/ready` ni retira el POS del trafico.
+
+```powershell
+npm.cmd run test:operational-backup-health
+```
+
+Este diagnostico no sustituye una restauracion real periodica. Los backups locales tampoco
+protegen frente a la perdida completa del host; el almacenamiento externo y las alertas quedan
+pendientes para B3 y trabajo operativo posterior.
 
 ## Backups y recuperacion comprobada
 
@@ -387,6 +423,9 @@ BACKUP_RESTORE_USER=
 BACKUP_RESTORE_PASSWORD=
 BACKUP_RETENTION_DAYS=30
 BACKUP_RETENTION_COUNT=10
+BACKUP_WARNING_HOURS=24
+BACKUP_CRITICAL_HOURS=48
+BACKUP_STATUS_CACHE_MS=300000
 ```
 
 En Windows se detectan `mysqldump.exe` y `mysql.exe` desde `PATH` y desde la instalacion
@@ -702,6 +741,9 @@ HEALTH_READINESS_SOFT_MS=300
 HEALTH_READINESS_TIMEOUT_MS=1500
 HEALTH_READINESS_CACHE_MS=4000
 SHUTDOWN_TIMEOUT_MS=10000
+BACKUP_WARNING_HOURS=24
+BACKUP_CRITICAL_HOURS=48
+BACKUP_STATUS_CACHE_MS=300000
 SECURITY_LOG_LEVEL=info
 ```
 

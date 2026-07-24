@@ -221,6 +221,8 @@ async function testHttpContractsAndRateLimit() {
     assert.strictEqual(ready.status, 200);
     assert.strictEqual(readyBody.checks.migrations, 'ok');
     assert(readyBody.requestId);
+    assert.strictEqual(readyBody.diagnostics, undefined,
+      'Readiness publico no debe exponer detalles internos de migraciones.');
     assert(!JSON.stringify(readyBody).includes(SECRET));
 
     const readyHead = await fetch(`${fixture.baseUrl}/health/ready`, { method: 'HEAD' });

@@ -29,8 +29,13 @@ const { permissionsPolicy, securityHeaders } = require('./middleware/security-he
 const { requireActiveSubscription, resolveSubscription } = require('./middleware/subscription');
 const { requireTenant } = require('./middleware/tenant');
 const { createSecurityLogger } = require('./utils/security-logger');
+const { createAdminHealthRouter } = require('./routes/admin-health');
 const { createHealthRouter } = require('./routes/health');
-const { createOperationalHealthService } = require('./services/operational-health-service');
+const { createBackupStatusService } = require('./services/backup-status-service');
+const {
+  createOperationalDiagnosticService,
+  createOperationalHealthService
+} = require('./services/operational-health-service');
 const {
   announceInitialReadiness,
   createGracefulShutdown,
@@ -59,6 +64,19 @@ const healthService = createOperationalHealthService({
   cacheMs: appSecurityConfig.operationalHealth.cacheMs
 });
 const healthRoutes = createHealthRouter({ healthService, logger: securityLogger });
+const backupStatusService = createBackupStatusService({
+  warningHours: appSecurityConfig.operationalBackup.warningHours,
+  criticalHours: appSecurityConfig.operationalBackup.criticalHours,
+  cacheMs: appSecurityConfig.operationalBackup.cacheMs
+});
+const diagnosticService = createOperationalDiagnosticService({
+  healthService,
+  backupStatusService
+});
+const adminHealthRoutes = createAdminHealthRouter({
+  diagnosticService,
+  logger: securityLogger
+});
 const sessionStore = new MySQLSessionStore({
   createDatabaseTable: true,
   endConnectionOnClose: false,
@@ -116,6 +134,7 @@ app.use('/api/admin', rateLimiters.admin);
 app.use('/api', rateLimiters.api);
 
 app.use('/auth', authRoutes);
+app.use('/api/admin/health', requireAuth, requireRole('superadmin'), adminHealthRoutes);
 app.use('/api/admin/catalogo', requireAuth, requireRole('superadmin'), adminCatalogRoutes);
 app.use('/api/admin', requireAuth, requireRole('superadmin'), adminRoutes);
 app.use('/api/catalogo-maestro', requireAuth, requireTenant, resolveSubscription, requireActiveSubscription, masterCatalogRoutes);

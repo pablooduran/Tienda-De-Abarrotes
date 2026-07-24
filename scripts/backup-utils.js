@@ -110,12 +110,27 @@ function ensureDirectory(directory) {
   return fs.realpathSync(directory);
 }
 
-function backupDirectory(environment = process.env) {
+function resolveBackupDirectoryPath(environment = process.env) {
   const configured = String(environment.BACKUP_DIR || './backups').trim();
   if (!configured || /[\u0000-\u001f]/.test(configured)) {
     fail('BACKUP_DIRECTORY_UNSAFE', 'BACKUP_DIR no es valido.');
   }
-  return ensureDirectory(path.resolve(PROJECT_ROOT, configured));
+  return path.resolve(PROJECT_ROOT, configured);
+}
+
+function backupDirectory(environment = process.env, options = {}) {
+  const resolved = resolveBackupDirectoryPath(environment);
+  if (options.create !== false) return ensureDirectory(resolved);
+  let stat;
+  try {
+    stat = fs.lstatSync(resolved);
+  } catch {
+    fail('BACKUP_DIRECTORY_NOT_FOUND', 'No existe el directorio de backups configurado.');
+  }
+  if (!stat.isDirectory() || stat.isSymbolicLink()) {
+    fail('BACKUP_DIRECTORY_UNSAFE', 'BACKUP_DIR debe ser un directorio real y no un enlace simbolico.');
+  }
+  return fs.realpathSync(resolved);
 }
 
 function isInsideDirectory(filePath, directory) {
@@ -444,7 +459,7 @@ function versionMajor(value) {
 
 async function verifyBackup(filePath, options = {}) {
   const environment = options.environment || process.env;
-  const directory = backupDirectory(environment);
+  const directory = backupDirectory(environment, { create: options.readOnly !== true });
   let sql;
   try {
     sql = assertRegularFileInside(filePath, directory, '.sql');
@@ -758,6 +773,7 @@ module.exports = {
   finalizeManifest,
   manifestDigest,
   resolveExecutable,
+  resolveBackupDirectoryPath,
   safeFilePart,
   scanSqlBackup,
   sha256File,

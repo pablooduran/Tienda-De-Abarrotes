@@ -109,6 +109,9 @@ check('rateLimitLoginEspecifico', files.server.includes("app.use('/auth/login', 
 check('rateLimitExportacion', files.server.includes('rateLimiters.export'));
 check('rateLimitWhatsapp', files.server.includes('rateLimiters.whatsapp'));
 check('rateLimitHealth', files.server.includes("app.use('/health', rateLimiters.health"));
+check('healthInternoProtegido', files.server.includes(
+  "app.use('/api/admin/health', requireAuth, requireRole('superadmin'), adminHealthRoutes)"
+));
 check('rateLimitProduccionObligatorio', files.webConfig.includes('RATE_LIMIT_ENABLED debe ser true'));
 check('rateLimitMemoryDocumentable', files.rateLimits.includes("require('express-rate-limit')"));
 check('credencialesUniformes', files.auth.includes("error: 'Credenciales incorrectas.'")

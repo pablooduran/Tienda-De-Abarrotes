@@ -52,13 +52,14 @@ async function dependencyQuery(pool, sql, timeoutMs, component) {
   return result[0];
 }
 
-function publicResult(status, checks, durationMs, checkedAt, reason = null) {
+function publicResult(status, checks, durationMs, checkedAt, reason = null, diagnostics = {}) {
   return Object.freeze({
     status,
     checks: Object.freeze(checks),
     durationMs: Number(durationMs.toFixed(1)),
     checkedAt,
-    reason
+    reason,
+    diagnostics: Object.freeze(diagnostics)
   });
 }
 
@@ -111,7 +112,10 @@ function createOperationalHealthService(options) {
         return publicResult('unhealthy', {
           database: databasePassed ? 'ok' : 'unavailable',
           migrations: 'unavailable'
-        }, durationMs, checkedAt, databasePassed ? 'MIGRATIONS_TIMEOUT' : 'DATABASE_TIMEOUT');
+        }, durationMs, checkedAt, databasePassed ? 'MIGRATIONS_TIMEOUT' : 'DATABASE_TIMEOUT', {
+          expectedMigrations: expected.size,
+          appliedMigrations: null
+        });
       }
       if (error instanceof DependencyFailure) {
         return publicResult('unhealthy', {
@@ -119,7 +123,10 @@ function createOperationalHealthService(options) {
           migrations: 'unavailable'
         }, durationMs, checkedAt, error.component === 'database'
           ? 'DATABASE_UNAVAILABLE'
-          : 'MIGRATIONS_UNAVAILABLE');
+          : 'MIGRATIONS_UNAVAILABLE', {
+          expectedMigrations: expected.size,
+          appliedMigrations: null
+        });
       }
       throw error;
     }
@@ -132,18 +139,27 @@ function createOperationalHealthService(options) {
       return publicResult('unhealthy', {
         database: 'ok',
         migrations: 'error'
-      }, durationMs, checkedAt, 'MIGRATIONS_INCOMPLETE');
+      }, durationMs, checkedAt, 'MIGRATIONS_INCOMPLETE', {
+        expectedMigrations: expected.size,
+        appliedMigrations: applied.size
+      });
     }
     if (durationMs > softLimitMs) {
       return publicResult('degraded', {
         database: 'slow',
         migrations: 'ok'
-      }, durationMs, checkedAt, 'DATABASE_SLOW');
+      }, durationMs, checkedAt, 'DATABASE_SLOW', {
+        expectedMigrations: expected.size,
+        appliedMigrations: applied.size
+      });
     }
     return publicResult('healthy', {
       database: 'ok',
       migrations: 'ok'
-    }, durationMs, checkedAt);
+    }, durationMs, checkedAt, null, {
+      expectedMigrations: expected.size,
+      appliedMigrations: applied.size
+    });
   }
 
   function readiness({ bypassCache = false } = {}) {
@@ -173,9 +189,66 @@ function createOperationalHealthService(options) {
   });
 }
 
+function createOperationalDiagnosticService(options = {}) {
+  const {
+    healthService,
+    backupStatusService,
+    clock = () => new Date(),
+    monotonicNow = () => performance.now()
+  } = options;
+  if (!healthService || typeof healthService.readiness !== 'function'
+    || !backupStatusService || typeof backupStatusService.status !== 'function') {
+    throw new Error('El diagnostico operativo requiere los servicios de readiness y backup.');
+  }
+
+  async function diagnose() {
+    const startedAt = monotonicNow();
+    const [readiness, backup] = await Promise.all([
+      healthService.readiness(),
+      backupStatusService.status()
+    ]);
+    const unhealthy = readiness.status === 'unhealthy';
+    const degraded = !unhealthy && (readiness.status === 'degraded' || backup.status !== 'ok');
+    const databaseStatus = readiness.checks.database === 'ok'
+      ? 'ok'
+      : readiness.checks.database === 'slow' ? 'warning' : 'error';
+    const migrationsStatus = readiness.checks.migrations === 'ok' ? 'ok' : 'error';
+    const backupCheck = {
+      status: backup.status,
+      code: backup.code,
+      durationMs: backup.durationMs
+    };
+    if (Number.isFinite(backup.ageHours)) backupCheck.ageHours = backup.ageHours;
+    return Object.freeze({
+      status: unhealthy ? 'unhealthy' : degraded ? 'degraded' : 'healthy',
+      httpStatus: unhealthy ? 503 : 200,
+      checks: Object.freeze({
+        app: Object.freeze({ status: 'ok' }),
+        database: Object.freeze({
+          status: databaseStatus,
+          durationMs: readiness.durationMs,
+          ...(readiness.reason?.startsWith('DATABASE_') ? { code: readiness.reason } : {})
+        }),
+        migrations: Object.freeze({
+          status: migrationsStatus,
+          expectedCount: readiness.diagnostics.expectedMigrations,
+          appliedCount: readiness.diagnostics.appliedMigrations,
+          ...(readiness.reason?.startsWith('MIGRATIONS_') ? { code: readiness.reason } : {})
+        }),
+        backup: Object.freeze(backupCheck)
+      }),
+      checkedAt: clock().toISOString(),
+      durationMs: Number((monotonicNow() - startedAt).toFixed(1))
+    });
+  }
+
+  return Object.freeze({ diagnose });
+}
+
 module.exports = {
   DATABASE_QUERY,
   MIGRATIONS_QUERY,
+  createOperationalDiagnosticService,
   createOperationalHealthService,
   loadExpectedMigrations
 };

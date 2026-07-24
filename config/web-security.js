@@ -70,6 +70,11 @@ function webSecurityConfig(environment = process.env) {
   if (readinessSoftMs >= readinessTimeoutMs) {
     throw new Error('HEALTH_READINESS_SOFT_MS debe ser menor que HEALTH_READINESS_TIMEOUT_MS.');
   }
+  const backupWarningHours = integerSetting(environment, 'BACKUP_WARNING_HOURS', 24, 1, 8760);
+  const backupCriticalHours = integerSetting(environment, 'BACKUP_CRITICAL_HOURS', 48, 2, 17520);
+  if (backupCriticalHours <= backupWarningHours) {
+    throw new Error('BACKUP_CRITICAL_HOURS debe ser mayor que BACKUP_WARNING_HOURS.');
+  }
   return Object.freeze({
     production,
     trustedOrigins: trustedOrigins(environment),
@@ -90,6 +95,11 @@ function webSecurityConfig(environment = process.env) {
       timeoutMs: readinessTimeoutMs,
       cacheMs: integerSetting(environment, 'HEALTH_READINESS_CACHE_MS', 4000, 500, 30000),
       shutdownTimeoutMs: integerSetting(environment, 'SHUTDOWN_TIMEOUT_MS', 10000, 1000, 60000)
+    }),
+    operationalBackup: Object.freeze({
+      warningHours: backupWarningHours,
+      criticalHours: backupCriticalHours,
+      cacheMs: integerSetting(environment, 'BACKUP_STATUS_CACHE_MS', 300000, 1000, 3600000)
     }),
     logLevel
   });
