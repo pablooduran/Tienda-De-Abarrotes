@@ -1,10 +1,18 @@
 const path = require('path');
 const dotenv = require('dotenv');
 const { buildDatabaseOptions } = require('./database-options');
+const {
+  missingEnvironmentWarning,
+  normalizeAppEnvironment,
+  resolveEnvironmentFile
+} = require('./environment-selection');
 
-const activeEnvironment = String(process.env.APP_ENV || '').trim().toLowerCase();
+const activeEnvironment = normalizeAppEnvironment(process.env.APP_ENV);
 const isLocalEnvironment = activeEnvironment === 'local';
-const environmentFile = isLocalEnvironment ? '.env.local' : '.env';
+const environmentFile = resolveEnvironmentFile(activeEnvironment);
+const environmentWarning = missingEnvironmentWarning(activeEnvironment);
+
+if (environmentWarning) console.warn(environmentWarning);
 
 dotenv.config({ path: path.join(__dirname, '..', environmentFile) });
 
@@ -46,8 +54,10 @@ function requireLocalhostDatabase(action) {
 }
 
 module.exports = {
+  activeEnvironment,
   databaseConfig,
   databaseTarget,
+  environmentFile,
   isLocalEnvironment,
   logDatabaseTarget,
   requireEnvironment,

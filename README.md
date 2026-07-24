@@ -71,13 +71,26 @@ Los rangos `DATETIME` usan el contrato semiabierto `[fechaInicio, fechaFin)`: el
 
 Para probar sin usar la configuracion habitual, cree `.env.local` tomando como referencia `.env.local.example`. No publique ese archivo.
 
-El entorno local se activa desde la terminal antes de ejecutar un comando:
+El comando recomendado para iniciar la aplicacion en desarrollo es:
 
 ```powershell
-$env:APP_ENV='local'
+npm.cmd run start:local
 ```
 
-Con `APP_ENV=local`, la aplicacion carga solamente `.env.local`; en cualquier otro caso conserva el uso de `.env`. Los comandos locales muestran el host, puerto y base seleccionados, sin mostrar usuario, contrasena ni secretos.
+`start:local` establece `APP_ENV=local` de forma portable, carga `.env.local` y se detiene si
+`DB_HOST` no es `localhost`. Antes de abrir el servidor muestra solamente entorno, archivo de
+configuracion, host, puerto y base; nunca imprime usuario, contrasena, certificado ni secretos.
+Puede comprobar la seleccion sin iniciar el servidor con
+`npm.cmd run start:local -- --check`.
+
+`npm start` conserva su comportamiento general: usa el valor de `APP_ENV` proporcionado por el
+entorno. `APP_ENV=local` selecciona `.env.local`; cualquier otro valor selecciona `.env`. Si
+`APP_ENV` no esta definido se muestra una advertencia y se mantiene el uso historico de `.env`.
+Produccion debe declarar `APP_ENV=production` de forma explicita.
+
+No comparta `.env` ni `.env.local`. Las credenciales administrativas no deben almacenarse de
+forma persistente en esos archivos; use credenciales efimeras solo dentro de mecanismos de prueba
+aislados y con limpieza comprobada.
 
 ## Comandos de base de datos
 
@@ -312,11 +325,13 @@ No use este comando en una base real. Si detecta clientes, proveedores, producto
 
 ## Ejecutar localmente
 
-```bash
-npm start
+```powershell
+npm.cmd run start:local
 ```
 
-Abra `http://localhost:3000`. Para desarrollo con recarga automatica puede usar `npm run dev`.
+Abra `http://localhost:3000`. `npm start` no fuerza el entorno local y queda disponible para el
+entorno configurado por el operador, incluida produccion con `APP_ENV=production`. Antes de usar
+`npm run dev`, establezca `APP_ENV=local` en esa terminal.
 
 ## Backups y recuperacion comprobada
 

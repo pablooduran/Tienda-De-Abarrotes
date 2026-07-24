@@ -244,8 +244,13 @@ No existe una orden generica `npm test` que represente toda la bateria. Revisar 
 
 | Script | Uso | Condiciones |
 | --- | --- | --- |
-| `start` | Inicia el servidor. | Requiere entorno y base configurados. No ejecutar contra produccion por defecto. |
+| `start:local` | Inicia el servidor con `APP_ENV=local` y `.env.local`. | Recomendado para desarrollo; exige `DB_HOST=localhost`. |
+| `start` | Inicia el servidor sin forzar entorno. | Produccion debe declarar `APP_ENV=production`; con `APP_ENV` ausente usa `.env` y advierte. |
 | `dev` | Inicia con recarga para desarrollo. | Solo local. |
+
+`npm.cmd run start:local -- --check` valida la seleccion local sin abrir el servidor ni consultar
+la base. La prueba `test:local-startup` comprueba la seleccion de `.env.local`, la conservacion de
+`.env` para produccion y entorno indefinido, y que los mensajes no expongan secretos.
 
 ### Escritura administrativa o estructural
 
@@ -366,7 +371,7 @@ Solo se documentan nombres. Consultar `.env.example` y `.env.local.example`; no 
 - `BACKUP_RETENTION_DAYS`
 - `BACKUP_RETENTION_COUNT`
 
-No mostrar estas variables en logs ni respuestas. Nunca versionar `.env`, `.env.local`, certificados, dumps o manifiestos con datos operativos.
+No mostrar estas variables en logs ni respuestas. Nunca versionar `.env`, `.env.local`, certificados, dumps o manifiestos con datos operativos. Las credenciales administrativas no deben quedar almacenadas en la configuracion local; solo pueden proporcionarse de forma efimera a una prueba aislada que garantice su limpieza.
 
 ## 8. Bases locales y usuarios auxiliares
 
@@ -476,7 +481,7 @@ git log -10 --oneline
 3. Confirmar rama `mejora-multitienda`, HEAD esperado o explicar cualquier diferencia, y working tree limpio.
 4. Leer `README.md` y `docs/CONTINUIDAD_PROYECTO.md` completos.
 5. Revisar `package.json`, `server.js`, el modulo que se vaya a tocar y sus pruebas.
-6. Confirmar que `APP_ENV` es local/test, `DB_HOST` es localhost y `DB_NAME` es la base de pruebas antes de cualquier conexion.
+6. Para iniciar el servidor de desarrollo, usar `npm.cmd run start:local`; para otros comandos confirmar que `APP_ENV` es local/test, `DB_HOST` es localhost y `DB_NAME` es la base de pruebas antes de cualquier conexion.
 7. Ejecutar primero validaciones estaticas seguras: `node --check` de los archivos relevantes, `npm.cmd run check:web-security` cuando corresponda y `git diff --check`.
 8. Ejecutar comprobadores de solo lectura solo despues de verificar el entorno.
 9. Ejecutar pruebas funcionales unicamente si se entiende su limpieza y si apuntan a la base local de pruebas.

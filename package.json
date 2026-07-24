@@ -5,6 +5,7 @@
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
+    "start:local": "node scripts/start-local.js",
     "dev": "nodemon server.js",
     "db:init": "node scripts/init-db.js",
     "db:migrate": "node scripts/migrate-db.js",
@@ -44,6 +45,7 @@
     "test:web-security": "node scripts/test-web-security.js",
     "test:legacy-migrations": "node scripts/test-legacy-migrations.js",
     "test:backup-restore": "node scripts/test-backup-restore.js",
+    "test:local-startup": "node scripts/test-local-startup.js",
     "check:web-security": "node scripts/check-web-security.js"
   },
   "dependencies": {
