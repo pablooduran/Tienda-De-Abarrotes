@@ -19,6 +19,24 @@ const MIGRATIONS_DIR = path.join(ROOT, 'database', 'migrations');
 const MIGRATION_015 = '015_compensaciones_venta_inventario.sql';
 const TEMP_PREFIX = 'tmp_tienda_restore_';
 const PRIMARY_DATABASE = 'tienda_abarrotes_pruebas';
+const PRIMARY_RELEVANT_TABLES = [
+  'cobrofiado',
+  'compensacionventa',
+  'detallecompensacionlote',
+  'detallecompensacionventa',
+  'detalleventa',
+  'fiado',
+  'liquidacioncompensacionventa',
+  'loteproducto',
+  'movimientolote',
+  'movimientostock',
+  'operacioncompensatoria',
+  'pagofiado',
+  'pagoventa',
+  'producto',
+  'schema_migrations',
+  'venta'
+];
 const PROTECTED_DATABASES = new Set([
   'tienda_abarrotes',
   PRIMARY_DATABASE,
@@ -158,38 +176,161 @@ function runNodeScript(script, databaseName, timeout = 180000) {
 async function primaryFingerprint(environment = process.env) {
   const connection = await createConnection(environment);
   try {
-    const [[migration]] = await connection.query(
-      `SELECT COUNT(*) total,
-              SUM(nombre=?) migration015
-       FROM schema_migrations`,
-      [MIGRATION_015]
+    const [migrations] = await connection.query(
+      `SELECT nombre,
+              DATE_FORMAT(aplicadaEn, '%Y-%m-%d %H:%i:%s') aplicadaEn
+       FROM schema_migrations
+       ORDER BY nombre`
     );
-    const [[structures]] = await connection.query(
-      `SELECT
-         (SELECT COUNT(*) FROM information_schema.TABLES
-          WHERE TABLE_SCHEMA=DATABASE()) tableCount,
-         (SELECT COUNT(*) FROM information_schema.TABLES
-          WHERE TABLE_SCHEMA=DATABASE()
-            AND LOWER(TABLE_NAME) IN (
-              'compensacionventa',
-              'detallecompensacionventa',
-              'detallecompensacionlote',
-              'liquidacioncompensacionventa'
-            )) c2Tables,
-         (SELECT COUNT(*) FROM venta) sales,
-         (SELECT COUNT(*) FROM detalleVenta) saleDetails,
-         (SELECT COUNT(*) FROM movimientoStock) stockMovements,
-         (SELECT COUNT(*) FROM movimientoLote) lotMovements`
+    const [tables] = await connection.query(
+      `SELECT LOWER(TABLE_NAME) tableName,
+              LOWER(ENGINE) engine
+       FROM information_schema.TABLES
+       WHERE TABLE_SCHEMA=DATABASE()
+         AND LOWER(TABLE_NAME) IN (?)
+       ORDER BY LOWER(TABLE_NAME)`,
+      [PRIMARY_RELEVANT_TABLES]
     );
+    const [columns] = await connection.query(
+      `SELECT LOWER(TABLE_NAME) tableName,
+              LOWER(COLUMN_NAME) columnName,
+              LOWER(COLUMN_TYPE) columnType,
+              IS_NULLABLE nullable,
+              COLUMN_DEFAULT defaultValue,
+              LOWER(EXTRA) extra
+       FROM information_schema.COLUMNS
+       WHERE TABLE_SCHEMA=DATABASE()
+         AND LOWER(TABLE_NAME) IN (?)
+       ORDER BY LOWER(TABLE_NAME), ORDINAL_POSITION`,
+      [PRIMARY_RELEVANT_TABLES]
+    );
+    const [saleStates] = await connection.query(
+      `SELECT estadoOperacion,
+              estadoPago,
+              COUNT(*) count,
+              COALESCE(SUM(total), 0) total
+       FROM venta
+       GROUP BY estadoOperacion, estadoPago
+       ORDER BY estadoOperacion, estadoPago`
+    );
+    const summary = async (sql) => (await connection.query(sql))[0][0];
+    const migrationNamesRegistered = migrations.map((migration) => migration.nombre);
+
     return {
-      migrations: Number(migration.total),
-      migration015: Number(migration.migration015 || 0),
-      tableCount: Number(structures.tableCount),
-      c2Tables: Number(structures.c2Tables),
-      sales: Number(structures.sales),
-      saleDetails: Number(structures.saleDetails),
-      stockMovements: Number(structures.stockMovements),
-      lotMovements: Number(structures.lotMovements)
+      migrations: {
+        registered: migrations,
+        latest: migrationNamesRegistered.at(-1) || null
+      },
+      schema: { tables, columns },
+      commercial: {
+        venta: await summary(
+          `SELECT COUNT(*) count, COALESCE(SUM(idVenta), 0) idSum,
+                  COALESCE(SUM(subtotal), 0) subtotal,
+                  COALESCE(SUM(descuento), 0) discount,
+                  COALESCE(SUM(total), 0) total,
+                  COALESCE(SUM(montoPagado), 0) paid,
+                  COALESCE(SUM(saldoPendiente), 0) pending
+           FROM venta`
+        ),
+        detalleVenta: await summary(
+          `SELECT COUNT(*) count, COALESCE(SUM(idDetalleVenta), 0) idSum,
+                  COALESCE(SUM(cantidad), 0) quantity,
+                  COALESCE(SUM(cantidadEquivalenteUnidades), 0) baseUnits,
+                  COALESCE(SUM(subtotal), 0) subtotal,
+                  COALESCE(SUM(subtotalCosto), 0) cost,
+                  COALESCE(SUM(ganancia), 0) profit
+           FROM detalleVenta`
+        ),
+        pagoVenta: await summary(
+          `SELECT COUNT(*) count, COALESCE(SUM(idPagoVenta), 0) idSum,
+                  COALESCE(SUM(monto), 0) amount,
+                  COALESCE(SUM(montoRecibido), 0) received,
+                  COALESCE(SUM(cambio), 0) changeAmount
+           FROM pagoVenta`
+        ),
+        fiado: await summary(
+          `SELECT COUNT(*) count, COALESCE(SUM(idFiado), 0) idSum,
+                  COALESCE(SUM(totalFiado), 0) total,
+                  COALESCE(SUM(totalPagado), 0) paid,
+                  COALESCE(SUM(saldoPendiente), 0) pending,
+                  COALESCE(SUM(activo), 0) active
+           FROM fiado`
+        ),
+        pagoFiado: await summary(
+          `SELECT COUNT(*) count, COALESCE(SUM(idPagoFiado), 0) idSum,
+                  COALESCE(SUM(monto), 0) amount
+           FROM pagoFiado`
+        ),
+        cobroFiado: await summary(
+          `SELECT COUNT(*) count, COALESCE(SUM(idCobroFiado), 0) idSum,
+                  COALESCE(SUM(montoTotal), 0) total,
+                  COALESCE(SUM(montoRecibido), 0) received,
+                  COALESCE(SUM(cambio), 0) changeAmount
+           FROM cobroFiado`
+        ),
+        producto: await summary(
+          `SELECT COUNT(*) count, COALESCE(SUM(idProducto), 0) idSum,
+                  COALESCE(SUM(stock), 0) stock,
+                  COALESCE(SUM(stockUnidadesTotal), 0) baseStock,
+                  COALESCE(SUM(activo), 0) active
+           FROM producto`
+        ),
+        movimientoStock: await summary(
+          `SELECT COUNT(*) count, COALESCE(SUM(idMovimientoStock), 0) idSum,
+                  COALESCE(SUM(cantidad), 0) quantity,
+                  COALESCE(SUM(stockAnterior), 0) previousStock,
+                  COALESCE(SUM(stockPosterior), 0) resultingStock,
+                  COALESCE(SUM(cantidadOperacion), 0) operationQuantity
+           FROM movimientoStock`
+        ),
+        loteProducto: await summary(
+          `SELECT COUNT(*) count, COALESCE(SUM(idLoteProducto), 0) idSum,
+                  COALESCE(SUM(cantidadInicial), 0) initialQuantity,
+                  COALESCE(SUM(cantidadRestante), 0) remainingQuantity
+           FROM loteProducto`
+        ),
+        movimientoLote: await summary(
+          `SELECT COUNT(*) count, COALESCE(SUM(idMovimientoLote), 0) idSum,
+                  COALESCE(SUM(cantidad), 0) quantity,
+                  COALESCE(SUM(cantidadAnterior), 0) previousQuantity,
+                  COALESCE(SUM(cantidadPosterior), 0) resultingQuantity
+           FROM movimientoLote`
+        ),
+        operacionCompensatoria: await summary(
+          `SELECT COUNT(*) count,
+                  COALESCE(SUM(idOperacionCompensatoria), 0) idSum
+           FROM operacionCompensatoria`
+        ),
+        compensacionVenta: await summary(
+          `SELECT COUNT(*) count, COALESCE(SUM(idCompensacionVenta), 0) idSum,
+                  COALESCE(SUM(montoCompensado), 0) amount,
+                  COALESCE(SUM(costoCompensado), 0) cost
+           FROM compensacionVenta`
+        ),
+        detalleCompensacionVenta: await summary(
+          `SELECT COUNT(*) count,
+                  COALESCE(SUM(idDetalleCompensacionVenta), 0) idSum,
+                  COALESCE(SUM(unidadesDevueltas), 0) returnedUnits,
+                  COALESCE(SUM(montoCompensado), 0) amount,
+                  COALESCE(SUM(costoCompensado), 0) cost
+           FROM detalleCompensacionVenta`
+        ),
+        detalleCompensacionLote: await summary(
+          `SELECT COUNT(*) count,
+                  COALESCE(SUM(idDetalleCompensacionLote), 0) idSum,
+                  COALESCE(SUM(unidadesDevueltas), 0) returnedUnits
+           FROM detalleCompensacionLote`
+        ),
+        liquidacionCompensacionVenta: await summary(
+          `SELECT COUNT(*) count,
+                  COALESCE(SUM(idLiquidacionCompensacionVenta), 0) idSum,
+                  COALESCE(SUM(montoCompensado), 0) amount,
+                  COALESCE(SUM(montoReduccionDeudaPendiente), 0) debtReduction,
+                  COALESCE(SUM(montoReembolsoPendiente), 0) refundPending
+           FROM liquidacionCompensacionVenta`
+        )
+      },
+      saleStates
     };
   } finally {
     await connection.end();
@@ -440,14 +581,24 @@ async function startTemporaryServer(databaseName) {
   throw new Error('El servidor temporal no inicio dentro del plazo.');
 }
 
+function processHasStopped(child) {
+  return !child || child.exitCode !== null || child.signalCode !== null;
+}
+
 async function stopTemporaryServer(child) {
-  if (!child || child.exitCode !== null) return;
+  if (processHasStopped(child)) return;
   child.kill('SIGTERM');
   await Promise.race([
     new Promise((resolve) => child.once('exit', resolve)),
     new Promise((resolve) => setTimeout(resolve, 10000))
   ]);
-  if (child.exitCode === null) child.kill('SIGKILL');
+  if (!processHasStopped(child)) {
+    child.kill('SIGKILL');
+    await Promise.race([
+      new Promise((resolve) => child.once('exit', resolve)),
+      new Promise((resolve) => setTimeout(resolve, 2000))
+    ]);
+  }
 }
 
 function staticContract() {
@@ -471,14 +622,16 @@ async function main() {
   staticContract();
   const primaryEnvironment = { ...process.env };
   const primaryBefore = await primaryFingerprint(primaryEnvironment);
-  assert(primaryBefore.migration015 === 0 && primaryBefore.c2Tables === 0,
-    'La base principal permanece en 014 antes de la prueba C2.');
+  assert(primaryBefore.migrations.registered.length > 0
+    && primaryBefore.migrations.latest,
+  'La prueba registra la version y huella iniciales de la base principal.');
 
   const temporaryDatabase = temporaryDatabaseName();
   const serverConnection = await createConnection(restoreEnvironment(), false);
   let temporaryConnection = null;
   let applicationPool = null;
   let temporaryServer = null;
+  let temporaryServerProcess = null;
   try {
     await serverConnection.query(
       `CREATE DATABASE ${quoteTemporaryDatabase(temporaryDatabase)}
@@ -925,6 +1078,7 @@ async function main() {
     );
 
     temporaryServer = await startTemporaryServer(temporaryDatabase);
+    temporaryServerProcess = temporaryServer.child;
     const sessionA = new HttpSession(temporaryServer.baseUrl);
     const sessionB = new HttpSession(temporaryServer.baseUrl);
     const superSession = new HttpSession(temporaryServer.baseUrl);
@@ -1009,7 +1163,9 @@ async function main() {
 
   const primaryAfter = await primaryFingerprint(primaryEnvironment);
   assert(JSON.stringify(primaryAfter) === JSON.stringify(primaryBefore),
-    'La base principal conserva exactamente su huella y sigue sin 015.');
+    'La base principal conserva exactamente su version, estructura y datos.');
+  assert(processHasStopped(temporaryServerProcess),
+    'No quedan procesos de servidor temporales de C2.');
 }
 
 main().catch((error) => {
