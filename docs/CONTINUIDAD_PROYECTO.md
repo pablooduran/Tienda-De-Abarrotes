@@ -6,7 +6,7 @@ Documento de relevo tecnico para continuar el proyecto sin depender del historia
 
 - Repositorio obligatorio: `pablooduran/Tienda-De-Abarrotes`
 - Rama de trabajo obligatoria: `mejora-multitienda`
-- HEAD local esperado al crear este documento: `91b4bb9 feat: agregar backups y restauracion verificada`
+- HEAD funcional anterior a C1: `6dd1e1c feat: agregar eventos y monitoreo operativo`
 - No trabajar directamente en `main`.
 - El HEAD indicado es una referencia local conocida. Confirmar si tambien existe en el remoto antes de depender de el para una recuperacion.
 - El working tree estaba limpio antes de crear este documento.
@@ -46,7 +46,7 @@ Si la rama, el HEAD o el estado difieren, detenerse y entender los cambios exist
 | `routes/` | Contratos HTTP de autenticacion, administracion y modulos comerciales. |
 | `services/` | Reglas de negocio, transacciones, reportes, POS, stock, clientes y cobranza. |
 | `public/` | Aplicacion web, administracion, login, estilos y JavaScript del navegador. |
-| `database/migrations/` | Migraciones historicas y modernas, numeradas de 001 a 013. |
+| `database/migrations/` | Migraciones historicas y modernas, numeradas de 001 a 014. |
 | `database/tienda_abarrotes.sql` | Esquema inicial equivalente al estado final esperado. |
 | `scripts/` | Migrador, comprobadores, pruebas, administracion local y backups. |
 | `utils/` | Utilidades compartidas, incluidas fechas locales y errores. |
@@ -113,7 +113,7 @@ El contexto de tienda proviene de la sesion validada. El navegador no debe envia
 | Migraciones historicas 001-003 | Terminado | Inspectores semanticos, recuperacion por pasos y prueba en bases temporales. |
 | Backups y restauracion | Terminado | Backup, manifiesto, hash, verificacion y restauracion probada en base temporal. |
 | Healthcheck, monitoreo y alertas | B1-B3 terminados; proveedores externos pendientes | Liveness, readiness, arranque/cierre, diagnostico superadmin, backups read-only, transiciones, anti-spam y comprobador operativo implementados. No hay envio externo. |
-| Anulaciones y compensaciones | Pendiente | No hay flujo general seguro para anular ventas, compras o pagos. |
+| Anulaciones y compensaciones | C1 terminado; ejecucion pendiente | Migracion 014, cabecera comun, estados, motivos, idempotencia, permisos y comprobador. No hay anulacion, devolucion ni correccion comercial ejecutable. |
 | Auditoria administrativa global | Parcial | Existen actores y fechas en modulos concretos, pero no una bitacora global e inmutable. |
 | Correcciones finales de stock/reposicion | Pendiente | Revision de stock vendible y reglas de sugerencia antes de produccion. |
 | Fase 11 - acceso publico | No iniciada | Registro publico, alta automatica, verificacion, recuperacion y proteccion antiabuso. |
@@ -208,7 +208,10 @@ Un downgrade no borra ni oculta deuda existente. Se mantiene la consulta histori
 
 ## 5. Migraciones
 
-No renumerar, editar ni reemplazar migraciones aplicadas. El estado local esperado llega hasta la 013.
+No renumerar, editar ni reemplazar migraciones aplicadas. El repositorio incluye 014,
+pero la base local principal conocida permanece hasta 013: C1 probo 014 unicamente
+en bases temporales aisladas y no autorizo aplicarla sobre
+`tienda_abarrotes_pruebas`.
 
 | Migracion | Objetivo principal |
 | --- | --- |
@@ -225,6 +228,7 @@ No renumerar, editar ni reemplazar migraciones aplicadas. El estado local espera
 | `011_lotes_vencimientos.sql` | Lotes, vencimientos, FEFO/FIFO y trazabilidad. |
 | `012_clientes_fiados_comunicacion.sql` | Clientes ampliados, credito, cobros, seguimiento y plantillas. |
 | `013_seguridad_sesiones.sql` | Version de sesion y revocacion segura. |
+| `014_operaciones_compensatorias.sql` | Contrato base, estado operativo de venta, idempotencia y trazabilidad de futuras compensaciones. |
 
 Reglas:
 
@@ -233,7 +237,7 @@ Reglas:
 - Las modernas usan inspeccion pre/parcial/post y registro tardio.
 - Una migracion registrada pero fisicamente incompleta debe bloquear el proceso.
 - Una estructura completa no registrada solo puede adoptarse despues de validarla.
-- `database/tienda_abarrotes.sql` debe conservar equivalencia con el estado post-013 para instalaciones nuevas.
+- `database/tienda_abarrotes.sql` debe conservar equivalencia con el estado post-014 para instalaciones nuevas.
 - Antes de cualquier futura migracion: backup verificado, ensayo sobre copia, revision del SQL y comprobacion posterior.
 
 ## 6. Scripts npm y nivel de seguridad
@@ -280,6 +284,7 @@ Todos requieren credenciales MySQL y deben apuntar a la base local correcta. No 
 - `db:check-session-security`: version y vigencia de sesiones.
 - `db:check-timezone-tls`: configuracion TLS y estrategia horaria.
 - `db:check-legacy-migrations`: estado semantico de las migraciones 001-003.
+- `db:check-compensations`: estructura, invariantes, idempotencia, tenant y permisos de la base C1; exige localhost y 014 aplicada en el destino comprobado.
 - `check:web-security`: revision estatica de protecciones web.
 
 ### Pruebas funcionales
@@ -302,6 +307,7 @@ Estas pruebas pueden crear y limpiar datos temporales en la base local de prueba
 - `test:timezone-tls`: configuracion TLS y fechas locales.
 - `test:web-security`: rate limits, origen, CSP, cabeceras y errores.
 - `test:legacy-migrations`: crea y elimina exclusivamente bases `tmp_tienda_legacy_*`.
+- `test:compensation-foundation`: prueba 001→014, 013→014, esquema inicial e invariantes exclusivamente en bases `tmp_tienda_restore_*`.
 
 No ejecutar pruebas funcionales sobre una base comercial ni remota. Confirmar sus guardas antes de cada uso.
 
@@ -422,13 +428,14 @@ No mostrar estas variables en logs ni respuestas. Nunca versionar `.env`, `.env.
 | Catalogo maestro | `routes/master-catalog.js`, `services/master-catalog-service.js` |
 | Frontend comun | `public/app.html`, `public/js/app.js`, `public/js/http-security.js`, `public/css/styles.css` |
 | Health operativo | `routes/health.js`, `routes/admin-health.js`, `services/operational-health-service.js`, `services/backup-status-service.js`, `services/operational-state-tracker.js`, `services/operational-event-dispatcher.js`, `services/server-lifecycle-service.js`, `scripts/check-operational-health.js` |
+| Compensaciones C1 | `config/compensation-contract.js`, `database/migrations/014_operaciones_compensatorias.sql`, `scripts/check-compensations.js`, `scripts/test-compensation-foundation.js` |
 | Migrador | `scripts/migrate-db.js`, `scripts/migration-state/legacy-migrations.js` |
 | Backups | `scripts/backup-db.js`, `scripts/backup-utils.js`, `scripts/verify-db-backup.js`, `scripts/test-db-restore.js`, `scripts/cleanup-db-backups.js` |
 
 ## 10. Limitaciones conocidas
 
-- No existe anulacion general segura de ventas, compras, cobros o pagos. No corregir montos o stock con SQL manual.
-- No hay operaciones compensatorias completas ni devoluciones comerciales.
+- Existe la base C1 de operaciones compensatorias, pero no hay anulacion general ejecutable de ventas, compras, cobros o pagos. No corregir montos o stock con SQL manual.
+- No existen todavia tablas de detalle, liquidaciones, devoluciones comerciales, reposiciones, reembolsos, endpoints, frontend ni reportes netos de compensaciones.
 - No existe inventario fisico integral ni flujo final de conciliacion operativa para produccion.
 - La auditoria administrativa es parcial; varios modulos guardan actor y fechas, pero falta una bitacora global inmutable.
 - Las sugerencias de reposicion requieren una revision final sobre stock vendible y reglas de compra.
@@ -456,7 +463,7 @@ No mostrar estas variables en logs ni respuestas. Nunca versionar `.env`, `.env.
 
 No alterar este orden sin una decision explicita:
 
-1. Anulaciones y operaciones compensatorias.
+1. Continuar anulaciones y operaciones compensatorias desde C2, sin volver a diseñar ni aplicar C1 sobre la base principal sin autorizacion.
 2. Auditoria administrativa minima.
 3. Correcciones finales de stock y reposicion.
 4. Fase 11: acceso publico.
@@ -561,14 +568,16 @@ En ambos casos, conservar el repositorio o base anterior hasta completar smoke t
 ### Git
 
 - Rama local: `mejora-multitienda`.
-- HEAD esperado: `91b4bb9 feat: agregar backups y restauracion verificada`.
+- HEAD funcional anterior a C1: `6dd1e1c feat: agregar eventos y monitoreo operativo`.
 - Working tree: limpio antes de crear este documento.
 - No consta despliegue de este estado. Verificar el remoto antes de asumir que todos los commits locales fueron publicados.
 
 ### Base local
 
 - Base de pruebas esperada: `tienda_abarrotes_pruebas`.
-- Migraciones esperadas: 001 a 013 registradas y fisicamente validas.
+- Migraciones registradas en la base principal conocida: 001 a 013. El repositorio
+  incorpora 014, ensayada solo en bases temporales y pendiente de aplicacion
+  expresamente autorizada.
 - La restauracion de validacion mas reciente informo 34 tablas, 13 migraciones y 90 claves foraneas, sin conservar la base temporal.
 - No deberian existir bases `tmp_tienda_restore_*` ni `tmp_tienda_legacy_*` despues de las pruebas.
 
@@ -581,6 +590,9 @@ Han sido validadas en bloques anteriores:
 - Seguridad: sesiones, TLS/zona horaria, seguridad web y migraciones historicas.
 - Operacion: `test:operational-health`, `test:operational-backup-health` y
   `test:operational-monitoring` sin conexiones remotas ni escrituras comerciales.
+- Compensaciones C1: `test:compensation-foundation` valido instalacion 001→014,
+  actualizacion 013→014, equivalencia del esquema inicial, FKs compuestas,
+  idempotencia, allowlists y limpieza total sin modificar la base principal.
 - Backup: `test:backup-restore` con 26 comprobaciones, backup real local, verificacion de hash/manifiesto y restauracion temporal.
 - Durante la restauracion se ejecutaron `db:check-legacy-migrations`, `db:check-session-security`, `db:check-timezone-tls` y `db:check-customers-credit` contra la base temporal.
 - La validacion final de backup elimino los archivos generados y la base temporal; no dejo procesos auxiliares activos.

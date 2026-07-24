@@ -232,6 +232,13 @@ SELECT 'exportacion_clientes_fiados', 'Exportacion de clientes y fiados',
        'Exportacion administrativa de clientes, deudas y cobros.', 1,
        @fecha_local_instalacion, @fecha_local_instalacion
 WHERE NOT EXISTS (SELECT 1 FROM funcionalidad WHERE codigo='exportacion_clientes_fiados');
+-- COMPENSATION_FOUNDATION_FEATURE_START
+INSERT INTO funcionalidad (codigo, nombre, descripcion, activo, creadoEn, actualizadoEn)
+SELECT 'anulaciones_operativas', 'Anulaciones operativas',
+       'Base protegida para operaciones compensatorias con trazabilidad.', 1,
+       @fecha_local_instalacion, @fecha_local_instalacion
+WHERE NOT EXISTS (SELECT 1 FROM funcionalidad WHERE codigo='anulaciones_operativas');
+-- COMPENSATION_FOUNDATION_FEATURE_END
 
 INSERT INTO planFuncionalidad (idPlan, idFuncionalidad, habilitada, creadoEn)
 SELECT p.idPlan, f.idFuncionalidad, 1, @fecha_local_instalacion
@@ -312,6 +319,18 @@ WHERE p.codigo IN ('basico','avanzado')
     SELECT 1 FROM planFuncionalidad pf
     WHERE pf.idPlan=p.idPlan AND pf.idFuncionalidad=f.idFuncionalidad
   );
+
+-- COMPENSATION_FOUNDATION_PLAN_START
+INSERT INTO planFuncionalidad (idPlan, idFuncionalidad, habilitada, creadoEn)
+SELECT p.idPlan, f.idFuncionalidad, 1, @fecha_local_instalacion
+FROM plan p
+JOIN funcionalidad f ON f.codigo='anulaciones_operativas'
+WHERE p.codigo IN ('basico','avanzado')
+  AND NOT EXISTS (
+    SELECT 1 FROM planFuncionalidad pf
+    WHERE pf.idPlan=p.idPlan AND pf.idFuncionalidad=f.idFuncionalidad
+  );
+-- COMPENSATION_FOUNDATION_PLAN_END
 
 INSERT INTO planFuncionalidad (idPlan, idFuncionalidad, habilitada, creadoEn)
 SELECT p.idPlan, f.idFuncionalidad, 0, @fecha_local_instalacion
@@ -604,6 +623,9 @@ CREATE TABLE IF NOT EXISTS venta (
   montoPagado DECIMAL(10,2) NOT NULL DEFAULT 0,
   saldoPendiente DECIMAL(10,2) NOT NULL DEFAULT 0,
   estadoPago ENUM('pagada','parcial','pendiente','legado') NOT NULL DEFAULT 'legado',
+  -- COMPENSATION_FOUNDATION_SALE_COLUMN_START
+  estadoOperacion ENUM('vigente','devuelta_parcial','anulada') NOT NULL DEFAULT 'vigente',
+  -- COMPENSATION_FOUNDATION_SALE_COLUMN_END
   tipo ENUM('pagada','fiada') NOT NULL DEFAULT 'pagada',
   idCliente INT NULL,
   claveOperacion VARCHAR(64) NULL,
@@ -614,6 +636,10 @@ CREATE TABLE IF NOT EXISTS venta (
   KEY idx_venta_tienda_fecha (idTienda, fecha),
   KEY idx_venta_tienda_cliente (idTienda, idCliente),
   KEY idx_venta_tienda_estado_fecha (idTienda, estadoPago, fecha),
+  -- COMPENSATION_FOUNDATION_SALE_INDEX_START
+  KEY idx_venta_tienda_estado_operacion_fecha
+    (idTienda, estadoOperacion, fecha, idVenta),
+  -- COMPENSATION_FOUNDATION_SALE_INDEX_END
   CONSTRAINT chk_venta_totales_pos CHECK (
     subtotal >= 0 AND descuento >= 0 AND total >= 0 AND descuento <= subtotal
     AND ABS((subtotal - descuento) - total) < 0.01
@@ -628,10 +654,129 @@ CREATE TABLE IF NOT EXISTS venta (
     OR (estadoPago = 'parcial' AND montoPagado > 0 AND saldoPendiente > 0)
     OR (estadoPago = 'pendiente' AND montoPagado = 0 AND saldoPendiente = total AND total > 0)
   ),
+  -- COMPENSATION_FOUNDATION_SALE_CHECK_START
+  CONSTRAINT chk_venta_estado_operacion CHECK (
+    estadoOperacion IN ('vigente','devuelta_parcial','anulada')
+  ),
+  -- COMPENSATION_FOUNDATION_SALE_CHECK_END
   CONSTRAINT fk_venta_tienda FOREIGN KEY (idTienda) REFERENCES tienda(idTienda),
   CONSTRAINT fk_venta_cliente FOREIGN KEY (idCliente) REFERENCES cliente(idCliente),
   CONSTRAINT fk_venta_tienda_cliente FOREIGN KEY (idTienda, idCliente) REFERENCES cliente(idTienda, idCliente)
 );
+
+-- COMPENSATION_FOUNDATION_TABLE_START
+CREATE TABLE IF NOT EXISTS operacionCompensatoria (
+  idOperacionCompensatoria BIGINT NOT NULL AUTO_INCREMENT,
+  idTienda INT NOT NULL,
+  tipoOperacion ENUM(
+    'anulacion_venta',
+    'devolucion_venta',
+    'correccion_pago_venta',
+    'anulacion_fiado',
+    'anulacion_cobro_fiado',
+    'correccion_saldo'
+  ) NOT NULL,
+  estado ENUM(
+    'solicitada',
+    'pendiente_aprobacion',
+    'aprobada',
+    'aplicada',
+    'rechazada',
+    'fallida',
+    'cancelada'
+  ) NOT NULL DEFAULT 'solicitada',
+  motivoCodigo ENUM(
+    'error_cantidad',
+    'error_producto',
+    'error_cliente',
+    'error_metodo_pago',
+    'operacion_duplicada',
+    'devolucion_cliente',
+    'mercaderia_danada',
+    'otro_controlado'
+  ) NOT NULL,
+  observacion VARCHAR(1000) NULL,
+  requiereAprobacion TINYINT(1) NOT NULL DEFAULT 0,
+  idAdministradorSolicitante INT NOT NULL,
+  idAdministradorAprobador INT NULL,
+  claveOperacion VARCHAR(160)
+    CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+  huellaSolicitud CHAR(64)
+    CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+  fechaSolicitud DATETIME NOT NULL,
+  fechaAprobacion DATETIME NULL,
+  fechaAplicacion DATETIME NULL,
+  creadoEn DATETIME NOT NULL,
+  actualizadoEn DATETIME NOT NULL,
+  PRIMARY KEY (idOperacionCompensatoria),
+  UNIQUE KEY uq_operacionCompensatoria_tienda_id
+    (idTienda, idOperacionCompensatoria),
+  UNIQUE KEY uq_operacionCompensatoria_tienda_clave
+    (idTienda, claveOperacion),
+  KEY idx_operacionCompensatoria_tienda_tipo_estado
+    (idTienda, tipoOperacion, estado),
+  KEY idx_operacionCompensatoria_tienda_fecha
+    (idTienda, fechaSolicitud, idOperacionCompensatoria),
+  KEY idx_operacionCompensatoria_tienda_solicitante
+    (idTienda, idAdministradorSolicitante, fechaSolicitud),
+  KEY idx_operacionCompensatoria_tienda_aprobador
+    (idTienda, idAdministradorAprobador, fechaAprobacion),
+  CONSTRAINT chk_operacionCompensatoria_aprobacion
+    CHECK (requiereAprobacion IN (0,1)),
+  CONSTRAINT chk_operacionCompensatoria_clave
+    CHECK (
+      CHAR_LENGTH(claveOperacion) BETWEEN 1 AND 160
+      AND CONVERT(claveOperacion USING utf8mb4)
+        REGEXP '^[A-Za-z0-9][A-Za-z0-9._:-]*$'
+    ),
+  CONSTRAINT chk_operacionCompensatoria_huella
+    CHECK (
+      CONVERT(huellaSolicitud USING utf8mb4) REGEXP '^[0-9A-Fa-f]{64}$'
+      AND huellaSolicitud=LOWER(huellaSolicitud)
+    ),
+  CONSTRAINT chk_operacionCompensatoria_motivo
+    CHECK (
+      motivoCodigo<>'otro_controlado'
+      OR (observacion IS NOT NULL AND CHAR_LENGTH(TRIM(observacion))>=8)
+    ),
+  CONSTRAINT chk_operacionCompensatoria_fechas
+    CHECK (
+      fechaSolicitud=creadoEn
+      AND actualizadoEn>=creadoEn
+      AND (
+        (idAdministradorAprobador IS NULL AND fechaAprobacion IS NULL)
+        OR (
+          idAdministradorAprobador IS NOT NULL
+          AND fechaAprobacion IS NOT NULL
+          AND fechaAprobacion>=fechaSolicitud
+        )
+      )
+      AND (
+        (estado='aplicada' AND fechaAplicacion IS NOT NULL AND fechaAplicacion>=fechaSolicitud)
+        OR (estado<>'aplicada' AND fechaAplicacion IS NULL)
+      )
+      AND (
+        estado<>'aprobada'
+        OR (idAdministradorAprobador IS NOT NULL AND fechaAprobacion IS NOT NULL)
+      )
+      AND (
+        requiereAprobacion=0
+        OR estado NOT IN ('aprobada','aplicada')
+        OR (idAdministradorAprobador IS NOT NULL AND fechaAprobacion IS NOT NULL)
+      )
+    ),
+  CONSTRAINT fk_operacionCompensatoria_tienda FOREIGN KEY (idTienda)
+    REFERENCES tienda(idTienda) ON UPDATE RESTRICT ON DELETE RESTRICT,
+  CONSTRAINT fk_operacionCompensatoria_solicitante
+    FOREIGN KEY (idTienda, idAdministradorSolicitante)
+    REFERENCES administrador(idTienda, idAdministrador)
+    ON UPDATE RESTRICT ON DELETE RESTRICT,
+  CONSTRAINT fk_operacionCompensatoria_aprobador
+    FOREIGN KEY (idTienda, idAdministradorAprobador)
+    REFERENCES administrador(idTienda, idAdministrador)
+    ON UPDATE RESTRICT ON DELETE RESTRICT
+) ENGINE=InnoDB;
+-- COMPENSATION_FOUNDATION_TABLE_END
 
 CREATE TABLE IF NOT EXISTS detalleVenta (
   idDetalleVenta INT AUTO_INCREMENT PRIMARY KEY,

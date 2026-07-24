@@ -127,6 +127,65 @@ Migraciones actuales, en orden:
 11. `011_lotes_vencimientos.sql`: control opcional por lotes, vencimientos, FEFO/FIFO y trazabilidad por movimiento.
 12. `012_clientes_fiados_comunicacion.sql`: clientes ampliados, configuracion de credito, cobros y seguimiento de cobranza.
 13. `013_seguridad_sesiones.sql`: version de sesion por administrador para revocar accesos despues de cambios criticos.
+14. `014_operaciones_compensatorias.sql`: contrato base, idempotencia, estados operativos y trazabilidad para futuras compensaciones.
+
+### Base de operaciones compensatorias
+
+La migracion `014` crea `operacionCompensatoria` y separa en `venta.estadoOperacion`
+la vigencia comercial (`vigente`, `devuelta_parcial`, `anulada`) del estado de pago.
+El backfill solo asigna `vigente`: no cambia importes, saldos, pagos, fiados, cobros,
+stock ni lotes.
+
+La cabecera comun reserva estos tipos:
+
+- `anulacion_venta`
+- `devolucion_venta`
+- `correccion_pago_venta`
+- `anulacion_fiado`
+- `anulacion_cobro_fiado`
+- `correccion_saldo`
+
+Sus estados son `solicitada`, `pendiente_aprobacion`, `aprobada`, `aplicada`,
+`rechazada`, `fallida` y `cancelada`. Los estados `aplicada`, `rechazada` y
+`cancelada` son terminales por contrato. `requiereAprobacion`, el aprobador y la
+fecha correspondiente preparan una aprobacion opcional, pero todavia no existe un
+flujo que solicite, apruebe o aplique operaciones.
+
+Los motivos son una allowlist respaldada por el esquema:
+`error_cantidad`, `error_producto`, `error_cliente`, `error_metodo_pago`,
+`operacion_duplicada`, `devolucion_cliente`, `mercaderia_danada` y
+`otro_controlado`. Este ultimo exige una observacion suficiente.
+
+La idempotencia queda definida por `(idTienda, claveOperacion)` y una
+`huellaSolicitud` SHA-256 hexadecimal del payload canonico. En los bloques
+comerciales futuros, la misma clave y huella devolveran la operacion existente;
+la misma clave con una huella distinta debera responder `409
+OPERATION_KEY_CONFLICT`.
+
+La funcionalidad `anulaciones_operativas` queda habilitada en los planes basico y
+avanzado; no es una ventaja premium. El historial futuro no debera desaparecer
+por downgrade, pero las escrituras continuaran sujetas a tenant, suscripcion y
+permisos. Un superadmin sin contexto de tienda no obtiene acceso comercial.
+
+Comprobacion y prueba aislada:
+
+```powershell
+$env:APP_ENV='local'
+npm.cmd run test:compensation-foundation
+npm.cmd run db:check-compensations
+```
+
+`test:compensation-foundation` crea exclusivamente bases
+`tmp_tienda_restore_*`, usa el usuario auxiliar local de restauracion, prueba
+001→014, 013→014 y el esquema inicial, y elimina las bases en `finally`.
+`db:check-compensations` es de solo lectura, pero debe apuntar a una base donde
+014 ya haya sido aplicada. C1 se ensayo solo en bases temporales: no aplica 014
+automaticamente a la base principal.
+
+C1 no implementa anulaciones, devoluciones, reembolsos, correcciones, endpoints,
+frontend ni ajustes de reportes. Las tablas de detalle y liquidacion, el estado
+operativo de cobros y las relaciones especificas con venta, pago, fiado, cobro,
+stock y lotes se definen en C2-C4, junto con sus transacciones y bloqueos.
 
 ### Migraciones historicas 001-003
 
@@ -171,7 +230,7 @@ reinspeccionados. Si ya figura registrada pero esta incompleta, no se intenta un
 silenciosa: haga un respaldo, revise los elementos exactos informados y ensaye la recuperacion
 sobre una copia. No edite `schema_migrations` en la base real para forzar el avance.
 
-`database/tienda_abarrotes.sql` representa una instalacion nueva con el estado final post-013.
+`database/tienda_abarrotes.sql` representa una instalacion nueva con el estado final post-014.
 Aunque ese archivo conserva `CREATE DATABASE` y `USE` para uso manual explicito, el migrador
 no lo carga. Las migraciones y los comprobadores siempre usan la base validada en `DB_NAME`,
 por lo que tambien funcionan con nombres de base distintos a `tienda_abarrotes`.
@@ -725,7 +784,7 @@ Los segmentos disponibles y sus reglas son:
 
 Los valores predeterminados pueden ajustarse mediante parametros validados; `pageSize` y `limiteResultados` admiten de 1 a 100 filas por pagina. `fechaDesde` y `fechaHasta` son fechas civiles inclusivas de `America/La_Paz`; internamente se usa un rango `DATETIME` semiabierto. La busqueda cubre nombre, telefono y documento normalizado. `estadoCliente` admite unicamente `activos`, `ocultos` o `todos`, y los campos de orden usan una lista permitida.
 
-La respuesta incluye `descripcion`, `criterios`, `parametrosAplicados`, resumen global, resultados explicados y paginacion. Los filtros y agregados se aplican antes de `LIMIT/OFFSET`; las metricas no se reconstruyen con la pagina visible. Las ventas se cuentan conforme al modelo actual, que todavia no posee anulacion de ventas. Una futura anulacion debera excluir sus operaciones mediante una regla central, no con una excepcion propia de segmentacion. Para volumenes grandes conviene medir los planes de ejecucion; los indices actuales por tienda, cliente y fecha soportan la primera version, pero una migracion futura puede incorporar indices especializados segun datos reales.
+La respuesta incluye `descripcion`, `criterios`, `parametrosAplicados`, resumen global, resultados explicados y paginacion. Los filtros y agregados se aplican antes de `LIMIT/OFFSET`; las metricas no se reconstruyen con la pagina visible. C1 define `venta.estadoOperacion`, pero todavia no existe una anulacion ejecutable ni reportes netos; C2-C5 deberan integrar esa regla de forma central, no mediante una excepcion propia de segmentacion. Para volumenes grandes conviene medir los planes de ejecucion; los indices actuales por tienda, cliente y fecha soportan la primera version, pero una migracion futura puede incorporar indices especializados segun datos reales.
 
 ### Seguridad y revocacion de sesiones
 
@@ -882,8 +941,8 @@ Limitaciones conocidas y trabajo futuro:
 - Los historiales resumidos de la ficha muestran los 20 registros mas recientes y remiten al estado de cuenta para la cronologia completa.
 - Los comprobantes no son facturas fiscales y los nombres de tienda, cliente y responsable no tienen snapshots historicos.
 - WhatsApp solo prepara texto y enlaces `https://wa.me/`; no envia mensajes automaticamente.
-- No se generan PDF, no existen anulaciones ni operaciones compensatorias y no se implementa portal publico del cliente.
-- Los segmentos se calculan con el modelo vigente, que aun no posee anulaciones de venta; no se implementa un segmento predictivo de abandono.
+- No se generan PDF ni existe ejecucion comercial de anulaciones o compensaciones; C1 solo aporta su contrato y estructura base. Tampoco se implementa portal publico del cliente.
+- Los segmentos se calculan con el modelo vigente y aun no aplican anulaciones porque C1 no incorpora ejecucion comercial ni reportes netos; no se implementa un segmento predictivo de abandono.
 - Los limites XLSX son 5000 clientes, 10000 fiados y 20000 movimientos de estado de cuenta, salvo configuracion explicita.
 
 `npm audit` informa dos entradas moderadas relacionadas: `exceljs@4.4.0` queda marcado por su dependencia transitiva `uuid@8.3.2`, afectada por `GHSA-w5hq-g745-h8pq`. No hay hallazgos altos o criticos en este informe. La correccion automatica propuesta implica un cambio mayor o una degradacion de ExcelJS, por lo que no debe ejecutarse `npm audit fix --force`; la actualizacion se evaluara de forma controlada cuando ExcelJS publique o adopte una version compatible de UUID.

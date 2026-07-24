@@ -24,6 +24,7 @@
     "db:check-session-security": "node scripts/check-session-security.js",
     "db:check-timezone-tls": "node scripts/check-timezone-tls.js",
     "db:check-legacy-migrations": "node scripts/check-legacy-migrations.js",
+    "db:check-compensations": "node scripts/check-compensations.js",
     "db:backup": "node scripts/backup-db.js",
     "db:verify-backup": "node scripts/verify-db-backup.js",
     "db:test-restore": "node scripts/test-db-restore.js",
@@ -49,6 +50,7 @@
     "test:operational-health": "node scripts/test-operational-health.js",
     "test:operational-backup-health": "node scripts/test-operational-backup-health.js",
     "test:operational-monitoring": "node scripts/test-operational-monitoring.js",
+    "test:compensation-foundation": "node scripts/test-compensation-foundation.js",
     "check:operational-health": "node scripts/check-operational-health.js",
     "check:web-security": "node scripts/check-web-security.js"
   },

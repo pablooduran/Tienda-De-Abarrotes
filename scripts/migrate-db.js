@@ -20,6 +20,13 @@ const {
   isLegacyMigration,
   migrateLegacyMigration
 } = require('./migration-state/legacy-migrations');
+const {
+  COMPENSATION_FEATURE,
+  COMPENSATION_REASONS,
+  COMPENSATION_STATES,
+  COMPENSATION_TYPES,
+  SALE_OPERATION_STATES
+} = require('../config/compensation-contract');
 
 const MIGRATION_LOCAL_DATETIME_TOKEN = '__MIGRATION_LOCAL_DATETIME__';
 
@@ -27,7 +34,8 @@ function prepareMigrationStatement(file, statement, context = {}) {
   if (![
     '010_inteligencia_inventario.sql',
     '011_lotes_vencimientos.sql',
-    '012_clientes_fiados_comunicacion.sql'
+    '012_clientes_fiados_comunicacion.sql',
+    '014_operaciones_compensatorias.sql'
   ].includes(file)
     || !statement.includes(MIGRATION_LOCAL_DATETIME_TOKEN)) {
     return { sql: statement, params: [] };
@@ -515,6 +523,41 @@ const migrationRequirements = {
     checks: [
       ['administrador', 'chk_administrador_version_sesion']
     ]
+  },
+  '014_operaciones_compensatorias.sql': {
+    columns: {
+      venta: ['estadoOperacion'],
+      operacionCompensatoria: [
+        'idOperacionCompensatoria', 'idTienda', 'tipoOperacion', 'estado',
+        'motivoCodigo', 'observacion', 'requiereAprobacion',
+        'idAdministradorSolicitante', 'idAdministradorAprobador',
+        'claveOperacion', 'huellaSolicitud', 'fechaSolicitud',
+        'fechaAprobacion', 'fechaAplicacion', 'creadoEn', 'actualizadoEn'
+      ]
+    },
+    indexes: [
+      ['venta', 'idx_venta_tienda_estado_operacion_fecha', ['idTienda', 'estadoOperacion', 'fecha', 'idVenta'], false],
+      ['operacionCompensatoria', 'PRIMARY', ['idOperacionCompensatoria'], true],
+      ['operacionCompensatoria', 'uq_operacionCompensatoria_tienda_id', ['idTienda', 'idOperacionCompensatoria'], true],
+      ['operacionCompensatoria', 'uq_operacionCompensatoria_tienda_clave', ['idTienda', 'claveOperacion'], true],
+      ['operacionCompensatoria', 'idx_operacionCompensatoria_tienda_tipo_estado', ['idTienda', 'tipoOperacion', 'estado'], false],
+      ['operacionCompensatoria', 'idx_operacionCompensatoria_tienda_fecha', ['idTienda', 'fechaSolicitud', 'idOperacionCompensatoria'], false],
+      ['operacionCompensatoria', 'idx_operacionCompensatoria_tienda_solicitante', ['idTienda', 'idAdministradorSolicitante', 'fechaSolicitud'], false],
+      ['operacionCompensatoria', 'idx_operacionCompensatoria_tienda_aprobador', ['idTienda', 'idAdministradorAprobador', 'fechaAprobacion'], false]
+    ],
+    checks: [
+      ['venta', 'chk_venta_estado_operacion'],
+      ['operacionCompensatoria', 'chk_operacionCompensatoria_aprobacion'],
+      ['operacionCompensatoria', 'chk_operacionCompensatoria_clave'],
+      ['operacionCompensatoria', 'chk_operacionCompensatoria_huella'],
+      ['operacionCompensatoria', 'chk_operacionCompensatoria_motivo'],
+      ['operacionCompensatoria', 'chk_operacionCompensatoria_fechas']
+    ],
+    foreignKeyConstraints: [
+      ['operacionCompensatoria', 'fk_operacionCompensatoria_tienda', ['idTienda'], 'tienda', ['idTienda'], 'RESTRICT', 'RESTRICT'],
+      ['operacionCompensatoria', 'fk_operacionCompensatoria_solicitante', ['idTienda', 'idAdministradorSolicitante'], 'administrador', ['idTienda', 'idAdministrador'], 'RESTRICT', 'RESTRICT'],
+      ['operacionCompensatoria', 'fk_operacionCompensatoria_aprobador', ['idTienda', 'idAdministradorAprobador'], 'administrador', ['idTienda', 'idAdministrador'], 'RESTRICT', 'RESTRICT']
+    ]
   }
 };
 
@@ -831,6 +874,123 @@ async function requirementsSatisfied(connection, file) {
   }
   for (const relation of requirements.foreignKeyConstraints || []) {
     if (!await hasForeignKeyConstraint(connection, ...relation)) return false;
+  }
+  if (file === '014_operaciones_compensatorias.sql') {
+    const expectedDefinitions = {
+      venta: {
+        estadoOperacion: {
+          type: `enum('${SALE_OPERATION_STATES.join("','")}')`,
+          nullable: false,
+          defaultValue: 'vigente',
+          extra: ''
+        }
+      },
+      operacionCompensatoria: {
+        idOperacionCompensatoria: {
+          type: 'bigint',
+          nullable: false,
+          defaultValue: null,
+          extraIncludes: 'auto_increment'
+        },
+        idTienda: { type: 'int', nullable: false, defaultValue: null, extra: '' },
+        tipoOperacion: {
+          type: `enum('${COMPENSATION_TYPES.join("','")}')`,
+          nullable: false,
+          defaultValue: null,
+          extra: ''
+        },
+        estado: {
+          type: `enum('${COMPENSATION_STATES.join("','")}')`,
+          nullable: false,
+          defaultValue: 'solicitada',
+          extra: ''
+        },
+        motivoCodigo: {
+          type: `enum('${COMPENSATION_REASONS.join("','")}')`,
+          nullable: false,
+          defaultValue: null,
+          extra: ''
+        },
+        observacion: { type: 'varchar(1000)', nullable: true, defaultValue: null, extra: '' },
+        requiereAprobacion: { type: 'tinyint(1)', nullable: false, defaultValue: 0, extra: '' },
+        idAdministradorSolicitante: { type: 'int', nullable: false, defaultValue: null, extra: '' },
+        idAdministradorAprobador: { type: 'int', nullable: true, defaultValue: null, extra: '' },
+        claveOperacion: { type: 'varchar(160)', nullable: false, defaultValue: null, extra: '' },
+        huellaSolicitud: { type: 'char(64)', nullable: false, defaultValue: null, extra: '' },
+        fechaSolicitud: { type: 'datetime', nullable: false, defaultValue: null, extra: '' },
+        fechaAprobacion: { type: 'datetime', nullable: true, defaultValue: null, extra: '' },
+        fechaAplicacion: { type: 'datetime', nullable: true, defaultValue: null, extra: '' },
+        creadoEn: { type: 'datetime', nullable: false, defaultValue: null, extra: '' },
+        actualizadoEn: { type: 'datetime', nullable: false, defaultValue: null, extra: '' }
+      }
+    };
+    for (const [table, definitions] of Object.entries(expectedDefinitions)) {
+      const details = await normalizedColumnDetails(connection, table, Object.keys(definitions));
+      for (const [column, expected] of Object.entries(definitions)) {
+        if (!columnDefinitionMatches(details[normalizedIdentifier(column)], expected)) return false;
+      }
+    }
+    const [[engine]] = await connection.query(
+      `SELECT COUNT(*) total FROM information_schema.TABLES
+       WHERE TABLE_SCHEMA=? AND LOWER(TABLE_NAME)='operacioncompensatoria'
+         AND LOWER(ENGINE)='innodb'`,
+      [process.env.DB_NAME]
+    );
+    if (Number(engine.total) !== 1) return false;
+    const [[invalidSaleStates]] = await connection.query(
+      `SELECT COUNT(*) total FROM venta
+       WHERE estadoOperacion IS NULL OR estadoOperacion NOT IN (?)`,
+      [SALE_OPERATION_STATES]
+    );
+    const [[invalidOperations]] = await connection.query(
+      `SELECT COUNT(*) total FROM operacionCompensatoria
+       WHERE idTienda IS NULL
+          OR idAdministradorSolicitante IS NULL
+          OR tipoOperacion NOT IN (?)
+          OR estado NOT IN (?)
+          OR motivoCodigo NOT IN (?)
+          OR CONVERT(claveOperacion USING utf8mb4)
+             NOT REGEXP '^[A-Za-z0-9][A-Za-z0-9._:-]*$'
+          OR CHAR_LENGTH(claveOperacion)>160
+          OR CONVERT(huellaSolicitud USING utf8mb4) NOT REGEXP '^[0-9A-Fa-f]{64}$'
+          OR huellaSolicitud<>LOWER(huellaSolicitud)
+          OR requiereAprobacion NOT IN (0,1)
+          OR (motivoCodigo='otro_controlado'
+              AND (observacion IS NULL OR CHAR_LENGTH(TRIM(observacion))<8))
+          OR fechaSolicitud<>creadoEn
+          OR actualizadoEn<creadoEn
+          OR ((idAdministradorAprobador IS NULL)<>(fechaAprobacion IS NULL))
+          OR (fechaAprobacion IS NOT NULL AND fechaAprobacion<fechaSolicitud)
+          OR (estado='aplicada' AND (fechaAplicacion IS NULL OR fechaAplicacion<fechaSolicitud))
+          OR (estado<>'aplicada' AND fechaAplicacion IS NOT NULL)
+          OR (estado='aprobada' AND idAdministradorAprobador IS NULL)
+          OR (
+            requiereAprobacion=1
+            AND estado IN ('aprobada','aplicada')
+            AND idAdministradorAprobador IS NULL
+          )`,
+      [COMPENSATION_TYPES, COMPENSATION_STATES, COMPENSATION_REASONS]
+    );
+    const [[feature]] = await connection.query(
+      `SELECT COUNT(*) total FROM funcionalidad
+       WHERE codigo=? AND activo=1`,
+      [COMPENSATION_FEATURE]
+    );
+    const [[planAccess]] = await connection.query(
+      `SELECT COUNT(DISTINCT p.codigo) total
+       FROM planFuncionalidad pf
+       JOIN plan p ON p.idPlan=pf.idPlan
+       JOIN funcionalidad f ON f.idFuncionalidad=pf.idFuncionalidad
+       WHERE p.codigo IN ('basico','avanzado')
+         AND f.codigo=?
+         AND f.activo=1
+         AND pf.habilitada=1`,
+      [COMPENSATION_FEATURE]
+    );
+    return Number(invalidSaleStates.total) === 0
+      && Number(invalidOperations.total) === 0
+      && Number(feature.total) === 1
+      && Number(planAccess.total) === 2;
   }
   if (file === '004_multitienda_base.sql') {
     const [[shop]] = await connection.query("SELECT COUNT(*) total FROM tienda WHERE slug='tienda-deisy'");
@@ -1406,7 +1566,12 @@ async function structureElementExists(connection, element, file = null) {
     const details = await normalizedColumnDetails(connection, element.table, [element.name]);
     return columnDefinitionMatches(details[normalizedIdentifier(element.name)], element.expected);
   }
-  if (['011_lotes_vencimientos.sql', '012_clientes_fiados_comunicacion.sql', '013_seguridad_sesiones.sql'].includes(file)) {
+  if ([
+    '011_lotes_vencimientos.sql',
+    '012_clientes_fiados_comunicacion.sql',
+    '013_seguridad_sesiones.sql',
+    '014_operaciones_compensatorias.sql'
+  ].includes(file)) {
     if (element.type === 'columna') {
       const details = await normalizedColumnDetails(connection, element.table, [element.name]);
       return Boolean(details[normalizedIdentifier(element.name)]);
@@ -2682,7 +2847,15 @@ async function main() {
               ? !(estado011.estructuraCompleta && estado011.datosValidos)
               : file === '012_clientes_fiados_comunicacion.sql'
                 ? !(estado012.estructuraCompleta && estado012.datosValidos)
-            : ['004_multitienda_base.sql', '005_planes_suscripciones.sql', '007_movimientos_stock.sql', '008_punto_venta_pagos.sql', '009_finanzas_reportes_caja.sql', '013_seguridad_sesiones.sql'].includes(file)
+            : [
+              '004_multitienda_base.sql',
+              '005_planes_suscripciones.sql',
+              '007_movimientos_stock.sql',
+              '008_punto_venta_pagos.sql',
+              '009_finanzas_reportes_caja.sql',
+              '013_seguridad_sesiones.sql',
+              '014_operaciones_compensatorias.sql'
+            ].includes(file)
             && !await requirementsSatisfied(connection, file);
         if (registeredMigrationIsIncomplete) {
           throw new Error(`La migracion ${file} figura en schema_migrations, pero su estructura o sus datos estan incompletos. No se aplicaron cambios adicionales.`);
@@ -2705,7 +2878,8 @@ async function main() {
           '010_inteligencia_inventario.sql',
           '011_lotes_vencimientos.sql',
           '012_clientes_fiados_comunicacion.sql',
-          '013_seguridad_sesiones.sql'
+          '013_seguridad_sesiones.sql',
+          '014_operaciones_compensatorias.sql'
         ].includes(file)) {
           await connection.query('INSERT IGNORE INTO schema_migrations (nombre) VALUES (?)', [file]);
           const [finalRecord] = await connection.query(
@@ -2727,7 +2901,7 @@ async function main() {
               throw new Error('La migracion 012 no pudo confirmar su registro y estado fisico final.');
             }
           } else if (finalRecord.length !== 1 || !await requirementsSatisfied(connection, file)) {
-            throw new Error('La migracion 013 no pudo confirmar su registro y estado fisico final.');
+            throw new Error(`La migracion ${file} no pudo confirmar su registro y estado fisico final.`);
           }
         } else {
           await connection.query('INSERT INTO schema_migrations (nombre) VALUES (?)', [file]);
@@ -2740,7 +2914,8 @@ async function main() {
       const migrationContext = [
         '010_inteligencia_inventario.sql',
         '011_lotes_vencimientos.sql',
-        '012_clientes_fiados_comunicacion.sql'
+        '012_clientes_fiados_comunicacion.sql',
+        '014_operaciones_compensatorias.sql'
       ].includes(file)
         ? { localDateTime: formatLocalDateTime() }
         : {};
@@ -2775,7 +2950,18 @@ async function main() {
           console.log('Datos multi-tienda validados antes de crear indices y restricciones.');
         }
 
-        const element = ['004_multitienda_base.sql', '006_catalogo_maestro.sql', '007_movimientos_stock.sql', '008_punto_venta_pagos.sql', '009_finanzas_reportes_caja.sql', '010_inteligencia_inventario.sql', '011_lotes_vencimientos.sql', '012_clientes_fiados_comunicacion.sql', '013_seguridad_sesiones.sql'].includes(file)
+        const element = [
+          '004_multitienda_base.sql',
+          '006_catalogo_maestro.sql',
+          '007_movimientos_stock.sql',
+          '008_punto_venta_pagos.sql',
+          '009_finanzas_reportes_caja.sql',
+          '010_inteligencia_inventario.sql',
+          '011_lotes_vencimientos.sql',
+          '012_clientes_fiados_comunicacion.sql',
+          '013_seguridad_sesiones.sql',
+          '014_operaciones_compensatorias.sql'
+        ].includes(file)
           ? structureElementFromStatement(statement)
           : null;
         if (element && await structureElementExists(connection, element, file)) {
@@ -2850,7 +3036,8 @@ async function main() {
         '010_inteligencia_inventario.sql',
         '011_lotes_vencimientos.sql',
         '012_clientes_fiados_comunicacion.sql',
-        '013_seguridad_sesiones.sql'
+        '013_seguridad_sesiones.sql',
+        '014_operaciones_compensatorias.sql'
       ].includes(file)) {
         await connection.query('INSERT IGNORE INTO schema_migrations (nombre) VALUES (?)', [file]);
         const [finalRecord] = await connection.query(
@@ -2872,7 +3059,7 @@ async function main() {
             throw new Error('La migracion 012 no pudo confirmar su registro y estado fisico final.');
           }
         } else if (finalRecord.length !== 1 || !await requirementsSatisfied(connection, file)) {
-          throw new Error('La migracion 013 no pudo confirmar su registro y estado fisico final.');
+          throw new Error(`La migracion ${file} no pudo confirmar su registro y estado fisico final.`);
         }
       } else {
         await connection.query('INSERT INTO schema_migrations (nombre) VALUES (?)', [file]);
