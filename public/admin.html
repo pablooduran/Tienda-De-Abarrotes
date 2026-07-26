@@ -20,6 +20,7 @@
       <nav aria-label="Navegación administrativa">
         <a class="nav-link active" href="#tiendas">Tiendas</a>
         <a class="nav-link" href="#catalogo">Catálogo maestro</a>
+        <a class="nav-link" id="auditAdminLink" href="#auditoria">Auditoría</a>
       </nav>
 
       <div class="session-block">
@@ -210,6 +211,10 @@
           <div><div class="owners-heading"><h3>Marcas maestras</h3></div><div id="masterBrandsList" class="taxonomy-list"></div></div>
         </div>
       </section>
+
+      <section id="auditoria" class="content-section audit-admin-section" aria-label="Auditoría administrativa">
+        <div id="adminAuditRoot"></div>
+      </section>
     </main>
   </div>
 
@@ -260,6 +265,7 @@
 
   <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
   <script src="/js/http-security.js" defer></script>
+  <script src="/js/administrative-audit-ui.js" defer></script>
   <script src="/js/admin.js" defer></script>
 </body>
 </html>

@@ -185,6 +185,7 @@ async function scalar(connection, sql, params = []) {
 }
 
 async function cleanupStore(connection, idTienda) {
+  await connection.query('DELETE FROM eventoAuditoriaAdministrativa WHERE idTienda=?', [idTienda]);
   await connection.query('DELETE FROM seguimientoCobranza WHERE idTienda=?', [idTienda]);
   await connection.query('DELETE FROM cierreCaja WHERE idTienda=?', [idTienda]);
   await connection.query('DELETE FROM gasto WHERE idTienda=?', [idTienda]);
@@ -221,7 +222,22 @@ async function cleanup(connection, fixture) {
   ].filter(Boolean));
   for (const idTienda of ids) await cleanupStore(connection, idTienda);
   if (fixture.noFeaturePlan) await connection.query('DELETE FROM plan WHERE idPlan=?', [fixture.noFeaturePlan]);
-  if (fixture.superUser) await connection.query('DELETE FROM administrador WHERE usuario=?', [fixture.superUser]);
+  if (fixture.superUser) {
+    await connection.query(
+      `DELETE ea FROM eventoAuditoriaAdministrativa ea
+       JOIN administrador a ON a.idAdministrador=ea.idAdministradorActor
+       WHERE a.usuario=?`,
+      [fixture.superUser]
+    );
+    await connection.query('DELETE FROM administrador WHERE usuario=?', [fixture.superUser]);
+  }
+  if (Number.isSafeInteger(fixture.auditStartId)) {
+    await connection.query(
+      `DELETE FROM eventoAuditoriaAdministrativa
+       WHERE idEventoAuditoria>? AND idTienda IS NULL AND actorTipo='anonimo'`,
+      [fixture.auditStartId]
+    );
+  }
 }
 
 async function createProduct(session, marker, suffix, stock = 100) {
@@ -266,6 +282,10 @@ async function main() {
 
   try {
     connection = await createDatabaseConnection(config);
+    const [[auditStart]] = await connection.query(
+      'SELECT COALESCE(MAX(idEventoAuditoria),0) id FROM eventoAuditoriaAdministrativa'
+    );
+    fixture.auditStartId = Number(auditStart.id);
     await connection.query(
       "INSERT INTO administrador (idTienda,usuario,password,rol,activo) VALUES (NULL,?,?,'superadmin',1)",
       [fixture.superUser, await bcrypt.hash(superPassword, 12)]

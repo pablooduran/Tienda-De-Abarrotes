@@ -13,6 +13,7 @@ const {
   localDateText,
   moneyToCents
 } = require('./customer-credit-service');
+const { administrativeAuditService } = require('./administrative-audit-service');
 
 const COLLECTION_METHODS = new Set(['efectivo', 'qr', 'transferencia', 'tarjeta', 'otro', 'no_especificado']);
 
@@ -323,6 +324,20 @@ async function runCollection(input) {
       ...input,
       collection: normalizeCollection(input.body)
     });
+    if (!result.repetido && input.requestId) {
+      await administrativeAuditService.recordCritical(connection, {
+        storeId: input.idTienda,
+        actorType: 'administrador',
+        administratorId: input.idAdministrador,
+        action: 'registro_pago_fiado',
+        result: 'correcto',
+        resultCode: 'COMMERCIAL_OPERATION_OK',
+        origin: 'web',
+        reference: `cobro_fiado:${result.idCobroFiado}`,
+        requestId: input.requestId,
+        metadata: { metodoPago: result.metodoPago }
+      });
+    }
     if (ownedConnection) await connection.commit();
     return result;
   } catch (error) {

@@ -12,7 +12,8 @@ const state = {
   importRows: [],
   importSelection: new Set(),
   formAction: null,
-  formFields: []
+  formFields: [],
+  auditUi: null
 };
 
 const elements = {
@@ -90,6 +91,16 @@ function formatDate(value) {
     timeStyle: 'short',
     hour12: false
   }).format(date);
+}
+
+function escapeHtml(value) {
+  return String(value ?? '').replace(/[&<>"']/g, (character) => ({
+    '&': '&amp;',
+    '<': '&lt;',
+    '>': '&gt;',
+    '"': '&quot;',
+    "'": '&#39;'
+  }[character]));
 }
 
 function statusLabel(status) {
@@ -992,6 +1003,18 @@ document.querySelectorAll('.admin-sidebar .nav-link').forEach((link) => {
   link.addEventListener('click', () => {
     document.querySelectorAll('.admin-sidebar .nav-link').forEach((item) => item.classList.remove('active'));
     link.classList.add('active');
+    if (link.id === 'auditAdminLink') {
+      if (!state.auditUi) {
+        state.auditUi = window.AdministrativeAuditUI.create({
+          api,
+          root: document.getElementById('adminAuditRoot'),
+          mode: 'admin',
+          escapeHtml,
+          formatDate
+        });
+      }
+      state.auditUi.render().catch((error) => showToast(error.message, 'error'));
+    }
   });
 });
 

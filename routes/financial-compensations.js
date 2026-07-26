@@ -56,6 +56,7 @@ function compensationInput(req) {
   return {
     idTienda: req.tenant.idTienda,
     idAdministrador: req.auth.idAdministrador,
+    requestId: req.requestId,
     body: req.body
   };
 }

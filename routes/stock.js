@@ -22,6 +22,7 @@ const {
   prepareLotExit
 } = require('../services/lot-service');
 const { formatLocalDateTime } = require('../utils/local-datetime');
+const { administrativeAuditService } = require('../services/administrative-audit-service');
 
 const router = express.Router();
 const ADJUSTMENT_WINDOW_MS = 10 * 60 * 1000;
@@ -293,6 +294,19 @@ router.post('/productos/:idProducto/ajustar-stock', requirePlanFeature('ajuste_s
       detailIndex: 1,
       creadoEn: operationDateTime,
       idAdministrador
+    });
+    await administrativeAuditService.recordCritical(connection, {
+      storeId: idTienda,
+      actorType: 'administrador',
+      administratorId: idAdministrador,
+      action: 'ajuste_stock',
+      result: 'correcto',
+      resultCode: 'COMMERCIAL_OPERATION_OK',
+      origin: 'web',
+      reference: `producto:${idProducto}`,
+      requestId: req.requestId,
+      before: { stock: stockAnterior },
+      after: { stock: nuevoStock }
     });
     await connection.commit();
     res.status(201).json({

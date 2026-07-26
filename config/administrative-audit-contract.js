@@ -5,9 +5,18 @@ const AUDIT_ORIGINS = Object.freeze(['web', 'sistema', 'script']);
 const VALUE_TYPES = Object.freeze({
   activo: 'boolean',
   estado: 'code',
+  estadoOperacion: 'code',
+  estadoPago: 'code',
   rol: 'code',
   planCodigo: 'code',
   tipoSuscripcion: 'code',
+  tipoOperacion: 'code',
+  tratamientoInventario: 'code',
+  metodoPago: 'code',
+  formato: 'code',
+  tipoExportacion: 'code',
+  stock: 'integer',
+  filas: 'integer',
   sesionesRevocadas: 'integer',
   versionSesionIncrementada: 'boolean'
 });
@@ -24,7 +33,7 @@ function definition(category, entity, before = [], after = [], metadata = []) {
   });
 }
 
-const AUDIT_ACTIONS = Object.freeze({
+const BASE_AUDIT_ACTIONS = {
   inicio_sesion: definition('autenticacion', 'administrador', [], [], ['rol']),
   cierre_sesion: definition('sesion', 'sesion'),
   revocacion_sesion: definition('sesion', 'sesion', [], [], ['sesionesRevocadas']),
@@ -47,10 +56,66 @@ const AUDIT_ACTIONS = Object.freeze({
   ),
   suspension_suscripcion: definition('suscripcion', 'suscripcion', ['estado'], ['estado']),
   cancelacion_suscripcion: definition('suscripcion', 'suscripcion', ['estado'], ['estado'])
+};
+
+const COMMERCIAL_AUDIT_ACTIONS = {
+  creacion_cliente: definition('cliente', 'cliente', [], ['activo']),
+  modificacion_cliente: definition('cliente', 'cliente'),
+  ocultamiento_cliente: definition('cliente', 'cliente', ['activo'], ['activo']),
+  restauracion_cliente: definition('cliente', 'cliente', ['activo'], ['activo']),
+  configuracion_credito: definition('credito', 'configuracion_credito'),
+  creacion_producto: definition('producto', 'producto', [], ['activo']),
+  modificacion_producto: definition('producto', 'producto'),
+  ocultamiento_producto: definition('producto', 'producto', ['activo'], ['activo']),
+  restauracion_producto: definition('producto', 'producto', ['activo'], ['activo']),
+  ajuste_stock: definition('inventario', 'producto', ['stock'], ['stock']),
+  configuracion_lotes: definition('inventario', 'producto'),
+  distribucion_lotes: definition('inventario', 'producto'),
+  registro_compra: definition('inventario', 'compra'),
+  registro_venta: definition('venta', 'venta', [], ['estadoOperacion', 'estadoPago']),
+  ocultamiento_fiado: definition('credito', 'fiado', ['activo'], ['activo']),
+  restauracion_fiado: definition('credito', 'fiado', ['activo'], ['activo']),
+  registro_pago_fiado: definition('cobranza', 'cobro_fiado', [], [], ['metodoPago']),
+  actualizacion_promesa_pago: definition('cobranza', 'fiado'),
+  registro_seguimiento_cobranza: definition('cobranza', 'seguimiento_cobranza'),
+  creacion_gasto: definition('finanzas', 'gasto', [], ['estado']),
+  modificacion_gasto: definition('finanzas', 'gasto'),
+  anulacion_gasto: definition('finanzas', 'gasto', ['estado'], ['estado']),
+  cierre_caja: definition('finanzas', 'cierre_caja', [], ['estado']),
+  anulacion_cierre_caja: definition('finanzas', 'cierre_caja', ['estado'], ['estado']),
+  compensacion_venta: definition(
+    'compensacion',
+    'operacion_compensatoria',
+    [],
+    ['estadoOperacion'],
+    ['tipoOperacion', 'tratamientoInventario']
+  ),
+  resolucion_liquidacion: definition('compensacion', 'liquidacion_compensacion'),
+  compensacion_cobro: definition('compensacion', 'cobro_fiado'),
+  correccion_metodo_pago: definition('compensacion', 'pago_venta', [], [], ['metodoPago']),
+  liquidacion_reembolso: definition('compensacion', 'liquidacion_reembolso', [], [], ['metodoPago']),
+  exportacion_datos: definition('exportacion', 'exportacion', [], [], ['formato', 'tipoExportacion', 'filas'])
+};
+
+const AUDIT_ACTIONS = Object.freeze({
+  ...BASE_AUDIT_ACTIONS,
+  ...COMMERCIAL_AUDIT_ACTIONS
 });
 
 const ADMIN_FAILURE_CODES = Object.freeze(['ADMIN_OPERATION_REJECTED', 'ADMIN_OPERATION_FAILED']);
-const AUDIT_ACTION_RESULT_CODES = Object.freeze({
+const COMMERCIAL_RESULT_CODES = Object.freeze([
+  'COMMERCIAL_OPERATION_OK',
+  'COMMERCIAL_OPERATION_REJECTED',
+  'COMMERCIAL_OPERATION_FAILED',
+  'COMMERCIAL_OPERATION_LIMITED'
+]);
+const EXPORT_RESULT_CODES = Object.freeze([
+  'EXPORT_COMPLETED',
+  'EXPORT_REJECTED',
+  'EXPORT_FAILED',
+  'EXPORT_LIMITED'
+]);
+const BASE_ACTION_RESULT_CODES = {
   inicio_sesion: Object.freeze([
     'LOGIN_OK',
     'INVALID_CREDENTIALS',
@@ -73,6 +138,15 @@ const AUDIT_ACTION_RESULT_CODES = Object.freeze({
   creacion_suscripcion: Object.freeze(['SUBSCRIPTION_CREATED', ...ADMIN_FAILURE_CODES]),
   suspension_suscripcion: Object.freeze(['SUBSCRIPTION_SUSPENDED', ...ADMIN_FAILURE_CODES]),
   cancelacion_suscripcion: Object.freeze(['SUBSCRIPTION_CANCELLED', ...ADMIN_FAILURE_CODES])
+};
+const AUDIT_ACTION_RESULT_CODES = Object.freeze({
+  ...BASE_ACTION_RESULT_CODES,
+  ...Object.fromEntries(
+    Object.keys(COMMERCIAL_AUDIT_ACTIONS).map((action) => [
+      action,
+      action === 'exportacion_datos' ? EXPORT_RESULT_CODES : COMMERCIAL_RESULT_CODES
+    ])
+  )
 });
 
 const AUDIT_CATEGORIES = Object.freeze(
@@ -103,7 +177,9 @@ const AUDIT_RESULT_CODES = Object.freeze([
   'SUBSCRIPTION_SUSPENDED',
   'SUBSCRIPTION_CANCELLED',
   'ADMIN_OPERATION_REJECTED',
-  'ADMIN_OPERATION_FAILED'
+  'ADMIN_OPERATION_FAILED',
+  ...COMMERCIAL_RESULT_CODES,
+  ...EXPORT_RESULT_CODES
 ]);
 
 const AUDIT_RESULTS_BY_CODE = Object.freeze({
@@ -130,7 +206,15 @@ const AUDIT_RESULTS_BY_CODE = Object.freeze({
   SUBSCRIPTION_SUSPENDED: Object.freeze(['correcto']),
   SUBSCRIPTION_CANCELLED: Object.freeze(['correcto']),
   ADMIN_OPERATION_REJECTED: Object.freeze(['rechazado']),
-  ADMIN_OPERATION_FAILED: Object.freeze(['fallido'])
+  ADMIN_OPERATION_FAILED: Object.freeze(['fallido']),
+  COMMERCIAL_OPERATION_OK: Object.freeze(['correcto']),
+  COMMERCIAL_OPERATION_REJECTED: Object.freeze(['rechazado']),
+  COMMERCIAL_OPERATION_FAILED: Object.freeze(['fallido']),
+  COMMERCIAL_OPERATION_LIMITED: Object.freeze(['limitado']),
+  EXPORT_COMPLETED: Object.freeze(['correcto']),
+  EXPORT_REJECTED: Object.freeze(['rechazado']),
+  EXPORT_FAILED: Object.freeze(['fallido']),
+  EXPORT_LIMITED: Object.freeze(['limitado'])
 });
 
 module.exports = {

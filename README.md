@@ -133,7 +133,7 @@ Migraciones actuales, en orden:
 17. `017_integracion_compensaciones.sql`: liquidaciones materiales inmutables, reportes netos y explicacion compensatoria de cierres futuros.
 18. `018_auditoria_administrativa_critica.sql`: bitacora append-only para autenticacion, sesiones, credenciales y superadministracion critica.
 
-### Auditoria administrativa critica
+### Auditoria administrativa
 
 AUD-A crea `eventoAuditoriaAdministrativa` y un contrato cerrado de
 categorias, acciones, resultados y datos permitidos. Los eventos exitosos que
@@ -145,21 +145,60 @@ funcional original.
 La bitacora no guarda cuerpos completos, contrasenas, hashes, cookies,
 sesiones, tokens, CSRF, SQL, stacks, claves idempotentes ni huellas. Solo usa
 referencias tecnicas acotadas, `requestId` y cambios filtrados por allowlist.
-El servicio es exclusivamente de insercion y no existe API de escritura ni
-pantalla. El usuario MySQL de la aplicacion debe mantener privilegios minimos;
-consulta administrativa y retencion quedan para AUD-B.
+El servicio de registro es exclusivamente de insercion y no existe API de
+escritura para la bitacora. AUD-B agrega eventos comerciales para clientes,
+productos, inventario, ventas, cobranza, finanzas, compensaciones y
+exportaciones. Las ventas, los cobros, los ajustes de stock y las
+compensaciones registran su evento correcto dentro de la transaccion cuando
+existe `requestId`; los rechazos y fallos se registran despues del rollback
+sin sustituir el error funcional. Un reintento idempotente ya resuelto no
+duplica el evento. El registrador comercial se monta despues de la sesion y
+antes de CSRF y los limitadores, de modo que sus rechazos tempranos tambien
+quedan auditados sin copiar cuerpos, cabeceras ni credenciales.
+
+Consultas protegidas:
+
+```text
+GET /api/auditoria
+GET /api/auditoria/:id
+GET /api/admin/auditoria
+GET /api/admin/auditoria/:id
+```
+
+El propietario solo consulta su `idTienda`. El superadministrador consulta el
+alcance global o filtra por una tienda validada. Las cuatro rutas son de solo
+lectura, usan el limitador administrativo, `Cache-Control: no-store`,
+paginacion determinista y filtros por fecha, categoria, accion, resultado,
+actor y entidad. No existen rutas `POST`, `PUT`, `PATCH` o `DELETE` para
+auditoria.
+
+La aplicacion comercial y la superadministracion incluyen una pantalla
+responsive de consulta y detalle. Los valores anteriores, posteriores y
+metadatos vuelven a validarse contra las allowlists antes de salir de la API;
+no se exponen `requestId`, cuerpos completos, credenciales ni datos personales.
+
+Politica inicial de retencion: conservar como minimo 365 dias en linea y
+revisar trimestralmente volumen, requisitos legales y capacidad. No hay
+borrado automatico. Un archivo o purga futura debera ser un mantenimiento
+separado, autorizado, verificable y con respaldo; nunca una accion disponible
+desde las rutas web.
 
 Validacion segura:
 
 ```powershell
 $env:APP_ENV = "local"
 npm.cmd run test:administrative-audit
+npm.cmd run test:administrative-audit-commercial
+npm.cmd run test:administrative-audit-frontend
+npm.cmd run test:administrative-audit-browser
 ```
 
 La prueba aplica 018 con el migrador real exclusivamente sobre una base
 `tmp_tienda_restore_*`, compara la huella de la base principal y limpia la
 base temporal en `finally`. `db:check-administrative-audit` es de solo lectura
-y debe ejecutarse sobre una base donde 018 ya haya sido autorizada.
+y debe ejecutarse sobre una base donde 018 ya haya sido autorizada. Las
+pruebas comercial y frontend no modifican MySQL; la prueba de navegador usa
+un servidor HTTP local aislado y Edge o Chrome instalado.
 
 ### Operaciones compensatorias de venta
 

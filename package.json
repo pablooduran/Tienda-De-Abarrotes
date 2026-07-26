@@ -62,6 +62,9 @@
     "test:compensation-frontend": "node scripts/test-compensation-frontend.js",
     "test:compensation-browser": "node scripts/test-compensation-browser.js",
     "test:administrative-audit": "node scripts/test-administrative-audit.js",
+    "test:administrative-audit-commercial": "node scripts/test-administrative-audit-commercial.js",
+    "test:administrative-audit-frontend": "node scripts/test-administrative-audit-frontend.js",
+    "test:administrative-audit-browser": "node scripts/test-administrative-audit-browser.js",
     "check:operational-health": "node scripts/check-operational-health.js",
     "check:web-security": "node scripts/check-web-security.js"
   },

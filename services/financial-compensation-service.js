@@ -8,6 +8,7 @@ const {
   SALE_PAYMENT_METHODS
 } = require('../config/compensation-contract');
 const { stockError } = require('./stock-movement-service');
+const { administrativeAuditService } = require('./administrative-audit-service');
 const { formatLocalDateTime } = require('../utils/local-datetime');
 
 const MAX_MONEY_CENTS = 9999999999;
@@ -992,12 +993,13 @@ async function executePaymentMethodCorrection(connection, input, request, runtim
 
 function createFinancialCompensationService(dependencies = {}) {
   const servicePool = dependencies.pool || pool;
+  const auditService = dependencies.auditService || administrativeAuditService;
   const runtime = {
     now: dependencies.now || (() => new Date()),
     afterFinancialChanges: dependencies.afterFinancialChanges
   };
 
-  async function transaction(input, normalize, execute, target) {
+  async function transaction(input, normalize, execute, target, auditAction, referenceEntity) {
     const request = normalize(target, input.body);
     const idTienda = positiveId(input.idTienda, 'La tienda');
     const idAdministrador = positiveId(input.idAdministrador, 'El administrador');
@@ -1008,6 +1010,23 @@ function createFinancialCompensationService(dependencies = {}) {
         idTienda,
         idAdministrador
       }, request, runtime);
+      if (!result.repetida && input.requestId) {
+        const metadata = auditAction === 'correccion_metodo_pago'
+          ? { metodoPago: request.destination.method }
+          : null;
+        await auditService.recordCritical(connection, {
+          storeId: idTienda,
+          actorType: 'administrador',
+          administratorId: idAdministrador,
+          action: auditAction,
+          result: 'correcto',
+          resultCode: 'COMMERCIAL_OPERATION_OK',
+          origin: 'web',
+          reference: `${referenceEntity}:${target}`,
+          requestId: input.requestId,
+          metadata
+        });
+      }
       await connection.commit();
       return result;
     } catch (error) {
@@ -1024,7 +1043,9 @@ function createFinancialCompensationService(dependencies = {}) {
         input,
         normalizeSettlementRequest,
         executeSettlementResolution,
-        input.idLiquidacionCompensacionVenta
+        input.idLiquidacionCompensacionVenta,
+        'resolucion_liquidacion',
+        'liquidacion_compensacion'
       );
     },
     compensateDebtCollection(input) {
@@ -1032,7 +1053,9 @@ function createFinancialCompensationService(dependencies = {}) {
         input,
         normalizeCollectionRequest,
         executeCollectionCompensation,
-        input.idCobroFiado
+        input.idCobroFiado,
+        'compensacion_cobro',
+        'cobro_fiado'
       );
     },
     correctSalePaymentMethod(input) {
@@ -1040,7 +1063,9 @@ function createFinancialCompensationService(dependencies = {}) {
         input,
         normalizePaymentMethodRequest,
         executePaymentMethodCorrection,
-        input.idPagoVenta
+        input.idPagoVenta,
+        'correccion_metodo_pago',
+        'pago_venta'
       );
     }
   };

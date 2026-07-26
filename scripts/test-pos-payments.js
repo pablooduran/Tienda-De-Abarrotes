@@ -92,6 +92,7 @@ async function scalar(connection, sql, params = []) {
 }
 
 async function cleanupStore(connection, idTienda) {
+  await connection.query('DELETE FROM eventoAuditoriaAdministrativa WHERE idTienda=?', [idTienda]);
   await connection.query('DELETE FROM cierreCaja WHERE idTienda=?', [idTienda]);
   await connection.query('DELETE FROM gasto WHERE idTienda=?', [idTienda]);
   await connection.query('DELETE FROM categoriaGasto WHERE idTienda=?', [idTienda]);
@@ -121,7 +122,22 @@ async function cleanup(connection, fixture) {
   if (!connection) return;
   const [stores] = await connection.query('SELECT idTienda FROM tienda WHERE slug LIKE ?', [`tienda-pos-%-${fixture.marker}`]);
   for (const store of stores) await cleanupStore(connection, store.idTienda);
-  if (fixture.superUser) await connection.query('DELETE FROM administrador WHERE usuario=?', [fixture.superUser]);
+  if (fixture.superUser) {
+    await connection.query(
+      `DELETE ea FROM eventoAuditoriaAdministrativa ea
+       JOIN administrador a ON a.idAdministrador=ea.idAdministradorActor
+       WHERE a.usuario=?`,
+      [fixture.superUser]
+    );
+    await connection.query('DELETE FROM administrador WHERE usuario=?', [fixture.superUser]);
+  }
+  if (Number.isSafeInteger(fixture.auditStartId)) {
+    await connection.query(
+      `DELETE FROM eventoAuditoriaAdministrativa
+       WHERE idEventoAuditoria>? AND idTienda IS NULL AND actorTipo='anonimo'`,
+      [fixture.auditStartId]
+    );
+  }
 }
 
 async function main() {
@@ -137,6 +153,10 @@ async function main() {
 
   try {
     connection = await createDatabaseConnection(config);
+    const [[auditStart]] = await connection.query(
+      'SELECT COALESCE(MAX(idEventoAuditoria),0) id FROM eventoAuditoriaAdministrativa'
+    );
+    fixture.auditStartId = Number(auditStart.id);
     assert(await scalar(connection,
       "SELECT COUNT(*) total FROM schema_migrations WHERE nombre='008_punto_venta_pagos.sql'") === 1,
     'La migracion 008 debe estar aplicada.');

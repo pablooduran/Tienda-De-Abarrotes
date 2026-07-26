@@ -16,6 +16,7 @@ const {
   recordOverdueCreditConfirmation,
   validateNewCredit
 } = require('./customer-credit-service');
+const { administrativeAuditService } = require('./administrative-audit-service');
 const { formatLocalDate, formatLocalDateTime } = require('../utils/local-datetime');
 
 const SALE_PRESENTATIONS = new Set(['unidad', 'paquete']);
@@ -215,7 +216,13 @@ async function existingSale(connection, idTienda, requestKey) {
   return rows[0] || null;
 }
 
-async function registerSale({ idTienda, idAdministrador, body, legacyMode = false }) {
+async function registerSale({
+  idTienda,
+  idAdministrador,
+  body,
+  requestId = null,
+  legacyMode = false
+}) {
   body = body && typeof body === 'object' ? body : {};
   if (!legacyMode && !String(body.claveOperacion || '').trim()) {
     throw stockError(400, 'La clave de operacion de la venta es obligatoria.');
@@ -379,6 +386,23 @@ async function registerSale({ idTienda, idAdministrador, body, legacyMode = fals
       });
     }
 
+    if (requestId) {
+      await administrativeAuditService.recordCritical(connection, {
+        storeId: idTienda,
+        actorType: 'administrador',
+        administratorId: idAdministrador,
+        action: 'registro_venta',
+        result: 'correcto',
+        resultCode: 'COMMERCIAL_OPERATION_OK',
+        origin: 'web',
+        reference: `venta:${idVenta}`,
+        requestId,
+        after: {
+          estadoOperacion: 'vigente',
+          estadoPago: paymentState(totalCents, paidCents)
+        }
+      });
+    }
     await connection.commit();
     return {
       idVenta,

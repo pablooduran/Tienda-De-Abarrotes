@@ -15,6 +15,7 @@ let inventoryUi = { activeTab: 'resumen', rankingMode: 'ingresos', movementClass
 let lotUi = { page: 1, pages: 1, activeTab: 'lotes' };
 let customerCreditUi = null;
 let compensationUi = null;
+let administrativeAuditUi = null;
 
 const sections = [
   ['inicio', 'Inicio', 'Resumen general del negocio'],
@@ -31,6 +32,7 @@ const sections = [
   ['gastos', 'Gastos', 'Egresos operativos y categorias'],
   ['finanzas', 'Finanzas', 'Ventas, cobros, costos y ganancias'],
   ['compensaciones', 'Compensaciones', 'Anulaciones, devoluciones y ajustes trazables'],
+  ['auditoria', 'Auditoria', 'Acciones administrativas y resultados'],
   ['cierreCaja', 'Cierre de caja', 'Control de efectivo por periodo'],
   ['reportes', 'Reportes', 'Consultas, filtros y ganancias']
 ];
@@ -330,6 +332,23 @@ function operationalCompensationUi() {
   return compensationUi;
 }
 
+function auditUi() {
+  if (!administrativeAuditUi) {
+    administrativeAuditUi = window.AdministrativeAuditUI.create({
+      api,
+      root: view,
+      mode: 'tenant',
+      escapeHtml,
+      formatDate
+    });
+  }
+  return administrativeAuditUi;
+}
+
+async function auditoria() {
+  await auditUi().render();
+}
+
 function hasLotOperationalAccess() {
   return ['control_lotes', 'alertas_vencimiento', 'trazabilidad_lotes', 'exportacion_lotes', 'vencimientos_lote']
     .some(hasFeature) || Number(state.lotAccess?.productosControlados || 0) > 0;
@@ -391,7 +410,7 @@ async function loadView(id) {
   title.textContent = section[1];
   subtitle.textContent = section[2];
   await refreshCatalogs();
-  const handlers = { inicio, productos, movimientosStock, inventarioInteligente, lotesVencimientos, clientes, proveedores, ventas, compras, historialVentas, pagos, gastos, finanzas, compensaciones, cierreCaja, reportes };
+  const handlers = { inicio, productos, movimientosStock, inventarioInteligente, lotesVencimientos, clientes, proveedores, ventas, compras, historialVentas, pagos, gastos, finanzas, compensaciones, auditoria, cierreCaja, reportes };
   if (!handlers[id] || !sectionAllowed(id)) return loadView('inicio');
   await handlers[id]();
   applyReadOnlyUi();

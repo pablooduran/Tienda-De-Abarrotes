@@ -15,6 +15,7 @@ const {
   movementKey,
   stockError
 } = require('./stock-movement-service');
+const { administrativeAuditService } = require('./administrative-audit-service');
 const { formatLocalDate, formatLocalDateTime } = require('../utils/local-datetime');
 
 const MAX_DETAILS = 100;
@@ -796,6 +797,7 @@ async function executeCompensation(connection, input, dependencies) {
 
 function createSaleCompensationService(dependencies = {}) {
   const servicePool = dependencies.pool || pool;
+  const auditService = dependencies.auditService || administrativeAuditService;
   const runtime = {
     now: dependencies.now || (() => new Date()),
     afterInventory: dependencies.afterInventory
@@ -813,6 +815,25 @@ function createSaleCompensationService(dependencies = {}) {
           idAdministrador,
           request
         }, runtime);
+        if (!result.repetida && input.requestId) {
+          const treatments = new Set(result.detalles.map((detail) => detail.tratamientoInventario));
+          await auditService.recordCritical(connection, {
+            storeId: idTienda,
+            actorType: 'administrador',
+            administratorId: idAdministrador,
+            action: 'compensacion_venta',
+            result: 'correcto',
+            resultCode: 'COMMERCIAL_OPERATION_OK',
+            origin: 'web',
+            reference: `operacion_compensatoria:${result.idOperacionCompensatoria}`,
+            requestId: input.requestId,
+            after: { estadoOperacion: result.estadoOperacionVenta },
+            metadata: {
+              tipoOperacion: result.tipoCompensacion,
+              tratamientoInventario: treatments.size === 1 ? [...treatments][0] : 'mixto'
+            }
+          });
+        }
         await connection.commit();
         return result;
       } catch (error) {

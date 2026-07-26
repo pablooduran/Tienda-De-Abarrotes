@@ -175,6 +175,7 @@ router.post('/pos/ventas', async (req, res, next) => {
     const result = await registerSale({
       idTienda: tenantId(req),
       idAdministrador: req.session.admin.id,
+      requestId: req.requestId,
       body: req.body
     });
     const receipt = await getSaleReceipt(tenantId(req), result.idVenta);

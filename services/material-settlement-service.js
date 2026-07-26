@@ -7,6 +7,7 @@ const {
   OPERATION_KEY_PATTERN
 } = require('../config/compensation-contract');
 const { stockError } = require('./stock-movement-service');
+const { administrativeAuditService } = require('./administrative-audit-service');
 const { formatLocalDateTime } = require('../utils/local-datetime');
 
 const MAX_MONEY_CENTS = 9999999999;
@@ -328,6 +329,7 @@ async function execute(connection, input, request, runtime) {
 
 function createMaterialSettlementService(dependencies = {}) {
   const servicePool = dependencies.pool || pool;
+  const auditService = dependencies.auditService || administrativeAuditService;
   const runtime = {
     now: dependencies.now || (() => new Date()),
     afterMaterialSettlement: dependencies.afterMaterialSettlement
@@ -343,6 +345,20 @@ function createMaterialSettlementService(dependencies = {}) {
       try {
         await connection.beginTransaction();
         const result = await execute(connection, identity, request, runtime);
+        if (!result.repetida && input.requestId) {
+          await auditService.recordCritical(connection, {
+            storeId: identity.idTienda,
+            actorType: 'administrador',
+            administratorId: identity.idAdministrador,
+            action: 'liquidacion_reembolso',
+            result: 'correcto',
+            resultCode: 'COMMERCIAL_OPERATION_OK',
+            origin: 'web',
+            reference: `liquidacion_reembolso:${result.idMovimientoLiquidacionCompensacion}`,
+            requestId: input.requestId,
+            metadata: { metodoPago: result.metodoLiquidacion }
+          });
+        }
         await connection.commit();
         return result;
       } catch (error) {

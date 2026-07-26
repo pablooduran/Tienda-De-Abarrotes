@@ -754,6 +754,7 @@ async function specificPayment(req, res, idFiado) {
   const result = await collectSpecificDebt({
     idTienda: tenantId(req),
     idAdministrador: req.session.admin.id,
+    requestId: req.requestId,
     idFiado,
     body: req.body
   });
@@ -770,6 +771,7 @@ router.post('/pagos-fiado/cliente', requirePlanFeature('pagos_fiado'), asyncRout
   const result = await collectCustomerDebt({
     idTienda: tenantId(req),
     idAdministrador: req.session.admin.id,
+    requestId: req.requestId,
     idCliente: req.body?.idCliente,
     body: req.body
   });

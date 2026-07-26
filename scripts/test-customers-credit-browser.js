@@ -137,6 +137,7 @@ function storePayload(marker, kind, planCode) {
 
 async function cleanupStore(connection, idTienda) {
   if (!idTienda) return;
+  await connection.query('DELETE FROM eventoAuditoriaAdministrativa WHERE idTienda=?', [idTienda]);
   const tables = [
     'seguimientoCobranza', 'cierreCaja', 'gasto', 'categoriaGasto', 'movimientoLote', 'loteProducto',
     'movimientoStock', 'pagoVenta', 'pagoFiado', 'cobroFiado', 'detalleFiado', 'detalleVenta',
@@ -239,6 +240,10 @@ async function main() {
 
   try {
     connection = await createDatabaseConnection(config);
+    const [[auditStart]] = await connection.query(
+      'SELECT COALESCE(MAX(idEventoAuditoria),0) id FROM eventoAuditoriaAdministrativa'
+    );
+    fixture.auditStartId = Number(auditStart.id);
     const port = await freePort();
     const baseUrl = `http://127.0.0.1:${port}`;
     server = spawn(process.execPath, ['server.js'], {
@@ -796,12 +801,32 @@ async function main() {
       await Promise.race([new Promise((resolve) => server.once('exit', resolve)), delay(3000)]);
       if (server.exitCode === null) server.kill('SIGKILL');
     }
+    let cleanupError = null;
     if (connection) {
-      for (const idTienda of fixture.stores) await cleanupStore(connection, idTienda).catch(() => {});
-      await connection.query('DELETE FROM administrador WHERE usuario=?', [fixture.superUser]).catch(() => {});
-      await connection.end().catch(() => {});
+      try {
+        for (const idTienda of fixture.stores) await cleanupStore(connection, idTienda);
+        await connection.query(
+          `DELETE ea FROM eventoAuditoriaAdministrativa ea
+           JOIN administrador a ON a.idAdministrador=ea.idAdministradorActor
+           WHERE a.usuario=?`,
+          [fixture.superUser]
+        );
+        await connection.query('DELETE FROM administrador WHERE usuario=?', [fixture.superUser]);
+        if (Number.isSafeInteger(fixture.auditStartId)) {
+          await connection.query(
+            `DELETE FROM eventoAuditoriaAdministrativa
+             WHERE idEventoAuditoria>? AND idTienda IS NULL AND actorTipo='anonimo'`,
+            [fixture.auditStartId]
+          );
+        }
+      } catch (error) {
+        cleanupError = error;
+      } finally {
+        await connection.end().catch(() => {});
+      }
     }
     fs.rmSync(artifactDir, { recursive: true, force: true });
+    if (cleanupError) throw cleanupError;
   }
 }
 

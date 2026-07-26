@@ -6,10 +6,10 @@ Documento de relevo tecnico para continuar el proyecto sin depender del historia
 
 - Repositorio obligatorio: `pablooduran/Tienda-De-Abarrotes`
 - Rama de trabajo obligatoria: `mejora-multitienda`
-- HEAD base de C4B: `dbe178e feat: integrar liquidaciones y reportes compensatorios`
+- Punto de partida de AUD-B: `5621b44 test: adaptar auditoria a base migrada`
 - No trabajar directamente en `main`.
 - El HEAD indicado es una referencia local conocida. Confirmar si tambien existe en el remoto antes de depender de el para una recuperacion.
-- La base principal local esta en 017. C4B no agrega migraciones ni modifica
+- La base principal local esta en 018. AUD-B no agrega migraciones ni modifica
   datos comerciales preexistentes.
 
 Comprobacion inicial obligatoria:
@@ -47,7 +47,7 @@ Si la rama, el HEAD o el estado difieren, detenerse y entender los cambios exist
 | `routes/` | Contratos HTTP de autenticacion, administracion y modulos comerciales. |
 | `services/` | Reglas de negocio, transacciones, reportes, POS, stock, clientes y cobranza. |
 | `public/` | Aplicacion web, administracion, login, estilos y JavaScript del navegador. |
-| `database/migrations/` | Migraciones historicas y modernas, numeradas de 001 a 018; la base principal local validada permanece en 017 hasta autorizar 018. |
+| `database/migrations/` | Migraciones historicas y modernas, numeradas de 001 a 018; la base principal local validada esta en 018. |
 | `database/tienda_abarrotes.sql` | Esquema inicial equivalente al estado final esperado. |
 | `scripts/` | Migrador, comprobadores, pruebas, administracion local y backups. |
 | `utils/` | Utilidades compartidas, incluidas fechas locales y errores. |
@@ -115,7 +115,7 @@ El contexto de tienda proviene de la sesion validada. El navegador no debe envia
 | Backups y restauracion | Terminado | Backup, manifiesto, hash, verificacion y restauracion probada en base temporal. |
 | Healthcheck, monitoreo y alertas | B1-B3 terminados; proveedores externos pendientes | Liveness, readiness, arranque/cierre, diagnostico superadmin, backups read-only, transiciones, anti-spam y comprobador operativo implementados. No hay envio externo. |
 | Anulaciones y compensaciones | C1-C4B implementados | API transaccional, inventario y lotes, liquidaciones, reportes netos, comprobantes, interfaz, CSV/XLSX y pruebas de navegador. La base local esta en 017. |
-| Auditoria administrativa global | AUD-A implementado; AUD-B pendiente | Fundacion append-only, contrato, allowlists y eventos criticos de autenticacion y superadministracion. Consulta, pantalla y retencion quedan para AUD-B. |
+| Auditoria administrativa global | AUD-A y AUD-B implementados | Bitacora append-only, allowlists, eventos administrativos y comerciales, consulta tenant/global, pantalla responsive y politica documental de retencion. No hay borrado automatico. |
 | Correcciones finales de stock/reposicion | Pendiente | Revision de stock vendible y reglas de sugerencia antes de produccion. |
 | Fase 11 - acceso publico | No iniciada | Registro publico, alta automatica, verificacion, recuperacion y proteccion antiabuso. |
 | Suscripciones comerciales | No iniciada | No hay cobro automatizado de planes ni pasarela comercial. |
@@ -210,7 +210,7 @@ Un downgrade no borra ni oculta deuda existente. Se mantiene la consulta histori
 ## 5. Migraciones
 
 No renumerar, editar ni reemplazar migraciones aplicadas. La base local principal
-conocida `tienda_abarrotes_pruebas` esta validada en 017. C4B no agrega
+conocida `tienda_abarrotes_pruebas` esta validada en 018. AUD-B no agrega
 migraciones ni modifica el esquema.
 
 | Migracion | Objetivo principal |
@@ -241,7 +241,7 @@ Reglas:
 - Las modernas usan inspeccion pre/parcial/post y registro tardio.
 - Una migracion registrada pero fisicamente incompleta debe bloquear el proceso.
 - Una estructura completa no registrada solo puede adoptarse despues de validarla.
-- `database/tienda_abarrotes.sql` debe conservar equivalencia con el estado post-017 para instalaciones nuevas.
+- `database/tienda_abarrotes.sql` debe conservar equivalencia con el estado post-018 para instalaciones nuevas.
 - Antes de cualquier futura migracion: backup verificado, ensayo sobre copia, revision del SQL y comprobacion posterior.
 
 ## 6. Scripts npm y nivel de seguridad
@@ -438,7 +438,7 @@ No mostrar estas variables en logs ni respuestas. Nunca versionar `.env`, `.env.
 | Health operativo | `routes/health.js`, `routes/admin-health.js`, `services/operational-health-service.js`, `services/backup-status-service.js`, `services/operational-state-tracker.js`, `services/operational-event-dispatcher.js`, `services/server-lifecycle-service.js`, `scripts/check-operational-health.js` |
 | Compensaciones C1-C4A | `config/compensation-contract.js`, migraciones `014` a `017`, `routes/sales-compensations.js`, `routes/financial-compensations.js`, servicios `*compensation*`, comprobadores y pruebas `*compensation*` |
 | Interfaz C4B | `public/js/compensation-ui.js`, `public/css/styles.css`, `services/compensation-query-service.js`, `services/compensation-export-service.js`, pruebas `test:compensation-*` |
-| Auditoria administrativa AUD-A | `config/administrative-audit-contract.js`, `services/administrative-audit-service.js`, migracion `018`, comprobador y prueba `administrative-audit` |
+| Auditoria administrativa AUD-A/B | `config/administrative-audit-contract.js`, `services/administrative-audit-service.js`, `services/administrative-audit-query-service.js`, `middleware/administrative-audit-middleware.js`, `routes/audit.js`, `public/js/administrative-audit-ui.js`, migracion `018` y pruebas `administrative-audit*` |
 | Migrador | `scripts/migrate-db.js`, `scripts/migration-state/legacy-migrations.js` |
 | Backups | `scripts/backup-db.js`, `scripts/backup-utils.js`, `scripts/verify-db-backup.js`, `scripts/test-db-restore.js`, `scripts/cleanup-db-backups.js` |
 
@@ -450,7 +450,10 @@ No mostrar estas variables en logs ni respuestas. Nunca versionar `.env`, `.env.
   responsive y accesible, con exportaciones CSV/XLSX protegidas. El credito a
   favor permanece fuera de alcance.
 - No existe inventario fisico integral ni flujo final de conciliacion operativa para produccion.
-- AUD-A aporta una bitacora global inmutable para eventos administrativos criticos. AUD-B debe agregar consulta protegida, filtros, pantalla y politica operativa de retencion.
+- AUD-A/B aporta una bitacora global inmutable, eventos administrativos y comerciales,
+  consulta protegida para propietario y superadmin, filtros, detalle y pantalla
+  responsive. La retencion inicial conserva al menos 365 dias en linea y se revisa
+  trimestralmente; no existe borrado automatico ni API de escritura.
 - Las sugerencias de reposicion requieren una revision final sobre stock vendible y reglas de compra.
 - Los backups son locales. No hay almacenamiento remoto, cifrado propio, programacion automatica, rotacion distribuida ni monitoreo externo.
 - Los backups contienen datos sensibles y deben residir en disco cifrado o almacenamiento seguro. No enviarlos por correo o WhatsApp.
@@ -476,13 +479,11 @@ No mostrar estas variables en logs ni respuestas. Nunca versionar `.env`, `.env.
 
 No alterar este orden sin una decision explicita:
 
-1. Cerrar AUD-A y aplicar 018 mediante un procedimiento autorizado.
-2. AUD-B: consulta y experiencia administrativa de auditoria.
-3. Correcciones finales de stock y reposicion.
-4. Fase 11: acceso publico.
-5. Suscripciones comerciales.
-6. Staging.
-7. Produccion.
+1. Correcciones finales de stock y reposicion.
+2. Fase 11: acceso publico.
+3. Suscripciones comerciales.
+4. Staging.
+5. Produccion.
 
 Cada bloque debe cerrar con pruebas, comprobadores, documentacion y un commit local independiente. No mezclar cambios de bloques distintos.
 
@@ -581,15 +582,17 @@ En ambos casos, conservar el repositorio o base anterior hasta completar smoke t
 ### Git
 
 - Rama local: `mejora-multitienda`.
-- HEAD base de C4B: `dbe178e feat: integrar liquidaciones y reportes compensatorios`.
-- Working tree esperado durante C4B: contiene exclusivamente interfaz,
-  consultas, exportaciones, pruebas y documentacion de compensaciones.
+- Punto de partida de AUD-B: `5621b44 test: adaptar auditoria a base migrada`.
+- AUD-B queda completo con contrato comercial, integraciones transaccionales,
+  consulta protegida, interfaz, pruebas y documentacion de auditoria.
+- Working tree esperado despues del cierre: limpio. Verificar siempre el HEAD
+  real con `git log -1 --oneline`.
 - No consta despliegue de este estado. Verificar el remoto antes de asumir que todos los commits locales fueron publicados.
 
 ### Base local
 
 - Base de pruebas esperada: `tienda_abarrotes_pruebas`.
-- Migraciones registradas en la base principal conocida: 001 a 017.
+- Migraciones registradas en la base principal conocida: 001 a 018.
 - No deberian existir bases `tmp_tienda_restore_*` ni `tmp_tienda_legacy_*` despues de las pruebas.
 
 ### Ultimo estado conocido de pruebas
@@ -617,6 +620,10 @@ Han sido validadas en bloques anteriores:
   `test:compensation-frontend` y `test:compensation-browser` validan filtros,
   CSV/XLSX, formula injection, interfaz, teclado, foco, impresion, responsive y
   doble envio sin tocar la base principal.
+- Auditoria AUD-B: `test:administrative-audit-commercial`,
+  `test:administrative-audit-frontend` y `test:administrative-audit-browser`
+  validan tenant, filtros, paginacion, sanitizacion, ausencia de rutas de
+  escritura, teclado, foco y responsive sin modificar MySQL.
 - Backup: `test:backup-restore` con 26 comprobaciones, backup real local, verificacion de hash/manifiesto y restauracion temporal.
 - Durante la restauracion se ejecutaron `db:check-legacy-migrations`, `db:check-session-security`, `db:check-timezone-tls` y `db:check-customers-credit` contra la base temporal.
 - La validacion final de backup elimino los archivos generados y la base temporal; no dejo procesos auxiliares activos.

@@ -113,6 +113,7 @@ function storePayload(marker, label, planCode) {
 
 async function cleanupStore(connection, idTienda) {
   if (!idTienda) return;
+  await connection.query('DELETE FROM eventoAuditoriaAdministrativa WHERE idTienda=?', [idTienda]);
   await connection.query('DELETE FROM cierreCaja WHERE idTienda=?', [idTienda]);
   await connection.query('DELETE FROM gasto WHERE idTienda=?', [idTienda]);
   await connection.query('DELETE FROM categoriaGasto WHERE idTienda=?', [idTienda]);
@@ -145,7 +146,20 @@ async function cleanup(connection, fixture) {
   await cleanupStore(connection, fixture.idTiendaSecundaria);
   await cleanupStore(connection, fixture.idTiendaPrimaria);
   if (fixture.usuarioSuperadmin) {
+    await connection.query(
+      `DELETE ea FROM eventoAuditoriaAdministrativa ea
+       JOIN administrador a ON a.idAdministrador=ea.idAdministradorActor
+       WHERE a.usuario=?`,
+      [fixture.usuarioSuperadmin]
+    );
     await connection.query('DELETE FROM administrador WHERE usuario=?', [fixture.usuarioSuperadmin]);
+  }
+  if (Number.isSafeInteger(fixture.auditStartId)) {
+    await connection.query(
+      `DELETE FROM eventoAuditoriaAdministrativa
+       WHERE idEventoAuditoria>? AND idTienda IS NULL AND actorTipo='anonimo'`,
+      [fixture.auditStartId]
+    );
   }
 }
 
@@ -168,6 +182,10 @@ async function main() {
 
   try {
     connection = await createDatabaseConnection(config);
+    const [[auditStart]] = await connection.query(
+      'SELECT COALESCE(MAX(idEventoAuditoria),0) id FROM eventoAuditoriaAdministrativa'
+    );
+    fixture.auditStartId = Number(auditStart.id);
     const inactiveUser = `inactive_test_${marker}`;
     const inactivePassword = `Inactive-${crypto.randomBytes(12).toString('hex')}!`;
     const superPassword = `Super-${crypto.randomBytes(12).toString('hex')}!`;

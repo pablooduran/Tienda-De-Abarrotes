@@ -13,6 +13,7 @@ router.post(
       const result = await compensateSale({
         idTienda: req.tenant.idTienda,
         idAdministrador: req.auth.idAdministrador,
+        requestId: req.requestId,
         idVenta: req.params.idVenta,
         body: req.body
       });

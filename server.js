@@ -24,6 +24,7 @@ const { createErrorHandler, notFoundHandler } = require('./middleware/error-hand
 const { createRateLimiters } = require('./middleware/rate-limiters');
 const { requestContext } = require('./middleware/request-context');
 const { mutationProtection, noStoreSensitiveResponses } = require('./middleware/request-security');
+const { createCommercialAuditMiddleware } = require('./middleware/administrative-audit-middleware');
 const { requireRole } = require('./middleware/roles');
 const { permissionsPolicy, securityHeaders } = require('./middleware/security-headers');
 const { requireActiveSubscription, resolveSubscription } = require('./middleware/subscription');
@@ -49,6 +50,7 @@ const {
 } = require('./services/server-lifecycle-service');
 const adminCatalogRoutes = require('./routes/admin-catalog');
 const adminRoutes = require('./routes/admin');
+const { createAuditRouter } = require('./routes/audit');
 const apiRoutes = require('./routes/api');
 const authRoutes = require('./routes/auth');
 const customerCreditRoutes = require('./routes/customers-credit');
@@ -115,6 +117,11 @@ const adminHealthRoutes = createAdminHealthRouter({
   logger: securityLogger,
   monitor: operationalMonitor
 });
+const tenantAuditRoutes = createAuditRouter({ mode: 'tenant' });
+const adminAuditRoutes = createAuditRouter({ mode: 'admin' });
+const commercialAuditMiddleware = createCommercialAuditMiddleware({
+  auditService: administrativeAuditService
+});
 const sessionStore = new MySQLSessionStore({
   createDatabaseTable: true,
   endConnectionOnClose: false,
@@ -156,6 +163,7 @@ app.use(session({
     maxAge: 1000 * 60 * 60 * 8
   }
 }));
+app.use('/api', commercialAuditMiddleware);
 app.use(mutationProtection(appSecurityConfig.trustedOrigins));
 
 app.use('/auth', rateLimiters.auth);
@@ -174,8 +182,10 @@ app.use('/api', rateLimiters.api);
 
 app.use('/auth', authRoutes);
 app.use('/api/admin/health', requireAuth, requireRole('superadmin'), adminHealthRoutes);
+app.use('/api/admin/auditoria', requireAuth, requireRole('superadmin'), adminAuditRoutes);
 app.use('/api/admin/catalogo', requireAuth, requireRole('superadmin'), adminCatalogRoutes);
 app.use('/api/admin', requireAuth, requireRole('superadmin'), adminRoutes);
+app.use('/api/auditoria', rateLimiters.admin, requireAuth, requireTenant, tenantAuditRoutes);
 app.use('/api/catalogo-maestro', requireAuth, requireTenant, resolveSubscription, requireActiveSubscription, masterCatalogRoutes);
 app.use(
   '/api',

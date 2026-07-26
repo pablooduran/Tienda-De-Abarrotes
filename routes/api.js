@@ -650,6 +650,7 @@ router.post('/ventas', async (req, res, next) => {
     const result = await registerSale({
       idTienda: tenantId(req),
       idAdministrador: req.session.admin.id,
+      requestId: req.requestId,
       body: req.body,
       legacyMode: true
     });
@@ -967,6 +968,7 @@ router.post('/pagos-fiado', requirePlanFeature('pagos_fiado'), async (req, res, 
     const result = await collectSpecificDebt({
       idTienda: tenantId(req),
       idAdministrador: req.session.admin.id,
+      requestId: req.requestId,
       idFiado: req.body?.idFiado,
       body: req.body
     });
@@ -984,6 +986,7 @@ router.post('/pagos-fiado/cliente', requirePlanFeature('pagos_fiado'), async (re
     const result = await collectCustomerDebt({
       idTienda: tenantId(req),
       idAdministrador: req.session.admin.id,
+      requestId: req.requestId,
       idCliente: req.body?.idCliente,
       body: req.body
     });
