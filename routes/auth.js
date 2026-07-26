@@ -8,6 +8,10 @@ const {
   destroyRequestSession,
   validateSession
 } = require('../services/session-validation-service');
+const {
+  administrativeAuditService,
+  administratorActor
+} = require('../services/administrative-audit-service');
 
 const router = express.Router();
 const dummyPasswordHash = bcrypt.hash(crypto.randomBytes(32).toString('hex'), 12);
@@ -16,6 +20,19 @@ function invalidCredentials(res) {
   return res.status(401).json({
     error: 'Credenciales incorrectas.',
     code: 'INVALID_CREDENTIALS'
+  });
+}
+
+async function auditLoginRejected(req, resultCode = 'INVALID_CREDENTIALS') {
+  await administrativeAuditService.recordOutcome({
+    actorType: 'anonimo',
+    administratorId: null,
+    storeId: null,
+    action: 'inicio_sesion',
+    result: 'rechazado',
+    resultCode,
+    origin: 'web',
+    requestId: req.requestId
   });
 }
 
@@ -49,6 +66,7 @@ router.post('/login', async (req, res, next) => {
     const usuario = String(req.body?.usuario || '').trim().slice(0, 80);
     const password = req.body?.password;
     if (!usuario || !password) {
+      await auditLoginRejected(req, 'LOGIN_INPUT_INVALID');
       return res.status(400).json({ error: 'Usuario y contrasena son obligatorios.' });
     }
 
@@ -63,17 +81,23 @@ router.post('/login', async (req, res, next) => {
     );
     if (rows.length === 0) {
       await bcrypt.compare(password, await dummyPasswordHash);
+      await auditLoginRejected(req);
       return invalidCredentials(res);
     }
 
     const ok = await bcrypt.compare(password, rows[0].password);
-    if (!ok || !Number(rows[0].activo)) return invalidCredentials(res);
+    if (!ok || !Number(rows[0].activo)) {
+      await auditLoginRejected(req);
+      return invalidCredentials(res);
+    }
 
     const admin = rows[0];
     if (!['dueno_tienda', 'superadmin'].includes(admin.rol)) {
+      await auditLoginRejected(req);
       return invalidCredentials(res);
     }
     if (admin.rol === 'superadmin' && admin.idTienda !== null) {
+      await auditLoginRejected(req);
       return invalidCredentials(res);
     }
     if (admin.rol === 'dueno_tienda'
@@ -81,6 +105,7 @@ router.post('/login', async (req, res, next) => {
         || Number(admin.idTienda) <= 0
         || !admin.tiendaActiva
         || admin.estadoTienda !== 'activa')) {
+      await auditLoginRejected(req);
       return invalidCredentials(res);
     }
 
@@ -92,6 +117,22 @@ router.post('/login', async (req, res, next) => {
       idTienda: admin.idTienda === null ? null : Number(admin.idTienda),
       versionSesion: Number(admin.versionSesion)
     };
+    try {
+      const actor = administratorActor(req.session.admin);
+      await administrativeAuditService.recordCritical(pool, {
+        ...actor,
+        action: 'inicio_sesion',
+        result: 'correcto',
+        resultCode: 'LOGIN_OK',
+        origin: 'web',
+        reference: `administrador:${admin.idAdministrador}`,
+        requestId: req.requestId,
+        metadata: { rol: admin.rol }
+      });
+    } catch (error) {
+      await destroyRequestSession(req, res);
+      throw error;
+    }
     res.json({ message: 'Sesion iniciada.', admin: publicAdmin(req.session.admin) });
   } catch (error) {
     next(error);
@@ -153,24 +194,78 @@ router.post('/change-password', requireAuth, async (req, res, next) => {
        WHERE idAdministrador=?`,
       [passwordHash, req.auth.idAdministrador]
     );
+    const actor = administratorActor(req.auth);
+    await administrativeAuditService.recordCritical(connection, {
+      ...actor,
+      action: 'cambio_password',
+      result: 'correcto',
+      resultCode: 'PASSWORD_CHANGED',
+      origin: 'web',
+      reference: `administrador:${req.auth.idAdministrador}`,
+      requestId: req.requestId,
+      metadata: { versionSesionIncrementada: true }
+    });
+    await administrativeAuditService.recordCritical(connection, {
+      ...actor,
+      action: 'revocacion_sesion',
+      result: 'correcto',
+      resultCode: 'SESSION_REVOKED',
+      origin: 'web',
+      reference: `administrador:${req.auth.idAdministrador}`,
+      requestId: req.requestId,
+      metadata: { sesionesRevocadas: 1 }
+    });
     await connection.commit();
     await destroyRequestSession(req, res);
     return res.json({ message: 'Contrasena actualizada. Inicie sesion nuevamente.' });
   } catch (error) {
     await connection.rollback();
+    const actor = administratorActor(req.auth);
+    await administrativeAuditService.recordOutcome({
+      ...actor,
+      action: 'cambio_password',
+      result: Number(error?.status || 500) >= 500 ? 'fallido' : 'rechazado',
+      resultCode: 'PASSWORD_CHANGE_REJECTED',
+      origin: 'web',
+      reference: req.auth?.idAdministrador
+        ? `administrador:${req.auth.idAdministrador}`
+        : null,
+      requestId: req.requestId
+    });
     return next(error);
   } finally {
     connection.release();
   }
 });
 
-router.post('/logout', (req, res, next) => {
-  clearSessionCookie(res);
-  if (!req.session) return res.json({ message: 'Sesion cerrada.' });
-  return req.session.destroy((error) => {
-    if (error) return next(error);
+router.post('/logout', async (req, res, next) => {
+  try {
+    let validation = { valid: false };
+    try {
+      validation = await validateSession(req.session?.admin);
+    } catch {
+      validation = { valid: false };
+    }
+    const actor = validation.valid
+      ? administratorActor(validation.context)
+      : { actorType: 'anonimo', administratorId: null, storeId: null };
+    await destroyRequestSession(req, res);
+    await administrativeAuditService.recordOutcome({
+      ...actor,
+      action: 'cierre_sesion',
+      result: 'correcto',
+      resultCode: 'LOGOUT_OK',
+      origin: 'web',
+      reference: validation.valid
+        ? `administrador:${validation.context.idAdministrador}`
+        : null,
+      requestId: req.requestId
+    });
     return res.json({ message: 'Sesion cerrada.' });
-  });
+  } catch (error) {
+    clearSessionCookie(res);
+    return next(error);
+  }
 });
 
 module.exports = router;

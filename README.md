@@ -131,6 +131,35 @@ Migraciones actuales, en orden:
 15. `015_compensaciones_venta_inventario.sql`: anulaciones y devoluciones de venta, liquidacion explicita y movimientos compensatorios de stock y lotes.
 16. `016_compensaciones_financieras.sql`: reduccion de deuda, obligaciones de reembolso, compensacion de cobros y correccion de metodos.
 17. `017_integracion_compensaciones.sql`: liquidaciones materiales inmutables, reportes netos y explicacion compensatoria de cierres futuros.
+18. `018_auditoria_administrativa_critica.sql`: bitacora append-only para autenticacion, sesiones, credenciales y superadministracion critica.
+
+### Auditoria administrativa critica
+
+AUD-A crea `eventoAuditoriaAdministrativa` y un contrato cerrado de
+categorias, acciones, resultados y datos permitidos. Los eventos exitosos que
+acompanan una mutacion se insertan en la misma transaccion. Si la transaccion
+revierte, el evento exitoso tambien revierte. Los rechazos y fallos
+controlados se intentan registrar despues del rollback sin reemplazar el error
+funcional original.
+
+La bitacora no guarda cuerpos completos, contrasenas, hashes, cookies,
+sesiones, tokens, CSRF, SQL, stacks, claves idempotentes ni huellas. Solo usa
+referencias tecnicas acotadas, `requestId` y cambios filtrados por allowlist.
+El servicio es exclusivamente de insercion y no existe API de escritura ni
+pantalla. El usuario MySQL de la aplicacion debe mantener privilegios minimos;
+consulta administrativa y retencion quedan para AUD-B.
+
+Validacion segura:
+
+```powershell
+$env:APP_ENV = "local"
+npm.cmd run test:administrative-audit
+```
+
+La prueba aplica 018 con el migrador real exclusivamente sobre una base
+`tmp_tienda_restore_*`, compara la huella de la base principal y limpia la
+base temporal en `finally`. `db:check-administrative-audit` es de solo lectura
+y debe ejecutarse sobre una base donde 018 ya haya sido autorizada.
 
 ### Operaciones compensatorias de venta
 

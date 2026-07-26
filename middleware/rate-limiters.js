@@ -15,7 +15,15 @@ function identityKey(req) {
   return crypto.createHash('sha256').update(`${ip}\0${identity}`).digest('hex').slice(0, 32);
 }
 
-function limiter(config, { identifier, limit, code, message, skipSuccessfulRequests = false, keyGenerator }) {
+function limiter(config, {
+  identifier,
+  limit,
+  code,
+  message,
+  skipSuccessfulRequests = false,
+  keyGenerator,
+  onLimit
+}) {
   if (!config.enabled) return disabledLimiter;
   return rateLimit({
     windowMs: config.windowMs,
@@ -25,10 +33,11 @@ function limiter(config, { identifier, limit, code, message, skipSuccessfulReque
     legacyHeaders: false,
     skipSuccessfulRequests,
     ...(keyGenerator ? { keyGenerator } : {}),
-    handler(req, res) {
+    async handler(req, res) {
       if (!res.getHeader('Retry-After')) {
         res.setHeader('Retry-After', String(Math.ceil(config.windowMs / 1000)));
       }
+      if (onLimit) await onLimit(req, code);
       res.status(429).json({
         error: message,
         code,
@@ -38,7 +47,7 @@ function limiter(config, { identifier, limit, code, message, skipSuccessfulReque
   });
 }
 
-function createRateLimiters(config) {
+function createRateLimiters(config, { onLoginLimited = null } = {}) {
   const commonMessage = 'Se alcanzaron demasiadas solicitudes. Intenta nuevamente mas tarde.';
   return Object.freeze({
     api: limiter(config, {
@@ -69,14 +78,16 @@ function createRateLimiters(config) {
       identifier: 'login-ip', limit: config.loginIpMax,
       code: 'TOO_MANY_LOGIN_ATTEMPTS',
       message: 'Demasiados intentos de inicio de sesion. Intenta nuevamente mas tarde.',
-      skipSuccessfulRequests: true
+      skipSuccessfulRequests: true,
+      onLimit: onLoginLimited
     }),
     loginIdentity: limiter(config, {
       identifier: 'login-identity', limit: config.loginIdentityMax,
       code: 'TOO_MANY_LOGIN_ATTEMPTS',
       message: 'Demasiados intentos de inicio de sesion. Intenta nuevamente mas tarde.',
       skipSuccessfulRequests: true,
-      keyGenerator: identityKey
+      keyGenerator: identityKey,
+      onLimit: onLoginLimited
     })
   });
 }

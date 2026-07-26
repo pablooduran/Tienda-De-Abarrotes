@@ -769,6 +769,47 @@ const migrationRequirements = {
         'administrador', ['idTienda', 'idAdministrador'],
         'RESTRICT', 'RESTRICT']
     ]
+  },
+  '018_auditoria_administrativa_critica.sql': {
+    columns: {
+      eventoAuditoriaAdministrativa: [
+        'idEventoAuditoria', 'idTienda', 'actorTipo', 'idAdministradorActor',
+        'categoria', 'accion', 'resultado', 'codigoResultado', 'origen',
+        'entidadTipo', 'referenciaSegura', 'requestId', 'datosAnteriores',
+        'datosPosteriores', 'metadatos', 'creadoEn'
+      ]
+    },
+    indexes: [
+      ['eventoAuditoriaAdministrativa',
+        'uq_eventoAuditoria_request_accion_resultado',
+        ['requestId', 'accion', 'resultado'], true],
+      ['eventoAuditoriaAdministrativa',
+        'idx_eventoAuditoria_tienda_fecha',
+        ['idTienda', 'creadoEn', 'idEventoAuditoria'], false],
+      ['eventoAuditoriaAdministrativa',
+        'idx_eventoAuditoria_actor_fecha',
+        ['idAdministradorActor', 'creadoEn', 'idEventoAuditoria'], false],
+      ['eventoAuditoriaAdministrativa',
+        'idx_eventoAuditoria_categoria_accion_fecha',
+        ['categoria', 'accion', 'creadoEn', 'idEventoAuditoria'], false],
+      ['eventoAuditoriaAdministrativa',
+        'idx_eventoAuditoria_resultado_fecha',
+        ['resultado', 'creadoEn', 'idEventoAuditoria'], false]
+    ],
+    checks: [
+      ['eventoAuditoriaAdministrativa', 'chk_eventoAuditoria_actor'],
+      ['eventoAuditoriaAdministrativa', 'chk_eventoAuditoria_categoria_accion'],
+      ['eventoAuditoriaAdministrativa', 'chk_eventoAuditoria_codigo'],
+      ['eventoAuditoriaAdministrativa', 'chk_eventoAuditoria_referencia'],
+      ['eventoAuditoriaAdministrativa', 'chk_eventoAuditoria_request']
+    ],
+    foreignKeyConstraints: [
+      ['eventoAuditoriaAdministrativa', 'fk_eventoAuditoria_tienda',
+        ['idTienda'], 'tienda', ['idTienda'], 'RESTRICT', 'RESTRICT'],
+      ['eventoAuditoriaAdministrativa', 'fk_eventoAuditoria_actor',
+        ['idAdministradorActor'], 'administrador', ['idAdministrador'],
+        'RESTRICT', 'RESTRICT']
+    ]
   }
 };
 
@@ -2065,7 +2106,8 @@ async function structureElementExists(connection, element, file = null) {
     '014_operaciones_compensatorias.sql',
     '015_compensaciones_venta_inventario.sql',
     '016_compensaciones_financieras.sql',
-    '017_integracion_compensaciones.sql'
+    '017_integracion_compensaciones.sql',
+    '018_auditoria_administrativa_critica.sql'
   ].includes(file)) {
     if (element.type === 'columna') {
       const details = await normalizedColumnDetails(connection, element.table, [element.name]);
@@ -3352,7 +3394,8 @@ async function main() {
               '014_operaciones_compensatorias.sql',
               '015_compensaciones_venta_inventario.sql',
               '016_compensaciones_financieras.sql',
-              '017_integracion_compensaciones.sql'
+              '017_integracion_compensaciones.sql',
+              '018_auditoria_administrativa_critica.sql'
             ].includes(file)
             && !await requirementsSatisfied(connection, file);
         if (registeredMigrationIsIncomplete) {
@@ -3380,7 +3423,8 @@ async function main() {
           '014_operaciones_compensatorias.sql',
           '015_compensaciones_venta_inventario.sql',
           '016_compensaciones_financieras.sql',
-          '017_integracion_compensaciones.sql'
+          '017_integracion_compensaciones.sql',
+          '018_auditoria_administrativa_critica.sql'
         ].includes(file)) {
           await connection.query('INSERT IGNORE INTO schema_migrations (nombre) VALUES (?)', [file]);
           const [finalRecord] = await connection.query(
@@ -3464,7 +3508,8 @@ async function main() {
           '014_operaciones_compensatorias.sql',
           '015_compensaciones_venta_inventario.sql',
           '016_compensaciones_financieras.sql',
-          '017_integracion_compensaciones.sql'
+          '017_integracion_compensaciones.sql',
+          '018_auditoria_administrativa_critica.sql'
         ].includes(file)
           ? structureElementFromStatement(statement)
           : null;
@@ -3544,7 +3589,8 @@ async function main() {
         '014_operaciones_compensatorias.sql',
         '015_compensaciones_venta_inventario.sql',
         '016_compensaciones_financieras.sql',
-        '017_integracion_compensaciones.sql'
+        '017_integracion_compensaciones.sql',
+        '018_auditoria_administrativa_critica.sql'
       ].includes(file)) {
         await connection.query('INSERT IGNORE INTO schema_migrations (nombre) VALUES (?)', [file]);
         const [finalRecord] = await connection.query(

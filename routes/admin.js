@@ -8,6 +8,10 @@ const {
 const { ensureDefaultExpenseCategories } = require('../services/financial-service');
 const { ensureInventoryConfiguration } = require('../services/inventory-intelligence-service');
 const { revokeStoreSessions } = require('../services/session-validation-service');
+const {
+  administrativeAuditService,
+  administratorActor
+} = require('../services/administrative-audit-service');
 const { formatLocalDateTime } = require('../utils/local-datetime');
 
 const router = express.Router();
@@ -191,6 +195,93 @@ function asyncRoute(handler) {
   return (req, res, next) => Promise.resolve(handler(req, res, next)).catch(next);
 }
 
+function safeReference(entity, id) {
+  const parsed = Number(id);
+  return Number.isInteger(parsed) && parsed > 0 ? `${entity}:${parsed}` : null;
+}
+
+async function auditAdministrativeSuccess(connection, req, res, {
+  action,
+  resultCode,
+  storeId = null,
+  reference = null,
+  before = null,
+  after = null,
+  metadata = null
+}) {
+  const actor = administratorActor(req.auth);
+  const result = await administrativeAuditService.recordCritical(connection, {
+    ...actor,
+    storeId,
+    action,
+    result: 'correcto',
+    resultCode,
+    origin: 'web',
+    reference,
+    requestId: req.requestId,
+    before,
+    after,
+    metadata
+  });
+  res.locals.administrativeAuditRecorded = true;
+  return result;
+}
+
+function administrativeAction(req) {
+  const method = req.method;
+  const route = req.path;
+  if (method === 'POST' && route === '/tiendas') return 'creacion_tienda';
+  if (method === 'PUT' && /^\/tiendas\/\d+$/.test(route)) return 'modificacion_tienda';
+  if (method === 'PATCH' && /^\/tiendas\/\d+\/activar$/.test(route)) return 'activacion_tienda';
+  if (method === 'PATCH' && /^\/tiendas\/\d+\/desactivar$/.test(route)) return 'desactivacion_tienda';
+  if (method === 'POST' && /^\/tiendas\/\d+\/propietarios$/.test(route)) return 'creacion_propietario';
+  if (method === 'PUT' && /^\/propietarios\/\d+$/.test(route)) return 'modificacion_propietario';
+  if (method === 'PATCH' && /^\/propietarios\/\d+\/activar$/.test(route)) return 'activacion_propietario';
+  if (method === 'PATCH' && /^\/propietarios\/\d+\/desactivar$/.test(route)) return 'desactivacion_propietario';
+  if (method === 'PATCH' && /^\/propietarios\/\d+\/restablecer-password$/.test(route)) {
+    return 'restablecimiento_password';
+  }
+  if (method === 'POST' && /^\/tiendas\/\d+\/suscripciones$/.test(route)) return 'creacion_suscripcion';
+  if (method === 'PATCH' && /^\/suscripciones\/\d+\/suspender$/.test(route)) return 'suspension_suscripcion';
+  if (method === 'PATCH' && /^\/suscripciones\/\d+\/cancelar$/.test(route)) return 'cancelacion_suscripcion';
+  return null;
+}
+
+function administrativeFailureTarget(req, res, action) {
+  const validatedStoreId = Number(res.locals.auditStoreId);
+  const storeId = Number.isInteger(validatedStoreId) && validatedStoreId > 0
+    ? validatedStoreId
+    : null;
+  const storeMatch = req.path.match(/^\/tiendas\/(\d+)/);
+  const ownerMatch = req.path.match(/^\/propietarios\/(\d+)/);
+  const subscriptionMatch = req.path.match(/^\/suscripciones\/(\d+)/);
+  if (storeMatch) {
+    if (action === 'creacion_propietario') {
+      return { storeId, reference: null };
+    }
+    if (action === 'creacion_suscripcion') {
+      return { storeId, reference: null };
+    }
+    return {
+      storeId,
+      reference: safeReference('tienda', storeMatch[1])
+    };
+  }
+  if (ownerMatch) {
+    return {
+      storeId: null,
+      reference: safeReference('administrador', ownerMatch[1])
+    };
+  }
+  if (subscriptionMatch) {
+    return {
+      storeId: null,
+      reference: safeReference('suscripcion', subscriptionMatch[1])
+    };
+  }
+  return { storeId: null, reference: null };
+}
+
 router.get('/tiendas', asyncRoute(async (req, res) => {
   const [rows] = await pool.query(
     `${storeSummaryQuery()} ORDER BY t.creadoEn DESC, t.idTienda DESC`,
@@ -253,6 +344,39 @@ router.post('/tiendas', asyncRoute(async (req, res) => {
     if (propietario.activo) {
       await enforcePlanLimit(connection, storeResult.insertId, 'propietarios', 0);
     }
+    const idTienda = Number(storeResult.insertId);
+    await auditAdministrativeSuccess(connection, req, res, {
+      action: 'creacion_tienda',
+      resultCode: 'STORE_CREATED',
+      storeId: idTienda,
+      reference: safeReference('tienda', idTienda),
+      after: { activo: Boolean(tienda.activo), estado: tienda.estado }
+    });
+    await auditAdministrativeSuccess(connection, req, res, {
+      action: 'creacion_propietario',
+      resultCode: 'OWNER_CREATED',
+      storeId: idTienda,
+      reference: safeReference('administrador', ownerResult.insertId),
+      after: { activo: Boolean(propietario.activo), rol: 'dueno_tienda' }
+    });
+    await auditAdministrativeSuccess(connection, req, res, {
+      action: 'creacion_suscripcion',
+      resultCode: 'SUBSCRIPTION_CREATED',
+      storeId: idTienda,
+      reference: safeReference('suscripcion', suscripcion.idSuscripcion),
+      after: {
+        estado: suscripcion.estado,
+        planCodigo: suscripcion.planCodigo,
+        tipoSuscripcion: suscripcion.tipo
+      }
+    });
+    await auditAdministrativeSuccess(connection, req, res, {
+      action: 'asignacion_plan',
+      resultCode: 'PLAN_ASSIGNED',
+      storeId: idTienda,
+      reference: safeReference('plan', suscripcion.idPlan),
+      after: { planCodigo: suscripcion.planCodigo }
+    });
     await connection.commit();
     res.status(201).json({
       message: 'Tienda y propietario creados correctamente.',
@@ -276,13 +400,32 @@ router.put('/tiendas/:idTienda', asyncRoute(async (req, res) => {
     await connection.beginTransaction();
     const current = await findStore(connection, idTienda, true);
     if (!current) throw httpError(404, 'La tienda no existe.');
+    res.locals.auditStoreId = idTienda;
     await connection.query(
       `UPDATE tienda SET nombre=?, slug=?, estado=?, activo=?, actualizadoEn=?
        WHERE idTienda=?`,
       [tienda.nombre, tienda.slug, tienda.estado, tienda.activo, formatLocalDateTime(), idTienda]
     );
+    let sessionsRevoked = 0;
     if (Number(current.activo) !== Number(tienda.activo) || current.estado !== tienda.estado) {
-      await revokeStoreSessions(connection, idTienda);
+      sessionsRevoked = await revokeStoreSessions(connection, idTienda);
+    }
+    await auditAdministrativeSuccess(connection, req, res, {
+      action: 'modificacion_tienda',
+      resultCode: 'STORE_UPDATED',
+      storeId: idTienda,
+      reference: safeReference('tienda', idTienda),
+      before: { activo: Boolean(current.activo), estado: current.estado },
+      after: { activo: Boolean(tienda.activo), estado: tienda.estado }
+    });
+    if (sessionsRevoked > 0) {
+      await auditAdministrativeSuccess(connection, req, res, {
+        action: 'revocacion_sesion',
+        resultCode: 'SESSION_REVOKED',
+        storeId: idTienda,
+        reference: safeReference('tienda', idTienda),
+        metadata: { sesionesRevocadas: sessionsRevoked }
+      });
     }
     await connection.commit();
     res.json({ message: 'Tienda actualizada correctamente.' });
@@ -299,12 +442,29 @@ router.patch('/tiendas/:idTienda/activar', asyncRoute(async (req, res) => {
   const connection = await pool.getConnection();
   try {
     await connection.beginTransaction();
-    if (!await findStore(connection, idTienda, true)) throw httpError(404, 'La tienda no existe.');
+    const current = await findStore(connection, idTienda, true);
+    if (!current) throw httpError(404, 'La tienda no existe.');
+    res.locals.auditStoreId = idTienda;
     await connection.query(
       "UPDATE tienda SET activo=1, estado='activa', actualizadoEn=? WHERE idTienda=?",
       [formatLocalDateTime(), idTienda]
     );
-    await revokeStoreSessions(connection, idTienda);
+    const sessionsRevoked = await revokeStoreSessions(connection, idTienda);
+    await auditAdministrativeSuccess(connection, req, res, {
+      action: 'activacion_tienda',
+      resultCode: 'STORE_ACTIVATED',
+      storeId: idTienda,
+      reference: safeReference('tienda', idTienda),
+      before: { activo: Boolean(current.activo), estado: current.estado },
+      after: { activo: true, estado: 'activa' }
+    });
+    await auditAdministrativeSuccess(connection, req, res, {
+      action: 'revocacion_sesion',
+      resultCode: 'SESSION_REVOKED',
+      storeId: idTienda,
+      reference: safeReference('tienda', idTienda),
+      metadata: { sesionesRevocadas: sessionsRevoked }
+    });
     await connection.commit();
     res.json({ message: 'Tienda activada correctamente.' });
   } catch (error) {
@@ -324,12 +484,29 @@ router.patch('/tiendas/:idTienda/desactivar', asyncRoute(async (req, res) => {
   const connection = await pool.getConnection();
   try {
     await connection.beginTransaction();
-    if (!await findStore(connection, idTienda, true)) throw httpError(404, 'La tienda no existe.');
+    const current = await findStore(connection, idTienda, true);
+    if (!current) throw httpError(404, 'La tienda no existe.');
+    res.locals.auditStoreId = idTienda;
     await connection.query(
       'UPDATE tienda SET activo=0, estado=?, actualizadoEn=? WHERE idTienda=?',
       [estado, formatLocalDateTime(), idTienda]
     );
-    await revokeStoreSessions(connection, idTienda);
+    const sessionsRevoked = await revokeStoreSessions(connection, idTienda);
+    await auditAdministrativeSuccess(connection, req, res, {
+      action: 'desactivacion_tienda',
+      resultCode: 'STORE_DEACTIVATED',
+      storeId: idTienda,
+      reference: safeReference('tienda', idTienda),
+      before: { activo: Boolean(current.activo), estado: current.estado },
+      after: { activo: false, estado }
+    });
+    await auditAdministrativeSuccess(connection, req, res, {
+      action: 'revocacion_sesion',
+      resultCode: 'SESSION_REVOKED',
+      storeId: idTienda,
+      reference: safeReference('tienda', idTienda),
+      metadata: { sesionesRevocadas: sessionsRevoked }
+    });
     await connection.commit();
     res.json({ message: 'Tienda desactivada correctamente.' });
   } catch (error) {
@@ -362,6 +539,7 @@ router.post('/tiendas/:idTienda/propietarios', asyncRoute(async (req, res) => {
     await connection.beginTransaction();
     const store = await findStore(connection, idTienda, true);
     if (!store) throw httpError(404, 'La tienda no existe.');
+    res.locals.auditStoreId = idTienda;
     if (propietario.activo) await enforcePlanLimit(connection, idTienda, 'propietarios');
     const [userRows] = await connection.query('SELECT idAdministrador FROM administrador WHERE usuario=? LIMIT 1', [propietario.usuario]);
     if (userRows.length) throw httpError(409, 'El usuario indicado ya existe.');
@@ -371,6 +549,13 @@ router.post('/tiendas/:idTienda/propietarios', asyncRoute(async (req, res) => {
        VALUES (?, ?, ?, 'dueno_tienda', ?)`,
       [idTienda, propietario.usuario, passwordHash, propietario.activo]
     );
+    await auditAdministrativeSuccess(connection, req, res, {
+      action: 'creacion_propietario',
+      resultCode: 'OWNER_CREATED',
+      storeId: idTienda,
+      reference: safeReference('administrador', result.insertId),
+      after: { activo: Boolean(propietario.activo), rol: 'dueno_tienda' }
+    });
     await connection.commit();
     res.status(201).json({
       message: 'Propietario creado correctamente.',
@@ -387,13 +572,46 @@ router.post('/tiendas/:idTienda/propietarios', asyncRoute(async (req, res) => {
 router.put('/propietarios/:idAdministrador', asyncRoute(async (req, res) => {
   const idAdministrador = parseId(req.params.idAdministrador, 'El propietario');
   const usuario = validateUsername(req.body?.usuario);
-  const [result] = await pool.query(
-    `UPDATE administrador SET usuario=?, versionSesion=versionSesion+1
-     WHERE idAdministrador=? AND rol='dueno_tienda' AND idTienda IS NOT NULL`,
-    [usuario, idAdministrador]
-  );
-  if (!result.affectedRows) throw httpError(404, 'El propietario no existe.');
-  res.json({ message: 'Usuario del propietario actualizado correctamente.' });
+  const connection = await pool.getConnection();
+  try {
+    await connection.beginTransaction();
+    const [owners] = await connection.query(
+      `SELECT idTienda, activo, rol
+       FROM administrador
+       WHERE idAdministrador=? AND rol='dueno_tienda' AND idTienda IS NOT NULL
+       FOR UPDATE`,
+      [idAdministrador]
+    );
+    if (!owners.length) throw httpError(404, 'El propietario no existe.');
+    res.locals.auditStoreId = Number(owners[0].idTienda);
+    await connection.query(
+      `UPDATE administrador SET usuario=?, versionSesion=versionSesion+1
+       WHERE idAdministrador=?`,
+      [usuario, idAdministrador]
+    );
+    await auditAdministrativeSuccess(connection, req, res, {
+      action: 'modificacion_propietario',
+      resultCode: 'OWNER_UPDATED',
+      storeId: Number(owners[0].idTienda),
+      reference: safeReference('administrador', idAdministrador),
+      before: { activo: Boolean(owners[0].activo), rol: owners[0].rol },
+      after: { activo: Boolean(owners[0].activo), rol: owners[0].rol }
+    });
+    await auditAdministrativeSuccess(connection, req, res, {
+      action: 'revocacion_sesion',
+      resultCode: 'SESSION_REVOKED',
+      storeId: Number(owners[0].idTienda),
+      reference: safeReference('administrador', idAdministrador),
+      metadata: { sesionesRevocadas: 1 }
+    });
+    await connection.commit();
+    res.json({ message: 'Usuario del propietario actualizado correctamente.' });
+  } catch (error) {
+    await connection.rollback();
+    throw error;
+  } finally {
+    connection.release();
+  }
 }));
 
 router.patch('/propietarios/:idAdministrador/activar', asyncRoute(async (req, res) => {
@@ -407,6 +625,7 @@ router.patch('/propietarios/:idAdministrador/activar', asyncRoute(async (req, re
       [idAdministrador]
     );
     if (!owners.length) throw httpError(404, 'El propietario no existe.');
+    res.locals.auditStoreId = Number(owners[0].idTienda);
     if (!Number(owners[0].activo)) {
       await findStore(connection, owners[0].idTienda, true);
       await enforcePlanLimit(connection, owners[0].idTienda, 'propietarios');
@@ -415,6 +634,21 @@ router.patch('/propietarios/:idAdministrador/activar', asyncRoute(async (req, re
         [idAdministrador]
       );
     }
+    await auditAdministrativeSuccess(connection, req, res, {
+      action: 'activacion_propietario',
+      resultCode: 'OWNER_ACTIVATED',
+      storeId: Number(owners[0].idTienda),
+      reference: safeReference('administrador', idAdministrador),
+      before: { activo: Boolean(owners[0].activo) },
+      after: { activo: true }
+    });
+    await auditAdministrativeSuccess(connection, req, res, {
+      action: 'revocacion_sesion',
+      resultCode: 'SESSION_REVOKED',
+      storeId: Number(owners[0].idTienda),
+      reference: safeReference('administrador', idAdministrador),
+      metadata: { sesionesRevocadas: Number(owners[0].activo) ? 0 : 1 }
+    });
     await connection.commit();
     res.json({ message: 'Propietario activado correctamente.' });
   } catch (error) {
@@ -460,6 +694,25 @@ router.post('/tiendas/:idTienda/suscripciones', asyncRoute(async (req, res) => {
       idTienda,
       creadoPor: req.auth.idAdministrador
     });
+    res.locals.auditStoreId = idTienda;
+    await auditAdministrativeSuccess(connection, req, res, {
+      action: 'creacion_suscripcion',
+      resultCode: 'SUBSCRIPTION_CREATED',
+      storeId: idTienda,
+      reference: safeReference('suscripcion', suscripcion.idSuscripcion),
+      after: {
+        estado: suscripcion.estado,
+        planCodigo: suscripcion.planCodigo,
+        tipoSuscripcion: suscripcion.tipo
+      }
+    });
+    await auditAdministrativeSuccess(connection, req, res, {
+      action: 'asignacion_plan',
+      resultCode: 'PLAN_ASSIGNED',
+      storeId: idTienda,
+      reference: safeReference('plan', suscripcion.idPlan),
+      after: { planCodigo: suscripcion.planCodigo }
+    });
     await connection.commit();
     res.status(201).json({ message: 'Suscripcion registrada correctamente.', suscripcion });
   } catch (error) {
@@ -476,17 +729,30 @@ async function changeSubscriptionStatus(req, res, targetStatus) {
   try {
     await connection.beginTransaction();
     const [rows] = await connection.query(
-      `SELECT s.idSuscripcion, s.idTienda
+      `SELECT s.idSuscripcion, s.idTienda, s.estado
        FROM suscripcionTienda s
        WHERE s.idSuscripcion=? FOR UPDATE`,
       [idSuscripcion]
     );
     if (!rows.length) throw httpError(404, 'La suscripcion no existe.');
+    res.locals.auditStoreId = Number(rows[0].idTienda);
     await findStore(connection, rows[0].idTienda, true);
     await connection.query(
       'UPDATE suscripcionTienda SET estado=?, actualizadoEn=? WHERE idSuscripcion=?',
       [targetStatus, formatLocalDateTime(), idSuscripcion]
     );
+    await auditAdministrativeSuccess(connection, req, res, {
+      action: targetStatus === 'suspendida'
+        ? 'suspension_suscripcion'
+        : 'cancelacion_suscripcion',
+      resultCode: targetStatus === 'suspendida'
+        ? 'SUBSCRIPTION_SUSPENDED'
+        : 'SUBSCRIPTION_CANCELLED',
+      storeId: Number(rows[0].idTienda),
+      reference: safeReference('suscripcion', idSuscripcion),
+      before: { estado: rows[0].estado },
+      after: { estado: targetStatus }
+    });
     await connection.commit();
     res.json({ message: `Suscripcion ${targetStatus === 'suspendida' ? 'suspendida' : 'cancelada'} correctamente.` });
   } catch (error) {
@@ -511,15 +777,31 @@ router.patch('/propietarios/:idAdministrador/desactivar', asyncRoute(async (req,
   try {
     await connection.beginTransaction();
     const [rows] = await connection.query(
-      `SELECT idAdministrador FROM administrador
+      `SELECT idAdministrador, idTienda, activo FROM administrador
        WHERE idAdministrador=? AND rol='dueno_tienda' AND idTienda IS NOT NULL FOR UPDATE`,
       [idAdministrador]
     );
     if (!rows.length) throw httpError(404, 'El propietario no existe.');
+    res.locals.auditStoreId = Number(rows[0].idTienda);
     await connection.query(
       'UPDATE administrador SET activo=0, versionSesion=versionSesion+1 WHERE idAdministrador=?',
       [idAdministrador]
     );
+    await auditAdministrativeSuccess(connection, req, res, {
+      action: 'desactivacion_propietario',
+      resultCode: 'OWNER_DEACTIVATED',
+      storeId: Number(rows[0].idTienda),
+      reference: safeReference('administrador', idAdministrador),
+      before: { activo: Boolean(rows[0].activo) },
+      after: { activo: false }
+    });
+    await auditAdministrativeSuccess(connection, req, res, {
+      action: 'revocacion_sesion',
+      resultCode: 'SESSION_REVOKED',
+      storeId: Number(rows[0].idTienda),
+      reference: safeReference('administrador', idAdministrador),
+      metadata: { sesionesRevocadas: 1 }
+    });
     await connection.commit();
     res.json({ message: 'Propietario desactivado correctamente.' });
   } catch (error) {
@@ -538,16 +820,31 @@ router.patch('/propietarios/:idAdministrador/restablecer-password', asyncRoute(a
   try {
     await connection.beginTransaction();
     const [rows] = await connection.query(
-      `SELECT idAdministrador FROM administrador
+      `SELECT idAdministrador, idTienda FROM administrador
        WHERE idAdministrador=? AND rol='dueno_tienda' AND idTienda IS NOT NULL FOR UPDATE`,
       [idAdministrador]
     );
     if (!rows.length) throw httpError(404, 'El propietario no existe.');
+    res.locals.auditStoreId = Number(rows[0].idTienda);
     await connection.query(
       `UPDATE administrador SET password=?, versionSesion=versionSesion+1
        WHERE idAdministrador=?`,
       [passwordHash, idAdministrador]
     );
+    await auditAdministrativeSuccess(connection, req, res, {
+      action: 'restablecimiento_password',
+      resultCode: 'PASSWORD_RESET',
+      storeId: Number(rows[0].idTienda),
+      reference: safeReference('administrador', idAdministrador),
+      metadata: { versionSesionIncrementada: true }
+    });
+    await auditAdministrativeSuccess(connection, req, res, {
+      action: 'revocacion_sesion',
+      resultCode: 'SESSION_REVOKED',
+      storeId: Number(rows[0].idTienda),
+      reference: safeReference('administrador', idAdministrador),
+      metadata: { sesionesRevocadas: 1 }
+    });
     await connection.commit();
     res.json({ message: 'Contrasena restablecida correctamente.' });
   } catch (error) {
@@ -558,7 +855,26 @@ router.patch('/propietarios/:idAdministrador/restablecer-password', asyncRoute(a
   }
 }));
 
-router.use((error, req, res, next) => {
+router.use(async (error, req, res, next) => {
+  const action = administrativeAction(req);
+  if (action) {
+    const actor = administratorActor(req.auth);
+    const target = administrativeFailureTarget(req, res, action);
+    const status = error.code === 'ER_DUP_ENTRY'
+      ? 409
+      : Number(error?.status || 500);
+    await administrativeAuditService.recordOutcome({
+      ...actor,
+      ...target,
+      action,
+      result: status >= 500 ? 'fallido' : 'rechazado',
+      resultCode: status >= 500
+        ? 'ADMIN_OPERATION_FAILED'
+        : 'ADMIN_OPERATION_REJECTED',
+      origin: 'web',
+      requestId: req.requestId
+    });
+  }
   if (error.code === 'ER_DUP_ENTRY') {
     const field = String(error.message).includes('usuario') ? 'usuario' : 'slug';
     return res.status(409).json({ error: `Ya existe un registro con ese ${field}.` });

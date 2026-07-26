@@ -29,6 +29,7 @@ const { permissionsPolicy, securityHeaders } = require('./middleware/security-he
 const { requireActiveSubscription, resolveSubscription } = require('./middleware/subscription');
 const { requireTenant } = require('./middleware/tenant');
 const { createSecurityLogger } = require('./utils/security-logger');
+const { administrativeAuditService } = require('./services/administrative-audit-service');
 const { createAdminHealthRouter } = require('./routes/admin-health');
 const { createHealthRouter } = require('./routes/health');
 const { createBackupStatusService } = require('./services/backup-status-service');
@@ -63,7 +64,19 @@ const stockRoutes = require('./routes/stock');
 const app = express();
 const PORT = process.env.PORT || 3000;
 const securityLogger = createSecurityLogger(appSecurityConfig.logLevel);
-const rateLimiters = createRateLimiters(appSecurityConfig.rateLimit);
+administrativeAuditService.setLogger(securityLogger);
+const rateLimiters = createRateLimiters(appSecurityConfig.rateLimit, {
+  onLoginLimited: (req) => administrativeAuditService.recordOutcome({
+    actorType: 'anonimo',
+    administratorId: null,
+    storeId: null,
+    action: 'inicio_sesion',
+    result: 'limitado',
+    resultCode: 'TOO_MANY_LOGIN_ATTEMPTS',
+    origin: 'web',
+    requestId: req.requestId
+  })
+});
 const operationalEventDispatcher = createOperationalEventDispatcher({
   logger: securityLogger
 });

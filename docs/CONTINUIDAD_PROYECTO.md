@@ -47,7 +47,7 @@ Si la rama, el HEAD o el estado difieren, detenerse y entender los cambios exist
 | `routes/` | Contratos HTTP de autenticacion, administracion y modulos comerciales. |
 | `services/` | Reglas de negocio, transacciones, reportes, POS, stock, clientes y cobranza. |
 | `public/` | Aplicacion web, administracion, login, estilos y JavaScript del navegador. |
-| `database/migrations/` | Migraciones historicas y modernas, numeradas de 001 a 017; la base principal local validada esta en 017. |
+| `database/migrations/` | Migraciones historicas y modernas, numeradas de 001 a 018; la base principal local validada permanece en 017 hasta autorizar 018. |
 | `database/tienda_abarrotes.sql` | Esquema inicial equivalente al estado final esperado. |
 | `scripts/` | Migrador, comprobadores, pruebas, administracion local y backups. |
 | `utils/` | Utilidades compartidas, incluidas fechas locales y errores. |
@@ -115,7 +115,7 @@ El contexto de tienda proviene de la sesion validada. El navegador no debe envia
 | Backups y restauracion | Terminado | Backup, manifiesto, hash, verificacion y restauracion probada en base temporal. |
 | Healthcheck, monitoreo y alertas | B1-B3 terminados; proveedores externos pendientes | Liveness, readiness, arranque/cierre, diagnostico superadmin, backups read-only, transiciones, anti-spam y comprobador operativo implementados. No hay envio externo. |
 | Anulaciones y compensaciones | C1-C4B implementados | API transaccional, inventario y lotes, liquidaciones, reportes netos, comprobantes, interfaz, CSV/XLSX y pruebas de navegador. La base local esta en 017. |
-| Auditoria administrativa global | Parcial | Existen actores y fechas en modulos concretos, pero no una bitacora global e inmutable. |
+| Auditoria administrativa global | AUD-A implementado; AUD-B pendiente | Fundacion append-only, contrato, allowlists y eventos criticos de autenticacion y superadministracion. Consulta, pantalla y retencion quedan para AUD-B. |
 | Correcciones finales de stock/reposicion | Pendiente | Revision de stock vendible y reglas de sugerencia antes de produccion. |
 | Fase 11 - acceso publico | No iniciada | Registro publico, alta automatica, verificacion, recuperacion y proteccion antiabuso. |
 | Suscripciones comerciales | No iniciada | No hay cobro automatizado de planes ni pasarela comercial. |
@@ -232,6 +232,7 @@ migraciones ni modifica el esquema.
 | `015_compensaciones_venta_inventario.sql` | Anulaciones/devoluciones de venta, liquidacion pendiente y trazabilidad compensatoria de stock y lotes. |
 | `016_compensaciones_financieras.sql` | Resolucion de liquidaciones, deuda compensada, reembolsos pendientes, compensacion de cobros y correccion de metodos. |
 | `017_integracion_compensaciones.sql` | Liquidaciones materiales inmutables, reportes netos y trazabilidad explicativa de cierres futuros. |
+| `018_auditoria_administrativa_critica.sql` | Bitacora append-only y eventos criticos de autenticacion, sesiones, credenciales, tiendas, propietarios, planes y suscripciones. |
 
 Reglas:
 
@@ -437,6 +438,7 @@ No mostrar estas variables en logs ni respuestas. Nunca versionar `.env`, `.env.
 | Health operativo | `routes/health.js`, `routes/admin-health.js`, `services/operational-health-service.js`, `services/backup-status-service.js`, `services/operational-state-tracker.js`, `services/operational-event-dispatcher.js`, `services/server-lifecycle-service.js`, `scripts/check-operational-health.js` |
 | Compensaciones C1-C4A | `config/compensation-contract.js`, migraciones `014` a `017`, `routes/sales-compensations.js`, `routes/financial-compensations.js`, servicios `*compensation*`, comprobadores y pruebas `*compensation*` |
 | Interfaz C4B | `public/js/compensation-ui.js`, `public/css/styles.css`, `services/compensation-query-service.js`, `services/compensation-export-service.js`, pruebas `test:compensation-*` |
+| Auditoria administrativa AUD-A | `config/administrative-audit-contract.js`, `services/administrative-audit-service.js`, migracion `018`, comprobador y prueba `administrative-audit` |
 | Migrador | `scripts/migrate-db.js`, `scripts/migration-state/legacy-migrations.js` |
 | Backups | `scripts/backup-db.js`, `scripts/backup-utils.js`, `scripts/verify-db-backup.js`, `scripts/test-db-restore.js`, `scripts/cleanup-db-backups.js` |
 
@@ -448,7 +450,7 @@ No mostrar estas variables en logs ni respuestas. Nunca versionar `.env`, `.env.
   responsive y accesible, con exportaciones CSV/XLSX protegidas. El credito a
   favor permanece fuera de alcance.
 - No existe inventario fisico integral ni flujo final de conciliacion operativa para produccion.
-- La auditoria administrativa es parcial; varios modulos guardan actor y fechas, pero falta una bitacora global inmutable.
+- AUD-A aporta una bitacora global inmutable para eventos administrativos criticos. AUD-B debe agregar consulta protegida, filtros, pantalla y politica operativa de retencion.
 - Las sugerencias de reposicion requieren una revision final sobre stock vendible y reglas de compra.
 - Los backups son locales. No hay almacenamiento remoto, cifrado propio, programacion automatica, rotacion distribuida ni monitoreo externo.
 - Los backups contienen datos sensibles y deben residir en disco cifrado o almacenamiento seguro. No enviarlos por correo o WhatsApp.
@@ -474,8 +476,8 @@ No mostrar estas variables en logs ni respuestas. Nunca versionar `.env`, `.env.
 
 No alterar este orden sin una decision explicita:
 
-1. Cerrar C4B con revision, commit y push autorizados.
-2. Auditoria administrativa minima.
+1. Cerrar AUD-A y aplicar 018 mediante un procedimiento autorizado.
+2. AUD-B: consulta y experiencia administrativa de auditoria.
 3. Correcciones finales de stock y reposicion.
 4. Fase 11: acceso publico.
 5. Suscripciones comerciales.
