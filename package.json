@@ -57,6 +57,9 @@
     "test:sales-compensations": "node scripts/test-sales-compensations.js",
     "test:financial-compensations": "node scripts/test-financial-compensations.js",
     "test:compensation-integration": "node scripts/test-compensation-integration.js",
+    "test:compensation-interface": "node scripts/test-compensation-interface.js",
+    "test:compensation-frontend": "node scripts/test-compensation-frontend.js",
+    "test:compensation-browser": "node scripts/test-compensation-browser.js",
     "check:operational-health": "node scripts/check-operational-health.js",
     "check:web-security": "node scripts/check-web-security.js"
   },

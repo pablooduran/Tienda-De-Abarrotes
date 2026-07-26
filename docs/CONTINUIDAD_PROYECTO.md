@@ -6,10 +6,11 @@ Documento de relevo tecnico para continuar el proyecto sin depender del historia
 
 - Repositorio obligatorio: `pablooduran/Tienda-De-Abarrotes`
 - Rama de trabajo obligatoria: `mejora-multitienda`
-- HEAD base de C4A: `6b25467 feat: agregar compensaciones financieras`
+- HEAD base de C4B: `dbe178e feat: integrar liquidaciones y reportes compensatorios`
 - No trabajar directamente en `main`.
 - El HEAD indicado es una referencia local conocida. Confirmar si tambien existe en el remoto antes de depender de el para una recuperacion.
-- La base principal local estaba en 016 y el working tree limpio antes de C4A.
+- La base principal local esta en 017. C4B no agrega migraciones ni modifica
+  datos comerciales preexistentes.
 
 Comprobacion inicial obligatoria:
 
@@ -46,7 +47,7 @@ Si la rama, el HEAD o el estado difieren, detenerse y entender los cambios exist
 | `routes/` | Contratos HTTP de autenticacion, administracion y modulos comerciales. |
 | `services/` | Reglas de negocio, transacciones, reportes, POS, stock, clientes y cobranza. |
 | `public/` | Aplicacion web, administracion, login, estilos y JavaScript del navegador. |
-| `database/migrations/` | Migraciones historicas y modernas, numeradas de 001 a 016; 016 permanece sin aplicar en la base principal. |
+| `database/migrations/` | Migraciones historicas y modernas, numeradas de 001 a 017; la base principal local validada esta en 017. |
 | `database/tienda_abarrotes.sql` | Esquema inicial equivalente al estado final esperado. |
 | `scripts/` | Migrador, comprobadores, pruebas, administracion local y backups. |
 | `utils/` | Utilidades compartidas, incluidas fechas locales y errores. |
@@ -113,7 +114,7 @@ El contexto de tienda proviene de la sesion validada. El navegador no debe envia
 | Migraciones historicas 001-003 | Terminado | Inspectores semanticos, recuperacion por pasos y prueba en bases temporales. |
 | Backups y restauracion | Terminado | Backup, manifiesto, hash, verificacion y restauracion probada en base temporal. |
 | Healthcheck, monitoreo y alertas | B1-B3 terminados; proveedores externos pendientes | Liveness, readiness, arranque/cierre, diagnostico superadmin, backups read-only, transiciones, anti-spam y comprobador operativo implementados. No hay envio externo. |
-| Anulaciones y compensaciones | C1-C3 terminados; C4A implementado sin aplicar 017 en la base principal | C4A agrega liquidaciones materiales, reportes netos y comprobantes separados. Frontend y exportaciones finales quedan para C4B. |
+| Anulaciones y compensaciones | C1-C4B implementados | API transaccional, inventario y lotes, liquidaciones, reportes netos, comprobantes, interfaz, CSV/XLSX y pruebas de navegador. La base local esta en 017. |
 | Auditoria administrativa global | Parcial | Existen actores y fechas en modulos concretos, pero no una bitacora global e inmutable. |
 | Correcciones finales de stock/reposicion | Pendiente | Revision de stock vendible y reglas de sugerencia antes de produccion. |
 | Fase 11 - acceso publico | No iniciada | Registro publico, alta automatica, verificacion, recuperacion y proteccion antiabuso. |
@@ -209,9 +210,8 @@ Un downgrade no borra ni oculta deuda existente. Se mantiene la consulta histori
 ## 5. Migraciones
 
 No renumerar, editar ni reemplazar migraciones aplicadas. La base local principal
-conocida `tienda_abarrotes_pruebas` esta en 015. El repositorio incorpora 016,
-pero C3 la prueba unicamente en bases temporales aisladas y no autoriza aplicarla
-sobre la base principal.
+conocida `tienda_abarrotes_pruebas` esta validada en 017. C4B no agrega
+migraciones ni modifica el esquema.
 
 | Migracion | Objetivo principal |
 | --- | --- |
@@ -436,6 +436,7 @@ No mostrar estas variables en logs ni respuestas. Nunca versionar `.env`, `.env.
 | Frontend comun | `public/app.html`, `public/js/app.js`, `public/js/http-security.js`, `public/css/styles.css` |
 | Health operativo | `routes/health.js`, `routes/admin-health.js`, `services/operational-health-service.js`, `services/backup-status-service.js`, `services/operational-state-tracker.js`, `services/operational-event-dispatcher.js`, `services/server-lifecycle-service.js`, `scripts/check-operational-health.js` |
 | Compensaciones C1-C4A | `config/compensation-contract.js`, migraciones `014` a `017`, `routes/sales-compensations.js`, `routes/financial-compensations.js`, servicios `*compensation*`, comprobadores y pruebas `*compensation*` |
+| Interfaz C4B | `public/js/compensation-ui.js`, `public/css/styles.css`, `services/compensation-query-service.js`, `services/compensation-export-service.js`, pruebas `test:compensation-*` |
 | Migrador | `scripts/migrate-db.js`, `scripts/migration-state/legacy-migrations.js` |
 | Backups | `scripts/backup-db.js`, `scripts/backup-utils.js`, `scripts/verify-db-backup.js`, `scripts/test-db-restore.js`, `scripts/cleanup-db-backups.js` |
 
@@ -443,7 +444,9 @@ No mostrar estas variables en logs ni respuestas. Nunca versionar `.env`, `.env.
 
 - C2 permite anular o devolver ventas por API; C3 resuelve deuda y crea obligaciones; C4A materializa reembolsos o compensaciones por otro medio sin editar historicos.
 - El credito a favor operativo sigue pendiente: no existe todavia un libro seguro de emision y consumo y nunca debe simularse con un fiado negativo.
-- C4A aporta reportes netos y comprobantes de compensacion. Frontend y exportaciones finales corresponden a C4B.
+- C4A aporta reportes netos y comprobantes; C4B los integra en una interfaz
+  responsive y accesible, con exportaciones CSV/XLSX protegidas. El credito a
+  favor permanece fuera de alcance.
 - No existe inventario fisico integral ni flujo final de conciliacion operativa para produccion.
 - La auditoria administrativa es parcial; varios modulos guardan actor y fechas, pero falta una bitacora global inmutable.
 - Las sugerencias de reposicion requieren una revision final sobre stock vendible y reglas de compra.
@@ -471,7 +474,7 @@ No mostrar estas variables en logs ni respuestas. Nunca versionar `.env`, `.env.
 
 No alterar este orden sin una decision explicita:
 
-1. Validar y cerrar C3; no aplicar 016 sobre la base principal sin autorizacion y backup verificado. Despues continuar C4 con reportes, comprobantes y frontend.
+1. Cerrar C4B con revision, commit y push autorizados.
 2. Auditoria administrativa minima.
 3. Correcciones finales de stock y reposicion.
 4. Fase 11: acceso publico.
@@ -576,16 +579,15 @@ En ambos casos, conservar el repositorio o base anterior hasta completar smoke t
 ### Git
 
 - Rama local: `mejora-multitienda`.
-- HEAD base de C4A: `6b25467 feat: agregar compensaciones financieras`.
-- Working tree: contiene exclusivamente la implementacion C4A hasta que se autorice su commit.
+- HEAD base de C4B: `dbe178e feat: integrar liquidaciones y reportes compensatorios`.
+- Working tree esperado durante C4B: contiene exclusivamente interfaz,
+  consultas, exportaciones, pruebas y documentacion de compensaciones.
 - No consta despliegue de este estado. Verificar el remoto antes de asumir que todos los commits locales fueron publicados.
 
 ### Base local
 
 - Base de pruebas esperada: `tienda_abarrotes_pruebas`.
-- Migraciones registradas en la base principal conocida: 001 a 016. El repositorio
-  incorpora 017, ensayada solo en bases temporales y pendiente de aplicacion
-  expresamente autorizada.
+- Migraciones registradas en la base principal conocida: 001 a 017.
 - No deberian existir bases `tmp_tienda_restore_*` ni `tmp_tienda_legacy_*` despues de las pruebas.
 
 ### Ultimo estado conocido de pruebas
@@ -603,10 +605,16 @@ Han sido validadas en bloques anteriores:
 - Compensaciones C2: `test:sales-compensations` valido 015 en base temporal,
   anulacion total, devolucion parcial/acumulada, idempotencia, concurrencia,
   rollback, stock simple, lotes vigentes/vencidos, liquidaciones pendientes,
-  tenant, plan y CSRF; la base principal esta en 015.
+  tenant, plan y CSRF; la base principal actualmente validada esta en 017.
 - Compensaciones C3: `test:financial-compensations` valida 016 con el migrador
   real solo en base temporal, deuda, reembolsos pendientes, cobros, metodos,
-  concurrencia, rollback, tenant, plan y CSRF; la base principal permanece en 015.
+  concurrencia, rollback, tenant, plan y CSRF.
+- Compensaciones C4A: `test:compensation-integration` valida liquidaciones
+  materiales, reportes netos, cierres y comprobantes sobre 017.
+- Compensaciones C4B: `test:compensation-interface`,
+  `test:compensation-frontend` y `test:compensation-browser` validan filtros,
+  CSV/XLSX, formula injection, interfaz, teclado, foco, impresion, responsive y
+  doble envio sin tocar la base principal.
 - Backup: `test:backup-restore` con 26 comprobaciones, backup real local, verificacion de hash/manifiesto y restauracion temporal.
 - Durante la restauracion se ejecutaron `db:check-legacy-migrations`, `db:check-session-security`, `db:check-timezone-tls` y `db:check-customers-credit` contra la base temporal.
 - La validacion final de backup elimino los archivos generados y la base temporal; no dejo procesos auxiliares activos.

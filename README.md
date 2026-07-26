@@ -227,7 +227,71 @@ neta. La compensacion de venta afecta ingreso, costo y rentabilidad en la fecha
 en que se aplica; el reembolso material afecta caja en su propia fecha y no
 vuelve a descontar el ingreso. Los cierres ya guardados quedan congelados. Los
 nuevos cierres conservan campos explicativos de compensaciones y reembolsos.
-Las exportaciones finales y el frontend de compensaciones quedan para C4B.
+### Interfaz y exportaciones de compensaciones
+
+La seccion **Compensaciones** esta disponible cuando el plan incluye
+`anulaciones_operativas`. Permite consultar el historial con filtros de fecha,
+tipo, estado, responsable, cliente y venta; revisar una venta antes de anularla
+o devolver productos; elegir el tratamiento de inventario; resolver efectos
+financieros; registrar reembolsos materiales; compensar cobros; corregir
+metodos de pago; y consultar comprobantes imprimibles.
+
+Las acciones mantienen una clave idempotente durante los reintentos del mismo
+formulario. El boton se bloquea durante la solicitud, pero la proteccion
+definitiva permanece en el backend. Toda accion exige motivo, confirmacion
+explicita y, para `otro_controlado`, una observacion suficiente. El registro
+original nunca se borra ni se presenta como editable.
+
+Consultas de C4B:
+
+```text
+GET /api/compensaciones
+GET /api/compensaciones/opciones
+GET /api/compensaciones/pendientes
+GET /api/compensaciones/ventas/:idVenta/contexto
+GET /api/compensaciones/:id
+```
+
+Exportaciones protegidas:
+
+```text
+GET /api/compensaciones/exportaciones/:tipo.csv
+GET /api/compensaciones/exportaciones/:tipo.xlsx
+```
+
+Los tipos admitidos son `historial`, `devoluciones`, `liquidaciones`,
+`finanzas-netas`, `cuentas-por-cobrar` y `metodos-pago`. Todas requieren
+`anulaciones_operativas`; las exportaciones requieren ademas
+`exportacion_reportes`, usan un limite explicito de 10000 filas y devuelven
+413 sin truncamiento silencioso. CSV y XLSX neutralizan formulas iniciadas por
+`=`, `+`, `-` o `@`, incluso si estan ocultas tras espacios o controles. Los
+XLSX conservan numeros y fechas como tipos reales.
+
+Los reportes mantienen estas identidades:
+
+- neto comercial = bruto - compensacion comercial;
+- el reembolso material se informa por separado y afecta caja en su fecha real;
+- la reduccion de deuda afecta cuentas por cobrar;
+- una correccion de metodo no cambia el total neto;
+- los cierres historicos no se recalculan.
+
+Los comprobantes de anulacion, devolucion, liquidacion, compensacion de cobro y
+correccion de pago se imprimen desde el navegador. No incluyen claves
+idempotentes, huellas ni datos tecnicos, y declaran que no son facturas
+fiscales. El credito a favor sigue deliberadamente no disponible.
+
+Pruebas de C4B:
+
+```powershell
+npm.cmd run test:compensation-interface
+npm.cmd run test:compensation-frontend
+npm.cmd run test:compensation-browser
+```
+
+La prueba de navegador usa Edge o Chrome instalado, un servidor HTTP temporal y
+respuestas aisladas sin tocar MySQL. Comprueba interfaz, doble envio,
+idempotencia, XSS, teclado, foco, impresion, descargas, permisos y vistas
+360x800, 768x1024 y 1366x768; cierra servidor y navegador al terminar.
 
 La ruta canonica de C2 es:
 
@@ -274,8 +338,8 @@ mientras exista una liquidacion `pendiente_c3`.
 Todas las rutas de C3 exigen sesion, tenant, suscripcion activa, proteccion de
 origen/CSRF, rate limiting e `anulaciones_operativas`. La misma clave y huella
 devuelve el resultado aplicado; otra huella responde `409
-OPERATION_KEY_CONFLICT`. Reportes netos, comprobantes y frontend permanecen
-fuera de C3.
+OPERATION_KEY_CONFLICT`. Reportes netos, comprobantes y frontend quedaron
+fuera de C3 y se implementaron posteriormente en C4A y C4B.
 
 ### Migraciones historicas 001-003
 
@@ -874,7 +938,7 @@ Los segmentos disponibles y sus reglas son:
 
 Los valores predeterminados pueden ajustarse mediante parametros validados; `pageSize` y `limiteResultados` admiten de 1 a 100 filas por pagina. `fechaDesde` y `fechaHasta` son fechas civiles inclusivas de `America/La_Paz`; internamente se usa un rango `DATETIME` semiabierto. La busqueda cubre nombre, telefono y documento normalizado. `estadoCliente` admite unicamente `activos`, `ocultos` o `todos`, y los campos de orden usan una lista permitida.
 
-La respuesta incluye `descripcion`, `criterios`, `parametrosAplicados`, resumen global, resultados explicados y paginacion. Los filtros y agregados se aplican antes de `LIMIT/OFFSET`; las metricas no se reconstruyen con la pagina visible. C2 ya puede cambiar `venta.estadoOperacion`, pero segmentacion y reportes aun no calculan importes netos de compensaciones; esa integracion debe hacerse de forma central en un bloque posterior. Para volumenes grandes conviene medir los planes de ejecucion; los indices actuales por tienda, cliente y fecha soportan la primera version, pero una migracion futura puede incorporar indices especializados segun datos reales.
+La respuesta incluye `descripcion`, `criterios`, `parametrosAplicados`, resumen global, resultados explicados y paginacion. Los filtros y agregados se aplican antes de `LIMIT/OFFSET`; las metricas no se reconstruyen con la pagina visible. La segmentacion conserva sus metricas historicas de clientes y no sustituye los reportes financieros netos de compensaciones. Para volumenes grandes conviene medir los planes de ejecucion; los indices actuales por tienda, cliente y fecha soportan la primera version, pero una migracion futura puede incorporar indices especializados segun datos reales.
 
 ### Seguridad y revocacion de sesiones
 
@@ -1031,8 +1095,8 @@ Limitaciones conocidas y trabajo futuro:
 - Los historiales resumidos de la ficha muestran los 20 registros mas recientes y remiten al estado de cuenta para la cronologia completa.
 - Los comprobantes no son facturas fiscales y los nombres de tienda, cliente y responsable no tienen snapshots historicos.
 - WhatsApp solo prepara texto y enlaces `https://wa.me/`; no envia mensajes automaticamente.
-- No se generan PDF. C2 aporta una API de anulaciones y devoluciones de venta, pero todavia no existe interfaz, comprobante ni integracion de importes netos en reportes. Tampoco se implementa portal publico del cliente.
-- Los segmentos se calculan con el modelo historico vigente y aun no descuentan compensaciones aplicadas; no se implementa un segmento predictivo de abandono.
+- No se generan PDF. Los comprobantes compensatorios se imprimen como HTML y no son facturas fiscales. Tampoco se implementa portal publico del cliente.
+- Los segmentos se calculan con el modelo historico de clientes; los importes contables netos se consultan en los reportes financieros compensatorios. No se implementa un segmento predictivo de abandono.
 - Los limites XLSX son 5000 clientes, 10000 fiados y 20000 movimientos de estado de cuenta, salvo configuracion explicita.
 
 `npm audit` informa dos entradas moderadas relacionadas: `exceljs@4.4.0` queda marcado por su dependencia transitiva `uuid@8.3.2`, afectada por `GHSA-w5hq-g745-h8pq`. No hay hallazgos altos o criticos en este informe. La correccion automatica propuesta implica un cambio mayor o una degradacion de ExcelJS, por lo que no debe ejecutarse `npm audit fix --force`; la actualizacion se evaluara de forma controlada cuando ExcelJS publique o adopte una version compatible de UUID.

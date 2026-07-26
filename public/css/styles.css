@@ -1510,6 +1510,182 @@ textarea:focus-visible { outline: 3px solid rgba(40, 106, 89, .28); outline-offs
   border: 0;
 }
 
+/* Compensaciones operativas */
+.compensation-heading {
+  display: flex;
+  justify-content: space-between;
+  align-items: end;
+  gap: 16px;
+  margin-bottom: 14px;
+}
+.compensation-heading h3 { margin: 4px 0; font-size: 24px; }
+.compensation-heading p { margin: 0; color: var(--muted); }
+.compensation-tabs {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 14px;
+  overflow-x: auto;
+}
+.compensation-tabs button {
+  flex: 0 0 auto;
+  color: #31433d;
+  background: #e8eeeb;
+  border: 1px solid #d2ddd8;
+}
+.compensation-tabs button.active {
+  color: #fff;
+  background: var(--brand);
+  border-color: var(--brand);
+}
+.compensation-filters {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(130px, 1fr));
+  gap: 10px;
+  align-items: end;
+}
+.compensation-summary { margin-bottom: 14px; }
+.compensation-summary .card span { color: var(--muted); }
+.compensation-table td small { display: block; margin-top: 4px; color: var(--muted); }
+.compensation-mobile-list { display: none; }
+.compensation-card {
+  display: grid;
+  gap: 10px;
+  padding: 13px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: #fff;
+}
+.compensation-card header {
+  display: flex;
+  justify-content: space-between;
+  align-items: start;
+  gap: 10px;
+}
+.compensation-card p,
+.compensation-card small { margin: 0; }
+.compensation-card small { color: var(--muted); }
+.compensation-status {
+  display: inline-flex;
+  width: fit-content;
+  min-height: 26px;
+  align-items: center;
+  padding: 4px 8px;
+  border: 1px solid #cbd4da;
+  border-radius: 999px;
+  color: #42515b;
+  background: #f3f6f7;
+  font-size: 12px;
+  font-weight: 800;
+}
+.compensation-status.status-vigente,
+.compensation-status.status-aplicada,
+.compensation-status.status-resuelta,
+.compensation-status.status-reembolsado,
+.compensation-status.status-compensado { color: var(--ok); background: #e6f4ee; border-color: #b8e0cc; }
+.compensation-status.status-devuelta_parcial,
+.compensation-status.status-pendiente,
+.compensation-status.status-pendiente_c3,
+.compensation-status.status-solicitada,
+.compensation-status.status-pendiente_aprobacion { color: #725500; background: #fff8dc; border-color: #e8cc72; }
+.compensation-status.status-anulada,
+.compensation-status.status-rechazada,
+.compensation-status.status-fallida,
+.compensation-status.status-cancelada { color: var(--danger); background: #fff0ef; border-color: #e7aaa5; }
+.compensation-preview {
+  margin: 12px 0;
+  padding: 12px;
+  border-left: 4px solid var(--brand);
+  background: #f2f7f5;
+}
+.compensation-expected {
+  margin: 12px 0;
+  padding: 12px;
+  border: 1px solid #cbded6;
+  background: #f8faf9;
+}
+.compensation-expected h4 { margin: 0 0 10px; }
+.compensation-expected dl {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+  margin: 0 0 8px;
+}
+.compensation-expected dt { color: var(--muted); font-size: 12px; }
+.compensation-expected dd { margin: 3px 0 0; font-weight: 700; }
+.compensation-expected small { color: var(--muted); }
+.compensation-preview h4 { margin: 0 0 10px; }
+.compensation-preview dl,
+.compensation-detail-grid,
+.receipt-details {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+.compensation-preview dl,
+.compensation-detail-grid { margin: 0; }
+.compensation-preview dt,
+.compensation-detail-grid dt,
+.compensation-receipt dt { color: var(--muted); font-size: 12px; }
+.compensation-preview dd,
+.compensation-detail-grid dd,
+.compensation-receipt dd { margin: 3px 0 0; overflow-wrap: anywhere; }
+.compensation-detail-editor { display: grid; gap: 10px; }
+.compensation-detail-row {
+  display: grid;
+  grid-template-columns: minmax(220px, 1.5fr) minmax(100px, .5fr) minmax(190px, 1fr);
+  gap: 10px;
+  align-items: end;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+}
+.compensation-detail-row small { display: block; color: var(--muted); }
+.confirmation-check {
+  display: flex;
+  flex-direction: row;
+  align-items: start;
+  gap: 9px;
+}
+.confirmation-check input { width: auto; margin-top: 3px; }
+.compensation-pending-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+.compensation-sale-search {
+  display: grid;
+  grid-template-columns: minmax(180px, 320px) auto;
+  gap: 10px;
+  align-items: end;
+}
+.compensation-export-grid { display: grid; gap: 8px; }
+.compensation-export-grid > div {
+  display: grid;
+  grid-template-columns: minmax(220px, 1fr) auto auto;
+  gap: 8px;
+  align-items: center;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+}
+.compensation-receipt {
+  max-width: 760px;
+  margin: 0 auto;
+  padding: 18px;
+  border: 1px dashed #aabbb4;
+  background: #fff;
+}
+.compensation-receipt > header {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  border-bottom: 1px solid var(--line);
+  padding-bottom: 12px;
+}
+.compensation-receipt > header h2 { margin: 3px 0; }
+.compensation-receipt > header div:last-child { text-align: right; }
+.compensation-receipt .receipt-details { margin: 14px 0; }
+
 /* Clientes, credito y cobranza */
 .credit-heading {
   display: flex;
@@ -1872,9 +2048,29 @@ textarea:focus-visible { outline: 3px solid rgba(40, 106, 89, .28); outline-offs
   .inventory-section-heading { align-items: stretch; flex-direction: column; }
   .lot-filters,
   .lot-detail-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .compensation-filters { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .compensation-detail-row { grid-template-columns: 1fr 1fr; }
+  .compensation-detail-row > :first-child { grid-column: 1 / -1; }
+  .compensation-pending-grid { grid-template-columns: 1fr; }
+  .compensation-expected dl { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 
 @media (max-width: 560px) {
+  .compensation-table { display: none; }
+  .compensation-mobile-list { display: grid; gap: 10px; }
+  .compensation-filters,
+  .compensation-preview dl,
+  .compensation-expected dl,
+  .compensation-detail-grid,
+  .compensation-detail-row,
+  .compensation-sale-search,
+  .compensation-export-grid > div,
+  .compensation-receipt > header,
+  .compensation-receipt .receipt-details { grid-template-columns: 1fr; }
+  .compensation-detail-row > :first-child { grid-column: auto; }
+  .compensation-export-grid button { width: 100%; }
+  .compensation-receipt > header { display: grid; }
+  .compensation-receipt > header div:last-child { text-align: left; }
   .customer-desktop-table, .collection-desktop-table, .segmentation-desktop-table { display: none; }
   .customer-mobile-list, .collection-mobile-list, .segmentation-mobile-list { display: grid; gap: 10px; }
   .credit-filters, .collection-filters, .segmentation-filters, .profile-details, .statement-summary,
@@ -2002,4 +2198,32 @@ textarea:focus-visible { outline: 3px solid rgba(40, 106, 89, .28); outline-offs
   body.printing-receipt .receipt { max-width: 80mm; margin: 0 auto; padding: 0; border: 0; }
   body.printing-receipt .receipt-actions,
   body.printing-receipt .receipt-modal > h3 { display: none !important; }
+  body.printing-compensation > * { display: none !important; }
+  body.printing-compensation #modalRoot,
+  body.printing-compensation .modal-backdrop,
+  body.printing-compensation .compensation-modal,
+  body.printing-compensation .modal-body,
+  body.printing-compensation .compensation-receipt { display: block !important; }
+  body.printing-compensation #modalRoot,
+  body.printing-compensation .modal-backdrop,
+  body.printing-compensation .compensation-modal {
+    position: static;
+    width: 100%;
+    max-width: none;
+    max-height: none;
+    overflow: visible;
+    padding: 0;
+    border: 0;
+    box-shadow: none;
+  }
+  body.printing-compensation .compensation-modal > h3,
+  body.printing-compensation .modal-actions { display: none !important; }
+  body.printing-compensation .compensation-receipt {
+    max-width: 190mm;
+    margin: 0 auto;
+    padding: 0;
+    border: 0;
+    font-size: 10pt;
+  }
+  body.printing-compensation .receipt-lines > div { break-inside: avoid; }
 }

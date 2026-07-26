@@ -14,6 +14,7 @@ let lastBarcodeScan = { value: '', at: 0 };
 let inventoryUi = { activeTab: 'resumen', rankingMode: 'ingresos', movementClass: '', data: {} };
 let lotUi = { page: 1, pages: 1, activeTab: 'lotes' };
 let customerCreditUi = null;
+let compensationUi = null;
 
 const sections = [
   ['inicio', 'Inicio', 'Resumen general del negocio'],
@@ -29,6 +30,7 @@ const sections = [
   ['pagos', 'Cobranza', 'Deudas, pagos, promesas y recordatorios'],
   ['gastos', 'Gastos', 'Egresos operativos y categorias'],
   ['finanzas', 'Finanzas', 'Ventas, cobros, costos y ganancias'],
+  ['compensaciones', 'Compensaciones', 'Anulaciones, devoluciones y ajustes trazables'],
   ['cierreCaja', 'Cierre de caja', 'Control de efectivo por periodo'],
   ['reportes', 'Reportes', 'Consultas, filtros y ganancias']
 ];
@@ -306,6 +308,28 @@ function creditUi() {
   return customerCreditUi;
 }
 
+function operationalCompensationUi() {
+  if (!compensationUi) {
+    compensationUi = window.CompensationUI.create({
+      api,
+      view,
+      modalRoot,
+      getState: () => state,
+      hasFeature,
+      escapeHtml,
+      money,
+      formatDate,
+      showError,
+      showSuccess,
+      showMessage,
+      newOperationKey,
+      secureFetch: SecurityHttp.secureFetch,
+      errorFromResponse: SecurityHttp.errorFromResponse
+    });
+  }
+  return compensationUi;
+}
+
 function hasLotOperationalAccess() {
   return ['control_lotes', 'alertas_vencimiento', 'trazabilidad_lotes', 'exportacion_lotes', 'vencimientos_lote']
     .some(hasFeature) || Number(state.lotAccess?.productosControlados || 0) > 0;
@@ -315,6 +339,7 @@ function sectionAllowed(id) {
   const features = state.context?.caracteristicas || [];
   if (id === 'gastos') return features.includes('gastos');
   if (id === 'finanzas') return features.includes('reportes_financieros');
+  if (id === 'compensaciones') return features.includes('anulaciones_operativas');
   if (id === 'cierreCaja') return features.includes('cierre_caja');
   if (id === 'inventarioInteligente') return features.includes('inventario_resumen');
   if (id === 'lotesVencimientos') return hasLotOperationalAccess();
@@ -366,10 +391,14 @@ async function loadView(id) {
   title.textContent = section[1];
   subtitle.textContent = section[2];
   await refreshCatalogs();
-  const handlers = { inicio, productos, movimientosStock, inventarioInteligente, lotesVencimientos, clientes, proveedores, ventas, compras, historialVentas, pagos, gastos, finanzas, cierreCaja, reportes };
+  const handlers = { inicio, productos, movimientosStock, inventarioInteligente, lotesVencimientos, clientes, proveedores, ventas, compras, historialVentas, pagos, gastos, finanzas, compensaciones, cierreCaja, reportes };
   if (!handlers[id] || !sectionAllowed(id)) return loadView('inicio');
   await handlers[id]();
   applyReadOnlyUi();
+}
+
+async function compensaciones() {
+  await operationalCompensationUi().render();
 }
 
 function chartTooltip(canvas) {

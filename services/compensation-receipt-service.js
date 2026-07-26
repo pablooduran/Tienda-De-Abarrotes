@@ -20,12 +20,14 @@ async function saleCompensationReceipt(connection, idTienda, sourceId) {
             cv.costoCompensado, cv.creadoEn, v.codigoComprobante,
             v.estadoOperacion, oc.motivoCodigo, oc.observacion,
             a.usuario responsable, t.nombre tienda,
+            COALESCE(c.nombre,'Cliente ocasional') cliente,
             lcv.estado estadoLiquidacion,
             lcv.montoReduccionDeudaPendiente, lcv.montoReembolsoPendiente,
             ore.idObligacionReembolsoVenta, ore.estado estadoReembolso,
             ore.monto montoReembolso
      FROM compensacionVenta cv
      JOIN venta v ON v.idTienda=cv.idTienda AND v.idVenta=cv.idVenta
+     LEFT JOIN cliente c ON c.idTienda=v.idTienda AND c.idCliente=v.idCliente
      JOIN operacionCompensatoria oc
        ON oc.idTienda=cv.idTienda
       AND oc.idOperacionCompensatoria=cv.idOperacionCompensatoria
@@ -79,6 +81,7 @@ async function saleCompensationReceipt(connection, idTienda, sourceId) {
       }
     },
     tienda: { nombre: header.tienda },
+    cliente: { nombre: header.cliente },
     responsable: header.responsable,
     detalles: details
   };
@@ -92,12 +95,14 @@ async function materialSettlementReceipt(connection, idTienda, sourceId) {
             mlc.referencia, mlc.observacion, mlc.fechaMovimiento,
             mlc.periodoOriginalCerrado, v.codigoComprobante,
             ore.estado estadoObligacion, ore.monto montoObligacion,
-            oc.motivoCodigo, a.usuario responsable, t.nombre tienda
+            oc.motivoCodigo, a.usuario responsable, t.nombre tienda,
+            COALESCE(c.nombre,'Cliente ocasional') cliente
      FROM movimientoLiquidacionCompensacion mlc
      JOIN obligacionReembolsoVenta ore
        ON ore.idTienda=mlc.idTienda
       AND ore.idObligacionReembolsoVenta=mlc.idObligacionReembolsoVenta
      JOIN venta v ON v.idTienda=ore.idTienda AND v.idVenta=ore.idVenta
+     LEFT JOIN cliente c ON c.idTienda=v.idTienda AND c.idCliente=v.idCliente
      JOIN operacionCompensatoria oc
        ON oc.idTienda=mlc.idTienda
       AND oc.idOperacionCompensatoria=mlc.idOperacionCompensatoria
@@ -128,6 +133,7 @@ async function materialSettlementReceipt(connection, idTienda, sourceId) {
       montoObligacion: row.montoObligacion
     },
     tienda: { nombre: row.tienda },
+    cliente: { nombre: row.cliente },
     responsable: row.responsable
   };
 }
@@ -139,10 +145,11 @@ async function collectionCompensationReceipt(connection, idTienda, sourceId) {
             ccf.montoCompensado, ccf.metodoOriginal, ccf.metodoDestino,
             ccf.referenciaDestino, ccf.creadoEn, ccf.periodoOriginalCerrado,
             cf.idCobroFiado, oc.motivoCodigo, oc.observacion,
-            a.usuario responsable, t.nombre tienda
+            a.usuario responsable, t.nombre tienda,c.nombre cliente
      FROM compensacionCobroFiado ccf
      JOIN cobroFiado cf
        ON cf.idTienda=ccf.idTienda AND cf.idCobroFiado=ccf.idCobroFiado
+     JOIN cliente c ON c.idTienda=cf.idTienda AND c.idCliente=cf.idCliente
      JOIN operacionCompensatoria oc
        ON oc.idTienda=ccf.idTienda
       AND oc.idOperacionCompensatoria=ccf.idOperacionCompensatoria
@@ -173,6 +180,7 @@ async function collectionCompensationReceipt(connection, idTienda, sourceId) {
       periodoOriginalCerrado: Boolean(row.periodoOriginalCerrado)
     },
     tienda: { nombre: row.tienda },
+    cliente: { nombre: row.cliente },
     responsable: row.responsable
   };
 }
@@ -184,9 +192,10 @@ async function paymentCorrectionReceipt(connection, idTienda, sourceId) {
             cpv.metodoDestino, cpv.referenciaDestino, cpv.creadoEn,
             cpv.periodoOriginalCerrado, v.codigoComprobante,
             oc.motivoCodigo, oc.observacion, a.usuario responsable,
-            t.nombre tienda
+            t.nombre tienda,COALESCE(c.nombre,'Cliente ocasional') cliente
      FROM compensacionPagoVenta cpv
      JOIN venta v ON v.idTienda=cpv.idTienda AND v.idVenta=cpv.idVenta
+     LEFT JOIN cliente c ON c.idTienda=v.idTienda AND c.idCliente=v.idCliente
      JOIN operacionCompensatoria oc
        ON oc.idTienda=cpv.idTienda
       AND oc.idOperacionCompensatoria=cpv.idOperacionCompensatoria
@@ -217,6 +226,7 @@ async function paymentCorrectionReceipt(connection, idTienda, sourceId) {
       periodoOriginalCerrado: Boolean(row.periodoOriginalCerrado)
     },
     tienda: { nombre: row.tienda },
+    cliente: { nombre: row.cliente },
     responsable: row.responsable
   };
 }
