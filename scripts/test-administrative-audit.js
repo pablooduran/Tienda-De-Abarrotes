@@ -43,7 +43,7 @@ function assertSafeRuntime() {
   if (!['local', 'test'].includes(environment) || isProductionEnvironment(process.env)) {
     throw new Error('test:administrative-audit solo se permite con APP_ENV=local o test.');
   }
-  if (!['localhost', '127.0.0.1', '::1'].includes(host)) {
+  if (host !== 'localhost') {
     throw new Error('test:administrative-audit solo se permite contra MySQL local.');
   }
   const primary = String(process.env.DB_NAME || '').trim().toLowerCase();
@@ -103,7 +103,7 @@ function readSqlStatements(sql) {
     .filter((statement) => !/^DROP\s+DATABASE/i.test(statement));
 }
 
-function schemaAt017() {
+function schemaWithoutAdministrativeAudit() {
   return fs.readFileSync(SCHEMA_FILE, 'utf8').replace(
     /-- ADMINISTRATIVE_AUDIT_FOUNDATION_START[\s\S]*?-- ADMINISTRATIVE_AUDIT_FOUNDATION_END/g,
     ''
@@ -116,10 +116,14 @@ async function executeSql(connection, sql) {
   }
 }
 
-function migrationNamesBeforeRecoverableModernMigrations() {
+function repositoryMigrationNames() {
   return fs.readdirSync(path.join(ROOT, 'database', 'migrations'))
-    .filter((name) => name.endsWith('.sql') && name < '010_')
+    .filter((name) => name.endsWith('.sql'))
     .sort();
+}
+
+function historicalBaselineMigrationNames() {
+  return repositoryMigrationNames().filter((name) => name < '010_');
 }
 
 async function registerMigrations(connection) {
@@ -129,7 +133,7 @@ async function registerMigrations(connection) {
        aplicadaEn DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
      ) ENGINE=InnoDB`
   );
-  for (const name of migrationNamesBeforeRecoverableModernMigrations()) {
+  for (const name of historicalBaselineMigrationNames()) {
     await connection.query('INSERT INTO schema_migrations (nombre) VALUES (?)', [name]);
   }
 }
@@ -150,37 +154,154 @@ function runMigrator(database) {
   if (result.status !== 0) {
     throw new Error(`El migrador fallo sobre la base temporal.\n${String(result.stderr || '').slice(-2000)}`);
   }
-  check(
-    String(result.stdout).includes(`Migracion aplicada: ${MIGRATION}`),
-    'El migrador real aplica exclusivamente la migracion 018 pendiente.'
+  const applied = String(result.stdout)
+    .split(/\r?\n/)
+    .filter((line) => line.startsWith('Migracion aplicada: '))
+    .map((line) => line.slice('Migracion aplicada: '.length).trim());
+  const repositoryMigrations = new Set(repositoryMigrationNames());
+  check(applied.includes(MIGRATION),
+    'El migrador real aplica la migracion 018 sobre la base temporal.');
+  check(applied.every((name) => repositoryMigrations.has(name)),
+    'Toda migracion aplicada en la base temporal pertenece al repositorio.');
+}
+
+const PRIMARY_FINGERPRINT_TABLES = Object.freeze([
+  'tienda',
+  'administrador',
+  'plan',
+  'funcionalidad',
+  'planFuncionalidad',
+  'suscripcionTienda',
+  'cliente',
+  'proveedor',
+  'producto',
+  'compra',
+  'detalleCompra',
+  'venta',
+  'detalleVenta',
+  'pagoVenta',
+  'fiado',
+  'detalleFiado',
+  'pagoFiado',
+  'cobroFiado',
+  'movimientoStock',
+  'loteProducto',
+  'movimientoLote',
+  'gasto',
+  'cierreCaja',
+  'operacionCompensatoria',
+  'compensacionVenta',
+  'compensacionPagoVenta',
+  'compensacionCobroFiado',
+  'obligacionReembolsoVenta',
+  'movimientoLiquidacionCompensacion'
+]);
+
+function quoteIdentifier(identifier) {
+  return `\`${String(identifier).replace(/`/g, '``')}\``;
+}
+
+async function aggregateTable(connection, primaryDatabase, table) {
+  const [existing] = await connection.query(
+    `SELECT TABLE_NAME
+     FROM information_schema.TABLES
+     WHERE TABLE_SCHEMA=? AND LOWER(TABLE_NAME)=LOWER(?)`,
+    [primaryDatabase, table]
+  );
+  if (!existing.length) return { exists: false };
+  const realTable = existing[0].TABLE_NAME;
+  const [columns] = await connection.query(
+    `SELECT COLUMN_NAME
+     FROM information_schema.COLUMNS
+     WHERE TABLE_SCHEMA=? AND LOWER(TABLE_NAME)=LOWER(?)
+       AND DATA_TYPE IN (
+         'tinyint','smallint','mediumint','int','bigint',
+         'decimal','numeric','float','double','real','bit'
+       )
+     ORDER BY ORDINAL_POSITION`,
+    [primaryDatabase, table]
+  );
+  const sums = columns.map(({ COLUMN_NAME }) => (
+    `COALESCE(SUM(COALESCE(${quoteIdentifier(COLUMN_NAME)},0)),0) AS ${quoteIdentifier(COLUMN_NAME)}`
+  ));
+  const [rows] = await connection.query(
+    `SELECT COUNT(*) AS __rows${sums.length ? `, ${sums.join(', ')}` : ''}
+     FROM ${quoteIdentifier(realTable)}`
+  );
+  return Object.fromEntries(
+    Object.entries(rows[0]).map(([key, value]) => [key, String(value)])
   );
 }
 
 async function primaryFingerprint(connection, primaryDatabase) {
   const [migrations] = await connection.query(
-    'SELECT nombre FROM schema_migrations ORDER BY nombre'
+    'SELECT nombre, aplicadaEn FROM schema_migrations ORDER BY nombre'
   );
-  const [commercial] = await connection.query(
-    `SELECT
-       (SELECT COUNT(*) FROM tienda) tiendas,
-       (SELECT COUNT(*) FROM administrador) administradores,
-       (SELECT COUNT(*) FROM venta) ventas,
-       (SELECT COALESCE(SUM(total),0) FROM venta) totalVentas,
-       (SELECT COUNT(*) FROM pagoVenta) pagosVenta,
-       (SELECT COALESCE(SUM(monto),0) FROM pagoVenta) totalPagosVenta,
-       (SELECT COUNT(*) FROM fiado) fiados,
-       (SELECT COALESCE(SUM(saldoPendiente),0) FROM fiado) saldoFiado`
-  );
-  const [[auditTable]] = await connection.query(
-    `SELECT COUNT(*) total FROM information_schema.TABLES
+  const [auditTables] = await connection.query(
+    `SELECT TABLE_NAME
+     FROM information_schema.TABLES
      WHERE TABLE_SCHEMA=? AND LOWER(TABLE_NAME)=LOWER('eventoAuditoriaAdministrativa')`,
     [primaryDatabase]
   );
+  const [auditColumns] = await connection.query(
+    `SELECT COLUMN_NAME, COLUMN_TYPE, IS_NULLABLE, COLUMN_DEFAULT, EXTRA, COLLATION_NAME
+     FROM information_schema.COLUMNS
+     WHERE TABLE_SCHEMA=? AND LOWER(TABLE_NAME)=LOWER('eventoAuditoriaAdministrativa')
+     ORDER BY ORDINAL_POSITION`,
+    [primaryDatabase]
+  );
+  const [auditIndexes] = await connection.query(
+    `SELECT INDEX_NAME, NON_UNIQUE, SEQ_IN_INDEX, COLUMN_NAME
+     FROM information_schema.STATISTICS
+     WHERE TABLE_SCHEMA=? AND LOWER(TABLE_NAME)=LOWER('eventoAuditoriaAdministrativa')
+     ORDER BY INDEX_NAME, SEQ_IN_INDEX`,
+    [primaryDatabase]
+  );
+  const [auditConstraints] = await connection.query(
+    `SELECT CONSTRAINT_NAME, CONSTRAINT_TYPE
+     FROM information_schema.TABLE_CONSTRAINTS
+     WHERE CONSTRAINT_SCHEMA=? AND LOWER(TABLE_NAME)=LOWER('eventoAuditoriaAdministrativa')
+     ORDER BY CONSTRAINT_NAME`,
+    [primaryDatabase]
+  );
+  const auditRows = auditTables.length
+    ? Number((await connection.query(
+      'SELECT COUNT(*) total FROM eventoAuditoriaAdministrativa'
+    ))[0][0].total)
+    : null;
+  const aggregates = {};
+  for (const table of PRIMARY_FINGERPRINT_TABLES) {
+    aggregates[table] = await aggregateTable(connection, primaryDatabase, table);
+  }
   return {
-    migrations: migrations.map((row) => row.nombre),
-    commercial: commercial[0],
-    auditTable: Number(auditTable.total)
+    migrations: migrations.map((row) => ({
+      name: row.nombre,
+      appliedAt: String(row.aplicadaEn)
+    })),
+    lastMigration: migrations.at(-1)?.nombre || null,
+    audit: {
+      present: auditTables.length === 1,
+      rows: auditRows,
+      columns: auditColumns,
+      indexes: auditIndexes,
+      constraints: auditConstraints
+    },
+    aggregates
   };
+}
+
+function fingerprintDigest(fingerprint) {
+  return crypto.createHash('sha256').update(JSON.stringify(fingerprint)).digest('hex');
+}
+
+async function temporaryDatabaseSnapshot(connection) {
+  const [rows] = await connection.query(
+    `SELECT SCHEMA_NAME
+     FROM information_schema.SCHEMATA
+     WHERE SCHEMA_NAME LIKE 'tmp\\_tienda\\_restore\\_%' ESCAPE '\\\\'
+     ORDER BY SCHEMA_NAME`
+  );
+  return rows.map((row) => row.SCHEMA_NAME);
 }
 
 function findFreePort() {
@@ -198,7 +319,9 @@ function findFreePort() {
 async function waitForServer(baseUrl, child) {
   const deadline = Date.now() + 20000;
   while (Date.now() < deadline) {
-    if (child.exitCode !== null) throw new Error('El servidor temporal termino antes de iniciar.');
+    if (child.exitCode !== null || child.signalCode !== null) {
+      throw new Error('El servidor temporal termino antes de iniciar.');
+    }
     try {
       const response = await fetch(`${baseUrl}/health/live`);
       if (response.status === 200) return;
@@ -211,13 +334,21 @@ async function waitForServer(baseUrl, child) {
 }
 
 async function stopServer(child) {
-  if (!child || child.exitCode !== null) return;
+  const stopped = () => child.exitCode !== null || child.signalCode !== null;
+  if (!child || stopped()) return;
   child.kill('SIGTERM');
   await Promise.race([
     new Promise((resolve) => child.once('exit', resolve)),
     new Promise((resolve) => setTimeout(resolve, 10000))
   ]);
-  if (child.exitCode === null) child.kill('SIGKILL');
+  if (!stopped()) {
+    child.kill('SIGKILL');
+    await Promise.race([
+      new Promise((resolve) => child.once('exit', resolve)),
+      new Promise((resolve) => setTimeout(resolve, 5000))
+    ]);
+  }
+  if (!stopped()) throw new Error('El proceso Node temporal no pudo cerrarse.');
 }
 
 class HttpSession {
@@ -428,19 +559,25 @@ async function main() {
   let temporary = null;
   let serverProcess = null;
   let serverOutput = '';
+  let temporaryDatabasesBefore = null;
 
   try {
+    temporaryDatabasesBefore = await temporaryDatabaseSnapshot(temporaryServer);
     const primaryBefore = await primaryFingerprint(primary, primaryDatabase);
-    check(primaryBefore.migrations.at(-1) === '017_integracion_compensaciones.sql',
-      'La base principal inicia exactamente en 017.');
-    check(primaryBefore.auditTable === 0, 'La base principal no contiene estructuras 018.');
+    check(primaryBefore.migrations.some((item) => item.name === MIGRATION),
+      'La base principal contiene la migracion 018 sin depender de la ultima version.');
+    check(primaryBefore.audit.present,
+      'La huella principal incluye la estructura fisica de auditoria.');
+    check(primaryBefore.migrations.at(-1)?.name === primaryBefore.lastMigration,
+      'La ultima migracion se deriva dinamicamente de schema_migrations.');
+    console.log(`Huella principal inicial: ${fingerprintDigest(primaryBefore)}`);
 
     await temporaryServer.query(
       `CREATE DATABASE ${quoteTemporaryDatabase(temporaryDatabase)}
        CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci`
     );
     temporary = await connectWithEnvironment(temporaryCredentials(temporaryDatabase));
-    await executeSql(temporary, schemaAt017());
+    await executeSql(temporary, schemaWithoutAdministrativeAudit());
     await registerMigrations(temporary);
     runMigrator(temporaryDatabase);
 
@@ -449,7 +586,10 @@ async function main() {
     const [[migrationCount]] = await temporary.query(
       'SELECT COUNT(*) total FROM schema_migrations'
     );
-    check(Number(migrationCount.total) === 18, 'La base temporal queda con 18 migraciones.');
+    check(
+      Number(migrationCount.total) === repositoryMigrationNames().length,
+      'La base temporal queda con todas las migraciones del repositorio.'
+    );
 
     const marker = crypto.randomBytes(5).toString('hex');
     const superPassword = `Super-${crypto.randomBytes(12).toString('hex')}!`;
@@ -717,6 +857,7 @@ async function main() {
     const primaryAfter = await primaryFingerprint(primary, primaryDatabase);
     check(JSON.stringify(primaryAfter) === JSON.stringify(primaryBefore),
       'La base principal conserva exactamente su huella previa.');
+    console.log(`Huella principal final: ${fingerprintDigest(primaryAfter)}`);
   } finally {
     await stopServer(serverProcess);
     if (serverOutput) {
@@ -735,6 +876,13 @@ async function main() {
         [temporaryDatabase]
       );
       check(remaining.length === 0, 'La base temporal se elimina en finally.');
+      const temporaryDatabasesAfter = await temporaryDatabaseSnapshot(temporaryServer);
+      if (temporaryDatabasesBefore) {
+        check(
+          JSON.stringify(temporaryDatabasesAfter) === JSON.stringify(temporaryDatabasesBefore),
+          'El conjunto de bases temporales queda exactamente como al inicio.'
+        );
+      }
       await temporaryServer.end();
       await primary.end();
     }
