@@ -115,10 +115,15 @@ async function executeSql(connection, sql) {
 }
 
 function schemaBeforeC3() {
-  return fs.readFileSync(SCHEMA_FILE, 'utf8').replace(
-    /-- COMPENSATION_FINANCIAL_[A-Z_]+_START[\s\S]*?-- COMPENSATION_FINANCIAL_[A-Z_]+_END/g,
-    ''
-  );
+  return fs.readFileSync(SCHEMA_FILE, 'utf8')
+    .replace(
+      /-- COMPENSATION_INTEGRATION_[A-Z_]+_START[\s\S]*?-- COMPENSATION_INTEGRATION_[A-Z_]+_END/g,
+      ''
+    )
+    .replace(
+      /-- COMPENSATION_FINANCIAL_[A-Z_]+_START[\s\S]*?-- COMPENSATION_FINANCIAL_[A-Z_]+_END/g,
+      ''
+    );
 }
 
 function migrationNames(limit) {

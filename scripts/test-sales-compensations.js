@@ -135,6 +135,10 @@ async function executeSql(connection, sql) {
 function schemaBeforeC2() {
   return fs.readFileSync(SCHEMA_FILE, 'utf8')
     .replace(
+      /-- COMPENSATION_INTEGRATION_[A-Z_]+_START[\s\S]*?-- COMPENSATION_INTEGRATION_[A-Z_]+_END/g,
+      ''
+    )
+    .replace(
       /-- COMPENSATION_FINANCIAL_[A-Z_]+_START[\s\S]*?-- COMPENSATION_FINANCIAL_[A-Z_]+_END/g,
       ''
     )
@@ -921,7 +925,7 @@ async function main() {
     const expiringLot = await createLot(temporaryConnection, fixtureA, expiringProduct, {
       code: 'LOTE-C2-VENCE',
       quantity: 4,
-      expiration: '2026-07-24',
+      expiration: '2027-07-24',
       cost: 5
     });
     const expiringSale = await saleFor(fixtureA, expiringProduct, 2, [
@@ -929,7 +933,7 @@ async function main() {
     ]);
     const futureService = createSaleCompensationService({
       pool: applicationPool,
-      now: () => new Date('2026-07-25T12:00:00-04:00')
+      now: () => new Date('2027-07-25T12:00:00-04:00')
     });
     const isolatedLotReturn = await futureService.compensateSale({
       idTienda: fixtureA.idTienda,

@@ -6,6 +6,14 @@ const {
   correctSalePaymentMethod,
   resolveSaleSettlement
 } = require('../services/financial-compensation-service');
+const { settleRefundObligation } = require('../services/material-settlement-service');
+const {
+  collectionCompensationReceipt,
+  materialSettlementReceipt,
+  paymentCorrectionReceipt,
+  saleCompensationReceipt
+} = require('../services/compensation-receipt-service');
+const pool = require('../config/db');
 
 const router = express.Router();
 
@@ -78,6 +86,62 @@ router.post(
       next(error);
     }
   }
+);
+
+router.post(
+  '/obligaciones-reembolso/:idObligacion/liquidaciones',
+  requirePlanFeature(COMPENSATION_FEATURE),
+  async (req, res, next) => {
+    try {
+      const result = await settleRefundObligation({
+        ...compensationInput(req),
+        idObligacionReembolsoVenta: req.params.idObligacion
+      });
+      res.status(result.repetida ? 200 : 201).json({
+        message: result.repetida
+          ? 'La liquidacion material ya habia sido registrada.'
+          : 'Liquidacion material registrada.',
+        ...result
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+function receiptRoute(loader) {
+  return async (req, res, next) => {
+    try {
+      res.set('Cache-Control', 'no-store');
+      res.json(await loader(pool, req.tenant.idTienda, req.params.id));
+    } catch (error) {
+      next(error);
+    }
+  };
+}
+
+router.get(
+  '/compensaciones/ventas/:id/comprobante',
+  requirePlanFeature(COMPENSATION_FEATURE),
+  receiptRoute(saleCompensationReceipt)
+);
+
+router.get(
+  '/compensaciones/liquidaciones/:id/comprobante',
+  requirePlanFeature(COMPENSATION_FEATURE),
+  receiptRoute(materialSettlementReceipt)
+);
+
+router.get(
+  '/compensaciones/cobros/:id/comprobante',
+  requirePlanFeature(COMPENSATION_FEATURE),
+  receiptRoute(collectionCompensationReceipt)
+);
+
+router.get(
+  '/compensaciones/pagos/:id/comprobante',
+  requirePlanFeature(COMPENSATION_FEATURE),
+  receiptRoute(paymentCorrectionReceipt)
 );
 
 module.exports = router;

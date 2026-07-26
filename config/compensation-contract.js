@@ -84,6 +84,11 @@ const REFUND_OBLIGATION_STATES = Object.freeze([
   'compensado'
 ]);
 
+const MATERIAL_SETTLEMENT_TYPES = Object.freeze([
+  'reembolso_realizado',
+  'compensacion_otro_medio'
+]);
+
 const COLLECTION_PAYMENT_METHODS = Object.freeze([
   'efectivo',
   'qr',
@@ -116,6 +121,7 @@ module.exports = {
   COMPENSATION_TYPES,
   INVENTORY_RETURN_RESULTS,
   INVENTORY_RETURN_TREATMENTS,
+  MATERIAL_SETTLEMENT_TYPES,
   OPERATION_KEY_PATTERN,
   REQUEST_FINGERPRINT_PATTERN,
   REFUND_OBLIGATION_STATES,

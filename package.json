@@ -27,6 +27,7 @@
     "db:check-compensations": "node scripts/check-compensations.js",
     "db:check-sales-compensations": "node scripts/check-sales-compensations.js",
     "db:check-financial-compensations": "node scripts/check-financial-compensations.js",
+    "db:check-compensation-integration": "node scripts/check-compensation-integration.js",
     "db:backup": "node scripts/backup-db.js",
     "db:verify-backup": "node scripts/verify-db-backup.js",
     "db:test-restore": "node scripts/test-db-restore.js",
@@ -55,6 +56,7 @@
     "test:compensation-foundation": "node scripts/test-compensation-foundation.js",
     "test:sales-compensations": "node scripts/test-sales-compensations.js",
     "test:financial-compensations": "node scripts/test-financial-compensations.js",
+    "test:compensation-integration": "node scripts/test-compensation-integration.js",
     "check:operational-health": "node scripts/check-operational-health.js",
     "check:web-security": "node scripts/check-web-security.js"
   },

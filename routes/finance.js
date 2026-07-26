@@ -327,8 +327,11 @@ router.get('/caja/cierres', asyncRoute(async (req, res) => {
     `SELECT c.idCierreCaja, DATE_FORMAT(c.fechaInicio,'%Y-%m-%dT%H:%i:%s') fechaInicio,
             DATE_FORMAT(c.fechaFin,'%Y-%m-%dT%H:%i:%s') fechaFin, c.efectivoInicial,
             c.efectivoVentasEsperado, c.efectivoFiadosCobrado, c.gastosEfectivo,
+            c.compensacionesEfectivo, c.reembolsosEfectivo,
+            c.compensacionesCobroTotal, c.reembolsosTotal,
             c.efectivoEsperado, c.efectivoContado, c.diferencia, c.totalQR,
-            c.totalNoEspecificado, c.totalCobrado, c.totalVentas, c.totalFiadoGenerado,
+            c.totalNoEspecificado, c.totalCobrado, c.totalVentas,
+            c.compensacionesVenta, c.liquidacionesOtroMedio, c.totalFiadoGenerado,
             c.totalGastos, c.totalCompras, c.observacion, c.estado, c.motivoAnulacion,
             c.creadoEn, c.anuladoEn, a.usuario responsable, aa.usuario anuladoPor
      FROM cierreCaja c
@@ -345,8 +348,11 @@ router.get('/caja/cierres/:id', asyncRoute(async (req, res) => {
     `SELECT c.idCierreCaja, DATE_FORMAT(c.fechaInicio,'%Y-%m-%dT%H:%i:%s') fechaInicio,
             DATE_FORMAT(c.fechaFin,'%Y-%m-%dT%H:%i:%s') fechaFin, c.efectivoInicial,
             c.efectivoVentasEsperado, c.efectivoFiadosCobrado, c.gastosEfectivo,
+            c.compensacionesEfectivo, c.reembolsosEfectivo,
+            c.compensacionesCobroTotal, c.reembolsosTotal,
             c.efectivoEsperado, c.efectivoContado, c.diferencia, c.totalQR,
-            c.totalNoEspecificado, c.totalCobrado, c.totalVentas, c.totalFiadoGenerado,
+            c.totalNoEspecificado, c.totalCobrado, c.totalVentas,
+            c.compensacionesVenta, c.liquidacionesOtroMedio, c.totalFiadoGenerado,
             c.totalGastos, c.totalCompras, c.observacion, c.estado, c.motivoAnulacion,
             c.creadoEn, c.anuladoEn, a.usuario responsable, aa.usuario anuladoPor
      FROM cierreCaja c
@@ -389,15 +395,23 @@ router.post('/caja/cierres', asyncRoute(async (req, res) => {
     const [result] = await connection.query(
       `INSERT INTO cierreCaja
        (idTienda, idAdministrador, fechaInicio, fechaFin, efectivoInicial, efectivoVentasEsperado,
-        efectivoFiadosCobrado, gastosEfectivo, efectivoEsperado, efectivoContado, diferencia,
-        totalQR, totalNoEspecificado, totalCobrado, totalVentas, totalFiadoGenerado,
+        efectivoFiadosCobrado, gastosEfectivo, compensacionesEfectivo,
+        reembolsosEfectivo, compensacionesCobroTotal, reembolsosTotal,
+        efectivoEsperado, efectivoContado, diferencia,
+        totalQR, totalNoEspecificado, totalCobrado, totalVentas, compensacionesVenta,
+        liquidacionesOtroMedio, totalFiadoGenerado,
         totalGastos, totalCompras, observacion, claveOperacion, creadoEn)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+               ?, ?, ?, ?, ?, ?)`,
       [tenantId(req), req.session.admin.id, range.inicio, range.finExclusivo,
         calculated.efectivoInicial, calculated.efectivoVentasEsperado, calculated.efectivoFiadosCobrado,
-        calculated.gastosEfectivo, calculated.efectivoEsperado, decimal(countedCents), diferencia,
+        calculated.gastosEfectivo, calculated.compensacionesEfectivo,
+        calculated.reembolsosEfectivo, calculated.compensacionesCobroTotal,
+        calculated.reembolsosTotal, calculated.efectivoEsperado,
+        decimal(countedCents), diferencia,
         calculated.totalQR, calculated.totalNoEspecificado, calculated.totalCobrado,
-        calculated.totalVentas, calculated.totalFiadoGenerado, calculated.totalGastos,
+        calculated.totalVentas, calculated.compensacionesVenta,
+        calculated.liquidacionesOtroMedio, calculated.totalFiadoGenerado, calculated.totalGastos,
         calculated.totalCompras, observacion, key, formatLocalDateTime()]
     );
     await connection.commit();

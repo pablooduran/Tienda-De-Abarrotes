@@ -165,6 +165,10 @@ function schemaWithoutCompensationFoundation() {
   const schema = fs.readFileSync(SCHEMA_FILE, 'utf8');
   return schema
     .replace(
+      /-- COMPENSATION_INTEGRATION_[A-Z_]+_START[\s\S]*?-- COMPENSATION_INTEGRATION_[A-Z_]+_END/g,
+      ''
+    )
+    .replace(
       /-- COMPENSATION_FINANCIAL_[A-Z_]+_START[\s\S]*?-- COMPENSATION_FINANCIAL_[A-Z_]+_END/g,
       ''
     )

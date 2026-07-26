@@ -30,6 +30,7 @@ const {
   COMPENSATION_TYPES,
   INVENTORY_RETURN_RESULTS,
   INVENTORY_RETURN_TREATMENTS,
+  MATERIAL_SETTLEMENT_TYPES,
   REFUND_OBLIGATION_STATES,
   SALE_PAYMENT_METHODS,
   SALE_COMPENSATION_TYPES,
@@ -716,6 +717,58 @@ const migrationRequirements = {
       ['compensacionPagoVenta', 'fk_compensacionPago_pago', ['idTienda', 'idPagoVenta'], 'pagoVenta', ['idTienda', 'idPagoVenta'], 'RESTRICT', 'RESTRICT'],
       ['compensacionPagoVenta', 'fk_compensacionPago_venta', ['idTienda', 'idVenta'], 'venta', ['idTienda', 'idVenta'], 'RESTRICT', 'RESTRICT']
     ]
+  },
+  '017_integracion_compensaciones.sql': {
+    columns: {
+      movimientoLiquidacionCompensacion: [
+        'idMovimientoLiquidacionCompensacion', 'idTienda',
+        'idOperacionCompensatoria', 'idObligacionReembolsoVenta',
+        'tipoLiquidacion', 'metodoLiquidacion', 'monto', 'referencia',
+        'observacion', 'periodoOriginalCerrado', 'fechaMovimiento',
+        'idAdministrador'
+      ],
+      cierreCaja: [
+        'compensacionesEfectivo', 'reembolsosEfectivo',
+        'compensacionesCobroTotal', 'reembolsosTotal',
+        'compensacionesVenta', 'liquidacionesOtroMedio'
+      ]
+    },
+    indexes: [
+      ['movimientoLiquidacionCompensacion',
+        'uq_movimientoLiquidacion_tienda_operacion',
+        ['idTienda', 'idOperacionCompensatoria'], true],
+      ['movimientoLiquidacionCompensacion',
+        'idx_movimientoLiquidacion_tienda_obligacion',
+        ['idTienda', 'idObligacionReembolsoVenta', 'fechaMovimiento',
+          'idMovimientoLiquidacionCompensacion'], false],
+      ['movimientoLiquidacionCompensacion',
+        'idx_movimientoLiquidacion_tienda_fecha_metodo',
+        ['idTienda', 'fechaMovimiento', 'metodoLiquidacion',
+          'idMovimientoLiquidacionCompensacion'], false]
+    ],
+    checks: [
+      ['movimientoLiquidacionCompensacion', 'chk_movimientoLiquidacion_monto'],
+      ['movimientoLiquidacionCompensacion', 'chk_movimientoLiquidacion_periodo'],
+      ['movimientoLiquidacionCompensacion', 'chk_movimientoLiquidacion_referencia'],
+      ['cierreCaja', 'chk_cierreCaja_compensaciones']
+    ],
+    foreignKeyConstraints: [
+      ['movimientoLiquidacionCompensacion',
+        'fk_movimientoLiquidacion_operacion',
+        ['idTienda', 'idOperacionCompensatoria'],
+        'operacionCompensatoria', ['idTienda', 'idOperacionCompensatoria'],
+        'RESTRICT', 'RESTRICT'],
+      ['movimientoLiquidacionCompensacion',
+        'fk_movimientoLiquidacion_obligacion',
+        ['idTienda', 'idObligacionReembolsoVenta'],
+        'obligacionReembolsoVenta', ['idTienda', 'idObligacionReembolsoVenta'],
+        'RESTRICT', 'RESTRICT'],
+      ['movimientoLiquidacionCompensacion',
+        'fk_movimientoLiquidacion_administrador',
+        ['idTienda', 'idAdministrador'],
+        'administrador', ['idTienda', 'idAdministrador'],
+        'RESTRICT', 'RESTRICT']
+    ]
   }
 };
 
@@ -1256,6 +1309,53 @@ async function requirementsSatisfied(connection, file) {
       && Number(invalid.liquidacionesInvalidas) === 0
       && Number(invalid.reembolsosInvalidos) === 0
       && Number(invalid.cobrosInvalidos) === 0;
+  }
+  if (file === '017_integracion_compensaciones.sql') {
+    const details = await normalizedColumnDetails(
+      connection,
+      'movimientoLiquidacionCompensacion',
+      ['tipoLiquidacion', 'metodoLiquidacion']
+    );
+    if (!columnDefinitionMatches(details.tipoliquidacion, {
+      type: `enum('${MATERIAL_SETTLEMENT_TYPES.join("','")}')`,
+      nullable: false,
+      defaultValue: null,
+      extra: ''
+    }) || !columnDefinitionMatches(details.metodoliquidacion, {
+      type: `enum('${COLLECTION_PAYMENT_METHODS.join("','")}')`,
+      nullable: false,
+      defaultValue: null,
+      extra: ''
+    })) return false;
+    const [[invalid]] = await connection.query(
+      `SELECT COUNT(*) total
+       FROM (
+         SELECT ore.idTienda, ore.idObligacionReembolsoVenta, ore.monto,
+                ore.estado, COALESCE(SUM(mlc.monto),0) liquidado,
+                COUNT(DISTINCT mlc.tipoLiquidacion) tipos,
+                MIN(mlc.tipoLiquidacion) tipo,
+                SUM(CASE WHEN oc.estado<>'aplicada' THEN 1 ELSE 0 END)
+                  operacionesNoAplicadas
+         FROM obligacionReembolsoVenta ore
+         LEFT JOIN movimientoLiquidacionCompensacion mlc
+           ON mlc.idTienda=ore.idTienda
+          AND mlc.idObligacionReembolsoVenta=ore.idObligacionReembolsoVenta
+         LEFT JOIN operacionCompensatoria oc
+           ON oc.idTienda=mlc.idTienda
+          AND oc.idOperacionCompensatoria=mlc.idOperacionCompensatoria
+         GROUP BY ore.idTienda, ore.idObligacionReembolsoVenta,
+                  ore.monto, ore.estado
+         HAVING liquidado>ore.monto+0.01
+            OR operacionesNoAplicadas>0
+            OR (ore.estado='pendiente' AND liquidado>=ore.monto-0.01)
+            OR (ore.estado='reembolsado'
+                AND (ABS(liquidado-ore.monto)>=0.01
+                     OR tipos<>1 OR tipo<>'reembolso_realizado'))
+            OR (ore.estado='compensado'
+                AND ABS(liquidado-ore.monto)>=0.01)
+       ) inconsistencias`
+    );
+    return Number(invalid.total) === 0;
   }
   if (file === '014_operaciones_compensatorias.sql') {
     const expectedDefinitions = {
@@ -1964,7 +2064,8 @@ async function structureElementExists(connection, element, file = null) {
     '013_seguridad_sesiones.sql',
     '014_operaciones_compensatorias.sql',
     '015_compensaciones_venta_inventario.sql',
-    '016_compensaciones_financieras.sql'
+    '016_compensaciones_financieras.sql',
+    '017_integracion_compensaciones.sql'
   ].includes(file)) {
     if (element.type === 'columna') {
       const details = await normalizedColumnDetails(connection, element.table, [element.name]);
@@ -3250,7 +3351,8 @@ async function main() {
               '013_seguridad_sesiones.sql',
               '014_operaciones_compensatorias.sql',
               '015_compensaciones_venta_inventario.sql',
-              '016_compensaciones_financieras.sql'
+              '016_compensaciones_financieras.sql',
+              '017_integracion_compensaciones.sql'
             ].includes(file)
             && !await requirementsSatisfied(connection, file);
         if (registeredMigrationIsIncomplete) {
@@ -3277,7 +3379,8 @@ async function main() {
           '013_seguridad_sesiones.sql',
           '014_operaciones_compensatorias.sql',
           '015_compensaciones_venta_inventario.sql',
-          '016_compensaciones_financieras.sql'
+          '016_compensaciones_financieras.sql',
+          '017_integracion_compensaciones.sql'
         ].includes(file)) {
           await connection.query('INSERT IGNORE INTO schema_migrations (nombre) VALUES (?)', [file]);
           const [finalRecord] = await connection.query(
@@ -3360,7 +3463,8 @@ async function main() {
           '013_seguridad_sesiones.sql',
           '014_operaciones_compensatorias.sql',
           '015_compensaciones_venta_inventario.sql',
-          '016_compensaciones_financieras.sql'
+          '016_compensaciones_financieras.sql',
+          '017_integracion_compensaciones.sql'
         ].includes(file)
           ? structureElementFromStatement(statement)
           : null;
@@ -3439,7 +3543,8 @@ async function main() {
         '013_seguridad_sesiones.sql',
         '014_operaciones_compensatorias.sql',
         '015_compensaciones_venta_inventario.sql',
-        '016_compensaciones_financieras.sql'
+        '016_compensaciones_financieras.sql',
+        '017_integracion_compensaciones.sql'
       ].includes(file)) {
         await connection.query('INSERT IGNORE INTO schema_migrations (nombre) VALUES (?)', [file]);
         const [finalRecord] = await connection.query(

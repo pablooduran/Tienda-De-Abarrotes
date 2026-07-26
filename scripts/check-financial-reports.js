@@ -9,6 +9,10 @@ const {
 } = require('./db-utils');
 
 const MIGRATION = '009_finanzas_reportes_caja.sql';
+const COMPENSATION_CLOSE_COLUMNS = Object.freeze([
+  'compensacionesEfectivo',
+  'reembolsosEfectivo'
+]);
 const REQUIRED_COLUMNS = Object.freeze({
   detalleVenta: ['origenCosto'],
   categoriaGasto: ['idCategoriaGasto', 'idTienda', 'nombre', 'nombreNormalizado', 'descripcion', 'activo', 'creadoEn', 'actualizadoEn'],
@@ -104,6 +108,11 @@ async function main() {
     };
 
     if (estructuraCompleta) {
+      const cierreCompensatorio = await hasColumns(
+        connection,
+        'cierreCaja',
+        COMPENSATION_CLOSE_COLUMNS
+      );
       datos.categoriasDuplicadas = await count(connection,
         `SELECT COUNT(*) total FROM (
            SELECT idTienda, nombreNormalizado FROM categoriaGasto
@@ -156,7 +165,12 @@ async function main() {
            AND a.fechaInicio<b.fechaFin AND b.fechaInicio<a.fechaFin`);
       datos.cierresBalanceInvalido = await count(connection,
         `SELECT COUNT(*) total FROM cierreCaja
-         WHERE ABS(efectivoEsperado-(efectivoInicial+efectivoVentasEsperado+efectivoFiadosCobrado-gastosEfectivo))>=0.01
+         WHERE ABS(efectivoEsperado-(
+           efectivoInicial+efectivoVentasEsperado+efectivoFiadosCobrado-gastosEfectivo
+           ${cierreCompensatorio
+    ? '-compensacionesEfectivo-reembolsosEfectivo'
+    : ''}
+         ))>=0.01
             OR ABS(diferencia-(efectivoContado-efectivoEsperado))>=0.01`);
       datos.responsablesCierreInvalidos = await count(connection,
         `SELECT COUNT(*) total FROM cierreCaja c

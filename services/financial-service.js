@@ -9,6 +9,13 @@ const {
   parseLocalDateTime: parseBusinessDateTime,
   startOfLocalDay
 } = require('../utils/local-datetime');
+const {
+  debtCompensationMetrics,
+  materialSettlementMetrics,
+  paymentFlowsByMethod,
+  salesCompensationMetrics,
+  salesCompensationsByDay
+} = require('./compensation-report-service');
 
 const DEFAULT_EXPENSE_CATEGORIES = Object.freeze([
   ['Servicios básicos', 'servicios basicos'],
@@ -204,7 +211,18 @@ function expensePayload(body = {}) {
 
 async function financialSummary(connection, idTienda, range) {
   const params = [idTienda, range.inicio, range.finExclusivo];
-  const [[sales], [costs], [payments], [expenses], [debts], [receivables], [purchases]] = await Promise.all([
+  const [
+    [sales],
+    [costs],
+    paymentRows,
+    [expenses],
+    [debts],
+    [receivables],
+    [purchases],
+    saleCompensations,
+    materialSettlements,
+    debtCompensations
+  ] = await Promise.all([
     connection.query(
       `SELECT COALESCE(SUM(subtotal),0) ventasBrutas, COALESCE(SUM(descuento),0) descuentos,
               COALESCE(SUM(total),0) ventasNetas, COUNT(*) cantidadVentas
@@ -222,23 +240,7 @@ async function financialSummary(connection, idTienda, range) {
        JOIN venta v ON v.idTienda=d.idTienda AND v.idVenta=d.idVenta
        WHERE d.idTienda=? AND v.fecha>=? AND v.fecha<?`, params
     ),
-    connection.query(
-      `SELECT COALESCE(SUM(pagos.monto),0) dineroCobrado,
-              COALESCE(SUM(CASE WHEN pagos.metodoPago='efectivo' THEN pagos.monto ELSE 0 END),0) efectivo,
-              COALESCE(SUM(CASE WHEN pagos.metodoPago='qr' THEN pagos.monto ELSE 0 END),0) qr,
-              COALESCE(SUM(CASE WHEN pagos.metodoPago='no_especificado' THEN pagos.monto ELSE 0 END),0) noEspecificado,
-              COALESCE(SUM(CASE WHEN pagos.metodoPago NOT IN ('efectivo','qr','no_especificado') THEN pagos.monto ELSE 0 END),0) otrosMetodos,
-              COALESCE(SUM(CASE WHEN pagos.idPagoFiado IS NOT NULL THEN pagos.monto ELSE 0 END),0) cobrosFiado
-       FROM (
-         SELECT pv.idPagoFiado, pv.monto,
-                CASE WHEN pv.idPagoFiado IS NOT NULL THEN COALESCE(cf.metodoPago,pv.metodoPago)
-                     ELSE pv.metodoPago END metodoPago
-         FROM pagoVenta pv
-         LEFT JOIN pagoFiado pf ON pf.idTienda=pv.idTienda AND pf.idPagoFiado=pv.idPagoFiado
-         LEFT JOIN cobroFiado cf ON cf.idTienda=pf.idTienda AND cf.idCobroFiado=pf.idCobroFiado
-         WHERE pv.idTienda=? AND pv.creadoEn>=? AND pv.creadoEn<?
-       ) pagos`, params
-    ),
+    paymentFlowsByMethod(connection, idTienda, range),
     connection.query(
       `SELECT COALESCE(SUM(monto),0) gastos, COUNT(*) cantidadGastos
        FROM gasto WHERE idTienda=? AND estado='registrado' AND fechaGasto>=? AND fechaGasto<?`, params
@@ -256,29 +258,61 @@ async function financialSummary(connection, idTienda, range) {
     connection.query(
       `SELECT COALESCE(SUM(total),0) compras, COUNT(*) cantidadCompras
        FROM compra WHERE idTienda=? AND fecha>=? AND fecha<?`, params
-    )
+    ),
+    salesCompensationMetrics(connection, idTienda, range),
+    materialSettlementMetrics(connection, idTienda, range),
+    debtCompensationMetrics(connection, idTienda, range)
   ]);
-  const ventasNetas = Number(sales[0].ventasNetas || 0);
-  const costoVendido = Number(costs[0].costoVendido || 0);
+  const ventasAntesCompensaciones = Number(sales[0].ventasNetas || 0);
+  const compensacionesVenta = Number(saleCompensations.montoCompensado || 0);
+  const ventasNetas = ventasAntesCompensaciones - compensacionesVenta;
+  const costoVendidoBruto = Number(costs[0].costoVendido || 0);
+  const costoCompensado = Number(saleCompensations.costoCompensado || 0);
+  const costoVendido = costoVendidoBruto - costoCompensado;
   const gastos = Number(expenses[0].gastos || 0);
-  const dineroCobrado = Number(payments[0].dineroCobrado || 0);
-  const gananciaConfirmada = Number(costs[0].gananciaConfirmada || 0);
-  const gananciaEstimada = Number(costs[0].gananciaEstimada || 0);
-  const detallesCostoDesconocido = Number(costs[0].detallesCostoDesconocido || 0);
+  const dineroCobradoBruto = paymentRows.reduce(
+    (sum, row) => sum + Number(row.bruto || 0), 0
+  );
+  const ajustesCompensatoriosCobro = paymentRows.reduce(
+    (sum, row) => sum + Number(row.ajustesCompensatorios || 0), 0
+  );
+  const reembolsosRealizados = Number(materialSettlements.reembolsosRealizados || 0);
+  const dineroCobrado = dineroCobradoBruto + ajustesCompensatoriosCobro
+    - reembolsosRealizados;
+  const gananciaConfirmada = Number(costs[0].gananciaConfirmada || 0)
+    - Number(saleCompensations.gananciaRealCompensada || 0);
+  const gananciaEstimada = Number(costs[0].gananciaEstimada || 0)
+    - Number(saleCompensations.gananciaEstimadaCompensada || 0);
+  const detallesCostoDesconocido = Number(costs[0].detallesCostoDesconocido || 0)
+    + Number(saleCompensations.detallesCostoDesconocidoCompensados || 0);
   const gananciaBruta = ventasNetas - costoVendido;
-  const gananciaBrutaCalculable = gananciaConfirmada + gananciaEstimada;
+  const gananciaBrutaCalculable = Number(costs[0].gananciaConfirmada || 0)
+    + Number(costs[0].gananciaEstimada || 0)
+    - Number(saleCompensations.gananciaCalculableCompensada || 0);
+  const method = (name) => paymentRows.find((row) => row.metodo === name);
+  const methodNet = (name) => Number(method(name)?.neto || 0);
+  const cobrosFiado = paymentRows.reduce(
+    (sum, row) => sum + Number(row.cobrosFiadoNetos || 0), 0
+  );
   return {
     rango: range,
     ventasBrutas: Number(sales[0].ventasBrutas || 0),
     descuentos: Number(sales[0].descuentos || 0),
+    ventasAntesCompensaciones,
+    compensacionesVenta,
     ventasNetas,
     cantidadVentas: Number(sales[0].cantidadVentas || 0),
+    costoVendidoBruto,
+    costoCompensado,
     costoVendido,
-    costoReal: Number(costs[0].costoReal || 0),
-    costoEstimado: Number(costs[0].costoEstimado || 0),
+    costoReal: Number(costs[0].costoReal || 0)
+      - Number(saleCompensations.costoRealCompensado || 0),
+    costoEstimado: Number(costs[0].costoEstimado || 0)
+      - Number(saleCompensations.costoEstimadoCompensado || 0),
     gananciaBrutaConfirmada: gananciaConfirmada,
     gananciaBrutaEstimada: gananciaEstimada,
-    ventasSinCosto: Number(costs[0].ventasSinCosto || 0),
+    ventasSinCosto: Number(costs[0].ventasSinCosto || 0)
+      - Number(saleCompensations.ventasSinCostoCompensadas || 0),
     detallesCostoDesconocido,
     gananciaBruta,
     gananciaBrutaCalculable,
@@ -288,13 +322,20 @@ async function financialSummary(connection, idTienda, range) {
     gananciaNetaCalculable: gananciaBrutaCalculable - gastos,
     rentabilidadCompleta: detallesCostoDesconocido === 0,
     rentabilidadExacta: detallesCostoDesconocido === 0 && Number(costs[0].costoEstimado || 0) === 0,
+    dineroCobradoBruto,
+    ajustesCompensatoriosCobro,
+    reembolsosRealizados,
+    liquidacionesOtroMedio: Number(materialSettlements.liquidacionesOtroMedio || 0),
     dineroCobrado,
-    efectivo: Number(payments[0].efectivo || 0),
-    qr: Number(payments[0].qr || 0),
-    cobrosNoEspecificados: Number(payments[0].noEspecificado || 0),
-    cobrosOtrosMetodos: Number(payments[0].otrosMetodos || 0),
-    cobrosFiado: Number(payments[0].cobrosFiado || 0),
+    efectivo: methodNet('efectivo'),
+    qr: methodNet('qr'),
+    cobrosNoEspecificados: methodNet('no_especificado'),
+    cobrosOtrosMetodos: paymentRows
+      .filter((row) => !['efectivo', 'qr', 'no_especificado'].includes(row.metodo))
+      .reduce((sum, row) => sum + Number(row.neto || 0), 0),
+    cobrosFiado,
     fiadoGenerado: Number(debts[0].fiadoGenerado || 0),
+    deudaCompensada: Number(debtCompensations.deudaCompensada || 0),
     cuentasPorCobrar: Number(receivables[0].cuentasPorCobrar || 0),
     fiadosAbiertos: Number(receivables[0].fiadosAbiertos || 0),
     compras: Number(purchases[0].compras || 0),
@@ -323,28 +364,63 @@ async function salesByDay(connection, idTienda, range) {
      ORDER BY DATE_FORMAT(v.fecha,'%Y-%m-%d')`,
     [idTienda, range.inicio, range.finExclusivo]
   );
-  return rows;
+  const compensations = await salesCompensationsByDay(
+    connection, idTienda, range
+  );
+  const byDate = new Map(rows.map((row) => [String(row.fecha), {
+    ...row,
+    ventasAntesCompensaciones: Number(row.ventasNetas || 0),
+    compensacionesVenta: 0,
+    costoCompensado: 0,
+    cantidadCompensaciones: 0
+  }]));
+  for (const compensation of compensations) {
+    const date = String(compensation.fecha);
+    const current = byDate.get(date) || {
+      fecha: date,
+      cantidadVentas: 0,
+      ventasBrutas: 0,
+      descuentos: 0,
+      ventasNetas: 0,
+      ventasAntesCompensaciones: 0,
+      costoVendido: 0,
+      gananciaBruta: 0,
+      gananciaCalculable: 0,
+      compensacionesVenta: 0,
+      costoCompensado: 0,
+      cantidadCompensaciones: 0
+    };
+    current.compensacionesVenta = Number(compensation.montoCompensado || 0);
+    current.costoCompensado = Number(compensation.costoCompensado || 0);
+    current.cantidadCompensaciones = Number(
+      compensation.cantidadCompensaciones || 0
+    );
+    current.ventasNetas = Number(current.ventasAntesCompensaciones || 0)
+      - current.compensacionesVenta;
+    current.costoVendido = Number(current.costoVendido || 0)
+      - current.costoCompensado;
+    current.gananciaBruta = current.ventasNetas - current.costoVendido;
+    current.gananciaCalculable = Number(current.gananciaCalculable || 0)
+      - Number(compensation.gananciaCalculableCompensada || 0);
+    byDate.set(date, current);
+  }
+  return [...byDate.values()].sort((left, right) =>
+    String(left.fecha).localeCompare(String(right.fecha)));
 }
 
 async function paymentMethods(connection, idTienda, range) {
-  const [rows] = await connection.query(
-    `SELECT pagos.metodoPago,
-            COALESCE(SUM(CASE WHEN pagos.idPagoFiado IS NULL THEN pagos.monto ELSE 0 END),0) pagosIniciales,
-            COALESCE(SUM(CASE WHEN pagos.idPagoFiado IS NOT NULL THEN pagos.monto ELSE 0 END),0) cobrosFiado,
-            COALESCE(SUM(pagos.monto),0) total, COUNT(*) cantidad
-     FROM (
-       SELECT pv.idPagoFiado, pv.monto,
-              CASE WHEN pv.idPagoFiado IS NOT NULL THEN COALESCE(cf.metodoPago,pv.metodoPago)
-                   ELSE pv.metodoPago END metodoPago
-       FROM pagoVenta pv
-       LEFT JOIN pagoFiado pf ON pf.idTienda=pv.idTienda AND pf.idPagoFiado=pv.idPagoFiado
-       LEFT JOIN cobroFiado cf ON cf.idTienda=pf.idTienda AND cf.idCobroFiado=pf.idCobroFiado
-       WHERE pv.idTienda=? AND pv.creadoEn>=? AND pv.creadoEn<?
-     ) pagos
-     GROUP BY pagos.metodoPago ORDER BY total DESC`,
-    [idTienda, range.inicio, range.finExclusivo]
-  );
-  return rows;
+  const rows = await paymentFlowsByMethod(connection, idTienda, range);
+  return rows.map((row) => ({
+    metodoPago: row.metodo,
+    pagosIniciales: Number(row.pagosInicialesNetos || 0),
+    cobrosFiado: Number(row.cobrosFiadoNetos || 0),
+    bruto: Number(row.bruto || 0),
+    ajustesCompensatorios: Number(row.ajustesCompensatorios || 0),
+    compensaciones: Number(row.salidasCompensatorias || 0),
+    reembolsos: Number(row.reembolsos || 0),
+    total: Number(row.neto || 0),
+    cantidad: Number(row.cantidad || 0)
+  }));
 }
 
 async function expensesByCategory(connection, idTienda, range) {
@@ -376,44 +452,142 @@ async function expensesByDay(connection, idTienda, range) {
 }
 
 async function productProfitability(connection, idTienda, range, filters = {}, options = {}) {
-  const conditions = ['d.idTienda=?', 'v.fecha>=?', 'v.fecha<?'];
-  const params = [idTienda, range.inicio, range.finExclusivo];
-  if (filters.idProducto) { conditions.push('d.idProducto=?'); params.push(positiveId(filters.idProducto, 'El producto')); }
-  if (filters.categoria) { conditions.push('p.categoria=?'); params.push(String(filters.categoria).trim().slice(0, 50)); }
-  if (filters.idProveedor) { conditions.push('p.idProveedor=?'); params.push(positiveId(filters.idProveedor, 'El proveedor')); }
-  if (filters.presentacion) {
-    const presentation = String(filters.presentacion).trim().toLowerCase();
-    if (!['unidad', 'paquete'].includes(presentation)) throw httpError(400, 'La presentacion no es valida.');
-    conditions.push('d.presentacionVenta=?'); params.push(presentation);
+  const commonConditions = [];
+  const commonParams = [];
+  if (filters.idProducto) {
+    commonConditions.push('p.idProducto=?');
+    commonParams.push(positiveId(filters.idProducto, 'El producto'));
   }
+  if (filters.categoria) {
+    commonConditions.push('p.categoria=?');
+    commonParams.push(String(filters.categoria).trim().slice(0, 50));
+  }
+  if (filters.idProveedor) {
+    commonConditions.push('p.idProveedor=?');
+    commonParams.push(positiveId(filters.idProveedor, 'El proveedor'));
+  }
+  let presentation = null;
+  if (filters.presentacion) {
+    presentation = String(filters.presentacion).trim().toLowerCase();
+    if (!['unidad', 'paquete'].includes(presentation)) throw httpError(400, 'La presentacion no es valida.');
+  }
+  let paymentState = null;
   if (filters.estadoPago) {
-    const state = String(filters.estadoPago).trim().toLowerCase();
-    if (!['pagada', 'parcial', 'pendiente', 'legado'].includes(state)) throw httpError(400, 'El estado de pago no es valido.');
-    conditions.push('v.estadoPago=?'); params.push(state);
+    paymentState = String(filters.estadoPago).trim().toLowerCase();
+    if (!['pagada', 'parcial', 'pendiente', 'legado'].includes(paymentState)) {
+      throw httpError(400, 'El estado de pago no es valido.');
+    }
   }
   const maximumLimit = Math.min(MAX_EXPORT_ROWS, Math.max(1, Number(options.maximumLimit) || 500));
   const limit = Math.min(maximumLimit, Math.max(1, Number.parseInt(filters.limit, 10) || 100));
+  const saleConditions = [
+    'd.idTienda=?',
+    'v.fecha>=?',
+    'v.fecha<?',
+    ...commonConditions,
+    ...(presentation ? ['d.presentacionVenta=?'] : []),
+    ...(paymentState ? ['v.estadoPago=?'] : [])
+  ];
+  const saleParams = [
+    idTienda,
+    range.inicio,
+    range.finExclusivo,
+    ...commonParams,
+    ...(presentation ? [presentation] : []),
+    ...(paymentState ? [paymentState] : [])
+  ];
+  const compensationConditions = [
+    'dcv.idTienda=?',
+    'cv.creadoEn>=?',
+    'cv.creadoEn<?',
+    ...commonConditions,
+    ...(presentation ? ['d.presentacionVenta=?'] : []),
+    ...(paymentState ? ['v.estadoPago=?'] : [])
+  ];
+  const compensationParams = [
+    idTienda,
+    range.inicio,
+    range.finExclusivo,
+    ...commonParams,
+    ...(presentation ? [presentation] : []),
+    ...(paymentState ? [paymentState] : [])
+  ];
   const [rows] = await connection.query(
-    `SELECT p.idProducto, p.nombre, p.categoria, COALESCE(pr.nombre,'Sin proveedor') proveedor,
-            SUM(d.cantidadEquivalenteUnidades) unidadesVendidas,
-            SUM(CASE WHEN d.presentacionVenta='paquete' THEN d.cantidad ELSE 0 END) paquetesVendidos,
-            SUM(d.subtotal) ventasBrutas,
-            SUM(GREATEST(0, d.subtotal-(d.subtotalCosto+d.ganancia))) descuentos,
-            SUM(d.subtotalCosto+d.ganancia) ventasNetas,
-            SUM(d.subtotalCosto) costoVendido,
-            SUM(CASE WHEN d.origenCosto<>'desconocido' THEN d.ganancia ELSE 0 END) gananciaConCosto,
-            SUM(CASE WHEN d.origenCosto='desconocido' THEN d.subtotalCosto+d.ganancia ELSE 0 END) ventasSinCosto,
-            SUM(CASE WHEN d.origenCosto='real' THEN 1 ELSE 0 END) detallesCostoReal,
-            SUM(CASE WHEN d.origenCosto='estimado' THEN 1 ELSE 0 END) detallesCostoEstimado,
-            SUM(CASE WHEN d.origenCosto='desconocido' THEN 1 ELSE 0 END) detallesCostoDesconocido
-     FROM detalleVenta d
-     JOIN venta v ON v.idTienda=d.idTienda AND v.idVenta=d.idVenta
-     JOIN producto p ON p.idTienda=d.idTienda AND p.idProducto=d.idProducto
-     LEFT JOIN proveedor pr ON pr.idTienda=p.idTienda AND pr.idProveedor=p.idProveedor
-     WHERE ${conditions.join(' AND ')}
+    `WITH movimientos AS (
+       SELECT d.idTienda, d.idProducto,
+              d.cantidadEquivalenteUnidades unidadesVendidas,
+              0 unidadesDevueltas,
+              CASE WHEN d.presentacionVenta='paquete' THEN d.cantidad ELSE 0 END
+                paquetesVendidos,
+              d.subtotal ventasBrutas,
+              GREATEST(0,d.subtotal-(d.subtotalCosto+d.ganancia)) descuentos,
+              d.subtotalCosto+d.ganancia ventasAntesCompensaciones,
+              0 compensacionesVenta,
+              d.subtotalCosto costoVendidoBruto,
+              0 costoCompensado,
+              CASE WHEN d.origenCosto<>'desconocido' THEN d.ganancia ELSE 0 END
+                gananciaConCostoBruta,
+              0 gananciaCompensada,
+              CASE WHEN d.origenCosto='desconocido'
+                   THEN d.subtotalCosto+d.ganancia ELSE 0 END ventasSinCosto,
+              CASE WHEN d.origenCosto='real' THEN 1 ELSE 0 END detallesCostoReal,
+              CASE WHEN d.origenCosto='estimado' THEN 1 ELSE 0 END
+                detallesCostoEstimado,
+              CASE WHEN d.origenCosto='desconocido' THEN 1 ELSE 0 END
+                detallesCostoDesconocido
+       FROM detalleVenta d
+       JOIN venta v ON v.idTienda=d.idTienda AND v.idVenta=d.idVenta
+       JOIN producto p ON p.idTienda=d.idTienda AND p.idProducto=d.idProducto
+       WHERE ${saleConditions.join(' AND ')}
+
+       UNION ALL
+
+       SELECT dcv.idTienda, dcv.idProducto, 0, dcv.unidadesDevueltas, 0,
+              0, 0, 0, dcv.montoCompensado, 0, dcv.costoCompensado, 0,
+              CASE WHEN d.origenCosto<>'desconocido'
+                   THEN dcv.montoCompensado-dcv.costoCompensado ELSE 0 END,
+              CASE WHEN d.origenCosto='desconocido'
+                   THEN -dcv.montoCompensado ELSE 0 END,
+              CASE WHEN d.origenCosto='real' THEN 1 ELSE 0 END,
+              CASE WHEN d.origenCosto='estimado' THEN 1 ELSE 0 END,
+              CASE WHEN d.origenCosto='desconocido' THEN 1 ELSE 0 END
+       FROM detalleCompensacionVenta dcv
+       JOIN compensacionVenta cv
+         ON cv.idTienda=dcv.idTienda
+        AND cv.idCompensacionVenta=dcv.idCompensacionVenta
+       JOIN detalleVenta d
+         ON d.idTienda=dcv.idTienda AND d.idDetalleVenta=dcv.idDetalleVenta
+       JOIN venta v ON v.idTienda=d.idTienda AND v.idVenta=d.idVenta
+       JOIN producto p ON p.idTienda=dcv.idTienda AND p.idProducto=dcv.idProducto
+       WHERE ${compensationConditions.join(' AND ')}
+     )
+     SELECT p.idProducto, p.nombre, p.categoria,
+            COALESCE(pr.nombre,'Sin proveedor') proveedor,
+            SUM(m.unidadesVendidas) unidadesVendidas,
+            SUM(m.unidadesDevueltas) unidadesDevueltas,
+            SUM(m.unidadesVendidas)-SUM(m.unidadesDevueltas) unidadesNetas,
+            SUM(m.paquetesVendidos) paquetesVendidos,
+            SUM(m.ventasBrutas) ventasBrutas,
+            SUM(m.descuentos) descuentos,
+            SUM(m.ventasAntesCompensaciones) ventasAntesCompensaciones,
+            SUM(m.compensacionesVenta) compensacionesVenta,
+            SUM(m.ventasAntesCompensaciones)-SUM(m.compensacionesVenta) ventasNetas,
+            SUM(m.costoVendidoBruto) costoVendidoBruto,
+            SUM(m.costoCompensado) costoCompensado,
+            SUM(m.costoVendidoBruto)-SUM(m.costoCompensado) costoVendido,
+            SUM(m.gananciaConCostoBruta)-SUM(m.gananciaCompensada) gananciaConCosto,
+            SUM(m.ventasSinCosto) ventasSinCosto,
+            SUM(m.detallesCostoReal) detallesCostoReal,
+            SUM(m.detallesCostoEstimado) detallesCostoEstimado,
+            SUM(m.detallesCostoDesconocido) detallesCostoDesconocido
+     FROM movimientos m
+     JOIN producto p ON p.idTienda=m.idTienda AND p.idProducto=m.idProducto
+     LEFT JOIN proveedor pr
+       ON pr.idTienda=p.idTienda AND pr.idProveedor=p.idProveedor
      GROUP BY p.idTienda, p.idProducto, p.nombre, p.categoria, pr.nombre
-     ORDER BY gananciaConCosto DESC, ventasNetas DESC LIMIT ?`,
-    [...params, limit]
+     ORDER BY gananciaConCosto DESC, ventasNetas DESC, p.idProducto
+     LIMIT ?`,
+    [...saleParams, ...compensationParams, limit]
   );
   return rows.map((row, index) => ({
     ...row,
@@ -450,24 +624,16 @@ async function purchasesReport(connection, idTienda, range, { limit = 100, offse
 async function calculateCashClose(connection, idTienda, range, initialValue = 0) {
   const initialCents = cents(initialValue, 'El efectivo inicial');
   const params = [idTienda, range.inicio, range.finExclusivo];
-  const [[payments], [expenses], [sales], [debts], [purchases]] = await Promise.all([
-    connection.query(
-      `SELECT
-        COALESCE(SUM(CASE WHEN pagos.metodoPago='efectivo' AND pagos.idPagoFiado IS NULL THEN pagos.monto ELSE 0 END),0) efectivoVentas,
-        COALESCE(SUM(CASE WHEN pagos.metodoPago='efectivo' AND pagos.idPagoFiado IS NOT NULL THEN pagos.monto ELSE 0 END),0) efectivoFiados,
-        COALESCE(SUM(CASE WHEN pagos.metodoPago='qr' THEN pagos.monto ELSE 0 END),0) totalQR,
-        COALESCE(SUM(CASE WHEN pagos.metodoPago NOT IN ('efectivo','qr') THEN pagos.monto ELSE 0 END),0) totalNoEspecificado,
-        COALESCE(SUM(pagos.monto),0) totalCobrado
-       FROM (
-         SELECT pv.idPagoFiado, pv.monto,
-                CASE WHEN pv.idPagoFiado IS NOT NULL THEN COALESCE(cf.metodoPago,pv.metodoPago)
-                     ELSE pv.metodoPago END metodoPago
-         FROM pagoVenta pv
-         LEFT JOIN pagoFiado pf ON pf.idTienda=pv.idTienda AND pf.idPagoFiado=pv.idPagoFiado
-         LEFT JOIN cobroFiado cf ON cf.idTienda=pf.idTienda AND cf.idCobroFiado=pf.idCobroFiado
-         WHERE pv.idTienda=? AND pv.creadoEn>=? AND pv.creadoEn<?
-       ) pagos`, params
-    ),
+  const [
+    paymentRows,
+    [expenses],
+    [sales],
+    [debts],
+    [purchases],
+    saleCompensations,
+    materialSettlements
+  ] = await Promise.all([
+    paymentFlowsByMethod(connection, idTienda, range),
     connection.query(
       `SELECT COALESCE(SUM(CASE WHEN metodoPago='efectivo' THEN monto ELSE 0 END),0) gastosEfectivo,
               COALESCE(SUM(monto),0) totalGastos
@@ -483,13 +649,51 @@ async function calculateCashClose(connection, idTienda, range, initialValue = 0)
     ),
     connection.query(
       'SELECT COALESCE(SUM(total),0) totalCompras FROM compra WHERE idTienda=? AND fecha>=? AND fecha<?', params
-    )
+    ),
+    salesCompensationMetrics(connection, idTienda, range),
+    materialSettlementMetrics(connection, idTienda, range)
   ]);
-  const efectivoVentas = cents(payments[0].efectivoVentas, 'Efectivo de ventas');
-  const efectivoFiados = cents(payments[0].efectivoFiados, 'Efectivo de fiados');
+  const cash = paymentRows.find((row) => row.metodo === 'efectivo') || {};
+  const efectivoVentas = cents(
+    Number(cash.pagosInicialesBrutos || 0) + Number(cash.entradasVenta || 0),
+    'Efectivo de ventas'
+  );
+  const efectivoFiados = cents(
+    Number(cash.cobrosFiadoBrutos || 0) + Number(cash.entradasFiado || 0),
+    'Efectivo de fiados'
+  );
+  const reembolsosEfectivo = cents(
+    cash.reembolsos || 0, 'Reembolsos en efectivo'
+  );
+  const compensacionesEfectivo = cents(
+    Number(cash.salidasVenta || 0) + Number(cash.salidasFiado || 0),
+    'Compensaciones en efectivo'
+  );
   const gastosEfectivo = cents(expenses[0].gastosEfectivo, 'Gastos en efectivo');
-  const expected = initialCents + efectivoVentas + efectivoFiados - gastosEfectivo;
+  const expected = initialCents + efectivoVentas + efectivoFiados
+    - compensacionesEfectivo - reembolsosEfectivo - gastosEfectivo;
   if (expected < 0) throw httpError(409, 'El efectivo esperado es negativo. Revise el efectivo inicial o los gastos del periodo.');
+  const methodInflows = (name) => {
+    const row = paymentRows.find((item) => item.metodo === name) || {};
+    return Number(row.bruto || 0) + Number(row.entradasCompensatorias || 0);
+  };
+  const unspecifiedInflows = paymentRows
+    .filter((row) => !['efectivo', 'qr'].includes(row.metodo))
+    .reduce((sum, row) => sum + Number(row.bruto || 0)
+      + Number(row.entradasCompensatorias || 0), 0);
+  const totalCollected = paymentRows.reduce(
+    (sum, row) => sum + Number(row.bruto || 0)
+      + Number(row.entradasCompensatorias || 0), 0
+  );
+  const totalCompensations = paymentRows.reduce(
+    (sum, row) => sum + Number(row.salidasCompensatorias || 0), 0
+  );
+  const totalRefunds = paymentRows.reduce(
+    (sum, row) => sum + Number(row.reembolsos || 0), 0
+  );
+  const totalCollectedNet = totalCollected - totalCompensations - totalRefunds;
+  const totalSales = Number(sales[0].totalVentas || 0);
+  const compensatedSales = Number(saleCompensations.montoCompensado || 0);
   return {
     fechaInicio: range.inicio,
     fechaFin: range.finExclusivo,
@@ -497,11 +701,28 @@ async function calculateCashClose(connection, idTienda, range, initialValue = 0)
     efectivoVentasEsperado: decimal(efectivoVentas),
     efectivoFiadosCobrado: decimal(efectivoFiados),
     gastosEfectivo: decimal(gastosEfectivo),
+    compensacionesEfectivo: decimal(compensacionesEfectivo),
+    reembolsosEfectivo: decimal(reembolsosEfectivo),
+    compensacionesCobroTotal: decimal(cents(
+      totalCompensations, 'Compensaciones totales de cobro'
+    )),
+    reembolsosTotal: decimal(cents(totalRefunds, 'Reembolsos totales')),
     efectivoEsperado: decimal(expected),
-    totalQR: decimal(cents(payments[0].totalQR, 'Total QR')),
-    totalNoEspecificado: decimal(cents(payments[0].totalNoEspecificado, 'Total no especificado')),
-    totalCobrado: decimal(cents(payments[0].totalCobrado, 'Total cobrado')),
-    totalVentas: decimal(cents(sales[0].totalVentas, 'Total vendido')),
+    totalQR: decimal(cents(methodInflows('qr'), 'Total QR')),
+    totalNoEspecificado: decimal(cents(
+      unspecifiedInflows, 'Total no especificado'
+    )),
+    totalCobrado: decimal(cents(totalCollected, 'Total cobrado')),
+    totalCobradoNeto: decimal(Math.round(totalCollectedNet * 100)),
+    totalVentas: decimal(cents(totalSales, 'Total vendido')),
+    compensacionesVenta: decimal(cents(
+      compensatedSales, 'Compensaciones de venta'
+    )),
+    totalVentasNeto: decimal(Math.round((totalSales - compensatedSales) * 100)),
+    liquidacionesOtroMedio: decimal(cents(
+      materialSettlements.liquidacionesOtroMedio || 0,
+      'Liquidaciones por otro medio'
+    )),
     totalFiadoGenerado: decimal(cents(debts[0].totalFiadoGenerado, 'Fiado generado')),
     totalGastos: decimal(cents(expenses[0].totalGastos, 'Total de gastos')),
     totalCompras: decimal(cents(purchases[0].totalCompras, 'Total de compras')),

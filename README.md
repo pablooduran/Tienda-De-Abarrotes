@@ -129,6 +129,8 @@ Migraciones actuales, en orden:
 13. `013_seguridad_sesiones.sql`: version de sesion por administrador para revocar accesos despues de cambios criticos.
 14. `014_operaciones_compensatorias.sql`: contrato base, idempotencia, estados operativos y trazabilidad para futuras compensaciones.
 15. `015_compensaciones_venta_inventario.sql`: anulaciones y devoluciones de venta, liquidacion explicita y movimientos compensatorios de stock y lotes.
+16. `016_compensaciones_financieras.sql`: reduccion de deuda, obligaciones de reembolso, compensacion de cobros y correccion de metodos.
+17. `017_integracion_compensaciones.sql`: liquidaciones materiales inmutables, reportes netos y explicacion compensatoria de cierres futuros.
 
 ### Operaciones compensatorias de venta
 
@@ -180,6 +182,8 @@ npm.cmd run test:sales-compensations
 npm.cmd run db:check-sales-compensations
 npm.cmd run test:financial-compensations
 npm.cmd run db:check-financial-compensations
+npm.cmd run test:compensation-integration
+npm.cmd run db:check-compensation-integration
 ```
 
 `test:compensation-foundation` crea exclusivamente bases
@@ -195,6 +199,35 @@ base temporal, prueba liquidaciones, deuda, reembolsos pendientes, cobros,
 metodos de pago, concurrencia, rollback, tenant, plan y CSRF, y compara la huella
 de la base principal antes y despues. `db:check-financial-compensations` es de
 solo lectura y requiere 016 en el destino.
+
+C4A registra el cumplimiento material de una obligacion mediante:
+
+```text
+POST /api/obligaciones-reembolso/:idObligacion/liquidaciones
+GET  /api/compensaciones/ventas/:id/comprobante
+GET  /api/compensaciones/liquidaciones/:id/comprobante
+GET  /api/compensaciones/cobros/:id/comprobante
+GET  /api/compensaciones/pagos/:id/comprobante
+```
+
+La escritura exige confirmacion, motivo controlado, importe positivo, metodo,
+clave idempotente, sesion, tenant, suscripcion activa, CSRF/origen,
+rate limiting y `anulaciones_operativas`. Admite reembolsos parciales o totales
+y compensacion por otro medio; nunca supera el saldo de la obligacion. El
+credito a favor permanece deshabilitado hasta disponer de un libro seguro de
+emision y consumo: no se representa como fiado negativo.
+
+`movimientoLiquidacionCompensacion` conserva cada cumplimiento con su fecha
+real, responsable, metodo y referencia. No modifica `venta`, `pagoVenta`,
+`pagoFiado` ni `cobroFiado`. Los comprobantes de compensacion son entidades
+separadas y no exponen claves idempotentes, huellas ni detalles internos.
+
+Los reportes financieros distinguen venta bruta, compensacion de venta y venta
+neta. La compensacion de venta afecta ingreso, costo y rentabilidad en la fecha
+en que se aplica; el reembolso material afecta caja en su propia fecha y no
+vuelve a descontar el ingreso. Los cierres ya guardados quedan congelados. Los
+nuevos cierres conservan campos explicativos de compensaciones y reembolsos.
+Las exportaciones finales y el frontend de compensaciones quedan para C4B.
 
 La ruta canonica de C2 es:
 

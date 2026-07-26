@@ -6,10 +6,10 @@ Documento de relevo tecnico para continuar el proyecto sin depender del historia
 
 - Repositorio obligatorio: `pablooduran/Tienda-De-Abarrotes`
 - Rama de trabajo obligatoria: `mejora-multitienda`
-- HEAD base de C3: `ef535b8 test: adaptar compensaciones a base migrada`
+- HEAD base de C4A: `6b25467 feat: agregar compensaciones financieras`
 - No trabajar directamente en `main`.
 - El HEAD indicado es una referencia local conocida. Confirmar si tambien existe en el remoto antes de depender de el para una recuperacion.
-- El working tree estaba limpio antes de crear este documento.
+- La base principal local estaba en 016 y el working tree limpio antes de C4A.
 
 Comprobacion inicial obligatoria:
 
@@ -113,7 +113,7 @@ El contexto de tienda proviene de la sesion validada. El navegador no debe envia
 | Migraciones historicas 001-003 | Terminado | Inspectores semanticos, recuperacion por pasos y prueba en bases temporales. |
 | Backups y restauracion | Terminado | Backup, manifiesto, hash, verificacion y restauracion probada en base temporal. |
 | Healthcheck, monitoreo y alertas | B1-B3 terminados; proveedores externos pendientes | Liveness, readiness, arranque/cierre, diagnostico superadmin, backups read-only, transiciones, anti-spam y comprobador operativo implementados. No hay envio externo. |
-| Anulaciones y compensaciones | C1 y C2 terminados; C3 implementado sin aplicar 016 en la base principal | C1 aporta 014; C2 agrega 015 y ventas/inventario; C3 agrega liquidaciones financieras, deuda, obligaciones de reembolso, compensacion de cobros y correccion de metodos. Reportes netos, comprobantes y frontend quedan para C4. |
+| Anulaciones y compensaciones | C1-C3 terminados; C4A implementado sin aplicar 017 en la base principal | C4A agrega liquidaciones materiales, reportes netos y comprobantes separados. Frontend y exportaciones finales quedan para C4B. |
 | Auditoria administrativa global | Parcial | Existen actores y fechas en modulos concretos, pero no una bitacora global e inmutable. |
 | Correcciones finales de stock/reposicion | Pendiente | Revision de stock vendible y reglas de sugerencia antes de produccion. |
 | Fase 11 - acceso publico | No iniciada | Registro publico, alta automatica, verificacion, recuperacion y proteccion antiabuso. |
@@ -231,6 +231,7 @@ sobre la base principal.
 | `014_operaciones_compensatorias.sql` | Contrato base, estado operativo de venta, idempotencia y trazabilidad de futuras compensaciones. |
 | `015_compensaciones_venta_inventario.sql` | Anulaciones/devoluciones de venta, liquidacion pendiente y trazabilidad compensatoria de stock y lotes. |
 | `016_compensaciones_financieras.sql` | Resolucion de liquidaciones, deuda compensada, reembolsos pendientes, compensacion de cobros y correccion de metodos. |
+| `017_integracion_compensaciones.sql` | Liquidaciones materiales inmutables, reportes netos y trazabilidad explicativa de cierres futuros. |
 
 Reglas:
 
@@ -239,7 +240,7 @@ Reglas:
 - Las modernas usan inspeccion pre/parcial/post y registro tardio.
 - Una migracion registrada pero fisicamente incompleta debe bloquear el proceso.
 - Una estructura completa no registrada solo puede adoptarse despues de validarla.
-- `database/tienda_abarrotes.sql` debe conservar equivalencia con el estado post-016 para instalaciones nuevas.
+- `database/tienda_abarrotes.sql` debe conservar equivalencia con el estado post-017 para instalaciones nuevas.
 - Antes de cualquier futura migracion: backup verificado, ensayo sobre copia, revision del SQL y comprobacion posterior.
 
 ## 6. Scripts npm y nivel de seguridad
@@ -434,15 +435,15 @@ No mostrar estas variables en logs ni respuestas. Nunca versionar `.env`, `.env.
 | Catalogo maestro | `routes/master-catalog.js`, `services/master-catalog-service.js` |
 | Frontend comun | `public/app.html`, `public/js/app.js`, `public/js/http-security.js`, `public/css/styles.css` |
 | Health operativo | `routes/health.js`, `routes/admin-health.js`, `services/operational-health-service.js`, `services/backup-status-service.js`, `services/operational-state-tracker.js`, `services/operational-event-dispatcher.js`, `services/server-lifecycle-service.js`, `scripts/check-operational-health.js` |
-| Compensaciones C1-C3 | `config/compensation-contract.js`, migraciones `014` a `016`, `routes/sales-compensations.js`, `routes/financial-compensations.js`, `services/sale-compensation-service.js`, `services/financial-compensation-service.js`, comprobadores y pruebas `*compensations*` |
+| Compensaciones C1-C4A | `config/compensation-contract.js`, migraciones `014` a `017`, `routes/sales-compensations.js`, `routes/financial-compensations.js`, servicios `*compensation*`, comprobadores y pruebas `*compensation*` |
 | Migrador | `scripts/migrate-db.js`, `scripts/migration-state/legacy-migrations.js` |
 | Backups | `scripts/backup-db.js`, `scripts/backup-utils.js`, `scripts/verify-db-backup.js`, `scripts/test-db-restore.js`, `scripts/cleanup-db-backups.js` |
 
 ## 10. Limitaciones conocidas
 
-- C2 permite anular o devolver ventas por API; C3 resuelve sus liquidaciones y compensa cobros o metodos sin editar historicos. No corregir montos o stock con SQL manual.
-- Los reembolsos quedan como obligaciones `pendiente`; C3 nunca entrega dinero automaticamente ni implementa credito a favor operativo.
-- No existen todavia frontend, comprobante ni reportes netos de compensaciones; corresponden a C4.
+- C2 permite anular o devolver ventas por API; C3 resuelve deuda y crea obligaciones; C4A materializa reembolsos o compensaciones por otro medio sin editar historicos.
+- El credito a favor operativo sigue pendiente: no existe todavia un libro seguro de emision y consumo y nunca debe simularse con un fiado negativo.
+- C4A aporta reportes netos y comprobantes de compensacion. Frontend y exportaciones finales corresponden a C4B.
 - No existe inventario fisico integral ni flujo final de conciliacion operativa para produccion.
 - La auditoria administrativa es parcial; varios modulos guardan actor y fechas, pero falta una bitacora global inmutable.
 - Las sugerencias de reposicion requieren una revision final sobre stock vendible y reglas de compra.
@@ -575,15 +576,15 @@ En ambos casos, conservar el repositorio o base anterior hasta completar smoke t
 ### Git
 
 - Rama local: `mejora-multitienda`.
-- HEAD base de C3: `ef535b8 test: adaptar compensaciones a base migrada`.
-- Working tree: contiene exclusivamente la implementacion C3 hasta que se autorice su commit.
+- HEAD base de C4A: `6b25467 feat: agregar compensaciones financieras`.
+- Working tree: contiene exclusivamente la implementacion C4A hasta que se autorice su commit.
 - No consta despliegue de este estado. Verificar el remoto antes de asumir que todos los commits locales fueron publicados.
 
 ### Base local
 
 - Base de pruebas esperada: `tienda_abarrotes_pruebas`.
-- Migraciones registradas en la base principal conocida: 001 a 015. El repositorio
-  incorpora 016, ensayada solo en bases temporales y pendiente de aplicacion
+- Migraciones registradas en la base principal conocida: 001 a 016. El repositorio
+  incorpora 017, ensayada solo en bases temporales y pendiente de aplicacion
   expresamente autorizada.
 - No deberian existir bases `tmp_tienda_restore_*` ni `tmp_tienda_legacy_*` despues de las pruebas.
 
