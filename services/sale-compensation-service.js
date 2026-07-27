@@ -8,7 +8,8 @@ const {
 } = require('../config/compensation-contract');
 const {
   databaseLocalDate,
-  insertLotMovement
+  insertLotMovement,
+  supportsInventoryClassification
 } = require('./lot-service');
 const {
   insertStockMovement,
@@ -539,6 +540,7 @@ async function createStockReturnMovement(connection, input) {
 
 function originalLotIsSellable(source, quantity, today) {
   return source.estadoOperativo === 'disponible'
+    && source.clasificacionInventario === 'vendible'
     && (!source.fechaVencimiento || databaseLocalDate(source.fechaVencimiento) >= today)
     && Number(source.cantidadRestante) + quantity <= Number(source.cantidadInicial);
 }
@@ -547,13 +549,16 @@ async function createBlockedReversalLot(connection, input) {
   const source = input.allocation.source;
   const quantity = input.allocation.quantity;
   const lotKey = `reversion:${input.idOperacionCompensatoria}:ml:${source.idMovimientoLote}`;
+  const hasClassification = await supportsInventoryClassification(connection);
+  const classificationColumn = hasClassification ? ', clasificacionInventario' : '';
+  const classificationValue = hasClassification ? ", 'tecnico'" : '';
   const [lot] = await connection.query(
     `INSERT INTO loteProducto
      (idTienda, idProducto, idProveedor, idDetalleCompra, codigoLote, origen,
       fechaIngreso, fechaVencimiento, cantidadInicial, cantidadRestante, costoUnitarioBase,
-      estadoOperativo, claveOperacion, creadoEn, actualizadoEn,
+      estadoOperativo${classificationColumn}, claveOperacion, creadoEn, actualizadoEn,
       idAdministradorCrea, idAdministradorActualiza)
-     VALUES (?, ?, ?, NULL, NULL, 'reversion', ?, ?, ?, ?, ?, 'bloqueado', ?, ?, ?, ?, ?)`,
+     VALUES (?, ?, ?, NULL, NULL, 'reversion', ?, ?, ?, ?, ?, 'bloqueado'${classificationValue}, ?, ?, ?, ?, ?)`,
     [input.idTienda, input.idProducto, source.idProveedor || null, source.fechaIngreso,
       databaseLocalDate(source.fechaVencimiento), quantity, quantity, source.costoUnitarioBase,
       lotKey, input.now, input.now, input.idAdministrador, input.idAdministrador]

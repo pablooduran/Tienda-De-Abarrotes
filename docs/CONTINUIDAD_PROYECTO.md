@@ -6,11 +6,11 @@ Documento de relevo tecnico para continuar el proyecto sin depender del historia
 
 - Repositorio obligatorio: `pablooduran/Tienda-De-Abarrotes`
 - Rama de trabajo obligatoria: `mejora-multitienda`
-- Punto de partida de AUD-B: `5621b44 test: adaptar auditoria a base migrada`
+- Punto de partida de INV-A: `89cc85a feat: completar auditoria administrativa`
 - No trabajar directamente en `main`.
 - El HEAD indicado es una referencia local conocida. Confirmar si tambien existe en el remoto antes de depender de el para una recuperacion.
-- La base principal local esta en 018. AUD-B no agrega migraciones ni modifica
-  datos comerciales preexistentes.
+- La base principal local esta en 018. INV-A agrega la migracion 019, ensayada
+  solo en bases temporales y pendiente de autorizacion para la base principal.
 
 Comprobacion inicial obligatoria:
 
@@ -47,7 +47,7 @@ Si la rama, el HEAD o el estado difieren, detenerse y entender los cambios exist
 | `routes/` | Contratos HTTP de autenticacion, administracion y modulos comerciales. |
 | `services/` | Reglas de negocio, transacciones, reportes, POS, stock, clientes y cobranza. |
 | `public/` | Aplicacion web, administracion, login, estilos y JavaScript del navegador. |
-| `database/migrations/` | Migraciones historicas y modernas, numeradas de 001 a 018; la base principal local validada esta en 018. |
+| `database/migrations/` | Migraciones historicas y modernas, numeradas de 001 a 019; la base principal local validada permanece en 018. |
 | `database/tienda_abarrotes.sql` | Esquema inicial equivalente al estado final esperado. |
 | `scripts/` | Migrador, comprobadores, pruebas, administracion local y backups. |
 | `utils/` | Utilidades compartidas, incluidas fechas locales y errores. |
@@ -105,7 +105,7 @@ El contexto de tienda proviene de la sesion validada. El navegador no debe envia
 | Fase 6 - movimientos de stock | Terminado | Movimientos inmutables, entradas, salidas, ajustes, conciliacion e idempotencia. |
 | Fase 7 - POS y pagos | Terminado | Venta transaccional, pagos multiples, fiado, comprobantes, caja, stock e idempotencia. |
 | Fase 8 - finanzas | Terminado | Gastos, caja, reportes, ganancia bruta/neta, cierres y exportaciones. |
-| Fase 9 - inteligencia de inventario | Terminado con mejora futura | Alertas, rotacion, stock minimo, sugerencias y productos sin movimiento. La revision final de stock vendible/reposicion queda en un bloque futuro. |
+| Fase 9 - inteligencia de inventario | Terminado con mejora futura | Alertas, rotacion, stock minimo, sugerencias y productos sin movimiento. INV-A alinea estas metricas con stock vendible; las reglas finales de reposicion quedan para INV-B. |
 | Fase 9B - lotes y vencimientos | Terminado | Lotes, vencimientos, FEFO/FIFO, stock vendible, compras, POS y alertas. |
 | Fase 10 - clientes y cobranza | Terminado | Backend, frontend, exportaciones, plantillas, comprobantes, segmentacion y pruebas reales de navegador. Cierre registrado en `d9fb327`. |
 | Endurecimiento de sesiones | Terminado | Migracion 013, revalidacion por peticion y revocacion administrativa. |
@@ -116,7 +116,8 @@ El contexto de tienda proviene de la sesion validada. El navegador no debe envia
 | Healthcheck, monitoreo y alertas | B1-B3 terminados; proveedores externos pendientes | Liveness, readiness, arranque/cierre, diagnostico superadmin, backups read-only, transiciones, anti-spam y comprobador operativo implementados. No hay envio externo. |
 | Anulaciones y compensaciones | C1-C4B implementados | API transaccional, inventario y lotes, liquidaciones, reportes netos, comprobantes, interfaz, CSV/XLSX y pruebas de navegador. La base local esta en 017. |
 | Auditoria administrativa global | AUD-A y AUD-B implementados | Bitacora append-only, allowlists, eventos administrativos y comerciales, consulta tenant/global, pantalla responsive y politica documental de retencion. No hay borrado automatico. |
-| Correcciones finales de stock/reposicion | Pendiente | Revision de stock vendible y reglas de sugerencia antes de produccion. |
+| INV-A - stock vendible y conciliacion | Implementado; migracion pendiente | Clasificacion explicita, conciliacion read-only, ajustes idempotentes, auditoria, interfaz y pruebas. 019 no esta aplicada en la base principal. |
+| INV-B - reposicion | Pendiente | Reglas finales de sugerencia y reposicion antes de produccion. |
 | Fase 11 - acceso publico | No iniciada | Registro publico, alta automatica, verificacion, recuperacion y proteccion antiabuso. |
 | Suscripciones comerciales | No iniciada | No hay cobro automatizado de planes ni pasarela comercial. |
 | Staging y produccion | Pendiente | No se ha desplegado este estado. |
@@ -210,8 +211,8 @@ Un downgrade no borra ni oculta deuda existente. Se mantiene la consulta histori
 ## 5. Migraciones
 
 No renumerar, editar ni reemplazar migraciones aplicadas. La base local principal
-conocida `tienda_abarrotes_pruebas` esta validada en 018. AUD-B no agrega
-migraciones ni modifica el esquema.
+conocida `tienda_abarrotes_pruebas` esta validada en 018. INV-A incorpora 019,
+todavia no aplicada a esa base.
 
 | Migracion | Objetivo principal |
 | --- | --- |
@@ -233,6 +234,7 @@ migraciones ni modifica el esquema.
 | `016_compensaciones_financieras.sql` | Resolucion de liquidaciones, deuda compensada, reembolsos pendientes, compensacion de cobros y correccion de metodos. |
 | `017_integracion_compensaciones.sql` | Liquidaciones materiales inmutables, reportes netos y trazabilidad explicativa de cierres futuros. |
 | `018_auditoria_administrativa_critica.sql` | Bitacora append-only y eventos criticos de autenticacion, sesiones, credenciales, tiendas, propietarios, planes y suscripciones. |
+| `019_stock_vendible_ajustes.sql` | Clasificacion de lotes, stock vendible y ajustes manuales trazables e idempotentes. |
 
 Reglas:
 
@@ -241,7 +243,7 @@ Reglas:
 - Las modernas usan inspeccion pre/parcial/post y registro tardio.
 - Una migracion registrada pero fisicamente incompleta debe bloquear el proceso.
 - Una estructura completa no registrada solo puede adoptarse despues de validarla.
-- `database/tienda_abarrotes.sql` debe conservar equivalencia con el estado post-018 para instalaciones nuevas.
+- `database/tienda_abarrotes.sql` debe conservar equivalencia con el estado post-019 para instalaciones nuevas.
 - Antes de cualquier futura migracion: backup verificado, ensayo sobre copia, revision del SQL y comprobacion posterior.
 
 ## 6. Scripts npm y nivel de seguridad
@@ -305,6 +307,9 @@ Estas pruebas pueden crear y limpiar datos temporales en la base local de prueba
 - `test:pos-payments`: ventas, stock, pagos e idempotencia.
 - `test:financial-reports`: caja, gastos, reportes y agregados.
 - `test:inventory-intelligence`: alertas y metricas de inventario.
+- `test:inventory-adjustments`: conciliacion y ajustes sobre bases temporales post-019.
+- `test:inventory-adjustments-frontend`: contrato estatico y seguridad de la interfaz.
+- `test:inventory-adjustments-browser`: flujo, foco, doble envio y vistas responsive.
 - `test:lots-expiration`: lotes, vencimientos y FEFO/FIFO.
 - `test:customers-credit`: clientes, credito, cobranza y multitienda.
 - `test:customers-credit-frontend`: contratos y seguridad estatica del frontend.
@@ -433,6 +438,7 @@ No mostrar estas variables en logs ni respuestas. Nunca versionar `.env`, `.env.
 | Stock | `routes/stock.js`, `services/stock-movement-service.js` |
 | Lotes | `routes/lots.js`, `services/lot-service.js`, `services/lot-export-service.js` |
 | Inteligencia de inventario | `routes/inventory-intelligence.js`, `services/inventory-intelligence-service.js` |
+| Stock vendible y ajustes INV-A | `config/inventory-adjustment-contract.js`, `routes/inventory-adjustments.js`, `services/inventory-reconciliation-service.js`, `services/inventory-adjustment-service.js`, `public/js/inventory-adjustment-ui.js`, migracion `019` y pruebas `inventory-adjustments*` |
 | Catalogo maestro | `routes/master-catalog.js`, `services/master-catalog-service.js` |
 | Frontend comun | `public/app.html`, `public/js/app.js`, `public/js/http-security.js`, `public/css/styles.css` |
 | Health operativo | `routes/health.js`, `routes/admin-health.js`, `services/operational-health-service.js`, `services/backup-status-service.js`, `services/operational-state-tracker.js`, `services/operational-event-dispatcher.js`, `services/server-lifecycle-service.js`, `scripts/check-operational-health.js` |
@@ -449,12 +455,12 @@ No mostrar estas variables en logs ni respuestas. Nunca versionar `.env`, `.env.
 - C4A aporta reportes netos y comprobantes; C4B los integra en una interfaz
   responsive y accesible, con exportaciones CSV/XLSX protegidas. El credito a
   favor permanece fuera de alcance.
-- No existe inventario fisico integral ni flujo final de conciliacion operativa para produccion.
+- INV-A no corrige automaticamente hallazgos historicos. En productos sin lotes, todo el saldo fisico se considera vendible; la existencia no vendible requiere trazabilidad por lotes.
 - AUD-A/B aporta una bitacora global inmutable, eventos administrativos y comerciales,
   consulta protegida para propietario y superadmin, filtros, detalle y pantalla
   responsive. La retencion inicial conserva al menos 365 dias en linea y se revisa
   trimestralmente; no existe borrado automatico ni API de escritura.
-- Las sugerencias de reposicion requieren una revision final sobre stock vendible y reglas de compra.
+- Las sugerencias ya usan stock vendible; INV-B debe cerrar las reglas de reposicion y compra sin automatizar pedidos.
 - Los backups son locales. No hay almacenamiento remoto, cifrado propio, programacion automatica, rotacion distribuida ni monitoreo externo.
 - Los backups contienen datos sensibles y deben residir en disco cifrado o almacenamiento seguro. No enviarlos por correo o WhatsApp.
 - El rate limiting actual en memoria aplica por instancia; para escala horizontal debe migrar a almacenamiento distribuido.
@@ -582,9 +588,9 @@ En ambos casos, conservar el repositorio o base anterior hasta completar smoke t
 ### Git
 
 - Rama local: `mejora-multitienda`.
-- Punto de partida de AUD-B: `5621b44 test: adaptar auditoria a base migrada`.
-- AUD-B queda completo con contrato comercial, integraciones transaccionales,
-  consulta protegida, interfaz, pruebas y documentacion de auditoria.
+- Punto de partida de INV-A: `89cc85a feat: completar auditoria administrativa`.
+- INV-A agrega el contrato post-019 de stock vendible, conciliacion y ajustes;
+  la base principal permanece en 018 hasta una autorizacion separada.
 - Working tree esperado despues del cierre: limpio. Verificar siempre el HEAD
   real con `git log -1 --oneline`.
 - No consta despliegue de este estado. Verificar el remoto antes de asumir que todos los commits locales fueron publicados.

@@ -96,6 +96,7 @@ async function scalar(connection, sql, params = []) {
 }
 
 async function cleanupStore(connection, idTienda) {
+  await connection.query('DELETE FROM eventoAuditoriaAdministrativa WHERE idTienda=?', [idTienda]);
   await connection.query('DELETE FROM movimientoLote WHERE idTienda=?', [idTienda]);
   await connection.query('DELETE FROM loteProducto WHERE idTienda=?', [idTienda]);
   await connection.query('DELETE FROM cierreCaja WHERE idTienda=?', [idTienda]);
@@ -127,7 +128,22 @@ async function cleanup(connection, fixture) {
   if (!connection) return;
   const [stores] = await connection.query('SELECT idTienda FROM tienda WHERE slug LIKE ?', [`tienda-lotes-%-${fixture.marker}`]);
   for (const store of stores) await cleanupStore(connection, store.idTienda);
-  if (fixture.superUser) await connection.query('DELETE FROM administrador WHERE usuario=?', [fixture.superUser]);
+  if (fixture.superUser) {
+    await connection.query(
+      `DELETE ea FROM eventoAuditoriaAdministrativa ea
+       JOIN administrador a ON a.idAdministrador=ea.idAdministradorActor
+       WHERE a.usuario=?`,
+      [fixture.superUser]
+    );
+    await connection.query('DELETE FROM administrador WHERE usuario=?', [fixture.superUser]);
+  }
+  if (Number.isSafeInteger(fixture.auditStartId)) {
+    await connection.query(
+      `DELETE FROM eventoAuditoriaAdministrativa
+       WHERE idEventoAuditoria>? AND idTienda IS NULL AND actorTipo='anonimo'`,
+      [fixture.auditStartId]
+    );
+  }
 }
 
 async function createProduct(session, marker, label, stock = 0, options = {}) {
@@ -173,6 +189,10 @@ async function main() {
 
   try {
     connection = await createDatabaseConnection(config);
+    fixture.auditStartId = await scalar(
+      connection,
+      'SELECT COALESCE(MAX(idEventoAuditoria),0) total FROM eventoAuditoriaAdministrativa'
+    );
     assert(await scalar(connection,
       "SELECT COUNT(*) total FROM schema_migrations WHERE nombre='011_lotes_vencimientos.sql'") === 1,
     'La migracion 011 debe estar aplicada.');

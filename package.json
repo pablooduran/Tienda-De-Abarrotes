@@ -29,6 +29,7 @@
     "db:check-financial-compensations": "node scripts/check-financial-compensations.js",
     "db:check-compensation-integration": "node scripts/check-compensation-integration.js",
     "db:check-administrative-audit": "node scripts/check-administrative-audit.js",
+    "db:check-inventory-adjustments": "node scripts/check-inventory-adjustments.js",
     "db:backup": "node scripts/backup-db.js",
     "db:verify-backup": "node scripts/verify-db-backup.js",
     "db:test-restore": "node scripts/test-db-restore.js",
@@ -65,6 +66,9 @@
     "test:administrative-audit-commercial": "node scripts/test-administrative-audit-commercial.js",
     "test:administrative-audit-frontend": "node scripts/test-administrative-audit-frontend.js",
     "test:administrative-audit-browser": "node scripts/test-administrative-audit-browser.js",
+    "test:inventory-adjustments": "node scripts/test-inventory-adjustments.js",
+    "test:inventory-adjustments-frontend": "node scripts/test-inventory-adjustments-frontend.js",
+    "test:inventory-adjustments-browser": "node scripts/test-inventory-adjustments-browser.js",
     "check:operational-health": "node scripts/check-operational-health.js",
     "check:web-security": "node scripts/check-web-security.js"
   },

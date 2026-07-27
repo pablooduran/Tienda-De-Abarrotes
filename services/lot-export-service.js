@@ -1,16 +1,24 @@
 const ExcelJS = require('exceljs');
 const { formatLocalDate } = require('../utils/local-datetime');
-const { databaseLocalDate, databaseLocalDateTime, LOT_STATES, validLocalDate } = require('./lot-service');
+const {
+  databaseLocalDate,
+  databaseLocalDateTime,
+  inventoryClassificationExpression,
+  LOT_STATES,
+  supportsInventoryClassification,
+  validLocalDate
+} = require('./lot-service');
 const { stockError } = require('./stock-movement-service');
 
 const MAX_EXPORT_ROWS = 5000;
 const CALCULATED_STATES = new Set([
-  'vencido', 'vence_hoy', 'proximo_a_vencer', 'vigente', 'bloqueado', 'agotado'
+  'vencido', 'vence_hoy', 'proximo_a_vencer', 'vigente', 'bloqueado', 'aislado', 'tecnico', 'agotado'
 ]);
 const LOT_COLUMNS = [
   ['Producto', 'producto'], ['Categoria', 'categoria'], ['Codigo de lote', 'codigoLote'],
   ['Proveedor', 'proveedor'], ['Origen', 'origen'], ['Fecha de ingreso', 'fechaIngreso'],
   ['Fecha de vencimiento', 'fechaVencimiento'], ['Estado operativo', 'estadoOperativo'],
+  ['Clasificacion inventario', 'clasificacionInventario'],
   ['Estado calculado', 'estadoCalculado'], ['Cantidad inicial', 'cantidadInicial'],
   ['Cantidad restante', 'cantidadRestante'], ['Costo unitario base', 'costoUnitarioBase'],
   ['Valor restante', 'valorRestante'], ['Compra relacionada', 'idCompra'],
@@ -70,11 +78,14 @@ function lotFilters(query = {}) {
   return { conditions, params, calculatedState, idProducto, idProveedor };
 }
 
-function lotBaseQuery(idTienda, query = {}) {
+function lotBaseQuery(idTienda, query = {}, hasClassification = false) {
   const today = formatLocalDate();
   const filters = lotFilters(query);
+  const inventoryClassification = inventoryClassificationExpression(hasClassification);
   const classification = `CASE
-    WHEN l.estadoOperativo='bloqueado' THEN 'bloqueado'
+    WHEN ${inventoryClassification}='tecnico' THEN 'tecnico'
+    WHEN ${inventoryClassification}='aislado' THEN 'aislado'
+    WHEN ${inventoryClassification}='bloqueado' THEN 'bloqueado'
     WHEN l.cantidadRestante=0 THEN 'agotado'
     WHEN l.fechaVencimiento<? THEN 'vencido'
     WHEN l.fechaVencimiento=? THEN 'vence_hoy'
@@ -83,7 +94,8 @@ function lotBaseQuery(idTienda, query = {}) {
     ELSE 'vigente' END`;
   const sql = `SELECT l.idLoteProducto, l.idProducto, p.nombre producto, p.categoria,
       pr.nombre proveedor, l.codigoLote, l.origen, l.fechaIngreso, l.fechaVencimiento,
-      l.estadoOperativo, ${classification} estadoCalculado,
+      l.estadoOperativo, ${inventoryClassification} clasificacionInventario,
+      ${classification} estadoCalculado,
       l.cantidadInicial, l.cantidadRestante,
       CAST(l.costoUnitarioBase AS CHAR) costoUnitarioBase,
       CASE WHEN l.costoUnitarioBase IS NULL THEN NULL
@@ -107,15 +119,25 @@ function lotBaseQuery(idTienda, query = {}) {
   };
 }
 
-async function lotSummary(connection, idTienda, query = {}) {
-  const base = lotBaseQuery(idTienda, query);
+async function lotSummary(connection, idTienda, query = {}, options = {}) {
+  const hasClassification = options.hasClassification
+    ?? await supportsInventoryClassification(connection);
+  const base = lotBaseQuery(idTienda, query, hasClassification);
   const [summaryRows] = await connection.query(
     `SELECT COUNT(*) totalLotes,
             COALESCE(SUM(cantidadRestante),0) stockTrazado,
             COALESCE(SUM(CASE WHEN estadoCalculado IN ('vigente','vence_hoy','proximo_a_vencer')
-                              AND estadoOperativo='disponible' THEN cantidadRestante ELSE 0 END),0) stockVendible,
-            COALESCE(SUM(CASE WHEN estadoCalculado='vencido' THEN cantidadRestante ELSE 0 END),0) stockVencido,
-            COALESCE(SUM(CASE WHEN estadoCalculado='bloqueado' THEN cantidadRestante ELSE 0 END),0) stockBloqueado,
+                              AND estadoOperativo='disponible'
+                              AND clasificacionInventario='vendible'
+                              THEN cantidadRestante ELSE 0 END),0) stockVendible,
+            COALESCE(SUM(CASE WHEN fechaVencimiento<?
+                              AND estadoOperativo<>'anulado' THEN cantidadRestante ELSE 0 END),0) stockVencido,
+            COALESCE(SUM(CASE WHEN clasificacionInventario='bloqueado'
+                              AND estadoOperativo<>'anulado' THEN cantidadRestante ELSE 0 END),0) stockBloqueado,
+            COALESCE(SUM(CASE WHEN clasificacionInventario='aislado'
+                              AND estadoOperativo<>'anulado' THEN cantidadRestante ELSE 0 END),0) stockAislado,
+            COALESCE(SUM(CASE WHEN clasificacionInventario='tecnico'
+                              AND estadoOperativo<>'anulado' THEN cantidadRestante ELSE 0 END),0) stockTecnico,
             SUM(CASE WHEN estadoCalculado='vencido' THEN 1 ELSE 0 END) lotesVencidos,
             SUM(CASE WHEN estadoCalculado='proximo_a_vencer' THEN 1 ELSE 0 END) lotesProximos,
             SUM(CASE WHEN estadoCalculado='vence_hoy' THEN 1 ELSE 0 END) lotesVencenHoy,
@@ -128,7 +150,7 @@ async function lotSummary(connection, idTienda, query = {}) {
                            THEN valorRestante ELSE 0 END),2) valorBloqueado,
             SUM(CASE WHEN cantidadRestante>0 AND costoUnitarioBase IS NULL THEN 1 ELSE 0 END) lotesCostoDesconocido
      FROM (${base.sql}) lotes ${base.outerWhere}`,
-    [...base.params, ...base.outerParams]
+    [formatLocalDate(), ...base.params, ...base.outerParams]
   );
   const productConditions = ['idTienda=?', 'controlaLotes=1'];
   const productParams = [idTienda];
@@ -144,8 +166,11 @@ async function lotSummary(connection, idTienda, query = {}) {
     totalLotes: Number(summaryRows[0].totalLotes),
     stockTrazado: Number(summaryRows[0].stockTrazado),
     stockVendible: Number(summaryRows[0].stockVendible),
+    stockNoVendible: Number(summaryRows[0].stockTrazado) - Number(summaryRows[0].stockVendible),
     stockVencido: Number(summaryRows[0].stockVencido),
     stockBloqueado: Number(summaryRows[0].stockBloqueado),
+    stockAislado: Number(summaryRows[0].stockAislado),
+    stockTecnico: Number(summaryRows[0].stockTecnico),
     lotesProximos: Number(summaryRows[0].lotesProximos),
     lotesVencidos: Number(summaryRows[0].lotesVencidos),
     lotesVencenHoy: Number(summaryRows[0].lotesVencenHoy),
@@ -182,7 +207,8 @@ function addRows(sheet, rows) {
 }
 
 async function buildLotExport(connection, idTienda, query = {}) {
-  const base = lotBaseQuery(idTienda, query);
+  const hasClassification = await supportsInventoryClassification(connection);
+  const base = lotBaseQuery(idTienda, query, hasClassification);
   const [rows] = await connection.query(
     `SELECT * FROM (${base.sql}) lotes ${base.outerWhere}
      ORDER BY fechaVencimiento IS NULL, fechaVencimiento, fechaIngreso, idLoteProducto
@@ -196,7 +222,7 @@ async function buildLotExport(connection, idTienda, query = {}) {
     fechaCompra: databaseLocalDateTime(row.fechaCompra),
     actualizadoEn: databaseLocalDateTime(row.actualizadoEn)
   }));
-  const summary = await lotSummary(connection, idTienda, query);
+  const summary = await lotSummary(connection, idTienda, query, { hasClassification });
   const workbook = new ExcelJS.Workbook();
   workbook.creator = 'Plataforma de tiendas';
   workbook.created = new Date();
@@ -204,14 +230,16 @@ async function buildLotExport(connection, idTienda, query = {}) {
   const lots = workbook.addWorksheet('Lotes');
   lots.columns = LOT_COLUMNS.map(([header, key]) => ({ header, key }));
   addRows(lots, exportRows);
-  styleSheet(lots, [28, 18, 18, 24, 18, 20, 20, 18, 20, 16, 17, 19, 17, 18, 20, 20, 22]);
+  styleSheet(lots, [28, 18, 18, 24, 18, 20, 20, 18, 20, 20, 16, 17, 19, 17, 18, 20, 20, 22]);
 
   const summarySheet = workbook.addWorksheet('Resumen');
   summarySheet.columns = [{ header: 'Metrica', key: 'metrica' }, { header: 'Valor', key: 'valor' }];
   const labels = {
     totalLotes: 'Total de lotes', productosControlados: 'Productos controlados',
     stockTrazado: 'Cantidad fisica trazada', stockVendible: 'Cantidad vendible',
-    stockVencido: 'Cantidad vencida', stockBloqueado: 'Cantidad bloqueada',
+    stockNoVendible: 'Cantidad no vendible', stockVencido: 'Cantidad vencida',
+    stockBloqueado: 'Cantidad bloqueada', stockAislado: 'Cantidad aislada',
+    stockTecnico: 'Cantidad en lotes tecnicos',
     lotesVencidos: 'Lotes vencidos', lotesProximos: 'Lotes proximos a vencer',
     lotesVencenHoy: 'Lotes que vencen hoy', lotesBloqueados: 'Lotes bloqueados',
     lotesAgotados: 'Lotes agotados', valorTotalRestante: 'Valor total restante conocido',
@@ -226,7 +254,7 @@ async function buildLotExport(connection, idTienda, query = {}) {
     const alertsSheet = workbook.addWorksheet('Alertas');
     alertsSheet.columns = LOT_COLUMNS.map(([header, key]) => ({ header, key }));
     addRows(alertsSheet, alerts);
-    styleSheet(alertsSheet, [28, 18, 18, 24, 18, 20, 20, 18, 20, 16, 17, 19, 17, 18, 20, 20, 22]);
+    styleSheet(alertsSheet, [28, 18, 18, 24, 18, 20, 20, 18, 20, 20, 16, 17, 19, 17, 18, 20, 20, 22]);
   }
 
   return {

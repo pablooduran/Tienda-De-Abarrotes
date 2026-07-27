@@ -7,11 +7,13 @@ const {
   databaseLocalDate,
   databaseLocalDateTime,
   existingOperationLots,
+  inventoryClassificationExpression,
   lockLots,
   lockProduct,
   normalizeLotEntries,
   operationPart,
   productLotSnapshot,
+  supportsInventoryClassification,
   validLocalDate
 } = require('../services/lot-service');
 const { stockError } = require('../services/stock-movement-service');
@@ -232,8 +234,12 @@ router.get('/lotes/alertas', requirePlanFeature('alertas_vencimiento'), asyncRou
     conditions.push('l.idProducto=?');
     params.push(parseId(req.query.producto, 'El producto'));
   }
+  const hasClassification = await supportsInventoryClassification(pool);
+  const inventoryClassification = inventoryClassificationExpression(hasClassification);
   const classification = `CASE
-    WHEN l.estadoOperativo='bloqueado' THEN 'bloqueado'
+    WHEN ${inventoryClassification}='tecnico' THEN 'tecnico'
+    WHEN ${inventoryClassification}='aislado' THEN 'aislado'
+    WHEN ${inventoryClassification}='bloqueado' THEN 'bloqueado'
     WHEN l.cantidadRestante=0 THEN 'agotado'
     WHEN l.fechaVencimiento<? THEN 'vencido'
     WHEN l.fechaVencimiento=? THEN 'vence_hoy'
@@ -254,9 +260,10 @@ router.get('/lotes/alertas', requirePlanFeature('alertas_vencimiento'), asyncRou
               CAST(l.costoUnitarioBase AS CHAR) costoUnitarioBase,
               CASE WHEN l.costoUnitarioBase IS NULL THEN NULL
                    ELSE ROUND(l.cantidadRestante*l.costoUnitarioBase,2) END valorRestante,
-              l.estadoOperativo, ${classification} estadoCalculado
+              l.estadoOperativo, ${inventoryClassification} clasificacionInventario,
+              ${classification} estadoCalculado
        ${from}
-       ORDER BY FIELD(estadoCalculado,'vencido','vence_hoy','proximo_a_vencer','bloqueado','agotado','vigente'),
+       ORDER BY FIELD(estadoCalculado,'vencido','vence_hoy','proximo_a_vencer','bloqueado','aislado','tecnico','agotado','vigente'),
                 l.fechaVencimiento, l.idLoteProducto LIMIT ? OFFSET ?`,
       [...baseParams, limit, offset]
     )
@@ -271,9 +278,13 @@ router.get('/productos/:id/lotes-disponibles', requireLotReadAccess('trazabilida
   const today = formatLocalDate();
   const lots = snapshot.lots.map((lot) => ({
     ...lot,
-    vendible: lot.estadoOperativo === 'disponible' && Number(lot.cantidadRestante) > 0
+    vendible: lot.estadoOperativo === 'disponible'
+      && lot.clasificacionInventario === 'vendible'
+      && Number(lot.cantidadRestante) > 0
       && (!lot.fechaVencimiento || databaseLocalDate(lot.fechaVencimiento) >= today),
-    motivoNoVendible: lot.estadoOperativo === 'bloqueado' ? 'bloqueado'
+    motivoNoVendible: lot.clasificacionInventario === 'tecnico' ? 'tecnico'
+      : lot.clasificacionInventario === 'aislado' ? 'aislado'
+        : lot.estadoOperativo === 'bloqueado' ? 'bloqueado'
       : Number(lot.cantidadRestante) <= 0 ? 'agotado'
         : lot.fechaVencimiento && databaseLocalDate(lot.fechaVencimiento) < today ? 'vencido' : null
   })).sort((a, b) => {
@@ -330,7 +341,12 @@ router.get('/lotes/:id', requireLotReadAccess('trazabilidad_lotes'), asyncRoute(
   ]);
   if (!lots.length) throw stockError(404, 'Lote no encontrado.');
   const snapshot = await productLotSnapshot(pool, idTienda, lots[0].idProducto);
-  res.json({ lote: lots[0], movimientos: movements, stock: snapshot.balances });
+  const classifiedLot = snapshot.lots.find((lot) => Number(lot.idLoteProducto) === idLote);
+  res.json({
+    lote: { ...lots[0], clasificacionInventario: classifiedLot?.clasificacionInventario || 'vendible' },
+    movimientos: movements,
+    stock: snapshot.balances
+  });
 }));
 
 router.get('/ventas/:id/lotes-utilizados', requireLotReadAccess('trazabilidad_lotes'), asyncRoute(async (req, res) => {
@@ -371,20 +387,27 @@ router.get('/lotes', requireLotReadAccess('trazabilidad_lotes'), asyncRoute(asyn
   if (from) { conditions.push('l.fechaVencimiento>=?'); params.push(from); }
   if (to) { conditions.push('l.fechaVencimiento<=?'); params.push(to); }
   if (['1', 'true'].includes(String(req.query.soloConSaldo || '').toLowerCase())) conditions.push('l.cantidadRestante>0');
-  const classification = `CASE WHEN l.estadoOperativo='bloqueado' THEN 'bloqueado'
+  const hasClassification = await supportsInventoryClassification(pool);
+  const inventoryClassification = inventoryClassificationExpression(hasClassification);
+  const classification = `CASE
+    WHEN ${inventoryClassification}='tecnico' THEN 'tecnico'
+    WHEN ${inventoryClassification}='aislado' THEN 'aislado'
+    WHEN ${inventoryClassification}='bloqueado' THEN 'bloqueado'
     WHEN l.cantidadRestante=0 THEN 'agotado' WHEN l.fechaVencimiento<? THEN 'vencido'
     WHEN l.fechaVencimiento=? THEN 'vence_hoy'
     WHEN l.fechaVencimiento<=DATE_ADD(?, INTERVAL COALESCE(p.diasAlertaVencimiento,c.diasAlertaVencimientoDefault) DAY)
       THEN 'proximo_a_vencer' ELSE 'vigente' END`;
   const state = String(req.query.estadoCalculado || '').trim();
-  const allowedCalculated = new Set(['vencido', 'vence_hoy', 'proximo_a_vencer', 'vigente', 'bloqueado', 'agotado']);
+  const allowedCalculated = new Set([
+    'vencido', 'vence_hoy', 'proximo_a_vencer', 'vigente', 'bloqueado', 'aislado', 'tecnico', 'agotado'
+  ]);
   const selectParams = [today, today, today, ...params];
   const base = `SELECT l.idLoteProducto, l.idProducto, p.nombre producto, p.categoria,
       pr.nombre proveedor, l.codigoLote, l.origen, l.fechaIngreso, l.fechaVencimiento,
       l.cantidadInicial, l.cantidadRestante, CAST(l.costoUnitarioBase AS CHAR) costoUnitarioBase,
       CASE WHEN l.costoUnitarioBase IS NULL THEN NULL
            ELSE ROUND(l.cantidadRestante*l.costoUnitarioBase,2) END valorRestante,
-      l.estadoOperativo,
+      l.estadoOperativo, ${inventoryClassification} clasificacionInventario,
       ${classification} estadoCalculado
     FROM loteProducto l
     JOIN producto p ON p.idTienda=l.idTienda AND p.idProducto=l.idProducto

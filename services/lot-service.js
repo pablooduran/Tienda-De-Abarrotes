@@ -101,6 +101,25 @@ function microsToCents(value) {
   return Number(roundedDivision(value, 10000));
 }
 
+async function supportsInventoryClassification(connection) {
+  const [rows] = await connection.query(
+    `SELECT COUNT(*) total
+     FROM information_schema.COLUMNS
+     WHERE TABLE_SCHEMA=DATABASE()
+       AND TABLE_NAME='loteProducto'
+       AND COLUMN_NAME='clasificacionInventario'`
+  );
+  return Number(rows[0]?.total || 0) === 1;
+}
+
+function inventoryClassificationExpression(hasClassification, alias = 'l') {
+  if (hasClassification) return `${alias}.clasificacionInventario`;
+  return `CASE
+    WHEN ${alias}.origen='reversion' THEN 'tecnico'
+    WHEN ${alias}.estadoOperativo='bloqueado' THEN 'bloqueado'
+    ELSE 'vendible' END`;
+}
+
 async function lockProduct(connection, idTienda, idProducto, { activeOnly = true } = {}) {
   const [rows] = await connection.query(
     `SELECT p.* FROM producto p
@@ -113,6 +132,7 @@ async function lockProduct(connection, idTienda, idProducto, { activeOnly = true
 }
 
 async function lockLots(connection, idTienda, idProducto, product = null) {
+  const hasClassification = await supportsInventoryClassification(connection);
   const order = Number(product?.controlaVencimiento) === 1
     ? 'fechaVencimiento IS NULL, fechaVencimiento, fechaIngreso, idLoteProducto'
     : 'fechaIngreso, idLoteProducto';
@@ -120,9 +140,10 @@ async function lockLots(connection, idTienda, idProducto, product = null) {
     `SELECT idLoteProducto, idTienda, idProducto, idProveedor, idDetalleCompra,
             codigoLote, origen, fechaIngreso, fechaVencimiento, cantidadInicial,
             cantidadRestante, CAST(costoUnitarioBase AS CHAR) costoUnitarioBase,
-            estadoOperativo, claveOperacion
-     FROM loteProducto
-     WHERE idTienda=? AND idProducto=?
+            estadoOperativo, ${inventoryClassificationExpression(hasClassification)} clasificacionInventario,
+            claveOperacion
+     FROM loteProducto l
+     WHERE l.idTienda=? AND l.idProducto=?
      ORDER BY ${order}
      FOR UPDATE`,
     [idTienda, idProducto]
@@ -136,6 +157,7 @@ function lotBalances(product, lots, today = formatLocalDate()) {
   const stockTrazado = nonCancelled.reduce((sum, lot) => sum + Number(lot.cantidadRestante), 0);
   const stockVendible = nonCancelled
     .filter((lot) => lot.estadoOperativo === 'disponible'
+      && lot.clasificacionInventario === 'vendible'
       && Number(lot.cantidadRestante) > 0
       && (!lot.fechaVencimiento || databaseLocalDate(lot.fechaVencimiento) >= today))
     .reduce((sum, lot) => sum + Number(lot.cantidadRestante), 0);
@@ -248,7 +270,12 @@ async function applyLotExit(connection, input) {
   return movementIds;
 }
 
-function normalizeLotEntries(rawLots, { requiredTotal, controlsExpiration, operationDate }) {
+function normalizeLotEntries(rawLots, {
+  requiredTotal,
+  controlsExpiration,
+  operationDate,
+  allowExpired = false
+}) {
   if (!Array.isArray(rawLots) || !rawLots.length) throw stockError(400, 'Debe indicar al menos un lote fisico.');
   if (rawLots.length > MAX_LOTS_PER_OPERATION) throw stockError(400, `Se permiten como maximo ${MAX_LOTS_PER_OPERATION} lotes por operacion.`);
   const today = formatLocalDate(operationDate);
@@ -257,7 +284,9 @@ function normalizeLotEntries(rawLots, { requiredTotal, controlsExpiration, opera
     const expiration = validLocalDate(raw.fechaVencimiento, `La fecha de vencimiento del lote ${index + 1}`, {
       required: controlsExpiration
     });
-    if (expiration && expiration < today) throw stockError(400, 'No se puede ingresar un lote ya vencido.');
+    if (!allowExpired && expiration && expiration < today) {
+      throw stockError(400, 'No se puede ingresar un lote ya vencido.');
+    }
     return {
       codigoLote: cleanText(raw.codigoLote, 80),
       fechaVencimiento: expiration,
@@ -274,23 +303,41 @@ function normalizeLotEntries(rawLots, { requiredTotal, controlsExpiration, opera
 
 async function createLotEntries(connection, input) {
   if (!LOT_ORIGINS.has(input.origen)) throw stockError(500, 'El origen del lote no es valido.');
+  const classification = input.clasificacionInventario || 'vendible';
+  if (!['vendible', 'bloqueado', 'aislado', 'tecnico'].includes(classification)) {
+    throw stockError(500, 'La clasificacion del lote no es valida.');
+  }
+  const operationalState = classification === 'vendible' ? 'disponible' : 'bloqueado';
+  if (classification === 'tecnico' && input.origen !== 'reversion') {
+    throw stockError(500, 'Un lote tecnico debe provenir de una reversion.');
+  }
   const operation = internalOperationPart(input.operation);
+  const hasClassification = await supportsInventoryClassification(connection);
   const created = [];
   for (let index = 0; index < input.entries.length; index += 1) {
     const entry = input.entries[index];
     const lotKey = derivedKey('lot', operation, input.detailIndex, index + 1);
     const movementKey = derivedKey('ml', operation, input.detailIndex, index + 1);
     const cost = input.costMicros !== undefined ? input.costMicros : entry.costMicros;
+    const columns = hasClassification
+      ? 'estadoOperativo, clasificacionInventario, claveOperacion'
+      : 'estadoOperativo, claveOperacion';
+    const placeholders = hasClassification ? '?, ?, ?' : '?, ?';
+    const values = [
+      input.idTienda, input.idProducto, input.idProveedor || null, input.idDetalleCompra || null,
+      entry.codigoLote, input.origen, input.creadoEn, entry.fechaVencimiento,
+      entry.quantity, entry.quantity, cost === null ? null : microsToDecimal(cost),
+      operationalState
+    ];
+    if (hasClassification) values.push(classification);
+    values.push(lotKey, input.creadoEn, input.creadoEn, input.idAdministrador);
     const [lot] = await connection.query(
       `INSERT INTO loteProducto
        (idTienda, idProducto, idProveedor, idDetalleCompra, codigoLote, origen,
         fechaIngreso, fechaVencimiento, cantidadInicial, cantidadRestante, costoUnitarioBase,
-        estadoOperativo, claveOperacion, creadoEn, actualizadoEn, idAdministradorCrea)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'disponible', ?, ?, ?, ?)`,
-      [input.idTienda, input.idProducto, input.idProveedor || null, input.idDetalleCompra || null,
-        entry.codigoLote, input.origen, input.creadoEn, entry.fechaVencimiento,
-        entry.quantity, entry.quantity, cost === null ? null : microsToDecimal(cost),
-        lotKey, input.creadoEn, input.creadoEn, input.idAdministrador]
+        ${columns}, creadoEn, actualizadoEn, idAdministradorCrea)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ${placeholders}, ?, ?, ?)`,
+      values
     );
     const idMovimientoLote = await insertLotMovement(connection, {
       idTienda: input.idTienda,
@@ -346,10 +393,12 @@ async function productLotSnapshot(connection, idTienda, idProducto, { lock = fal
               lotesActivadosEn, diasAlertaVencimiento
        FROM producto WHERE idTienda=? AND idProducto=?`, [idTienda, idProducto]))[0][0];
   if (!product) throw stockError(404, 'Producto no encontrado.');
+  const hasClassification = lock ? null : await supportsInventoryClassification(connection);
   const lots = lock ? await lockLots(connection, idTienda, idProducto, product) : (await connection.query(
-    `SELECT idLoteProducto, codigoLote, fechaIngreso, fechaVencimiento, cantidadInicial,
-            cantidadRestante, CAST(costoUnitarioBase AS CHAR) costoUnitarioBase, estadoOperativo
-     FROM loteProducto WHERE idTienda=? AND idProducto=? ORDER BY idLoteProducto`,
+    `SELECT idLoteProducto, codigoLote, origen, fechaIngreso, fechaVencimiento, cantidadInicial,
+            cantidadRestante, CAST(costoUnitarioBase AS CHAR) costoUnitarioBase,
+            estadoOperativo, ${inventoryClassificationExpression(hasClassification)} clasificacionInventario
+     FROM loteProducto l WHERE l.idTienda=? AND l.idProducto=? ORDER BY l.idLoteProducto`,
     [idTienda, idProducto]))[0];
   return { product, lots, balances: lotBalances(product, lots) };
 }
@@ -366,6 +415,7 @@ module.exports = {
   derivedKey,
   existingOperationLots,
   insertLotMovement,
+  inventoryClassificationExpression,
   lockLots,
   lockProduct,
   lotBalances,
@@ -375,5 +425,6 @@ module.exports = {
   optionalPositiveInteger,
   prepareLotExit,
   productLotSnapshot,
+  supportsInventoryClassification,
   validLocalDate
 };

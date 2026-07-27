@@ -88,6 +88,7 @@ async function scalar(connection, sql, params = []) {
 }
 
 async function cleanupStore(connection, idTienda) {
+  await connection.query('DELETE FROM eventoAuditoriaAdministrativa WHERE idTienda=?', [idTienda]);
   await connection.query('DELETE FROM cierreCaja WHERE idTienda=?', [idTienda]);
   await connection.query('DELETE FROM gasto WHERE idTienda=?', [idTienda]);
   await connection.query('DELETE FROM categoriaGasto WHERE idTienda=?', [idTienda]);
@@ -120,7 +121,22 @@ async function cleanup(connection, fixture) {
   );
   const ids = new Set([fixture.advancedStore, fixture.basicStore, ...stores.map((row) => row.idTienda)].filter(Boolean));
   for (const idTienda of ids) await cleanupStore(connection, idTienda);
-  if (fixture.superUser) await connection.query('DELETE FROM administrador WHERE usuario=?', [fixture.superUser]);
+  if (fixture.superUser) {
+    await connection.query(
+      `DELETE ea FROM eventoAuditoriaAdministrativa ea
+       JOIN administrador a ON a.idAdministrador=ea.idAdministradorActor
+       WHERE a.usuario=?`,
+      [fixture.superUser]
+    );
+    await connection.query('DELETE FROM administrador WHERE usuario=?', [fixture.superUser]);
+  }
+  if (Number.isSafeInteger(fixture.auditStartId)) {
+    await connection.query(
+      `DELETE FROM eventoAuditoriaAdministrativa
+       WHERE idEventoAuditoria>? AND idTienda IS NULL AND actorTipo='anonimo'`,
+      [fixture.auditStartId]
+    );
+  }
 }
 
 async function createProduct(connection, fixture, specification) {
@@ -304,6 +320,10 @@ async function main() {
   try {
     currentTestStage = 'setup: conexion y estructura local';
     connection = await createDatabaseConnection(config);
+    fixture.auditStartId = await scalar(
+      connection,
+      'SELECT COALESCE(MAX(idEventoAuditoria),0) total FROM eventoAuditoriaAdministrativa'
+    );
     assert(await scalar(connection,
       "SELECT COUNT(*) total FROM schema_migrations WHERE nombre='010_inteligencia_inventario.sql'") === 1,
     'La migracion 010 debe estar aplicada.');

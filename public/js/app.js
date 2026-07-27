@@ -16,12 +16,14 @@ let lotUi = { page: 1, pages: 1, activeTab: 'lotes' };
 let customerCreditUi = null;
 let compensationUi = null;
 let administrativeAuditUi = null;
+let inventoryAdjustmentUi = null;
 
 const sections = [
   ['inicio', 'Inicio', 'Resumen general del negocio'],
   ['productos', 'Productos', 'Catálogo, stock y presentaciones'],
   ['movimientosStock', 'Movimientos de stock', 'Entradas, salidas y ajustes del inventario'],
   ['inventarioInteligente', 'Inteligencia de inventario', 'Alertas, rotación y decisiones de abastecimiento'],
+  ['inventarioOperativo', 'Conciliación de inventario', 'Stock físico, vendible y ajustes trazables'],
   ['lotesVencimientos', 'Lotes y vencimientos', 'Trazabilidad, alertas y stock vendible'],
   ['clientes', 'Clientes', 'Perfiles, credito y estados de cuenta'],
   ['proveedores', 'Proveedores', 'Registro de proveedores'],
@@ -349,6 +351,27 @@ async function auditoria() {
   await auditUi().render();
 }
 
+function inventoryOperationsUi() {
+  if (!inventoryAdjustmentUi) {
+    inventoryAdjustmentUi = window.InventoryAdjustmentUI.create({
+      api,
+      root: view,
+      getProducts: () => state.productos,
+      hasFeature,
+      isReadOnly: () => Boolean(state.context?.soloLectura),
+      escapeHtml,
+      formatDate,
+      newOperationKey,
+      showSuccess
+    });
+  }
+  return inventoryAdjustmentUi;
+}
+
+async function inventarioOperativo() {
+  await inventoryOperationsUi().render();
+}
+
 function hasLotOperationalAccess() {
   return ['control_lotes', 'alertas_vencimiento', 'trazabilidad_lotes', 'exportacion_lotes', 'vencimientos_lote']
     .some(hasFeature) || Number(state.lotAccess?.productosControlados || 0) > 0;
@@ -361,6 +384,11 @@ function sectionAllowed(id) {
   if (id === 'compensaciones') return features.includes('anulaciones_operativas');
   if (id === 'cierreCaja') return features.includes('cierre_caja');
   if (id === 'inventarioInteligente') return features.includes('inventario_resumen');
+  if (id === 'inventarioOperativo') {
+    return features.includes('inventario_resumen')
+      || features.includes('historial_stock')
+      || features.includes('ajuste_stock');
+  }
   if (id === 'lotesVencimientos') return hasLotOperationalAccess();
   if (id === 'clientes') return features.includes('clientes_basico');
   if (id === 'pagos') return features.includes('fiados_basico') || features.includes('pagos_fiado');
@@ -410,7 +438,7 @@ async function loadView(id) {
   title.textContent = section[1];
   subtitle.textContent = section[2];
   await refreshCatalogs();
-  const handlers = { inicio, productos, movimientosStock, inventarioInteligente, lotesVencimientos, clientes, proveedores, ventas, compras, historialVentas, pagos, gastos, finanzas, compensaciones, auditoria, cierreCaja, reportes };
+  const handlers = { inicio, productos, movimientosStock, inventarioInteligente, inventarioOperativo, lotesVencimientos, clientes, proveedores, ventas, compras, historialVentas, pagos, gastos, finanzas, compensaciones, auditoria, cierreCaja, reportes };
   if (!handlers[id] || !sectionAllowed(id)) return loadView('inicio');
   await handlers[id]();
   applyReadOnlyUi();
@@ -1119,7 +1147,7 @@ function renderProductTable(rows) {
       <td>${escapeHtml(p.nombre)}</td><td>${escapeHtml(p.proveedor || 'SIN PROVEEDOR')}</td><td>${escapeHtml(p.categoria)}</td>
       <td>Bs ${money(p.precioVenta)}</td><td>${stockLabel(p)}</td><td>${packageText(p)}</td>
       <td>${p.bajoStock ? '<span class="badge pendiente">Bajo stock</span>' : '<span class="badge pagado">Normal</span>'}${Number(p.controlaLotes) ? `<span class="lot-control-label">Lotes${Number(p.controlaVencimiento) ? ' y vencimiento' : ''}</span>` : ''}</td>
-      <td class="actions"><button class="small secondary" data-edit="${p.idProducto}">Editar</button><button class="small" data-adjust-stock="${p.idProducto}">Ajustar stock</button><button class="small secondary" data-product-movements="${p.idProducto}">Ver movimientos</button>${Number(p.controlaLotes) || hasFeature('control_lotes') ? `<button class="small secondary" data-lot-config="${p.idProducto}">${Number(p.controlaLotes) ? 'Configurar lotes' : 'Activar lotes'}</button>` : ''}<button class="small danger" data-delete="${p.idProducto}">Ocultar</button></td>
+      <td class="actions"><button class="small secondary" data-edit="${p.idProducto}">Editar</button>${hasFeature('ajuste_stock') && !state.context?.soloLectura ? `<button class="small" data-adjust-stock="${p.idProducto}">Ajustar stock</button>` : ''}<button class="small secondary" data-product-movements="${p.idProducto}">Ver movimientos</button>${Number(p.controlaLotes) || hasFeature('control_lotes') ? `<button class="small secondary" data-lot-config="${p.idProducto}">${Number(p.controlaLotes) ? 'Configurar lotes' : 'Activar lotes'}</button>` : ''}<button class="small danger" data-delete="${p.idProducto}">Ocultar</button></td>
     </tr>`).join('')}</tbody></table></div>`;
   target.querySelectorAll('[data-edit]').forEach((btn) => btn.addEventListener('click', () => openProductModal(state.productos.find((p) => String(p.idProducto) === btn.dataset.edit))));
   target.querySelectorAll('[data-adjust-stock]').forEach((btn) => btn.addEventListener('click', () => openStockAdjustment(state.productos.find((p) => String(p.idProducto) === btn.dataset.adjustStock))));
@@ -1337,28 +1365,7 @@ async function requestLotStockAdjustment(product) {
 
 async function openStockAdjustment(product) {
   if (!product) return;
-  let data;
-  try {
-    data = Number(product.controlaLotes)
-      ? await requestLotStockAdjustment(product)
-      : await requestStockAdjustment(product);
-  } catch (error) {
-    return showError(error.message);
-  }
-  if (!data) return;
-  data.nuevoStock = Number(data.nuevoStock);
-  data.claveOperacion = data.claveOperacion || newOperationKey();
-  try {
-    const result = await api(`/api/productos/${product.idProducto}/ajustar-stock`, {
-      method: 'POST', body: JSON.stringify(data)
-    });
-    await showSuccess(`${result.message} Stock: ${result.stockAnterior} → ${result.stockPosterior}.`);
-    await loadView('productos');
-  } catch (error) {
-    await showError(error.message);
-  } finally {
-    data.password = '';
-  }
+  inventoryOperationsUi().openAdjustment(product.idProducto, document.activeElement);
 }
 
 async function openProductMovements(idProducto) {
@@ -3029,7 +3036,8 @@ function lotDate(value) {
 function lotStatusLabel(value) {
   return ({
     vencido: 'Vencido', vence_hoy: 'Vence hoy', proximo_a_vencer: 'Próximo a vencer',
-    vigente: 'Vigente', bloqueado: 'Bloqueado', agotado: 'Agotado',
+    vigente: 'Vigente', bloqueado: 'Bloqueado', aislado: 'Aislado',
+    tecnico: 'Tecnico', agotado: 'Agotado',
     disponible: 'Disponible', anulado: 'Anulado'
   })[value] || value || 'Sin estado';
 }
@@ -3067,8 +3075,11 @@ function renderLotSummary(summary) {
     ['Productos controlados', summary.productosControlados, 'neutral'],
     ['Stock trazado', summary.stockTrazado, 'neutral'],
     ['Stock vendible', summary.stockVendible, 'success'],
+    ['Stock no vendible', summary.stockNoVendible, 'warning'],
     ['Stock vencido', summary.stockVencido, 'danger'],
     ['Stock bloqueado', summary.stockBloqueado, 'warning'],
+    ['Stock aislado', summary.stockAislado, 'warning'],
+    ['Stock tecnico', summary.stockTecnico, 'neutral'],
     ['Próximos a vencer', summary.lotesProximos, 'attention'],
     ['Valor conocido por lotes', `Bs ${money(summary.valorTotalRestante)}`, 'neutral']
   ];
@@ -3171,7 +3182,9 @@ async function openLotDetail(idLote) {
       confirmText: 'Cerrar',
       body: `<div class="lot-detail-grid">
         <div><span>Producto</span><strong>${escapeHtml(lot.producto)}</strong></div><div><span>Código</span><strong>${escapeHtml(lot.codigoLote || 'Sin código')}</strong></div>
-        <div><span>Estado</span>${lotBadge(lot.estadoOperativo)}</div><div><span>Vencimiento</span><strong>${lotDate(lot.fechaVencimiento)}</strong></div>
+        <div><span>Estado</span>${lotBadge(lot.estadoOperativo)}</div>
+        <div><span>Clasificacion</span>${lotBadge(lot.clasificacionInventario)}</div>
+        <div><span>Vencimiento</span><strong>${lotDate(lot.fechaVencimiento)}</strong></div>
         <div><span>Ingreso</span><strong>${escapeHtml(formatDate(lot.fechaIngreso))}</strong></div><div><span>Proveedor</span><strong>${escapeHtml(lot.proveedor || 'Sin proveedor')}</strong></div>
         <div><span>Cantidad inicial</span><strong>${escapeHtml(lot.cantidadInicial)}</strong></div><div><span>Cantidad restante</span><strong>${escapeHtml(lot.cantidadRestante)}</strong></div>
         <div><span>Costo unitario</span><strong>${lot.costoUnitarioBase === null ? 'Desconocido' : `Bs ${money(lot.costoUnitarioBase)}`}</strong></div><div><span>Valor restante</span><strong>${lot.valorRestante === null ? 'Desconocido' : `Bs ${money(lot.valorRestante)}`}</strong></div>

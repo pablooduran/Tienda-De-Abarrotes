@@ -132,6 +132,7 @@ Migraciones actuales, en orden:
 16. `016_compensaciones_financieras.sql`: reduccion de deuda, obligaciones de reembolso, compensacion de cobros y correccion de metodos.
 17. `017_integracion_compensaciones.sql`: liquidaciones materiales inmutables, reportes netos y explicacion compensatoria de cierres futuros.
 18. `018_auditoria_administrativa_critica.sql`: bitacora append-only para autenticacion, sesiones, credenciales y superadministracion critica.
+19. `019_stock_vendible_ajustes.sql`: clasificacion explicita de lotes, stock vendible y ajustes manuales idempotentes y auditados.
 
 ### Auditoria administrativa
 
@@ -829,7 +830,7 @@ con codigo distinto de cero si el usuario limitado no esta configurado o no pued
 - Los productos usan borrado logico: ocultarlos o restaurarlos conserva stock y movimientos. Los proveedores todavia requieren una futura revision integral de borrado logico.
 - El stock solo cambia mediante alta inicial, compra, venta o ajuste manual. La edicion general del producto muestra el stock como solo lectura.
 - Los movimientos se guardan en unidades base enteras. Una operacion por paquete conserva tambien la cantidad y presentacion original para facilitar su lectura.
-- Los ajustes manuales usan el nuevo stock contado, calculan la diferencia en el backend y exigen la contrasena actual del propietario autenticado.
+- Los ajustes manuales operativos usan una cantidad positiva y una direccion separada, motivo controlado, confirmacion e idempotencia. El backend conserva stock anterior/posterior y crea movimientos, lotes y auditoria dentro de la misma transaccion.
 - Una venta fiada descuenta stock una sola vez al registrar la venta. Los pagos posteriores no cambian inventario.
 - El POS calcula precios, descuentos, pagos, cambio y saldo en el backend. El efectivo recibido se conserva para el comprobante, pero solo el monto aplicado se registra como ingreso.
 - El descuento disponible en esta fase es un monto fijo general; no se implementaron promociones ni porcentajes combinables.
@@ -1202,7 +1203,7 @@ Con `011` aplicada, inicie el servidor local y abra **Lotes y vencimientos**. La
 
 Compruebe con un plan avanzado:
 
-- el resumen separa stock trazado, vendible, vencido y bloqueado;
+- el resumen separa stock fisico, vendible, no vendible, vencido, bloqueado, aislado y tecnico;
 - los filtros por producto, proveedor, codigo, estado y vencimiento pueden aplicarse y limpiarse;
 - **Exportar XLSX** genera las hojas Lotes y Resumen, y agrega Alertas cuando existen resultados relevantes;
 - el detalle muestra compra, responsable, movimientos y ventas relacionadas sin claves internas;
@@ -1220,3 +1221,30 @@ Compruebe tambien:
 - en movil los lotes aparecen como tarjetas apiladas y los formularios no requieren desplazamiento horizontal;
 - los costos desconocidos se muestran como desconocidos, no como cero;
 - las fechas de vencimiento conservan el dia local y no se desplazan por UTC.
+
+### Stock vendible, conciliacion y ajustes manuales
+
+La migracion `019_stock_vendible_ajustes.sql` clasifica cada lote como
+`vendible`, `bloqueado`, `aislado` o `tecnico`. Solo un lote disponible,
+clasificado como vendible y no vencido aporta stock vendible. El stock fisico
+incluye ademas mercaderia vencida o no disponible para venta.
+
+`GET /api/inventario/conciliacion` compara, sin escribir, el saldo del producto,
+el historial de movimientos y los lotes. `GET /api/inventario/ajustes` lista el
+historial y `POST /api/inventario/ajustes` registra el ajuste transaccional. Las
+tres rutas toman la tienda de la sesion; la escritura exige suscripcion activa,
+funcionalidad `ajuste_stock`, CSRF, confirmacion y clave idempotente.
+
+```powershell
+$env:APP_ENV = "local"
+npm.cmd run db:check-inventory-adjustments
+npm.cmd run test:inventory-adjustments
+npm.cmd run test:inventory-adjustments-frontend
+npm.cmd run test:inventory-adjustments-browser
+```
+
+El comprobador nunca corrige diferencias. Para productos sin control de lotes,
+todo el saldo fisico se considera vendible: registrar existencia no vendible
+requiere activar el modelo trazable por lotes. La migracion `019` debe ensayarse
+en una base temporal y no aplicarse a la base principal sin autorizacion
+explicita.

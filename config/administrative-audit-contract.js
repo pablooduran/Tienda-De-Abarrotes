@@ -11,11 +11,16 @@ const VALUE_TYPES = Object.freeze({
   planCodigo: 'code',
   tipoSuscripcion: 'code',
   tipoOperacion: 'code',
+  tipoAjuste: 'code',
+  motivoCodigo: 'code',
   tratamientoInventario: 'code',
+  clasificacionInventario: 'code',
   metodoPago: 'code',
   formato: 'code',
   tipoExportacion: 'code',
   stock: 'integer',
+  stockFisico: 'integer',
+  stockVendible: 'integer',
   filas: 'integer',
   sesionesRevocadas: 'integer',
   versionSesionIncrementada: 'boolean'
@@ -69,6 +74,38 @@ const COMMERCIAL_AUDIT_ACTIONS = {
   ocultamiento_producto: definition('producto', 'producto', ['activo'], ['activo']),
   restauracion_producto: definition('producto', 'producto', ['activo'], ['activo']),
   ajuste_stock: definition('inventario', 'producto', ['stock'], ['stock']),
+  ajuste_inventario_solicitado: definition(
+    'inventario',
+    'ajuste_inventario',
+    [],
+    [],
+    ['tipoAjuste', 'motivoCodigo']
+  ),
+  ajuste_inventario_aplicado: definition(
+    'inventario',
+    'ajuste_inventario',
+    ['stockFisico', 'stockVendible'],
+    ['stockFisico', 'stockVendible'],
+    ['tipoAjuste', 'motivoCodigo', 'clasificacionInventario']
+  ),
+  ajuste_inventario_rechazado: definition(
+    'inventario',
+    'producto',
+    [],
+    [],
+    ['tipoAjuste', 'motivoCodigo']
+  ),
+  ajuste_inventario_fallido: definition(
+    'inventario',
+    'producto',
+    [],
+    [],
+    ['tipoAjuste', 'motivoCodigo']
+  ),
+  conciliacion_inventario_consultada: definition(
+    'inventario',
+    'conciliacion_inventario'
+  ),
   configuracion_lotes: definition('inventario', 'producto'),
   distribucion_lotes: definition('inventario', 'producto'),
   registro_compra: definition('inventario', 'compra'),
@@ -139,12 +176,20 @@ const BASE_ACTION_RESULT_CODES = {
   suspension_suscripcion: Object.freeze(['SUBSCRIPTION_SUSPENDED', ...ADMIN_FAILURE_CODES]),
   cancelacion_suscripcion: Object.freeze(['SUBSCRIPTION_CANCELLED', ...ADMIN_FAILURE_CODES])
 };
+const INVENTORY_ACTION_RESULT_CODES = Object.freeze({
+  ajuste_inventario_solicitado: Object.freeze(['INVENTORY_ADJUSTMENT_REQUESTED']),
+  ajuste_inventario_aplicado: Object.freeze(['INVENTORY_ADJUSTMENT_APPLIED']),
+  ajuste_inventario_rechazado: Object.freeze(['INVENTORY_ADJUSTMENT_REJECTED']),
+  ajuste_inventario_fallido: Object.freeze(['INVENTORY_ADJUSTMENT_FAILED']),
+  conciliacion_inventario_consultada: Object.freeze(['INVENTORY_RECONCILIATION_READ'])
+});
 const AUDIT_ACTION_RESULT_CODES = Object.freeze({
   ...BASE_ACTION_RESULT_CODES,
   ...Object.fromEntries(
     Object.keys(COMMERCIAL_AUDIT_ACTIONS).map((action) => [
       action,
-      action === 'exportacion_datos' ? EXPORT_RESULT_CODES : COMMERCIAL_RESULT_CODES
+      INVENTORY_ACTION_RESULT_CODES[action]
+        || (action === 'exportacion_datos' ? EXPORT_RESULT_CODES : COMMERCIAL_RESULT_CODES)
     ])
   )
 });
@@ -179,7 +224,12 @@ const AUDIT_RESULT_CODES = Object.freeze([
   'ADMIN_OPERATION_REJECTED',
   'ADMIN_OPERATION_FAILED',
   ...COMMERCIAL_RESULT_CODES,
-  ...EXPORT_RESULT_CODES
+  ...EXPORT_RESULT_CODES,
+  'INVENTORY_ADJUSTMENT_REQUESTED',
+  'INVENTORY_ADJUSTMENT_APPLIED',
+  'INVENTORY_ADJUSTMENT_REJECTED',
+  'INVENTORY_ADJUSTMENT_FAILED',
+  'INVENTORY_RECONCILIATION_READ'
 ]);
 
 const AUDIT_RESULTS_BY_CODE = Object.freeze({
@@ -214,7 +264,12 @@ const AUDIT_RESULTS_BY_CODE = Object.freeze({
   EXPORT_COMPLETED: Object.freeze(['correcto']),
   EXPORT_REJECTED: Object.freeze(['rechazado']),
   EXPORT_FAILED: Object.freeze(['fallido']),
-  EXPORT_LIMITED: Object.freeze(['limitado'])
+  EXPORT_LIMITED: Object.freeze(['limitado']),
+  INVENTORY_ADJUSTMENT_REQUESTED: Object.freeze(['correcto']),
+  INVENTORY_ADJUSTMENT_APPLIED: Object.freeze(['correcto']),
+  INVENTORY_ADJUSTMENT_REJECTED: Object.freeze(['rechazado']),
+  INVENTORY_ADJUSTMENT_FAILED: Object.freeze(['fallido']),
+  INVENTORY_RECONCILIATION_READ: Object.freeze(['correcto'])
 });
 
 module.exports = {

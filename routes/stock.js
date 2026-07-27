@@ -23,8 +23,13 @@ const {
 } = require('../services/lot-service');
 const { formatLocalDateTime } = require('../utils/local-datetime');
 const { administrativeAuditService } = require('../services/administrative-audit-service');
+const { createInventoryAdjustmentService } = require('../services/inventory-adjustment-service');
 
 const router = express.Router();
+const inventoryAdjustmentService = createInventoryAdjustmentService({
+  database: pool,
+  audit: administrativeAuditService
+});
 const ADJUSTMENT_WINDOW_MS = 10 * 60 * 1000;
 const ADJUSTMENT_BLOCK_MS = 15 * 60 * 1000;
 const MAX_PASSWORD_ATTEMPTS = 5;
@@ -37,6 +42,15 @@ function parseId(value, label) {
   const number = Number(value);
   if (!Number.isInteger(number) || number <= 0) throw stockError(400, `${label} no es valido.`);
   return number;
+}
+
+async function hasCanonicalInventoryAdjustments() {
+  const [[row]] = await pool.query(
+    `SELECT COUNT(*) total
+     FROM information_schema.TABLES
+     WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='ajusteInventario'`
+  );
+  return Number(row.total) === 1;
 }
 
 function pagination(query) {
@@ -178,6 +192,20 @@ router.post('/productos/:idProducto/ajustar-stock', requirePlanFeature('ajuste_s
   const idTienda = req.tenant.idTienda;
   const idAdministrador = Number(req.session.admin.id);
   const idProducto = parseId(req.params.idProducto, 'El producto');
+  if (await hasCanonicalInventoryAdjustments()) {
+    const result = await inventoryAdjustmentService.applyAdjustment({
+      idTienda,
+      idAdministrador,
+      idProducto,
+      requestId: req.requestId
+    }, { ...(req.body || {}), idProducto });
+    return res.status(result.repetida ? 200 : 201).json({
+      message: result.repetida
+        ? 'El ajuste ya habia sido aplicado.'
+        : 'Ajuste de inventario aplicado.',
+      ajuste: result
+    });
+  }
   const nuevoStock = Number(req.body.nuevoStock);
   const motivo = cleanText(req.body.motivo, 160);
   const observacion = cleanText(req.body.observacion, 500);

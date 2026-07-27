@@ -1268,6 +1268,10 @@ CREATE TABLE IF NOT EXISTS loteProducto (
   cantidadRestante INT NOT NULL,
   costoUnitarioBase DECIMAL(14,6) NULL,
   estadoOperativo ENUM('disponible','bloqueado','anulado') NOT NULL DEFAULT 'disponible',
+  -- INVENTORY_SELLABLE_LOT_CLASSIFICATION_START
+  clasificacionInventario ENUM('vendible','bloqueado','aislado','tecnico')
+    NOT NULL DEFAULT 'vendible',
+  -- INVENTORY_SELLABLE_LOT_CLASSIFICATION_END
   claveOperacion VARCHAR(160) NOT NULL,
   creadoEn DATETIME NOT NULL,
   actualizadoEn DATETIME NOT NULL,
@@ -1284,6 +1288,10 @@ CREATE TABLE IF NOT EXISTS loteProducto (
   KEY idx_lote_tienda_detalleCompra (idTienda, idDetalleCompra),
   KEY idx_lote_tienda_codigo (idTienda, codigoLote),
   KEY idx_lote_tienda_estado_vencimiento (idTienda, estadoOperativo, fechaVencimiento),
+  -- INVENTORY_SELLABLE_LOT_INDEX_START
+  KEY idx_lote_tienda_clasificacion_vencimiento
+    (idTienda, clasificacionInventario, fechaVencimiento),
+  -- INVENTORY_SELLABLE_LOT_INDEX_END
   CONSTRAINT chk_lote_cantidades CHECK (
     cantidadInicial>0 AND cantidadRestante>=0 AND cantidadRestante<=cantidadInicial
   ),
@@ -1299,6 +1307,19 @@ CREATE TABLE IF NOT EXISTS loteProducto (
   CONSTRAINT chk_lote_anulado_sin_saldo CHECK (
     estadoOperativo<>'anulado' OR cantidadRestante=0
   ),
+  -- INVENTORY_SELLABLE_LOT_CHECKS_START
+  CONSTRAINT chk_lote_clasificacion_operativa CHECK (
+    estadoOperativo='anulado'
+    OR (clasificacionInventario='vendible' AND estadoOperativo='disponible')
+    OR (
+      clasificacionInventario IN ('bloqueado','aislado','tecnico')
+      AND estadoOperativo='bloqueado'
+    )
+  ),
+  CONSTRAINT chk_lote_tecnico_reversion CHECK (
+    clasificacionInventario<>'tecnico' OR origen='reversion'
+  ),
+  -- INVENTORY_SELLABLE_LOT_CHECKS_END
   CONSTRAINT fk_lote_tienda FOREIGN KEY (idTienda)
     REFERENCES tienda(idTienda) ON UPDATE RESTRICT ON DELETE RESTRICT,
   CONSTRAINT fk_lote_producto FOREIGN KEY (idTienda, idProducto)
@@ -1357,6 +1378,86 @@ CREATE TABLE IF NOT EXISTS movimientoLote (
   CONSTRAINT fk_movimientoLote_administrador FOREIGN KEY (idTienda, idAdministrador)
     REFERENCES administrador(idTienda, idAdministrador) ON UPDATE RESTRICT ON DELETE RESTRICT
 ) ENGINE=InnoDB;
+
+-- INVENTORY_ADJUSTMENT_TABLE_START
+CREATE TABLE IF NOT EXISTS ajusteInventario (
+  idAjusteInventario BIGINT NOT NULL AUTO_INCREMENT,
+  idTienda INT NOT NULL,
+  idProducto INT NOT NULL,
+  idMovimientoStock BIGINT NULL,
+  idLoteProducto BIGINT NULL,
+  tipoAjuste ENUM('positivo','negativo') NOT NULL,
+  cantidad INT NOT NULL,
+  motivoCodigo ENUM(
+    'conteo_fisico','merma','danio','vencimiento',
+    'correccion_registro','otro_controlado'
+  ) NOT NULL,
+  observacion VARCHAR(500) NULL,
+  modoLotes ENUM('no_aplica','fefo_fifo','lote_explicito','lote_nuevo') NOT NULL,
+  clasificacionInventario ENUM('vendible','bloqueado','aislado','tecnico') NOT NULL,
+  stockFisicoAnterior INT NOT NULL,
+  stockFisicoPosterior INT NOT NULL,
+  stockVendibleAnterior INT NOT NULL,
+  stockVendiblePosterior INT NOT NULL,
+  claveOperacion VARCHAR(64) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+  huellaSolicitud CHAR(64) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+  idAdministrador INT NOT NULL,
+  creadoEn DATETIME NOT NULL,
+  PRIMARY KEY (idAjusteInventario),
+  UNIQUE KEY uq_ajusteInventario_tienda_id (idTienda, idAjusteInventario),
+  UNIQUE KEY uq_ajusteInventario_tienda_clave (idTienda, claveOperacion),
+  UNIQUE KEY uq_ajusteInventario_tienda_movimiento
+    (idTienda, idProducto, idMovimientoStock),
+  KEY idx_ajusteInventario_tienda_fecha
+    (idTienda, creadoEn, idAjusteInventario),
+  KEY idx_ajusteInventario_tienda_producto_fecha
+    (idTienda, idProducto, creadoEn, idAjusteInventario),
+  KEY idx_ajusteInventario_tienda_lote
+    (idTienda, idProducto, idLoteProducto),
+  CONSTRAINT chk_ajusteInventario_cantidad CHECK (cantidad>0),
+  CONSTRAINT chk_ajusteInventario_stock CHECK (
+    stockFisicoAnterior>=0
+    AND stockFisicoPosterior>=0
+    AND stockVendibleAnterior>=0
+    AND stockVendiblePosterior>=0
+    AND stockVendibleAnterior<=stockFisicoAnterior
+    AND stockVendiblePosterior<=stockFisicoPosterior
+    AND (
+      (tipoAjuste='positivo' AND stockFisicoPosterior=stockFisicoAnterior+cantidad)
+      OR
+      (tipoAjuste='negativo' AND stockFisicoPosterior=stockFisicoAnterior-cantidad)
+    )
+  ),
+  CONSTRAINT chk_ajusteInventario_otro CHECK (
+    motivoCodigo<>'otro_controlado' OR CHAR_LENGTH(TRIM(observacion))>=5
+  ),
+  CONSTRAINT chk_ajusteInventario_lotes CHECK (
+    (modoLotes='no_aplica' AND idLoteProducto IS NULL AND clasificacionInventario='vendible')
+    OR (modoLotes='fefo_fifo' AND idLoteProducto IS NULL)
+    OR (modoLotes IN ('lote_explicito','lote_nuevo') AND idLoteProducto IS NOT NULL)
+  ),
+  CONSTRAINT chk_ajusteInventario_clave CHECK (
+    claveOperacion REGEXP '^[A-Za-z0-9._:-]{8,64}$'
+    AND huellaSolicitud REGEXP '^[0-9a-f]{64}$'
+  ),
+  CONSTRAINT fk_ajusteInventario_tienda FOREIGN KEY (idTienda)
+    REFERENCES tienda(idTienda) ON UPDATE RESTRICT ON DELETE RESTRICT,
+  CONSTRAINT fk_ajusteInventario_producto FOREIGN KEY (idTienda, idProducto)
+    REFERENCES producto(idTienda, idProducto) ON UPDATE RESTRICT ON DELETE RESTRICT,
+  CONSTRAINT fk_ajusteInventario_movimiento
+    FOREIGN KEY (idTienda, idProducto, idMovimientoStock)
+    REFERENCES movimientoStock(idTienda, idProducto, idMovimientoStock)
+    ON UPDATE RESTRICT ON DELETE RESTRICT,
+  CONSTRAINT fk_ajusteInventario_lote
+    FOREIGN KEY (idTienda, idProducto, idLoteProducto)
+    REFERENCES loteProducto(idTienda, idProducto, idLoteProducto)
+    ON UPDATE RESTRICT ON DELETE RESTRICT,
+  CONSTRAINT fk_ajusteInventario_administrador
+    FOREIGN KEY (idTienda, idAdministrador)
+    REFERENCES administrador(idTienda, idAdministrador)
+    ON UPDATE RESTRICT ON DELETE RESTRICT
+) ENGINE=InnoDB;
+-- INVENTORY_ADJUSTMENT_TABLE_END
 
 -- COMPENSATION_SALES_TABLES_START
 ALTER TABLE movimientoLote

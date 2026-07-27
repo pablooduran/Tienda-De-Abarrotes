@@ -1,5 +1,6 @@
 const {
   addLocalDays,
+  formatLocalDate,
   formatLocalDateTime,
   getLocalNow,
   parseLocalDate,
@@ -241,6 +242,7 @@ async function fetchAnalysisRows(connection, idTienda, range, filters, options =
     `SELECT p.idProducto, p.nombre, p.categoria, p.idProveedor,
             pr.nombre proveedor, p.unidadMedida, p.unidadesPorPaquete,
             p.permiteVentaPorPaquete, p.stockUnidadesTotal, p.stockMinimo,
+            p.controlaLotes,
             p.precioVenta, p.ultimoPrecioCompra, p.activo AS productoActivo,
             p.diasReposicion, p.diasCoberturaObjetivo, p.presentacionCompraSugerida,
             p.fechaInicioSeguimiento,
@@ -291,7 +293,7 @@ async function fetchAnalysisRows(connection, idTienda, range, filters, options =
 
 function inventoryState(product) {
   if (Number(product.productoActivo) !== 1) return 'inactivo';
-  const stock = Number(product.stockUnidadesTotal);
+  const stock = Number(product.stockVendibleCalculado ?? product.stockUnidadesTotal);
   const minimum = Number(product.stockMinimo);
   if (stock === 0) return 'agotado';
   if (stock < minimum) return 'bajo';
@@ -306,7 +308,8 @@ function analyzeProduct(product, configuration, range) {
   const enoughHistory = observedDays >= Number(configuration.diasHistorialMinimo);
   const soldUnits = Number(product.unidadesVendidasPeriodo) || 0;
   const averageDaily = enoughHistory && observedDays > 0 ? soldUnits / observedDays : null;
-  const currentStock = Number(product.stockUnidadesTotal);
+  const physicalStock = Number(product.stockUnidadesTotal);
+  const currentStock = Number(product.stockVendibleCalculado ?? physicalStock);
   const restockDays = product.diasReposicion === null
     ? Number(configuration.diasReposicionDefault) : Number(product.diasReposicion);
   const coverageDays = product.diasCoberturaObjetivo === null
@@ -364,6 +367,15 @@ function analyzeProduct(product, configuration, range) {
     unidadesPorPaquete: Number(product.unidadesPorPaquete),
     estadoInventario: inventoryState(product),
     stockActual: currentStock,
+    stockFisico: physicalStock,
+    stockVendible: currentStock,
+    stockNoVendible: Math.max(0, physicalStock - currentStock),
+    desgloseNoVendible: product.desgloseNoVendible || {
+      vencido: 0,
+      bloqueado: 0,
+      aislado: 0,
+      tecnico: 0
+    },
     stockMinimo: Number(product.stockMinimo),
     unidadesVendidasPeriodo: soldUnits,
     ingresosPeriodo: round(product.ingresosPeriodo, 2),
@@ -398,16 +410,77 @@ function analyzeProduct(product, configuration, range) {
   };
 }
 
+async function stockAvailability(connection, idTienda) {
+  const [[column]] = await connection.query(
+    `SELECT COUNT(*) total
+     FROM information_schema.COLUMNS
+     WHERE TABLE_SCHEMA=DATABASE()
+       AND TABLE_NAME='loteProducto'
+       AND COLUMN_NAME='clasificacionInventario'`
+  );
+  const hasClassification = Number(column.total) === 1;
+  const classification = hasClassification
+    ? 'lp.clasificacionInventario'
+    : "CASE WHEN lp.origen='reversion' THEN 'tecnico' WHEN lp.estadoOperativo='bloqueado' THEN 'bloqueado' ELSE 'vendible' END";
+  const [rows] = await connection.query(
+    `SELECT lp.idProducto,
+            SUM(CASE
+              WHEN lp.estadoOperativo='disponible'
+               AND ${classification}='vendible'
+               AND (lp.fechaVencimiento IS NULL OR lp.fechaVencimiento>=?)
+              THEN lp.cantidadRestante ELSE 0 END) stockVendible,
+            SUM(CASE WHEN lp.estadoOperativo<>'anulado'
+              AND lp.fechaVencimiento IS NOT NULL AND lp.fechaVencimiento<?
+              THEN lp.cantidadRestante ELSE 0 END) vencido,
+            SUM(CASE WHEN lp.estadoOperativo<>'anulado'
+              AND ${classification}='bloqueado'
+              THEN lp.cantidadRestante ELSE 0 END) bloqueado,
+            SUM(CASE WHEN lp.estadoOperativo<>'anulado'
+              AND ${classification}='aislado'
+              THEN lp.cantidadRestante ELSE 0 END) aislado,
+            SUM(CASE WHEN lp.estadoOperativo<>'anulado'
+              AND ${classification}='tecnico'
+              THEN lp.cantidadRestante ELSE 0 END) tecnico
+     FROM loteProducto lp
+     WHERE lp.idTienda=?
+     GROUP BY lp.idProducto`,
+    [formatLocalDate(), formatLocalDate(), idTienda]
+  );
+  return new Map(rows.map((row) => [Number(row.idProducto), {
+    stockVendible: Number(row.stockVendible),
+    vencido: Number(row.vencido),
+    bloqueado: Number(row.bloqueado),
+    aislado: Number(row.aislado),
+    tecnico: Number(row.tecnico)
+  }]));
+}
+
 async function analysisContext(connection, idTienda, query = {}, options = {}) {
   const configuration = await loadInventoryConfiguration(connection, idTienda);
   const range = analysisRange(query, configuration);
   const filters = await validatedFilters(connection, idTienda, query);
-  const products = await fetchAnalysisRows(connection, idTienda, range, filters, options);
+  const [products, availability] = await Promise.all([
+    fetchAnalysisRows(connection, idTienda, range, filters, options),
+    stockAvailability(connection, idTienda)
+  ]);
+  const enriched = products.map((product) => {
+    if (!Number(product.controlaLotes)) {
+      return { ...product, stockVendibleCalculado: Number(product.stockUnidadesTotal) };
+    }
+    const current = availability.get(Number(product.idProducto)) || {
+      stockVendible: 0, vencido: 0, bloqueado: 0, aislado: 0, tecnico: 0
+    };
+    return {
+      ...product,
+      stockVendibleCalculado: current.stockVendible,
+      desgloseNoVendible: current
+    };
+  });
   return {
     configuration,
     range,
     filters,
-    products: products.map((product) => analyzeProduct(product, configuration, range))
+    products: enriched.map((product) => analyzeProduct(product, configuration, range))
   };
 }
 
@@ -430,7 +503,10 @@ async function inventorySummary(connection, idTienda, query = {}) {
     configuracion: context.configuration,
     productosActivos: context.products.length,
     estados: counts,
-    unidadesEnStock: context.products.reduce((sum, product) => sum + product.stockActual, 0),
+    unidadesEnStock: context.products.reduce((sum, product) => sum + product.stockVendible, 0),
+    stockFisico: context.products.reduce((sum, product) => sum + product.stockFisico, 0),
+    stockVendible: context.products.reduce((sum, product) => sum + product.stockVendible, 0),
+    stockNoVendible: context.products.reduce((sum, product) => sum + product.stockNoVendible, 0),
     productosConHistorialInsuficiente: context.products.filter((product) => !product.historialSuficiente).length,
     productosConCostoConocido: knownCost.length,
     productosConCostoDesconocido: context.products.length - knownCost.length,
@@ -681,5 +757,6 @@ module.exports = {
   suggestedPurchases,
   updateInventoryConfiguration,
   updateProductInventoryConfiguration,
-  valuationRows
+  valuationRows,
+  stockAvailability
 };

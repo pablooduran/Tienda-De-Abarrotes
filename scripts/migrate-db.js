@@ -810,6 +810,63 @@ const migrationRequirements = {
         ['idAdministradorActor'], 'administrador', ['idAdministrador'],
         'RESTRICT', 'RESTRICT']
     ]
+  },
+  '019_stock_vendible_ajustes.sql': {
+    columns: {
+      loteProducto: ['clasificacionInventario'],
+      ajusteInventario: [
+        'idAjusteInventario', 'idTienda', 'idProducto', 'idMovimientoStock',
+        'idLoteProducto', 'tipoAjuste', 'cantidad', 'motivoCodigo',
+        'observacion', 'modoLotes', 'clasificacionInventario',
+        'stockFisicoAnterior', 'stockFisicoPosterior', 'stockVendibleAnterior',
+        'stockVendiblePosterior', 'claveOperacion', 'huellaSolicitud',
+        'idAdministrador', 'creadoEn'
+      ]
+    },
+    indexes: [
+      ['loteProducto', 'idx_lote_tienda_clasificacion_vencimiento',
+        ['idTienda', 'clasificacionInventario', 'fechaVencimiento'], false],
+      ['ajusteInventario', 'uq_ajusteInventario_tienda_id',
+        ['idTienda', 'idAjusteInventario'], true],
+      ['ajusteInventario', 'uq_ajusteInventario_tienda_clave',
+        ['idTienda', 'claveOperacion'], true],
+      ['ajusteInventario', 'uq_ajusteInventario_tienda_movimiento',
+        ['idTienda', 'idProducto', 'idMovimientoStock'], true],
+      ['ajusteInventario', 'idx_ajusteInventario_tienda_fecha',
+        ['idTienda', 'creadoEn', 'idAjusteInventario'], false],
+      ['ajusteInventario', 'idx_ajusteInventario_tienda_producto_fecha',
+        ['idTienda', 'idProducto', 'creadoEn', 'idAjusteInventario'], false],
+      ['ajusteInventario', 'idx_ajusteInventario_tienda_lote',
+        ['idTienda', 'idProducto', 'idLoteProducto'], false]
+    ],
+    checks: [
+      ['loteProducto', 'chk_lote_clasificacion_operativa'],
+      ['loteProducto', 'chk_lote_tecnico_reversion'],
+      ['ajusteInventario', 'chk_ajusteInventario_cantidad'],
+      ['ajusteInventario', 'chk_ajusteInventario_stock'],
+      ['ajusteInventario', 'chk_ajusteInventario_otro'],
+      ['ajusteInventario', 'chk_ajusteInventario_lotes'],
+      ['ajusteInventario', 'chk_ajusteInventario_clave']
+    ],
+    foreignKeyConstraints: [
+      ['ajusteInventario', 'fk_ajusteInventario_tienda',
+        ['idTienda'], 'tienda', ['idTienda'], 'RESTRICT', 'RESTRICT'],
+      ['ajusteInventario', 'fk_ajusteInventario_producto',
+        ['idTienda', 'idProducto'], 'producto', ['idTienda', 'idProducto'],
+        'RESTRICT', 'RESTRICT'],
+      ['ajusteInventario', 'fk_ajusteInventario_movimiento',
+        ['idTienda', 'idProducto', 'idMovimientoStock'],
+        'movimientoStock', ['idTienda', 'idProducto', 'idMovimientoStock'],
+        'RESTRICT', 'RESTRICT'],
+      ['ajusteInventario', 'fk_ajusteInventario_lote',
+        ['idTienda', 'idProducto', 'idLoteProducto'],
+        'loteProducto', ['idTienda', 'idProducto', 'idLoteProducto'],
+        'RESTRICT', 'RESTRICT'],
+      ['ajusteInventario', 'fk_ajusteInventario_administrador',
+        ['idTienda', 'idAdministrador'],
+        'administrador', ['idTienda', 'idAdministrador'],
+        'RESTRICT', 'RESTRICT']
+    ]
   }
 };
 

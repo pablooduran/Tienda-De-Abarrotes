@@ -56,6 +56,7 @@ const authRoutes = require('./routes/auth');
 const customerCreditRoutes = require('./routes/customers-credit');
 const financeRoutes = require('./routes/finance');
 const financialCompensationRoutes = require('./routes/financial-compensations');
+const inventoryAdjustmentRoutes = require('./routes/inventory-adjustments');
 const inventoryIntelligenceRoutes = require('./routes/inventory-intelligence');
 const lotRoutes = require('./routes/lots');
 const masterCatalogRoutes = require('./routes/master-catalog');
@@ -194,6 +195,7 @@ app.use(
   resolveSubscription,
   requireActiveSubscription,
   financeRoutes,
+  inventoryAdjustmentRoutes,
   inventoryIntelligenceRoutes,
   lotRoutes,
   customerCreditRoutes,
