@@ -110,6 +110,7 @@ async function cleanupStore(connection, idTienda) {
   await connection.query('DELETE FROM cierreCaja WHERE idTienda=?', [idTienda]);
   await connection.query('DELETE FROM gasto WHERE idTienda=?', [idTienda]);
   await connection.query('DELETE FROM categoriaGasto WHERE idTienda=?', [idTienda]);
+  await connection.query('DELETE FROM ajusteInventario WHERE idTienda=?', [idTienda]);
   await connection.query('DELETE FROM movimientoStock WHERE idTienda=?', [idTienda]);
   await connection.query('DELETE FROM seguimientoCobranza WHERE idTienda=?', [idTienda]);
   await connection.query('DELETE FROM pagoVenta WHERE idTienda=?', [idTienda]);
@@ -362,44 +363,54 @@ async function main() {
       method: 'POST', body: {
         nuevoStock: stockBeforeEdit + 3, motivo: 'Conteo fisico', password: 'incorrecta', claveOperacion: `bad-pass-${marker}`
       }
-    }, 403, 'Ajuste con contrasena incorrecta');
+    }, 400, 'Payload heredado incompatible con el contrato canonico');
     await expect(ownerA, `/api/productos/${manualId}/ajustar-stock`, {
       method: 'POST', body: {
-        nuevoStock: stockBeforeEdit + 3, motivo: '', password: storeA.password, claveOperacion: `empty-reason-${marker}`
+        tipoAjuste: 'positivo', cantidad: 3, motivoCodigo: 'otro_controlado',
+        observacion: '', confirmado: true, modoLotes: 'no_aplica',
+        clasificacionInventario: 'vendible', claveOperacion: `empty-reason-${marker}`
       }
-    }, 400, 'Ajuste sin motivo');
+    }, 400, 'Ajuste con observacion obligatoria ausente');
     const positiveAdjustment = await expect(ownerA, `/api/productos/${manualId}/ajustar-stock`, {
       method: 'POST', body: {
-        nuevoStock: stockBeforeEdit + 3, motivo: 'Conteo fisico positivo', observacion: 'Prueba local',
-        password: storeA.password, claveOperacion: `positive-${marker}`
+        tipoAjuste: 'positivo', cantidad: 3, motivoCodigo: 'conteo_fisico',
+        observacion: 'Prueba local', confirmado: true, modoLotes: 'no_aplica',
+        clasificacionInventario: 'vendible', claveOperacion: `positive-${marker}`
       }
     }, 201, 'Ajuste positivo');
-    assert(Number(positiveAdjustment.diferencia) === 3, 'El ajuste positivo calculo una diferencia incorrecta.');
+    assert(Number(positiveAdjustment.ajuste.cantidad) === 3,
+      'El ajuste positivo canonico calculo una cantidad incorrecta.');
     const negativeAdjustment = await expect(ownerA, `/api/productos/${manualId}/ajustar-stock`, {
       method: 'POST', body: {
-        nuevoStock: stockBeforeEdit + 1, motivo: 'Conteo fisico negativo',
-        password: storeA.password, claveOperacion: `negative-${marker}`
+        tipoAjuste: 'negativo', cantidad: 2, motivoCodigo: 'conteo_fisico',
+        confirmado: true, modoLotes: 'no_aplica', clasificacionInventario: 'vendible',
+        claveOperacion: `negative-${marker}`
       }
     }, 201, 'Ajuste negativo');
-    assert(Number(negativeAdjustment.diferencia) === -2, 'El ajuste negativo calculo una diferencia incorrecta.');
+    assert(Number(negativeAdjustment.ajuste.cantidad) === 2,
+      'El ajuste negativo canonico calculo una cantidad incorrecta.');
     await expect(ownerA, `/api/productos/${manualId}/ajustar-stock`, {
       method: 'POST', body: {
-        nuevoStock: stockBeforeEdit + 1, motivo: 'Conteo sin diferencia',
-        password: storeA.password, claveOperacion: `zero-adjustment-${marker}`
+        tipoAjuste: 'positivo', cantidad: 0, motivoCodigo: 'conteo_fisico',
+        confirmado: true, modoLotes: 'no_aplica', clasificacionInventario: 'vendible',
+        claveOperacion: `zero-adjustment-${marker}`
       }
     }, 400, 'Ajuste de cantidad cero');
     await expect(ownerA, `/api/productos/${manualId}/ajustar-stock`, {
       method: 'POST', body: {
-        nuevoStock: -1, motivo: 'Intento de stock negativo',
-        password: storeA.password, claveOperacion: `negative-stock-${marker}`
+        tipoAjuste: 'negativo', cantidad: stockBeforeEdit + 4, motivoCodigo: 'conteo_fisico',
+        confirmado: true, modoLotes: 'no_aplica', clasificacionInventario: 'vendible',
+        claveOperacion: `negative-stock-${marker}`
       }
-    }, 400, 'Ajuste a stock negativo');
+    }, 409, 'Ajuste a stock negativo');
 
     await expect(ownerB, `/api/productos/${manualId}/movimientos`, {}, 404,
       'Otra tienda consulta movimientos ajenos');
     await expect(ownerB, `/api/productos/${manualId}/ajustar-stock`, {
       method: 'POST', body: {
-        nuevoStock: 1, motivo: 'Intento cruzado', password: storeB.password, claveOperacion: `cross-${marker}`
+        tipoAjuste: 'positivo', cantidad: 1, motivoCodigo: 'conteo_fisico',
+        confirmado: true, modoLotes: 'no_aplica', clasificacionInventario: 'vendible',
+        claveOperacion: `cross-${marker}`
       }
     }, 404, 'Otra tienda ajusta stock ajeno');
 

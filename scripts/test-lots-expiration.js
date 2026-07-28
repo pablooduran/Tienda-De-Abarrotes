@@ -97,6 +97,7 @@ async function scalar(connection, sql, params = []) {
 
 async function cleanupStore(connection, idTienda) {
   await connection.query('DELETE FROM eventoAuditoriaAdministrativa WHERE idTienda=?', [idTienda]);
+  await connection.query('DELETE FROM ajusteInventario WHERE idTienda=?', [idTienda]);
   await connection.query('DELETE FROM movimientoLote WHERE idTienda=?', [idTienda]);
   await connection.query('DELETE FROM loteProducto WHERE idTienda=?', [idTienda]);
   await connection.query('DELETE FROM cierreCaja WHERE idTienda=?', [idTienda]);
@@ -320,7 +321,7 @@ async function main() {
       [dateOffset(-3) + ' 08:00:00', dateOffset(-1), fixture.storeA, unavailableLots[0].idLoteProducto]
     );
     await connection.query(
-      "UPDATE loteProducto SET estadoOperativo='bloqueado' WHERE idTienda=? AND idLoteProducto=?",
+      "UPDATE loteProducto SET estadoOperativo='bloqueado', clasificacionInventario='bloqueado' WHERE idTienda=? AND idLoteProducto=?",
       [fixture.storeA, unavailableLots[1].idLoteProducto]
     );
     const unavailableSale = await ownerA.request('/api/pos/ventas', { method: 'POST', body: {
@@ -383,21 +384,24 @@ async function main() {
     }, 200, 'Activar producto para ajuste');
     await expect(ownerA, `/api/productos/${adjustmentProduct.idProducto}/ajustar-stock`, {
       method: 'POST', body: {
-        nuevoStock: 2, motivo: 'Conteo fisico positivo', password: storeA.password,
+        tipoAjuste: 'positivo', cantidad: 2, motivoCodigo: 'conteo_fisico',
+        confirmado: true, modoLotes: 'no_aplica', clasificacionInventario: 'vendible',
         claveOperacion: `adjust-positive-${marker}`
       }
     }, 409, 'Ajuste general inseguro rechazado');
     await expect(ownerA, `/api/productos/${adjustmentProduct.idProducto}/ajustar-stock`, {
       method: 'POST', body: {
-        nuevoStock: 2, motivo: 'Conteo fisico positivo', password: storeA.password,
-        claveOperacion: `adjust-positive-${marker}`, modoLotes: 'ajuste_positivo',
-        lotes: [{ codigoLote: 'ADJ', cantidad: 2, costoUnitarioBase: 1.5 }]
+        tipoAjuste: 'positivo', cantidad: 2, motivoCodigo: 'conteo_fisico',
+        confirmado: true, modoLotes: 'lote_nuevo', clasificacionInventario: 'vendible',
+        claveOperacion: `adjust-positive-${marker}`,
+        lote: { codigoLote: 'ADJ', costoUnitarioBase: 1.5 }
       }
     }, 201, 'Ajuste positivo por lotes');
     await expect(ownerA, `/api/productos/${adjustmentProduct.idProducto}/ajustar-stock`, {
       method: 'POST', body: {
-        nuevoStock: 1, motivo: 'Conteo fisico negativo', password: storeA.password,
-        claveOperacion: `adjust-negative-${marker}`, modoLotes: 'ajuste_negativo'
+        tipoAjuste: 'negativo', cantidad: 1, motivoCodigo: 'conteo_fisico',
+        confirmado: true, modoLotes: 'fefo_fifo', clasificacionInventario: 'vendible',
+        claveOperacion: `adjust-negative-${marker}`
       }
     }, 201, 'Ajuste negativo por lotes');
 
