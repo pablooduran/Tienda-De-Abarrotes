@@ -124,7 +124,8 @@ async function cleanupStore(connection, idTienda) {
     'detalleVenta', 'detalleCompra', 'fiado', 'venta', 'compra', 'movimientoLote',
     'loteProducto', 'movimientoStock', 'producto', 'cliente', 'proveedor',
     'plantillaCobranzaTienda', 'configuracionCreditoTienda',
-    'configuracionInventarioTienda', 'categoriaGasto', 'suscripcionTienda'
+    'configuracionInventarioTienda', 'configuracionTienda', 'categoriaGasto',
+    'suscripcionTienda'
   ]) {
     await connection.query(`DELETE FROM ${table} WHERE idTienda=?`, [idTienda]);
   }

@@ -10,10 +10,14 @@ const { createPublicRegistrationService } = require('../services/public-registra
 const { createAdministrativeAuditService } = require('../services/administrative-audit-service');
 const { createEmailVerificationService } = require('../services/email-verification-service');
 const { createLocalVerificationMailAdapter } = require('../services/local-verification-mail-adapter');
+const { ensureBaseConfiguration } = require('../services/store-bootstrap-service');
 const { normalizeRegistration, normalizeSlug } = require('../config/public-registration-contract');
 
 const ROOT = path.resolve(__dirname, '..');
-const MIGRATION_FILE = path.join(ROOT, 'database', 'migrations', '020_registro_publico_onboarding.sql');
+const MIGRATION_FILES = Object.freeze([
+  path.join(ROOT, 'database', 'migrations', '020_registro_publico_onboarding.sql'),
+  path.join(ROOT, 'database', 'migrations', '021_configuracion_base_tienda.sql')
+]);
 const TEMP_PREFIX = 'tmp_tienda_restore_saas_a1_';
 
 function quoteIdentifier(value) {
@@ -91,11 +95,23 @@ async function createPre020Schema(connection) {
   );
 }
 
-async function apply020(connection) {
-  for (const statement of readSqlStatements(MIGRATION_FILE)) {
-    await connection.query(statement);
+async function applyRegistrationMigrations(connection) {
+  for (const file of MIGRATION_FILES) {
+    for (const rawStatement of readSqlStatements(file)) {
+      const statement = rawStatement.replace(
+        /__MIGRATION_LOCAL_DATETIME__/g,
+        "'2026-07-29 10:00:00'"
+      );
+      await connection.query(statement);
+    }
   }
-  await connection.query('INSERT INTO schema_migrations (nombre) VALUES (?)', ['020_registro_publico_onboarding.sql']);
+  await connection.query(
+    'INSERT INTO schema_migrations (nombre) VALUES (?),(?)',
+    [
+      '020_registro_publico_onboarding.sql',
+      '021_configuracion_base_tienda.sql'
+    ]
+  );
 }
 
 function request(marker, overrides = {}) {
@@ -127,7 +143,7 @@ async function main() {
     connection = await connect(await temporaryCredentials(database));
     connection.release = () => {};
     await createPre020Schema(connection);
-    await apply020(connection);
+    await applyRegistrationMigrations(connection);
     const structure = await inspectPublicRegistration(connection);
     assert.deepStrictEqual(structure, {
       migrationRegistered: true, administrator: true, store: true, token: true, request: true, indexes: true
@@ -152,7 +168,10 @@ async function main() {
       fingerprintSecret: 'test-only-registration-secret',
       verificationService,
       clock: () => '2026-07-29 10:00:00',
-      bootstrap: async (_connection, idTienda) => { bootstrapCalls.push(idTienda); }
+      bootstrap: async (_connection, idTienda, now) => {
+        bootstrapCalls.push(idTienda);
+        await ensureBaseConfiguration(_connection, idTienda, now);
+      }
     });
     const key = `registro:${marker}:clave`;
     const body = request(marker);
@@ -175,6 +194,14 @@ async function main() {
     assert.strictEqual(owner.tipo, 'prueba');
     assert.strictEqual(owner.estado, 'activa');
     assert.strictEqual(Math.round((new Date(owner.fechaFin) - new Date(owner.fechaInicio)) / 86400000), 30);
+    const [[baseConfiguration]] = await connection.query(
+      `SELECT nombreMostrado,moneda,zonaHoraria
+       FROM configuracionTienda WHERE idTienda=?`,
+      [owner.idTienda]
+    );
+    assert.strictEqual(baseConfiguration.nombreMostrado, body.nombreTienda);
+    assert.strictEqual(baseConfiguration.moneda, 'BOB');
+    assert.strictEqual(baseConfiguration.zonaHoraria, 'America/La_Paz');
     const [[tokenCount]] = await connection.query(
       `SELECT COUNT(*) total FROM tokenAccesoAdministrador
        WHERE idAdministrador=? AND tipo='verificacion_correo'`,
@@ -209,7 +236,11 @@ async function main() {
     const concurrentService = createPublicRegistrationService({
       database: { getConnection: async () => connection }, fingerprintSecret: 'test-only-registration-secret', auditService,
       verificationService: noopVerificationService,
-      bootstrap: async () => { markBootstrapStarted(); await bootstrapRelease; }
+      bootstrap: async (_connection, idTienda, now) => {
+        markBootstrapStarted();
+        await bootstrapRelease;
+        await ensureBaseConfiguration(_connection, idTienda, now);
+      }
     });
     const secondAuditService = createAdministrativeAuditService({ database: concurrentConnection });
     const secondService = createPublicRegistrationService({

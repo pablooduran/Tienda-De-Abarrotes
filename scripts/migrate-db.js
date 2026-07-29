@@ -44,7 +44,8 @@ function prepareMigrationStatement(file, statement, context = {}) {
     '010_inteligencia_inventario.sql',
     '011_lotes_vencimientos.sql',
     '012_clientes_fiados_comunicacion.sql',
-    '014_operaciones_compensatorias.sql'
+    '014_operaciones_compensatorias.sql',
+    '021_configuracion_base_tienda.sql'
   ].includes(file)
     || !statement.includes(MIGRATION_LOCAL_DATETIME_TOKEN)) {
     return { sql: statement, params: [] };
@@ -896,6 +897,43 @@ const migrationRequirements = {
       ['tokenAccesoAdministrador', 'fk_tokenAcceso_administrador', ['idAdministrador'], 'administrador', ['idAdministrador'], 'RESTRICT', 'RESTRICT'],
       ['solicitudRegistroPublico', 'fk_solicitudRegistro_tienda', ['idTienda'], 'tienda', ['idTienda'], 'RESTRICT', 'RESTRICT'],
       ['solicitudRegistroPublico', 'fk_solicitudRegistro_administrador', ['idAdministrador'], 'administrador', ['idAdministrador'], 'RESTRICT', 'RESTRICT']
+    ]
+  },
+  '021_configuracion_base_tienda.sql': {
+    columns: {
+      configuracionTienda: [
+        'idConfiguracionTienda', 'idTienda', 'nombreMostrado', 'moneda',
+        'zonaHoraria', 'telefono', 'direccion', 'datoFiscalBasico',
+        'creadoEn', 'actualizadoEn'
+      ]
+    },
+    columnTypes: {
+      configuracionTienda: {
+        idConfiguracionTienda: 'bigint',
+        idTienda: 'int',
+        nombreMostrado: 'varchar',
+        moneda: 'char',
+        zonaHoraria: 'varchar',
+        telefono: 'varchar',
+        direccion: 'varchar',
+        datoFiscalBasico: 'varchar',
+        creadoEn: 'datetime',
+        actualizadoEn: 'datetime'
+      }
+    },
+    indexes: [
+      ['configuracionTienda', 'PRIMARY', ['idConfiguracionTienda'], true],
+      ['configuracionTienda', 'uq_configuracionTienda_tienda', ['idTienda'], true]
+    ],
+    checks: [
+      ['configuracionTienda', 'chk_configuracionTienda_nombre'],
+      ['configuracionTienda', 'chk_configuracionTienda_moneda'],
+      ['configuracionTienda', 'chk_configuracionTienda_zona'],
+      ['configuracionTienda', 'chk_configuracionTienda_opcionales']
+    ],
+    foreignKeyConstraints: [
+      ['configuracionTienda', 'fk_configuracionTienda_tienda',
+        ['idTienda'], 'tienda', ['idTienda'], 'RESTRICT', 'RESTRICT']
     ]
   }
 };
@@ -3484,7 +3522,8 @@ async function main() {
               '017_integracion_compensaciones.sql',
               '018_auditoria_administrativa_critica.sql',
               '019_stock_vendible_ajustes.sql',
-              '020_registro_publico_onboarding.sql'
+              '020_registro_publico_onboarding.sql',
+              '021_configuracion_base_tienda.sql'
             ].includes(file)
             && !await requirementsSatisfied(connection, file);
         if (registeredMigrationIsIncomplete) {
@@ -3515,7 +3554,8 @@ async function main() {
           '017_integracion_compensaciones.sql',
           '018_auditoria_administrativa_critica.sql',
           '019_stock_vendible_ajustes.sql',
-          '020_registro_publico_onboarding.sql'
+          '020_registro_publico_onboarding.sql',
+          '021_configuracion_base_tienda.sql'
         ].includes(file)) {
           await connection.query('INSERT IGNORE INTO schema_migrations (nombre) VALUES (?)', [file]);
           const [finalRecord] = await connection.query(
@@ -3551,7 +3591,8 @@ async function main() {
         '010_inteligencia_inventario.sql',
         '011_lotes_vencimientos.sql',
         '012_clientes_fiados_comunicacion.sql',
-        '014_operaciones_compensatorias.sql'
+        '014_operaciones_compensatorias.sql',
+        '021_configuracion_base_tienda.sql'
       ].includes(file)
         ? { localDateTime: formatLocalDateTime() }
         : {};

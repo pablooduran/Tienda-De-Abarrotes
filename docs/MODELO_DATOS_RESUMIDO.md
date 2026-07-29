@@ -31,7 +31,7 @@ columna, FK o constraint exacto.
 
 | Dominio | Tablas principales y PK | Ownership | Relaciones e historicos | Restricciones y notas | Migraciones |
 | --- | --- | --- | --- | --- | --- |
-| Tiendas y administracion | `tienda(idTienda)`, `administrador(idAdministrador)` | `tienda` es raiz; superadmin puede no tener tienda | administrador propietario referencia tienda; version de sesion invalida sesiones | usuario y rol controlados; no cruzar administradores de tiendas | 004, 013 |
+| Tiendas y administracion | `tienda(idTienda)`, `configuracionTienda(idConfiguracionTienda)`, `administrador(idAdministrador)` | `tienda` es raiz; configuracion es uno a uno por `idTienda`; superadmin puede no tener tienda | administrador propietario referencia tienda; configuracion conserva nombre mostrado, moneda y zona; version de sesion invalida sesiones | usuario y rol controlados; configuracion base no contiene plan, permisos ni datos comerciales | 004, 013, 020, 021 |
 | Planes y suscripciones | `plan(idPlan)`, `funcionalidad(idFuncionalidad)`, `planFuncionalidad`, `suscripcionTienda(idSuscripcion)` | suscripcion pertenece a tienda | plan define caracteristicas; suscripcion determina escritura y lectura | limites y caracteristicas se resuelven en backend | 005 |
 | Sesiones y autenticacion | `administrador`; tabla `sessions` gestionada por el store MySQL | actor puede ser global o de tienda | sesion valida administrador y su version | no documentar ni consultar contenido de sesion fuera del servicio | 013 |
 | Catalogo y productos | `categoriaMaestra`, `marcaMaestra`, `productoMaestro`, `auditoriaCatalogo`, `producto(idProducto)`, `proveedor(idProveedor)` | producto y proveedor pertenecen a tienda; catalogo maestro es global | producto puede referenciar catalogo; auditoria de catalogo conserva cambios | precio, stock y activo se validan por servicio; no usar maestro como tenant comercial | 001, 004, 006 |
@@ -81,7 +81,7 @@ columna, FK o constraint exacto.
 - Auditoria y compensaciones son append-only. La correccion crea una nueva
   operacion vinculada, no una edicion silenciosa.
 
-## Migraciones 001-019
+## Migraciones 001-021
 
 | Numero | Proposito | Dominio | Cambio principal | Backfill / criticidad |
 | --- | --- | --- | --- | --- |
@@ -104,6 +104,8 @@ columna, FK o constraint exacto.
 | 017 | Integracion compensatoria | caja y liquidaciones | movimiento material y campos de cierre | backfill seguro, cierres congelados |
 | 018 | Auditoria administrativa | auditoria | evento append-only, FKs e indices | critica: trazabilidad y sanitizacion |
 | 019 | Stock vendible y ajustes | lotes y ajustes | clasificacion operativa y ajuste inventario | backfill de clasificacion, critica para vendible |
+| 020 | Registro publico y acceso | tienda, administrador y tokens | correo normalizado, estados de acceso/onboarding, tokens e idempotencia | compatible con cuentas existentes |
+| 021 | Configuracion base de tienda | tienda y onboarding | tabla uno a uno con nombre mostrado, moneda, zona y datos opcionales | backfill desde `tienda.nombre`; no altera datos comerciales |
 
 Para una definicion exacta de PK, FK, indice, CHECK o columna, leer la
 migracion correspondiente y el esquema actual. No aplicar ni editar una

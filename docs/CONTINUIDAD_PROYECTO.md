@@ -9,8 +9,7 @@ Documento de relevo tecnico para continuar el proyecto sin depender del historia
 - Punto de partida de INV-A: `89cc85a feat: completar auditoria administrativa`
 - No trabajar directamente en `main`.
 - El HEAD indicado es una referencia local conocida. Confirmar si tambien existe en el remoto antes de depender de el para una recuperacion.
-- La base principal local esta en 019. INV-A e INV-B estan cerrados y no agregaron
-  migraciones posteriores.
+- La base principal local esta en 021. INV-A e INV-B permanecen cerrados.
 - La optimizacion operativa de Codex queda cerrada en las etapas 1 a 10. El
   HEAD esperado despues de este cierre es el commit `docs: cerrar optimizacion
   operativa de Codex` posterior a `2959093`; confirmar el hash real con Git.
@@ -50,7 +49,7 @@ Si la rama, el HEAD o el estado difieren, detenerse y entender los cambios exist
 | `routes/` | Contratos HTTP de autenticacion, administracion y modulos comerciales. |
 | `services/` | Reglas de negocio, transacciones, reportes, POS, stock, clientes y cobranza. |
 | `public/` | Aplicacion web, administracion, login, estilos y JavaScript del navegador. |
-| `database/migrations/` | Migraciones historicas y modernas, numeradas de 001 a 020; la base principal local validada esta en 020. |
+| `database/migrations/` | Migraciones historicas y modernas, numeradas de 001 a 021; la base principal local validada esta en 021. |
 | `database/tienda_abarrotes.sql` | Esquema inicial equivalente al estado final esperado. |
 | `scripts/` | Migrador, comprobadores, pruebas, administracion local y backups. |
 | `utils/` | Utilidades compartidas, incluidas fechas locales y errores. |
@@ -122,7 +121,7 @@ El contexto de tienda proviene de la sesion validada. El navegador no debe envia
 | INV-A - stock vendible y conciliacion | Terminado | Clasificacion explicita, conciliacion read-only, ajustes idempotentes, auditoria, interfaz y pruebas; 019 aplicada en localhost. |
 | INV-B - reposicion | Terminado | Rotacion neta, cobertura, alertas priorizadas, sugerencias informativas, exportacion XLSX y accesibilidad basica sin ordenes de compra. |
 | Optimizacion de Codex, etapas 1-10 | Terminado | Indice, mapas compactos, comprobadores, seis skills versionables y validacion segura. Ver `AGENTS.md` y `docs/GUIA_CODEX_SKILLS.md`. |
-| Fase 11 - acceso publico | Parcial: SAAS-A1, SAAS-A2 y SAAS-A3 | Registro publico transaccional, verificacion, reenvio y recuperacion de contrasena mediante tokens hash-only y adaptador local en memoria. Faltan onboarding y cierre. |
+| Fase 11 - acceso publico | Parcial: SAAS-A1, SAAS-A2, SAAS-A3 y SAAS-A4A | Registro publico transaccional, verificacion, reenvio, recuperacion de contrasena y configuracion base uno a uno por tienda. Faltan rutas/interfaz de onboarding y cierre. |
 | Suscripciones comerciales | No iniciada | No hay cobro automatizado de planes ni pasarela comercial. |
 | Staging y produccion | Pendiente | No se ha desplegado este estado. |
 
@@ -215,7 +214,7 @@ Un downgrade no borra ni oculta deuda existente. Se mantiene la consulta histori
 ## 5. Migraciones
 
 No renumerar, editar ni reemplazar migraciones aplicadas. La base local principal
-conocida `tienda_abarrotes_pruebas` esta validada en 019.
+conocida `tienda_abarrotes_pruebas` esta validada en 021.
 
 | Migracion | Objetivo principal |
 | --- | --- |
@@ -239,6 +238,7 @@ conocida `tienda_abarrotes_pruebas` esta validada en 019.
 | `018_auditoria_administrativa_critica.sql` | Bitacora append-only y eventos criticos de autenticacion, sesiones, credenciales, tiendas, propietarios, planes y suscripciones. |
 | `019_stock_vendible_ajustes.sql` | Stock fisico, vendible/no vendible, conciliacion y ajustes manuales. |
 | `020_registro_publico_onboarding.sql` | Registro publico idempotente, correo normalizado, estado de acceso/onboarding y tokens futuros. |
+| `021_configuracion_base_tienda.sql` | Configuracion base uno a uno de nombre mostrado, moneda, zona horaria y datos opcionales. |
 
 Reglas:
 
@@ -247,7 +247,7 @@ Reglas:
 - Las modernas usan inspeccion pre/parcial/post y registro tardio.
 - Una migracion registrada pero fisicamente incompleta debe bloquear el proceso.
 - Una estructura completa no registrada solo puede adoptarse despues de validarla.
-- `database/tienda_abarrotes.sql` debe conservar equivalencia con el estado post-019 para instalaciones nuevas.
+- `database/tienda_abarrotes.sql` debe conservar equivalencia con el estado post-021 para instalaciones nuevas.
 - Antes de cualquier futura migracion: backup verificado, ensayo sobre copia, revision del SQL y comprobacion posterior.
 
 ## 6. Scripts npm y nivel de seguridad
@@ -604,7 +604,7 @@ En ambos casos, conservar el repositorio o base anterior hasta completar smoke t
 ### Base local
 
 - Base de pruebas esperada: `tienda_abarrotes_pruebas`.
-- Migraciones registradas en la base principal conocida: 001 a 020.
+- Migraciones registradas en la base principal conocida: 001 a 021.
 - No deberian existir bases `tmp_tienda_restore_*` ni `tmp_tienda_legacy_*` despues de las pruebas.
 
 ### Ultimo estado conocido de pruebas
@@ -644,7 +644,7 @@ Estos resultados corresponden al ultimo estado conocido. Antes de iniciar el sig
 
 ## 17. Siguiente macrofase
 
-La siguiente macrofase es **SAAS-A: registro publico y onboarding**. Antes de
-iniciarla, confirmar el estado real de Git, migracion 019, backup, limpieza y
-reglas de seguridad. Cualquier migracion, proveedor externo, despliegue o
-secreto requiere una autorizacion separada.
+El siguiente subbloque es **SAAS-A4B: rutas e interfaz de onboarding** sobre la
+configuracion base de 021. Antes de iniciarlo, confirmar Git, migracion 021,
+backup y limpieza. Cualquier proveedor externo, despliegue o secreto requiere
+una autorizacion separada.

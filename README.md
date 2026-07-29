@@ -134,7 +134,7 @@ Migraciones actuales, en orden:
 18. `018_auditoria_administrativa_critica.sql`: bitacora append-only para autenticacion, sesiones, credenciales y superadministracion critica.
 19. `019_stock_vendible_ajustes.sql`: separacion entre stock fisico, vendible y no vendible, conciliacion y ajustes trazables.
 20. `020_registro_publico_onboarding.sql`: base para registro publico pendiente de verificacion, tokens futuros y onboarding.
-19. `019_stock_vendible_ajustes.sql`: clasificacion explicita de lotes, stock vendible y ajustes manuales idempotentes y auditados.
+21. `021_configuracion_base_tienda.sql`: configuracion base uno a uno por tienda para nombre mostrado, moneda, zona horaria y datos opcionales.
 
 ### Auditoria administrativa
 

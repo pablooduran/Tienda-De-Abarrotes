@@ -1,6 +1,19 @@
 const { ensureDefaultExpenseCategories } = require('./financial-service');
 const { ensureInventoryConfiguration } = require('./inventory-intelligence-service');
 
+async function ensureBaseConfiguration(connection, idTienda, localDateTime) {
+  await connection.query(
+    `INSERT INTO configuracionTienda
+     (idTienda, nombreMostrado, moneda, zonaHoraria, telefono, direccion,
+      datoFiscalBasico, creadoEn, actualizadoEn)
+     SELECT idTienda, nombre, 'BOB', 'America/La_Paz', NULL, NULL, NULL, ?, ?
+     FROM tienda
+     WHERE idTienda=?
+     ON DUPLICATE KEY UPDATE idTienda=VALUES(idTienda)`,
+    [localDateTime, localDateTime, idTienda]
+  );
+}
+
 async function ensureCreditConfiguration(connection, idTienda, localDateTime) {
   await connection.query(
     `INSERT INTO configuracionCreditoTienda
@@ -29,9 +42,14 @@ async function ensureCreditConfiguration(connection, idTienda, localDateTime) {
 }
 
 async function bootstrapStore(connection, idTienda, localDateTime) {
+  await ensureBaseConfiguration(connection, idTienda, localDateTime);
   await ensureDefaultExpenseCategories(connection, idTienda, localDateTime);
   await ensureInventoryConfiguration(connection, idTienda, localDateTime);
   await ensureCreditConfiguration(connection, idTienda, localDateTime);
 }
 
-module.exports = { bootstrapStore, ensureCreditConfiguration };
+module.exports = {
+  bootstrapStore,
+  ensureBaseConfiguration,
+  ensureCreditConfiguration
+};
