@@ -29,7 +29,7 @@ async function validateSession(sessionAdmin, connection = pool) {
   const [rows] = await connection.query(
     `SELECT a.idAdministrador, a.usuario, a.rol, a.idTienda, a.activo AS administradorActivo, a.estadoAcceso,
        a.versionSesion, t.idTienda AS tiendaEncontrada, t.activo AS tiendaActiva,
-       t.estado AS estadoTienda
+       t.estado AS estadoTienda, t.estadoOnboarding
      FROM administrador a
      LEFT JOIN tienda t ON t.idTienda=a.idTienda
      WHERE a.idAdministrador=?
@@ -66,7 +66,8 @@ async function validateSession(sessionAdmin, connection = pool) {
       idTienda: currentStore,
       versionSesion: Number(current.versionSesion),
       administradorActivo: true,
-      tiendaActiva: current.rol === 'superadmin' ? null : true
+      tiendaActiva: current.rol === 'superadmin' ? null : true,
+      estadoOnboarding: current.rol === 'superadmin' ? null : current.estadoOnboarding
     })
   });
 }

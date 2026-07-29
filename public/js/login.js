@@ -15,7 +15,9 @@ form.addEventListener('submit', async (event) => {
     });
     const result = await response.json().catch(() => ({}));
     if (!response.ok) throw SecurityHttp.errorFromResponse(response, result, 'No se pudo iniciar sesion.');
-    window.location.href = result.admin?.rol === 'superadmin' ? '/admin.html' : '/app.html';
+    window.location.href = result.destination === '/onboarding.html'
+      ? '/onboarding.html'
+      : (result.admin?.rol === 'superadmin' ? '/admin.html' : '/app.html');
   } catch (error) {
     message.textContent = error.message || 'No se pudo iniciar sesion.';
     message.className = 'message error';

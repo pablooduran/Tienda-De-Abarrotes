@@ -121,7 +121,7 @@ El contexto de tienda proviene de la sesion validada. El navegador no debe envia
 | INV-A - stock vendible y conciliacion | Terminado | Clasificacion explicita, conciliacion read-only, ajustes idempotentes, auditoria, interfaz y pruebas; 019 aplicada en localhost. |
 | INV-B - reposicion | Terminado | Rotacion neta, cobertura, alertas priorizadas, sugerencias informativas, exportacion XLSX y accesibilidad basica sin ordenes de compra. |
 | Optimizacion de Codex, etapas 1-10 | Terminado | Indice, mapas compactos, comprobadores, seis skills versionables y validacion segura. Ver `AGENTS.md` y `docs/GUIA_CODEX_SKILLS.md`. |
-| Fase 11 - acceso publico | Parcial: SAAS-A1, SAAS-A2, SAAS-A3 y SAAS-A4A | Registro publico transaccional, verificacion, reenvio, recuperacion de contrasena y configuracion base uno a uno por tienda. Faltan rutas/interfaz de onboarding y cierre. |
+| Fase 11 - acceso publico | Parcial: SAAS-A1, SAAS-A2, SAAS-A3, SAAS-A4A y SAAS-A4B | Registro publico transaccional, verificacion, reenvio, recuperacion de contrasena, configuracion base y onboarding inicial. Falta el cierre y regresion de SAAS-A5. |
 | Suscripciones comerciales | No iniciada | No hay cobro automatizado de planes ni pasarela comercial. |
 | Staging y produccion | Pendiente | No se ha desplegado este estado. |
 
@@ -644,7 +644,6 @@ Estos resultados corresponden al ultimo estado conocido. Antes de iniciar el sig
 
 ## 17. Siguiente macrofase
 
-El siguiente subbloque es **SAAS-A4B: rutas e interfaz de onboarding** sobre la
-configuracion base de 021. Antes de iniciarlo, confirmar Git, migracion 021,
-backup y limpieza. Cualquier proveedor externo, despliegue o secreto requiere
-una autorizacion separada.
+El siguiente subbloque es **SAAS-A5: regresion y cierre de acceso publico**.
+Antes de iniciarlo, confirmar Git, migracion 021, backup y limpieza. Cualquier
+proveedor externo, despliegue o secreto requiere una autorizacion separada.

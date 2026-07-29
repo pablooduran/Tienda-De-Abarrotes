@@ -77,6 +77,8 @@
     "test:email-verification": "node scripts/test-email-verification.js",
     "test:password-recovery": "node scripts/test-password-recovery.js",
     "test:store-configuration": "node scripts/test-store-configuration.js",
+    "test:onboarding": "node scripts/test-onboarding.js",
+    "test:onboarding-browser": "node scripts/test-onboarding-browser.js",
     "check:operational-health": "node scripts/check-operational-health.js",
     "check:web-security": "node scripts/check-web-security.js",
     "codex:status": "node scripts/codex-project-status.js",

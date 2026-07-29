@@ -1054,8 +1054,18 @@ de forma neutra; `POST /auth/restablecer-password` acepta solo token y nueva
 contrasena, cambia la clave dentro de una transaccion, incrementa
 `versionSesion`, invalida sesiones previas y no modifica estado de tienda,
 suscripcion u onboarding. El token de recuperacion dura 60 minutos por defecto
-y nunca verifica el correo ni crea una sesion. No hay proveedor real de correo,
-onboarding ni login por correo todavia.
+ y nunca verifica el correo ni crea una sesion. No hay proveedor real de correo
+ni login por correo todavia.
+
+### Onboarding inicial
+
+El propietario verificado accede a `/onboarding.html` mientras su tienda este en
+`pendiente` o `en_progreso`. Las rutas autenticadas `GET /onboarding`,
+`PATCH /onboarding` y `POST /onboarding/completar` derivan siempre el tenant de
+la sesion, usan CSRF en escrituras y actualizan solo `configuracionTienda`:
+nombre mostrado, moneda, zona horaria y datos opcionales. La finalizacion es
+transaccional e idempotente; no altera suscripcion, rol, sesiones ni datos
+comerciales. Al completar, el usuario puede continuar al panel principal.
 
 Las solicitudes incompletas se conservan solo como estado idempotente minimo y quedan
 indexadas para una futura politica de mantenimiento autorizada; SAAS-A1 no elimina

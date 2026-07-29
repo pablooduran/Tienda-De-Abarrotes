@@ -75,7 +75,7 @@ router.post('/login', async (req, res, next) => {
 
     const [rows] = await pool.query(
       `SELECT a.idAdministrador, a.usuario, a.password, a.rol, a.idTienda, a.activo, a.estadoAcceso, a.versionSesion,
-        t.activo AS tiendaActiva, t.estado AS estadoTienda
+        t.activo AS tiendaActiva, t.estado AS estadoTienda, t.estadoOnboarding
        FROM administrador a
        LEFT JOIN tienda t ON t.idTienda=a.idTienda
        WHERE a.usuario=?
@@ -136,7 +136,10 @@ router.post('/login', async (req, res, next) => {
       await destroyRequestSession(req, res);
       throw error;
     }
-    res.json({ message: 'Sesion iniciada.', admin: publicAdmin(req.session.admin) });
+    const destination = admin.rol === 'dueno_tienda' && admin.estadoOnboarding !== 'completado'
+      ? '/onboarding.html'
+      : (admin.rol === 'superadmin' ? '/admin.html' : '/app.html');
+    res.json({ message: 'Sesion iniciada.', admin: publicAdmin(req.session.admin), destination });
   } catch (error) {
     next(error);
   }

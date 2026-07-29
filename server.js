@@ -60,6 +60,7 @@ const inventoryAdjustmentRoutes = require('./routes/inventory-adjustments');
 const inventoryIntelligenceRoutes = require('./routes/inventory-intelligence');
 const lotRoutes = require('./routes/lots');
 const masterCatalogRoutes = require('./routes/master-catalog');
+const onboardingRoutes = require('./routes/onboarding');
 const posRoutes = require('./routes/pos');
 const salesCompensationRoutes = require('./routes/sales-compensations');
 const stockRoutes = require('./routes/stock');
@@ -192,6 +193,7 @@ app.use('/api/admin/auditoria', requireAuth, requireRole('superadmin'), adminAud
 app.use('/api/admin/catalogo', requireAuth, requireRole('superadmin'), adminCatalogRoutes);
 app.use('/api/admin', requireAuth, requireRole('superadmin'), adminRoutes);
 app.use('/api/auditoria', rateLimiters.admin, requireAuth, requireTenant, tenantAuditRoutes);
+app.use('/onboarding', rateLimiters.api, requireAuth, requireTenant, resolveSubscription, requireActiveSubscription, onboardingRoutes);
 app.use('/api/catalogo-maestro', requireAuth, requireTenant, resolveSubscription, requireActiveSubscription, masterCatalogRoutes);
 app.use(
   '/api',
@@ -213,7 +215,14 @@ app.use(
 
 app.get('/app.html', requireAuth, (req, res) => {
   if (req.auth.rol !== 'dueno_tienda') return res.redirect('/admin.html');
+  if (req.auth.estadoOnboarding !== 'completado') return res.redirect('/onboarding.html');
   res.sendFile(path.join(__dirname, 'public', 'app.html'));
+});
+
+app.get('/onboarding.html', requireAuth, (req, res) => {
+  if (req.auth.rol === 'superadmin') return res.redirect('/admin.html');
+  if (req.auth.estadoOnboarding === 'completado') return res.redirect('/app.html');
+  return res.sendFile(path.join(__dirname, 'public', 'onboarding.html'));
 });
 
 app.get('/admin.html', requireAuth, (req, res) => {
@@ -224,7 +233,9 @@ app.get('/admin.html', requireAuth, (req, res) => {
 app.use(express.static(path.join(__dirname, 'public')));
 
 app.get('/', requireAuth, (req, res) => {
-  const destination = req.auth.rol === 'superadmin' ? '/admin.html' : '/app.html';
+  const destination = req.auth.rol === 'superadmin'
+    ? '/admin.html'
+    : (req.auth.estadoOnboarding === 'completado' ? '/app.html' : '/onboarding.html');
   res.redirect(destination);
 });
 

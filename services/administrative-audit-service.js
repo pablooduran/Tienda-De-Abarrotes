@@ -18,6 +18,9 @@ const RESULT_CODES = new Set(AUDIT_RESULT_CODES);
 const SAFE_CODE = /^[A-Za-z0-9][A-Za-z0-9_.:-]{0,79}$/;
 const SAFE_REFERENCE = /^[a-z][a-z0-9_]{1,39}:[0-9]{1,20}$/;
 const REQUEST_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
+const ONBOARDING_FIELDS = new Set([
+  'nombremostrado', 'moneda', 'zonahoraria', 'telefono', 'direccion', 'datofiscalbasico'
+]);
 
 function auditError(message) {
   const error = new Error(message);
@@ -40,6 +43,16 @@ function safeCode(value, label) {
 
 function sanitizeValue(key, value) {
   const type = VALUE_TYPES[key];
+  if (type === 'field_list') {
+    if (!Array.isArray(value) || value.length > ONBOARDING_FIELDS.size) {
+      throw auditError(`Lista invalida para ${key}.`);
+    }
+    const normalized = [...new Set(value.map((item) => String(item || '').trim().toLowerCase()))];
+    if (normalized.some((item) => !ONBOARDING_FIELDS.has(item))) {
+      throw auditError(`Campo de onboarding no permitido para ${key}.`);
+    }
+    return normalized;
+  }
   if (type === 'boolean') {
     if (value === true || value === false) return value;
     if (value === 1 || value === 0) return Boolean(value);
