@@ -42,6 +42,8 @@
     "test:pos-payments": "node scripts/test-pos-payments.js",
     "test:financial-reports": "node scripts/test-financial-reports.js",
     "test:inventory-intelligence": "node scripts/test-inventory-intelligence.js",
+    "test:inventory-intelligence-frontend": "node scripts/test-inventory-intelligence-frontend.js",
+    "test:inventory-intelligence-browser": "node scripts/test-inventory-intelligence-browser.js",
     "test:lots-expiration": "node scripts/test-lots-expiration.js",
     "test:customers-credit": "node scripts/test-customers-credit.js",
     "test:customers-credit-frontend": "node scripts/test-customers-credit-frontend.js",

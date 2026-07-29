@@ -2,6 +2,7 @@ const express = require('express');
 const pool = require('../config/db');
 const { requirePlanFeature } = require('../middleware/subscription');
 const { buildInventoryIntelligenceExport } = require('../services/inventory-intelligence-export-service');
+const { administrativeAuditService } = require('../services/administrative-audit-service');
 const {
   inventoryAlerts,
   inventoryConfiguration,
@@ -26,34 +27,54 @@ function idTienda(req) {
 }
 
 router.get('/inventario-inteligente/resumen', requirePlanFeature('inventario_resumen'), asyncRoute(async (req, res) => {
+  res.set('Cache-Control', 'no-store');
   res.json(await inventorySummary(pool, idTienda(req), req.query));
 }));
 
 router.get('/inventario-inteligente/alertas', requirePlanFeature('alertas_stock'), asyncRoute(async (req, res) => {
+  res.set('Cache-Control', 'no-store');
   res.json(await inventoryAlerts(pool, idTienda(req), req.query));
 }));
 
 router.get('/inventario-inteligente/ranking', requirePlanFeature('ranking_productos'), asyncRoute(async (req, res) => {
+  res.set('Cache-Control', 'no-store');
   res.json(await inventoryRanking(pool, idTienda(req), req.query));
 }));
 
 router.get('/inventario-inteligente/valoracion', requirePlanFeature('valor_inventario_basico'), asyncRoute(async (req, res) => {
+  res.set('Cache-Control', 'no-store');
   res.json(await inventoryValuation(pool, idTienda(req), req.query));
 }));
 
 router.get('/inventario-inteligente/compras-sugeridas', requirePlanFeature('compras_sugeridas'), asyncRoute(async (req, res) => {
-  res.json(await suggestedPurchases(pool, idTienda(req), req.query));
+  res.set('Cache-Control', 'no-store');
+  const result = await suggestedPurchases(pool, idTienda(req), req.query);
+  res.json(result);
+  await administrativeAuditService.recordOutcome({
+    storeId: idTienda(req),
+    actorType: 'administrador',
+    administratorId: Number(req.session.admin.id),
+    action: 'consulta_sugerencias_compra',
+    result: 'correcto',
+    resultCode: 'INVENTORY_SUGGESTIONS_READ',
+    origin: 'web',
+    reference: `inventario:${idTienda(req)}`,
+    requestId: req.requestId
+  });
 }));
 
 router.get('/inventario-inteligente/rotacion', requirePlanFeature('rotacion_inventario'), asyncRoute(async (req, res) => {
+  res.set('Cache-Control', 'no-store');
   res.json(await inventoryRotation(pool, idTienda(req), req.query));
 }));
 
 router.get('/inventario-inteligente/sin-movimiento', requirePlanFeature('inventario_sin_movimiento'), asyncRoute(async (req, res) => {
+  res.set('Cache-Control', 'no-store');
   res.json(await inventoryWithoutMovement(pool, idTienda(req), req.query));
 }));
 
 router.get('/inventario-inteligente/configuracion', requirePlanFeature('inventario_resumen'), asyncRoute(async (req, res) => {
+  res.set('Cache-Control', 'no-store');
   res.json(await inventoryConfiguration(pool, idTienda(req), req.query));
 }));
 
@@ -86,8 +107,25 @@ router.get('/inventario-inteligente/exportacion.xlsx', requirePlanFeature('expor
   );
   res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
   res.setHeader('Content-Disposition', `attachment; filename="${report.fileName}"`);
+  res.setHeader('Cache-Control', 'no-store');
   res.setHeader('X-Inventory-Sheets', String(report.sheets.length));
   res.send(Buffer.from(report.buffer));
+  const action = report.type === 'rotacion'
+    ? 'exportacion_rotacion_inventario'
+    : report.type === 'alertas' ? 'exportacion_alertas_inventario' : null;
+  if (!action) return;
+  await administrativeAuditService.recordOutcome({
+    storeId: idTienda(req),
+    actorType: 'administrador',
+    administratorId: Number(req.session.admin.id),
+    action,
+    result: 'correcto',
+    resultCode: 'EXPORT_COMPLETED',
+    origin: 'web',
+    reference: `inventario:${idTienda(req)}`,
+    requestId: req.requestId,
+    metadata: { formato: 'xlsx', tipoExportacion: report.type, filas: report.rowCount }
+  });
 }));
 
 module.exports = router;

@@ -1301,6 +1301,18 @@ tr.low-stock { background: var(--warn); }
 .inventory-status-en_minimo { color: #405765; background: #edf3f6; border-color: #cad8df; }
 .inventory-status-suficiente { color: var(--ok); background: #e6f4ee; border-color: #b8e0cc; }
 .inventory-status-inactivo { color: #68736e; background: #eef1f0; border-color: #d4dad7; }
+.inventory-status-critical,
+.inventory-status-urgente { color: #a22727; background: #ffe9e6; border-color: #f5bbb5; }
+.inventory-status-warning,
+.inventory-status-recomendada,
+.inventory-status-baja { color: #745500; background: #fff3cd; border-color: #e8cc72; }
+.inventory-status-info,
+.inventory-status-media,
+.inventory-status-exceso,
+.inventory-status-sin_datos { color: #405765; background: #edf3f6; border-color: #cad8df; }
+.inventory-status-alta,
+.inventory-status-sin_movimiento { color: #245d4e; background: #e6f4ee; border-color: #b8e0cc; }
+.inventory-summary-line { margin: 0 0 14px; color: var(--muted); }
 .confidence-ok { color: var(--ok); background: #e6f4ee; border-color: #b8e0cc; }
 .confidence-low { color: #745500; background: #fff3cd; border-color: #e8cc72; }
 .inventory-classification { color: #425761; background: #eef3f5; border-color: #d0dce1; }
@@ -2495,4 +2507,7 @@ textarea:focus-visible { outline: 3px solid rgba(40, 106, 89, .28); outline-offs
   .inventory-adjustment-form fieldset,
   .inventory-stock-metrics { grid-template-columns: 1fr; }
   .inventory-operations-heading button { width: 100%; }
+  .inventory-suggestion-list { grid-template-columns: 1fr; }
+  .inventory-pagination { display: grid; grid-template-columns: 1fr; }
+  .inventory-pagination button { width: 100%; }
 }

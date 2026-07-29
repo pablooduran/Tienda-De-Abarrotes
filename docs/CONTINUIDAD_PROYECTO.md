@@ -9,8 +9,8 @@ Documento de relevo tecnico para continuar el proyecto sin depender del historia
 - Punto de partida de INV-A: `89cc85a feat: completar auditoria administrativa`
 - No trabajar directamente en `main`.
 - El HEAD indicado es una referencia local conocida. Confirmar si tambien existe en el remoto antes de depender de el para una recuperacion.
-- La base principal local esta en 018. INV-A agrega la migracion 019, ensayada
-  solo en bases temporales y pendiente de autorizacion para la base principal.
+- La base principal local esta en 019. INV-A e INV-B estan cerrados y no agregaron
+  migraciones posteriores.
 
 Comprobacion inicial obligatoria:
 
@@ -47,7 +47,7 @@ Si la rama, el HEAD o el estado difieren, detenerse y entender los cambios exist
 | `routes/` | Contratos HTTP de autenticacion, administracion y modulos comerciales. |
 | `services/` | Reglas de negocio, transacciones, reportes, POS, stock, clientes y cobranza. |
 | `public/` | Aplicacion web, administracion, login, estilos y JavaScript del navegador. |
-| `database/migrations/` | Migraciones historicas y modernas, numeradas de 001 a 019; la base principal local validada permanece en 018. |
+| `database/migrations/` | Migraciones historicas y modernas, numeradas de 001 a 019; la base principal local validada esta en 019. |
 | `database/tienda_abarrotes.sql` | Esquema inicial equivalente al estado final esperado. |
 | `scripts/` | Migrador, comprobadores, pruebas, administracion local y backups. |
 | `utils/` | Utilidades compartidas, incluidas fechas locales y errores. |
@@ -105,7 +105,7 @@ El contexto de tienda proviene de la sesion validada. El navegador no debe envia
 | Fase 6 - movimientos de stock | Terminado | Movimientos inmutables, entradas, salidas, ajustes, conciliacion e idempotencia. |
 | Fase 7 - POS y pagos | Terminado | Venta transaccional, pagos multiples, fiado, comprobantes, caja, stock e idempotencia. |
 | Fase 8 - finanzas | Terminado | Gastos, caja, reportes, ganancia bruta/neta, cierres y exportaciones. |
-| Fase 9 - inteligencia de inventario | Terminado con mejora futura | Alertas, rotacion, stock minimo, sugerencias y productos sin movimiento. INV-A alinea estas metricas con stock vendible; las reglas finales de reposicion quedan para INV-B. |
+| Fase 9 - inteligencia de inventario | Terminado | Alertas, rotacion neta, stock vendible, sugerencias informativas, ventanas 7/30/90, exportacion XLSX y trazabilidad acotada. No crea compras ni proveedores. |
 | Fase 9B - lotes y vencimientos | Terminado | Lotes, vencimientos, FEFO/FIFO, stock vendible, compras, POS y alertas. |
 | Fase 10 - clientes y cobranza | Terminado | Backend, frontend, exportaciones, plantillas, comprobantes, segmentacion y pruebas reales de navegador. Cierre registrado en `d9fb327`. |
 | Endurecimiento de sesiones | Terminado | Migracion 013, revalidacion por peticion y revocacion administrativa. |
@@ -116,8 +116,8 @@ El contexto de tienda proviene de la sesion validada. El navegador no debe envia
 | Healthcheck, monitoreo y alertas | B1-B3 terminados; proveedores externos pendientes | Liveness, readiness, arranque/cierre, diagnostico superadmin, backups read-only, transiciones, anti-spam y comprobador operativo implementados. No hay envio externo. |
 | Anulaciones y compensaciones | C1-C4B implementados | API transaccional, inventario y lotes, liquidaciones, reportes netos, comprobantes, interfaz, CSV/XLSX y pruebas de navegador. La base local esta en 017. |
 | Auditoria administrativa global | AUD-A y AUD-B implementados | Bitacora append-only, allowlists, eventos administrativos y comerciales, consulta tenant/global, pantalla responsive y politica documental de retencion. No hay borrado automatico. |
-| INV-A - stock vendible y conciliacion | Implementado; migracion pendiente | Clasificacion explicita, conciliacion read-only, ajustes idempotentes, auditoria, interfaz y pruebas. 019 no esta aplicada en la base principal. |
-| INV-B - reposicion | Pendiente | Reglas finales de sugerencia y reposicion antes de produccion. |
+| INV-A - stock vendible y conciliacion | Terminado | Clasificacion explicita, conciliacion read-only, ajustes idempotentes, auditoria, interfaz y pruebas; 019 aplicada en localhost. |
+| INV-B - reposicion | Terminado | Rotacion neta, cobertura, alertas priorizadas, sugerencias informativas, exportacion XLSX y accesibilidad basica sin ordenes de compra. |
 | Fase 11 - acceso publico | No iniciada | Registro publico, alta automatica, verificacion, recuperacion y proteccion antiabuso. |
 | Suscripciones comerciales | No iniciada | No hay cobro automatizado de planes ni pasarela comercial. |
 | Staging y produccion | Pendiente | No se ha desplegado este estado. |
@@ -211,8 +211,7 @@ Un downgrade no borra ni oculta deuda existente. Se mantiene la consulta histori
 ## 5. Migraciones
 
 No renumerar, editar ni reemplazar migraciones aplicadas. La base local principal
-conocida `tienda_abarrotes_pruebas` esta validada en 018. INV-A incorpora 019,
-todavia no aplicada a esa base.
+conocida `tienda_abarrotes_pruebas` esta validada en 019.
 
 | Migracion | Objetivo principal |
 | --- | --- |
@@ -307,6 +306,7 @@ Estas pruebas pueden crear y limpiar datos temporales en la base local de prueba
 - `test:pos-payments`: ventas, stock, pagos e idempotencia.
 - `test:financial-reports`: caja, gastos, reportes y agregados.
 - `test:inventory-intelligence`: alertas y metricas de inventario.
+- `test:inventory-intelligence-frontend`: contrato de rotacion, sugerencias, alertas, exportacion, seguridad y responsive de la vista final.
 - `test:inventory-adjustments`: conciliacion y ajustes sobre bases temporales post-019.
 - `test:inventory-adjustments-frontend`: contrato estatico y seguridad de la interfaz.
 - `test:inventory-adjustments-browser`: flujo, foco, doble envio y vistas responsive.
@@ -437,7 +437,7 @@ No mostrar estas variables en logs ni respuestas. Nunca versionar `.env`, `.env.
 | Finanzas | `routes/finance.js`, `services/financial-service.js`, `services/financial-export-service.js` |
 | Stock | `routes/stock.js`, `services/stock-movement-service.js` |
 | Lotes | `routes/lots.js`, `services/lot-service.js`, `services/lot-export-service.js` |
-| Inteligencia de inventario | `routes/inventory-intelligence.js`, `services/inventory-intelligence-service.js` |
+| Inteligencia de inventario | `routes/inventory-intelligence.js`, `services/inventory-intelligence-service.js`, `services/inventory-intelligence-export-service.js`, pruebas `inventory-intelligence*` |
 | Stock vendible y ajustes INV-A | `config/inventory-adjustment-contract.js`, `routes/inventory-adjustments.js`, `services/inventory-reconciliation-service.js`, `services/inventory-adjustment-service.js`, `public/js/inventory-adjustment-ui.js`, migracion `019` y pruebas `inventory-adjustments*` |
 | Catalogo maestro | `routes/master-catalog.js`, `services/master-catalog-service.js` |
 | Frontend comun | `public/app.html`, `public/js/app.js`, `public/js/http-security.js`, `public/css/styles.css` |
@@ -460,7 +460,7 @@ No mostrar estas variables en logs ni respuestas. Nunca versionar `.env`, `.env.
   consulta protegida para propietario y superadmin, filtros, detalle y pantalla
   responsive. La retencion inicial conserva al menos 365 dias en linea y se revisa
   trimestralmente; no existe borrado automatico ni API de escritura.
-- Las sugerencias ya usan stock vendible; INV-B debe cerrar las reglas de reposicion y compra sin automatizar pedidos.
+- La reposicion es informativa: no hay proveedores seleccionados, ordenes de compra ni compras automaticas. Las ventanas son 7/30/90 o un rango manual de hasta 365 dias; ventas anuladas y devoluciones aplicadas no inflan la demanda.
 - Los backups son locales. No hay almacenamiento remoto, cifrado propio, programacion automatica, rotacion distribuida ni monitoreo externo.
 - Los backups contienen datos sensibles y deben residir en disco cifrado o almacenamiento seguro. No enviarlos por correo o WhatsApp.
 - El rate limiting actual en memoria aplica por instancia; para escala horizontal debe migrar a almacenamiento distribuido.
@@ -485,8 +485,7 @@ No mostrar estas variables en logs ni respuestas. Nunca versionar `.env`, `.env.
 
 No alterar este orden sin una decision explicita:
 
-1. Correcciones finales de stock y reposicion.
-2. Fase 11: acceso publico.
+1. Fase 11: acceso publico.
 3. Suscripciones comerciales.
 4. Staging.
 5. Produccion.
@@ -588,9 +587,7 @@ En ambos casos, conservar el repositorio o base anterior hasta completar smoke t
 ### Git
 
 - Rama local: `mejora-multitienda`.
-- Punto de partida de INV-A: `89cc85a feat: completar auditoria administrativa`.
-- INV-A agrega el contrato post-019 de stock vendible, conciliacion y ajustes;
-  la base principal permanece en 018 hasta una autorizacion separada.
+- INV-A e INV-B estan cerrados sobre la rama `mejora-multitienda`.
 - Working tree esperado despues del cierre: limpio. Verificar siempre el HEAD
   real con `git log -1 --oneline`.
 - No consta despliegue de este estado. Verificar el remoto antes de asumir que todos los commits locales fueron publicados.
@@ -598,7 +595,7 @@ En ambos casos, conservar el repositorio o base anterior hasta completar smoke t
 ### Base local
 
 - Base de pruebas esperada: `tienda_abarrotes_pruebas`.
-- Migraciones registradas en la base principal conocida: 001 a 018.
+- Migraciones registradas en la base principal conocida: 001 a 019.
 - No deberian existir bases `tmp_tienda_restore_*` ni `tmp_tienda_legacy_*` despues de las pruebas.
 
 ### Ultimo estado conocido de pruebas

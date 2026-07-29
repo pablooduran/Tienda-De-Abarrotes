@@ -106,6 +106,13 @@ const COMMERCIAL_AUDIT_ACTIONS = {
     'inventario',
     'conciliacion_inventario'
   ),
+  consulta_sugerencias_compra: definition('inventario', 'sugerencia_compra'),
+  exportacion_rotacion_inventario: definition(
+    'exportacion', 'inventario', [], [], ['formato', 'tipoExportacion', 'filas']
+  ),
+  exportacion_alertas_inventario: definition(
+    'exportacion', 'inventario', [], [], ['formato', 'tipoExportacion', 'filas']
+  ),
   configuracion_lotes: definition('inventario', 'producto'),
   distribucion_lotes: definition('inventario', 'producto'),
   registro_compra: definition('inventario', 'compra'),
@@ -181,7 +188,10 @@ const INVENTORY_ACTION_RESULT_CODES = Object.freeze({
   ajuste_inventario_aplicado: Object.freeze(['INVENTORY_ADJUSTMENT_APPLIED']),
   ajuste_inventario_rechazado: Object.freeze(['INVENTORY_ADJUSTMENT_REJECTED']),
   ajuste_inventario_fallido: Object.freeze(['INVENTORY_ADJUSTMENT_FAILED']),
-  conciliacion_inventario_consultada: Object.freeze(['INVENTORY_RECONCILIATION_READ'])
+  conciliacion_inventario_consultada: Object.freeze(['INVENTORY_RECONCILIATION_READ']),
+  consulta_sugerencias_compra: Object.freeze(['INVENTORY_SUGGESTIONS_READ']),
+  exportacion_rotacion_inventario: Object.freeze(['EXPORT_COMPLETED', 'EXPORT_REJECTED', 'EXPORT_FAILED', 'EXPORT_LIMITED']),
+  exportacion_alertas_inventario: Object.freeze(['EXPORT_COMPLETED', 'EXPORT_REJECTED', 'EXPORT_FAILED', 'EXPORT_LIMITED'])
 });
 const AUDIT_ACTION_RESULT_CODES = Object.freeze({
   ...BASE_ACTION_RESULT_CODES,
@@ -229,7 +239,8 @@ const AUDIT_RESULT_CODES = Object.freeze([
   'INVENTORY_ADJUSTMENT_APPLIED',
   'INVENTORY_ADJUSTMENT_REJECTED',
   'INVENTORY_ADJUSTMENT_FAILED',
-  'INVENTORY_RECONCILIATION_READ'
+  'INVENTORY_RECONCILIATION_READ',
+  'INVENTORY_SUGGESTIONS_READ'
 ]);
 
 const AUDIT_RESULTS_BY_CODE = Object.freeze({
@@ -269,7 +280,8 @@ const AUDIT_RESULTS_BY_CODE = Object.freeze({
   INVENTORY_ADJUSTMENT_APPLIED: Object.freeze(['correcto']),
   INVENTORY_ADJUSTMENT_REJECTED: Object.freeze(['rechazado']),
   INVENTORY_ADJUSTMENT_FAILED: Object.freeze(['fallido']),
-  INVENTORY_RECONCILIATION_READ: Object.freeze(['correcto'])
+  INVENTORY_RECONCILIATION_READ: Object.freeze(['correcto']),
+  INVENTORY_SUGGESTIONS_READ: Object.freeze(['correcto'])
 });
 
 module.exports = {

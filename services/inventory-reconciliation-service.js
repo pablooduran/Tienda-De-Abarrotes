@@ -232,20 +232,14 @@ async function inventoryReconciliation(connection, idTienda, query = {}) {
   const { page, pageSize } = pagination(query);
   const search = searchFilter(query);
   const requestedStatus = statusFilter(query);
-  const today = formatLocalDate();
-  const [rawRows] = await connection.query(
-    `${RECONCILIATION_SOURCE}
-     ORDER BY p.nombre, p.idProducto`,
-    [today, today, idTienda, idTienda, idTienda, idTienda]
-  );
-  const classified = rawRows
-    .map(classify)
+  const classified = await inventoryReconciliationSnapshot(connection, idTienda);
+  const filtered = classified
     .filter((row) => !search || row.nombre.toLocaleUpperCase('es-BO').includes(search.toLocaleUpperCase('es-BO')))
     .filter((row) => requestedStatus === 'todos' || row.conciliacion.estado === requestedStatus);
-  const total = classified.length;
+  const total = filtered.length;
   const offset = (page - 1) * pageSize;
-  const rows = classified.slice(offset, offset + pageSize);
-  const totals = classified.reduce((result, row) => {
+  const rows = filtered.slice(offset, offset + pageSize);
+  const totals = filtered.reduce((result, row) => {
     result.stockFisico += row.stockFisico;
     result.stockVendible += row.stockVendible;
     result.stockNoVendible += row.stockNoVendible;
@@ -253,7 +247,7 @@ async function inventoryReconciliation(connection, idTienda, query = {}) {
     return result;
   }, { stockFisico: 0, stockVendible: 0, stockNoVendible: 0, ok: 0, warning: 0, error: 0 });
   return {
-    checkedAt: today,
+    checkedAt: formatLocalDate(),
     resumen: { productos: total, ...totals },
     resultados: rows,
     paginacion: {
@@ -267,10 +261,22 @@ async function inventoryReconciliation(connection, idTienda, query = {}) {
   };
 }
 
+async function inventoryReconciliationSnapshot(connection, idTienda) {
+  idTienda = positiveInteger(idTienda, 'La tienda');
+  const today = formatLocalDate();
+  const [rawRows] = await connection.query(
+    `${RECONCILIATION_SOURCE}
+     ORDER BY p.nombre, p.idProducto`,
+    [today, today, idTienda, idTienda, idTienda, idTienda]
+  );
+  return rawRows.map(classify);
+}
+
 module.exports = {
   DEFAULT_PAGE_SIZE,
   MAX_PAGE_SIZE,
   classify,
   inventoryReconciliation,
+  inventoryReconciliationSnapshot,
   pagination
 };

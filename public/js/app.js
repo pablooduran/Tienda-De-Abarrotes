@@ -11,7 +11,7 @@ let posCart = [];
 let posOperationKey = null;
 let posSearchTimer = null;
 let lastBarcodeScan = { value: '', at: 0 };
-let inventoryUi = { activeTab: 'resumen', rankingMode: 'ingresos', movementClass: '', data: {} };
+let inventoryUi = { activeTab: 'resumen', rankingMode: 'ingresos', movementClass: '', page: 1, request: 0, data: {} };
 let lotUi = { page: 1, pages: 1, activeTab: 'lotes' };
 let customerCreditUi = null;
 let compensationUi = null;
@@ -2661,6 +2661,14 @@ function localDateFromInput(value) {
 
 function inventoryFilterQuery() {
   const form = document.getElementById('inventoryFilters');
+  form.elements.ventana.addEventListener('change', () => {
+    if (!form.elements.ventana.value) return;
+    form.elements.desde.value = '';
+    form.elements.hasta.value = '';
+  });
+  ['desde', 'hasta'].forEach((field) => form.elements[field].addEventListener('change', () => {
+    if (form.elements[field].value) form.elements.ventana.value = '';
+  }));
   const data = formData(form);
   const from = data.desde ? localDateFromInput(data.desde) : null;
   const until = data.hasta ? localDateFromInput(data.hasta) : null;
@@ -2671,10 +2679,10 @@ function inventoryFilterQuery() {
     if (inclusiveDays > 365) throw new Error('El período no puede superar 365 días.');
   }
   const query = new URLSearchParams();
-  ['desde', 'hasta', 'categoria', 'proveedor', 'producto', 'estado', 'limite'].forEach((field) => {
+  ['desde', 'hasta', 'ventana', 'categoria', 'proveedor', 'producto', 'estado', 'prioridad', 'tipoAlerta', 'estadoSugerencia', 'limite'].forEach((field) => {
     if (data[field] !== undefined && data[field] !== '') query.set(field, data[field]);
   });
-  query.set('pagina', '1');
+  query.set('pagina', String(inventoryUi.page || 1));
   return query;
 }
 
@@ -2702,7 +2710,13 @@ function inventoryRenderSummary() {
   </section>`;
 }
 
-function inventoryRenderAlerts() {
+function inventoryPagination(data) {
+  if (!data || Number(data.paginas || 1) <= 1) return '';
+  const page = Number(data.pagina || 1);
+  return `<nav class="inventory-pagination" aria-label="Paginación de inventario"><button type="button" data-inventory-page="${page - 1}" ${page <= 1 ? 'disabled' : ''}>Anterior</button><span>Página ${escapeHtml(page)} de ${escapeHtml(data.paginas)}</span><button type="button" data-inventory-page="${page + 1}" ${page >= Number(data.paginas) ? 'disabled' : ''}>Siguiente</button></nav>`;
+}
+
+function inventoryRenderAlertsLegacy() {
   const data = inventoryUi.data.alertas;
   if (!data?.rows?.length) return inventoryEmpty('No hay productos agotados, bajos o en mínimo para estos filtros.');
   const canWrite = !state.context?.soloLectura;
@@ -2710,6 +2724,14 @@ function inventoryRenderAlerts() {
     <div class="table-wrap"><table class="inventory-table"><caption class="sr-only">Productos con alertas de inventario</caption><thead><tr><th>Producto</th><th>Categoría</th><th>Stock actual</th><th>Stock mínimo</th><th>Estado</th><th>Proveedor</th><th>Acción</th></tr></thead><tbody>
     ${data.rows.map((row) => { const product = state.productos.find((item) => Number(item.idProducto) === Number(row.idProducto)); return `<tr><td><strong>${escapeHtml(row.nombre)}</strong></td><td>${escapeHtml(row.categoria)}</td><td>${escapeHtml(row.stockActual)} ${escapeHtml(row.unidadBase)}${Number(product?.controlaLotes) ? '<small>Controlado por lotes</small>' : ''}</td><td>${escapeHtml(row.stockMinimo)}</td><td>${inventoryStateBadge(row.estadoInventario)}</td><td>${escapeHtml(row.proveedor || 'Sin proveedor')}</td><td><div class="actions">${canWrite ? `<button type="button" class="small secondary" data-inventory-product-config="${escapeHtml(row.idProducto)}">Configurar análisis</button>` : '<span class="muted">Solo lectura</span>'}${Number(product?.controlaLotes) ? `<button type="button" class="small secondary" data-inventory-product-lots="${escapeHtml(row.idProducto)}">Ver lotes</button>` : ''}</div></td></tr>`; }).join('')}
     </tbody></table></div>`;
+}
+
+function inventoryRenderAlerts() {
+  const data = inventoryUi.data.alertas;
+  if (!data?.rows?.length) return inventoryEmpty('No hay alertas de inventario para estos filtros.');
+  const canWrite = !state.context?.soloLectura;
+  return `<div class="inventory-section-heading"><div><h3>Alertas priorizadas</h3><p>${escapeHtml(inventoryPeriod(data.periodo))} · ${escapeHtml(data.total)} resultados</p></div></div>
+    <div class="table-wrap"><table class="inventory-table"><caption class="sr-only">Alertas priorizadas de inventario</caption><thead><tr><th>Prioridad</th><th>Producto</th><th>Alerta</th><th>Stock físico / vendible</th><th>Lectura</th><th>Acción</th></tr></thead><tbody>${data.rows.map((row) => `<tr><td><span class="inventory-status inventory-status-${escapeHtml(row.prioridad)}">${escapeHtml(row.prioridad)}</span></td><td><strong>${escapeHtml(row.nombre)}</strong><small>${escapeHtml(row.categoria)}</small></td><td>${escapeHtml(row.tipo)}</td><td>${escapeHtml(row.stockFisico)} / ${escapeHtml(row.stockVendible)}<small>No vendible: ${escapeHtml(row.stockNoVendible)}</small></td><td>${escapeHtml(row.mensaje)}</td><td>${canWrite ? `<button type="button" class="small secondary" data-inventory-product-config="${escapeHtml(row.idProducto)}">Configurar</button>` : '<span class="muted">Solo lectura</span>'}</td></tr>`).join('')}</tbody></table></div>${inventoryPagination(data)}`;
 }
 
 function inventoryRankingRows() {
@@ -2748,7 +2770,7 @@ function inventoryRenderValuation() {
     ${data.rows?.length ? `<div class="table-wrap"><table class="inventory-table"><caption class="sr-only">Valoración por producto</caption><thead><tr><th>Producto</th><th>Stock</th><th>Valor a costo</th><th>Valor de venta</th><th>Ganancia potencial</th></tr></thead><tbody>${data.rows.map((row) => `<tr><td>${escapeHtml(row.nombre)}</td><td>${escapeHtml(row.stockActual)} ${escapeHtml(row.unidadBase)}</td><td>${row.costoConocido ? `Bs ${money(row.valorCosto)}` : '<span class="muted">Costo desconocido</span>'}</td><td>Bs ${money(row.valorVenta)}</td><td>${row.costoConocido ? `Bs ${money(row.gananciaPotencial)}` : '<span class="muted">No calculable</span>'}</td></tr>`).join('')}</tbody></table></div>` : inventoryEmpty('No hay productos para valorar.')}`;
 }
 
-function inventoryRenderSuggestions() {
+function inventoryRenderSuggestionsLegacy() {
   const data = inventoryUi.data.sugerencias;
   if (!data?.rows?.length) return `${inventoryEmpty('No hay compras sugeridas para los filtros actuales.')}<div class="inventory-note"><strong>Recomendación informativa</strong><p>Esta sección nunca registra una compra ni modifica el stock.</p></div>`;
   const canWrite = !state.context?.soloLectura;
@@ -2757,11 +2779,30 @@ function inventoryRenderSuggestions() {
     <div class="inventory-suggestion-list">${data.rows.map((row) => `<article class="inventory-suggestion"><header><div><h4>${escapeHtml(row.nombre)}</h4><p>${escapeHtml(row.categoria)} · ${escapeHtml(row.proveedor || 'Sin proveedor')}</p></div>${inventoryConfidenceBadge(row)}</header><dl><div><dt>Stock</dt><dd>${escapeHtml(row.stockActual)}</dd></div><div><dt>Mínimo</dt><dd>${escapeHtml(row.stockMinimo)}</dd></div><div><dt>Promedio diario</dt><dd>${inventoryMetric(row.promedioDiario, 2, 'Sin demanda suficiente')}</dd></div><div><dt>Reposición</dt><dd>${escapeHtml(row.configuracionEfectiva?.diasReposicion)} días</dd></div><div><dt>Cobertura</dt><dd>${escapeHtml(row.configuracionEfectiva?.diasCoberturaObjetivo)} días</dd></div><div><dt>Stock objetivo</dt><dd>${escapeHtml(row.stockObjetivo)}</dd></div><div><dt>Cantidad sugerida</dt><dd><strong>${escapeHtml(row.cantidadCompraSugerida)} ${escapeHtml(row.presentacionCompraSugerida === 'paquete' ? 'paquetes' : 'unidades')}</strong></dd></div>${row.presentacionCompraSugerida === 'paquete' ? `<div><dt>Unidades finales</dt><dd>${escapeHtml(row.cantidadSugeridaUnidades)}</dd></div>` : ''}</dl><p class="inventory-reason">${escapeHtml(row.motivo)}</p>${canWrite ? `<button type="button" class="small secondary" data-inventory-product-config="${escapeHtml(row.idProducto)}">Ajustar parámetros</button>` : ''}</article>`).join('')}</div>`;
 }
 
-function inventoryRenderRotation() {
+function inventoryRenderSuggestions() {
+  const data = inventoryUi.data.sugerencias;
+  if (!data?.rows?.length) return inventoryEmpty('No hay sugerencias para los filtros actuales.');
+  const canWrite = !state.context?.soloLectura;
+  const summary = data.resumen || {};
+  return `<div class="inventory-section-heading"><div><h3>Sugerencias de compra</h3><p>${escapeHtml(inventoryPeriod(data.periodo))} · ${escapeHtml(data.total)} resultados</p></div></div>
+    <div class="inventory-note"><strong>Lectura informativa</strong><p>Urgente: sin stock o cobertura menor a la reposición. Recomendada: falta para el objetivo. Exceso: más de 150% del objetivo. No registra compras ni modifica stock.</p></div>
+    <p class="inventory-summary-line">Urgentes: ${escapeHtml(summary.urgente || 0)} · Recomendadas: ${escapeHtml(summary.recomendada || 0)} · Suficientes: ${escapeHtml(summary.suficiente || 0)} · Exceso: ${escapeHtml(summary.exceso || 0)} · Sin datos: ${escapeHtml(summary.sin_datos || 0)}</p>
+    <div class="inventory-suggestion-list">${data.rows.map((row) => `<article class="inventory-suggestion"><header><div><h4>${escapeHtml(row.nombre)}</h4><p>${escapeHtml(row.categoria)} · ${escapeHtml(row.proveedor || 'Sin proveedor')}</p></div><span class="inventory-status inventory-status-${escapeHtml(row.estadoSugerencia)}">${escapeHtml(row.estadoSugerencia)}</span></header><dl><div><dt>Físico / vendible</dt><dd>${escapeHtml(row.stockFisico)} / ${escapeHtml(row.stockVendible)}</dd></div><div><dt>No vendible</dt><dd>${escapeHtml(row.stockNoVendible)}</dd></div><div><dt>Promedio diario</dt><dd>${inventoryMetric(row.promedioDiario, 2, 'Sin datos suficientes')}</dd></div><div><dt>Cobertura</dt><dd>${row.diasRestantes === null ? 'No calculable' : `${inventoryMetric(row.diasRestantes, 1)} días`}</dd></div><div><dt>Stock objetivo</dt><dd>${escapeHtml(row.stockObjetivo)}</dd></div><div><dt>Cantidad sugerida</dt><dd><strong>${escapeHtml(row.cantidadCompraSugerida)} ${escapeHtml(row.presentacionCompraSugerida === 'paquete' ? 'paquetes' : 'unidades')}</strong></dd></div></dl><p class="inventory-reason">${escapeHtml(row.motivo)}</p>${canWrite ? `<button type="button" class="small secondary" data-inventory-product-config="${escapeHtml(row.idProducto)}">Configurar</button>` : ''}</article>`).join('')}</div>${inventoryPagination(data)}`;
+}
+
+function inventoryRenderRotationLegacy() {
   const data = inventoryUi.data.rotacion;
   if (!data?.rows?.length) return inventoryEmpty('No hay productos para analizar en este período.');
   return `<div class="inventory-section-heading"><div><h3>Rotación y cobertura</h3><p>${escapeHtml(inventoryPeriod(data.periodo))}</p></div></div>
     <div class="table-wrap"><table class="inventory-table"><caption class="sr-only">Rotación y días restantes del inventario</caption><thead><tr><th>Producto</th><th>Unidades vendidas</th><th>Stock promedio</th><th>Rotación estimada</th><th>Días restantes</th><th>Días observados</th><th>Lectura</th></tr></thead><tbody>${data.rows.map((row) => `<tr><td><strong>${escapeHtml(row.nombre)}</strong><small>${escapeHtml(row.categoria)}</small></td><td>${escapeHtml(row.unidadesVendidasPeriodo)} ${escapeHtml(row.unidadBase)}</td><td>${inventoryMetric(row.stockPromedio, 2)}</td><td>${inventoryMetric(row.rotacion, 2)}</td><td>${row.diasRestantes === null ? '<span class="muted">Sin demanda suficiente</span>' : `${inventoryMetric(row.diasRestantes, 1)} días`}</td><td>${inventoryMetric(row.diasObservados, 1)} días</td><td>${inventoryConfidenceBadge(row)}${row.advertencia ? `<small>${escapeHtml(row.advertencia)}</small>` : ''}</td></tr>`).join('')}</tbody></table></div>`;
+}
+
+function inventoryRenderRotation() {
+  const data = inventoryUi.data.rotacion;
+  if (!data?.rows?.length) return inventoryEmpty('No hay productos para analizar en este período.');
+  return `<div class="inventory-section-heading"><div><h3>Rotación y cobertura</h3><p>${escapeHtml(inventoryPeriod(data.periodo))}</p></div></div>
+    <div class="inventory-note"><strong>Regla</strong><p>Alta: rotación neta desde 1. Media: 0,25 a menor de 1. Baja: mayor que cero y menor de 0,25. Sin movimiento: cero unidades netas.</p></div>
+    <div class="table-wrap"><table class="inventory-table"><caption class="sr-only">Rotación y cobertura del inventario</caption><thead><tr><th>Producto</th><th>Ventas netas</th><th>Días con venta</th><th>Frecuencia</th><th>Última venta</th><th>Físico / vendible</th><th>Rotación</th><th>Cobertura</th><th>Clasificación</th></tr></thead><tbody>${data.rows.map((row) => `<tr><td><strong>${escapeHtml(row.nombre)}</strong><small>${escapeHtml(row.categoria)}</small></td><td>${escapeHtml(row.unidadesVendidasPeriodo)} ${escapeHtml(row.unidadBase)}</td><td>${escapeHtml(row.diasConVentaPeriodo)}</td><td>${inventoryMetric(row.frecuenciaVentaDiaria, 2)}</td><td>${inventoryDate(row.ultimaVenta)}</td><td>${escapeHtml(row.stockFisico)} / ${escapeHtml(row.stockVendible)}<small>No vendible: ${escapeHtml(row.stockNoVendible)}</small></td><td>${inventoryMetric(row.rotacion, 2)}</td><td>${row.diasRestantes === null ? '<span class="muted">No calculable</span>' : `${inventoryMetric(row.diasRestantes, 1)} días`}</td><td><span class="inventory-status inventory-status-${escapeHtml(row.clasificacionRotacion)}">${escapeHtml(row.clasificacionRotacion)}</span></td></tr>`).join('')}</tbody></table></div>${inventoryPagination(data)}`;
 }
 
 function inventoryMovementLabel(value) {
@@ -2819,6 +2860,11 @@ function renderInventoryActiveTab() {
     inventoryUi.movementClass = event.target.value;
     renderInventoryActiveTab();
   });
+  target.querySelectorAll('[data-inventory-page]').forEach((button) => button.addEventListener('click', async () => {
+    inventoryUi.page = Number(button.dataset.inventoryPage);
+    inventoryUi.data[inventoryUi.activeTab] = null;
+    await loadInventoryActiveTab(true);
+  }));
   document.getElementById('inventoryConfigurationForm')?.addEventListener('submit', saveInventoryConfiguration);
   applyReadOnlyUi();
 }
@@ -2830,6 +2876,7 @@ async function loadInventoryActiveTab(force = false) {
   if (!force && inventoryUi.data[tab]) return renderInventoryActiveTab();
   content.innerHTML = inventoryLoading();
   content.setAttribute('aria-busy', 'true');
+  const request = ++inventoryUi.request;
   try {
     const query = inventoryFilterQuery().toString();
     if (tab === 'resumen') {
@@ -2848,14 +2895,14 @@ async function loadInventoryActiveTab(force = false) {
       };
       inventoryUi.data[tab] = await api(`/api/inventario-inteligente/${endpoints[tab]}?${tab === 'configuracion' ? 'limite=100' : query}`);
     }
-    if (inventoryUi.activeTab === tab) renderInventoryActiveTab();
+    if (request === inventoryUi.request && inventoryUi.activeTab === tab) renderInventoryActiveTab();
   } catch (error) {
-    if (inventoryUi.activeTab === tab) {
+    if (request === inventoryUi.request && inventoryUi.activeTab === tab) {
       content.innerHTML = inventoryErrorState(error);
       content.querySelector('[data-inventory-retry]')?.addEventListener('click', () => loadInventoryActiveTab(true));
     }
   } finally {
-    content.removeAttribute('aria-busy');
+    if (request === inventoryUi.request) content.removeAttribute('aria-busy');
   }
 }
 
@@ -2949,8 +2996,10 @@ async function downloadInventoryExport() {
   const originalText = button.textContent;
   button.textContent = 'Generando archivo...';
   try {
-    const query = inventoryFilterQuery().toString();
-    const response = await SecurityHttp.secureFetch(`/api/inventario-inteligente/exportacion.xlsx?${query}`);
+    const query = inventoryFilterQuery();
+    const types = { alertas: 'alertas', sugerencias: 'sugerencias', rotacion: 'rotacion' };
+    query.set('tipoExportacion', types[inventoryUi.activeTab] || 'completo');
+    const response = await SecurityHttp.secureFetch(`/api/inventario-inteligente/exportacion.xlsx?${query.toString()}`);
     if (response.status === 401) window.location.href = '/login.html';
     if (!response.ok) {
       const body = await response.json().catch(() => ({}));
@@ -2979,16 +3028,20 @@ async function downloadInventoryExport() {
 async function inventarioInteligente() {
   const today = new Date();
   const start = new Date(today.getFullYear(), today.getMonth(), today.getDate() - 29);
-  inventoryUi = { activeTab: 'resumen', rankingMode: 'ingresos', movementClass: '', data: {} };
+  inventoryUi = { activeTab: 'resumen', rankingMode: 'ingresos', movementClass: '', page: 1, request: 0, data: {} };
   const tabs = inventoryTabs();
   view.innerHTML = `<div class="panel inventory-filter-panel">
     <form id="inventoryFilters" class="inventory-filters">
       <label>Desde<input type="date" name="desde" value="${localDateValue(start)}"></label>
       <label>Hasta<input type="date" name="hasta" value="${localDateValue(today)}"></label>
+      <label>Ventana rápida<select name="ventana"><option value="">Fechas manuales</option><option value="7">7 días</option><option value="30">30 días</option><option value="90">90 días</option></select></label>
       <label>Categoría<select name="categoria"><option value="">Todas</option>${categoryOptions()}</select></label>
       <label>Proveedor<select name="proveedor">${options(state.proveedores, 'idProveedor', 'nombre', 'Todos')}</select></label>
       <label>Producto<select name="producto">${options(state.productos, 'idProducto', 'nombre', 'Todos')}</select></label>
       <label>Estado<select name="estado"><option value="">Todos</option><option value="agotado">Agotado</option><option value="bajo">Stock bajo</option><option value="en_minimo">En mínimo</option><option value="suficiente">Suficiente</option><option value="inactivo">Inactivo</option></select></label>
+      <label>Prioridad<select name="prioridad"><option value="">Todas</option><option value="critical">Crítica</option><option value="warning">Advertencia</option><option value="info">Informativa</option></select></label>
+      <label>Alerta<select name="tipoAlerta"><option value="">Todas</option><option value="stock_vendible_bajo">Stock bajo</option><option value="sin_stock_vendible">Sin stock</option><option value="exceso_inventario">Exceso</option><option value="baja_rotacion">Baja rotación</option><option value="sin_movimiento">Sin movimiento</option><option value="proximo_vencimiento">Próximo vencimiento</option><option value="vencido">Vencido</option><option value="stock_no_vendible_alto">No vendible alto</option><option value="conciliacion">Conciliación</option></select></label>
+      <label>Sugerencias<select name="estadoSugerencia"><option value="todos">Todas</option><option value="urgente">Urgentes</option><option value="recomendada">Recomendadas</option><option value="suficiente">Suficientes</option><option value="exceso">Exceso</option><option value="sin_datos">Sin datos</option></select></label>
       <label>Resultados<select name="limite"><option value="25">25</option><option value="50" selected>50</option><option value="100">100</option></select></label>
       <div class="inventory-filter-actions"><button type="submit">Aplicar filtros</button><button type="button" class="secondary" id="clearInventoryFilters">Limpiar</button>${inventoryFeature('exportacion_inventario') ? '<button type="button" class="secondary" id="exportInventory">Exportar inventario</button>' : ''}</div>
     </form>
@@ -3002,6 +3055,7 @@ async function inventarioInteligente() {
     event.preventDefault();
     try {
       inventoryFilterQuery();
+      inventoryUi.page = 1;
       inventoryUi.data = {};
       await loadInventoryActiveTab(true);
     } catch (error) { showError(error.message); }
@@ -3010,12 +3064,15 @@ async function inventarioInteligente() {
     form.reset();
     form.elements.desde.value = localDateValue(start);
     form.elements.hasta.value = localDateValue(today);
+    form.elements.ventana.value = '';
+    inventoryUi.page = 1;
     inventoryUi.data = {};
     await loadInventoryActiveTab(true);
   });
   document.getElementById('exportInventory')?.addEventListener('click', downloadInventoryExport);
   document.querySelectorAll('[data-inventory-tab]').forEach((button) => button.addEventListener('click', async () => {
     inventoryUi.activeTab = button.dataset.inventoryTab;
+    inventoryUi.page = 1;
     document.querySelectorAll('[data-inventory-tab]').forEach((item) => {
       const active = item === button;
       item.classList.toggle('active', active);

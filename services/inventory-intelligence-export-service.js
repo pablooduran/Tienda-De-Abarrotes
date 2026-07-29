@@ -12,7 +12,7 @@ const {
 
 function neutralizeFormula(value) {
   if (typeof value !== 'string') return value;
-  return /^[=+\-@]/.test(value.trimStart()) ? `'${value}` : value;
+  return /^[\s\u0000-\u001F\u200B\uFEFF]*[=+\-@]/.test(value) ? `'${value}` : value;
 }
 
 function flatten(value, prefix = '', result = {}) {
@@ -58,43 +58,71 @@ function exportQuery(query) {
   return { ...query, pagina: 1, limite: MAX_ANALYSIS_ROWS };
 }
 
+function exportType(query = {}) {
+  const type = String(query.tipoExportacion || 'completo').trim().toLowerCase();
+  if (!['completo', 'alertas', 'sugerencias', 'rotacion'].includes(type)) {
+    const error = new Error('El tipo de exportacion de inventario no es valido.');
+    error.status = 400;
+    error.code = 'INVALID_INVENTORY_EXPORT_TYPE';
+    throw error;
+  }
+  return type;
+}
+
+function requireFeature(enabled, feature, type) {
+  if (enabled.has(feature)) return;
+  const error = new Error('La exportacion solicitada no esta incluida en el plan actual.');
+  error.status = 403;
+  error.code = 'FEATURE_NOT_AVAILABLE';
+  error.inventoryExportType = type;
+  throw error;
+}
+
 async function buildInventoryIntelligenceExport(connection, idTienda, query = {}, features = []) {
   const enabled = new Set(features);
   const boundedQuery = exportQuery(query);
+  const type = exportType(query);
   const workbook = new ExcelJS.Workbook();
   workbook.creator = 'Plataforma de tiendas';
   workbook.created = new Date();
 
   const summary = await inventorySummary(connection, idTienda, boundedQuery);
-  addSheet(workbook, 'Resumen', [summary]);
+  let rowCount = 0;
+  if (type === 'completo') addSheet(workbook, 'Resumen', [summary]);
 
-  if (enabled.has('alertas_stock')) {
+  if ((type === 'completo' && enabled.has('alertas_stock')) || type === 'alertas') {
+    requireFeature(enabled, 'alertas_stock', type);
     const alerts = await inventoryAlerts(connection, idTienda, boundedQuery, { maximumLimit: MAX_ANALYSIS_ROWS });
     addSheet(workbook, 'Alertas', alerts.rows);
+    rowCount += alerts.rows.length;
   }
-  if (enabled.has('ranking_productos')) {
+  if (type === 'completo' && enabled.has('ranking_productos')) {
     const ranking = await inventoryRanking(connection, idTienda, boundedQuery, { maximumLimit: MAX_ANALYSIS_ROWS });
     addSheet(workbook, 'Mas vendidos', ranking.masVendidosUnidades);
     addSheet(workbook, 'Ranking ingresos', ranking.masVendidosIngresos);
     addSheet(workbook, 'Menos vendidos', ranking.menosVendidos);
   }
-  if (enabled.has('compras_sugeridas')) {
+  if ((type === 'completo' && enabled.has('compras_sugeridas')) || type === 'sugerencias') {
+    requireFeature(enabled, 'compras_sugeridas', type);
     const suggestions = await suggestedPurchases(
       connection, idTienda, boundedQuery, { maximumLimit: MAX_ANALYSIS_ROWS }
     );
     addSheet(workbook, 'Compras sugeridas', suggestions.rows);
+    rowCount += suggestions.rows.length;
   }
-  if (enabled.has('rotacion_inventario')) {
+  if ((type === 'completo' && enabled.has('rotacion_inventario')) || type === 'rotacion') {
+    requireFeature(enabled, 'rotacion_inventario', type);
     const rotation = await inventoryRotation(connection, idTienda, boundedQuery, { maximumLimit: MAX_ANALYSIS_ROWS });
     addSheet(workbook, 'Rotacion', rotation.rows);
+    rowCount += rotation.rows.length;
   }
-  if (enabled.has('inventario_sin_movimiento')) {
+  if (type === 'completo' && enabled.has('inventario_sin_movimiento')) {
     const withoutMovement = await inventoryWithoutMovement(
       connection, idTienda, boundedQuery, { maximumLimit: MAX_ANALYSIS_ROWS }
     );
     addSheet(workbook, 'Sin movimiento', withoutMovement.rows);
   }
-  if (enabled.has('valor_inventario_basico')) {
+  if (type === 'completo' && enabled.has('valor_inventario_basico')) {
     const valuation = await inventoryValuation(connection, idTienda, boundedQuery, { maximumLimit: MAX_ANALYSIS_ROWS });
     addSheet(workbook, 'Valoracion resumen', [valuation.resumen]);
     addSheet(workbook, 'Valoracion detalle', valuation.rows);
@@ -102,14 +130,23 @@ async function buildInventoryIntelligenceExport(connection, idTienda, query = {}
 
   const buffer = await workbook.xlsx.writeBuffer();
   const date = String(summary.periodo.hastaExclusivo).slice(0, 10);
+  const name = {
+    completo: 'inteligencia-inventario',
+    alertas: 'alertas-inventario',
+    sugerencias: 'sugerencias-compra',
+    rotacion: 'rotacion-inventario'
+  }[type];
   return {
     buffer,
-    fileName: `inteligencia-inventario-${date}.xlsx`,
-    sheets: workbook.worksheets.map((sheet) => sheet.name)
+    fileName: `${name}-${date}.xlsx`,
+    sheets: workbook.worksheets.map((sheet) => sheet.name),
+    type,
+    rowCount
   };
 }
 
 module.exports = {
   buildInventoryIntelligenceExport,
+  exportType,
   neutralizeFormula
 };

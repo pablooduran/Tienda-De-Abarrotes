@@ -6,12 +6,23 @@ const {
   parseLocalDate,
   parseLocalDateTime
 } = require('../utils/local-datetime');
+const { inventoryReconciliationSnapshot } = require('./inventory-reconciliation-service');
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const MAX_RANGE_DAYS = 365;
 const MAX_PAGE_SIZE = 100;
 const MAX_ANALYSIS_ROWS = 5000;
 const INVENTORY_STATES = new Set(['agotado', 'bajo', 'en_minimo', 'suficiente', 'inactivo']);
+const SUGGESTION_STATES = new Set(['urgente', 'recomendada', 'suficiente', 'exceso', 'sin_datos']);
+const ALERT_PRIORITIES = new Set(['info', 'warning', 'critical']);
+const ALERT_TYPES = new Set([
+  'stock_vendible_bajo', 'sin_stock_vendible', 'exceso_inventario',
+  'baja_rotacion', 'sin_movimiento', 'proximo_vencimiento', 'vencido',
+  'stock_no_vendible_alto', 'conciliacion'
+]);
+const ROTATION_WINDOWS = new Set([7, 30, 90]);
+const EXPIRATION_WARNING_DAYS = 7;
+const HIGH_UNSELLABLE_PERCENT = 25;
 const SUGGESTED_PRESENTATIONS = new Set(['unidad', 'paquete']);
 const STORE_CONFIG_FIELDS = Object.freeze([
   'periodoAnalisisDias',
@@ -165,10 +176,18 @@ async function ensureInventoryConfiguration(connection, idTienda, localDateTime)
 }
 
 function analysisRange(query, configuration) {
+  const requestedWindow = query.ventana === undefined || query.ventana === ''
+    ? null : Number(query.ventana);
+  if (requestedWindow !== null && (!Number.isInteger(requestedWindow) || !ROTATION_WINDOWS.has(requestedWindow))) {
+    throw inventoryError(400, 'La ventana debe ser 7, 30 o 90 dias.', 'INVALID_INVENTORY_WINDOW');
+  }
   const requestedEnd = localDate(query.hasta, 'La fecha hasta', { endOfDate: true });
   const end = requestedEnd || getLocalNow();
   const requestedStart = localDate(query.desde, 'La fecha desde');
-  const configuredStart = addLocalDays(end, -Number(configuration.periodoAnalisisDias));
+  if (requestedWindow !== null && requestedStart) {
+    throw inventoryError(400, 'Use una ventana o una fecha desde, no ambos filtros.', 'INVALID_INVENTORY_WINDOW');
+  }
+  const configuredStart = addLocalDays(end, -(requestedWindow || Number(configuration.periodoAnalisisDias)));
   if (requestedStart && requestedStart >= end) {
     throw inventoryError(400, 'La fecha desde debe ser anterior a la fecha hasta.');
   }
@@ -184,6 +203,7 @@ function analysisRange(query, configuration) {
     desde: formatLocalDateTime(start),
     hastaExclusivo: formatLocalDateTime(end),
     dias: round(duration, 4),
+    ventana: requestedWindow,
     limitadoPorConfiguracion: Boolean(requestedStart && requestedStart < configuredStart),
     start,
     end
@@ -229,10 +249,6 @@ function productConditions(filters, { activeOnly = true } = {}) {
   if (filters.categoria) { conditions.push('p.categoria=?'); params.push(filters.categoria); }
   if (filters.idProveedor) { conditions.push('p.idProveedor=?'); params.push(filters.idProveedor); }
   if (filters.idProducto) { conditions.push('p.idProducto=?'); params.push(filters.idProducto); }
-  if (filters.estado === 'agotado') conditions.push('p.stockUnidadesTotal=0');
-  if (filters.estado === 'bajo') conditions.push('p.stockUnidadesTotal>0 AND p.stockUnidadesTotal<p.stockMinimo');
-  if (filters.estado === 'en_minimo') conditions.push('p.stockUnidadesTotal=p.stockMinimo');
-  if (filters.estado === 'suficiente') conditions.push('p.stockUnidadesTotal>p.stockMinimo');
   return { conditions, params };
 }
 
@@ -257,15 +273,38 @@ async function fetchAnalysisRows(connection, idTienda, range, filters, options =
      LEFT JOIN (
        SELECT dv.idProducto,
               SUM(CASE WHEN v.fecha>=? AND v.fecha<? AND v.fecha>=ps.fechaInicioSeguimiento
-                       THEN dv.cantidadEquivalenteUnidades ELSE 0 END) unidadesVendidasPeriodo,
+                              AND v.estadoOperacion<>'anulada'
+                       THEN GREATEST(dv.cantidadEquivalenteUnidades-COALESCE(r.unidadesDevueltas,0),0) ELSE 0 END) unidadesVendidasPeriodo,
               SUM(CASE WHEN v.fecha>=? AND v.fecha<? AND v.fecha>=ps.fechaInicioSeguimiento
-                       THEN dv.subtotal ELSE 0 END) ingresosPeriodo,
+                              AND v.estadoOperacion<>'anulada'
+                       THEN GREATEST(dv.subtotal-COALESCE(r.montoCompensado,0),0) ELSE 0 END) ingresosPeriodo,
               COUNT(DISTINCT CASE WHEN v.fecha>=? AND v.fecha<? AND v.fecha>=ps.fechaInicioSeguimiento
+                                      AND v.estadoOperacion<>'anulada'
+                                      AND dv.cantidadEquivalenteUnidades>COALESCE(r.unidadesDevueltas,0)
                                   THEN v.idVenta END) ventasPeriodo,
-              MAX(CASE WHEN v.fecha<? AND v.fecha>=ps.fechaInicioSeguimiento THEN v.fecha ELSE NULL END) ultimaVenta
+              COUNT(DISTINCT CASE WHEN v.fecha>=? AND v.fecha<? AND v.fecha>=ps.fechaInicioSeguimiento
+                                      AND v.estadoOperacion<>'anulada'
+                                      AND dv.cantidadEquivalenteUnidades>COALESCE(r.unidadesDevueltas,0)
+                                  THEN DATE(v.fecha) END) diasConVentaPeriodo,
+              MAX(CASE WHEN v.fecha<? AND v.fecha>=ps.fechaInicioSeguimiento
+                            AND v.estadoOperacion<>'anulada'
+                            AND dv.cantidadEquivalenteUnidades>COALESCE(r.unidadesDevueltas,0)
+                       THEN v.fecha ELSE NULL END) ultimaVenta
        FROM detalleVenta dv
        JOIN venta v ON v.idTienda=dv.idTienda AND v.idVenta=dv.idVenta
        JOIN producto ps ON ps.idTienda=dv.idTienda AND ps.idProducto=dv.idProducto
+       LEFT JOIN (
+         SELECT dcv.idTienda, dcv.idDetalleVenta,
+                SUM(dcv.unidadesDevueltas) unidadesDevueltas,
+                SUM(dcv.montoCompensado) montoCompensado
+         FROM detalleCompensacionVenta dcv
+         JOIN compensacionVenta cv
+           ON cv.idTienda=dcv.idTienda AND cv.idCompensacionVenta=dcv.idCompensacionVenta
+         JOIN operacionCompensatoria oc
+           ON oc.idTienda=cv.idTienda AND oc.idOperacionCompensatoria=cv.idOperacionCompensatoria
+         WHERE dcv.idTienda=? AND oc.estado='aplicada'
+         GROUP BY dcv.idTienda, dcv.idDetalleVenta
+       ) r ON r.idTienda=dv.idTienda AND r.idDetalleVenta=dv.idDetalleVenta
        WHERE dv.idTienda=?
        GROUP BY dv.idProducto
      ) s ON s.idProducto=p.idProducto
@@ -281,7 +320,8 @@ async function fetchAnalysisRows(connection, idTienda, range, filters, options =
      ORDER BY p.nombre, p.idProducto
      LIMIT ?`,
     [range.inicio, range.finExclusivo, range.inicio, range.finExclusivo,
-      range.inicio, range.finExclusivo, range.finExclusivo, idTienda,
+      range.inicio, range.finExclusivo, range.inicio, range.finExclusivo,
+      range.finExclusivo, idTienda, idTienda,
       range.inicio, range.finExclusivo, range.finExclusivo, idTienda,
       idTienda, ...where.params, MAX_ANALYSIS_ROWS + 1]
   );
@@ -336,6 +376,12 @@ function analyzeProduct(product, configuration, range) {
   const lastSale = dateObject(product.ultimaVenta);
   const ageDays = daysBetween(tracking, range.end);
   const daysWithoutSale = lastSale ? daysBetween(lastSale, range.end) : null;
+  const salesFrequency = observedDays > 0 ? Number(product.ventasPeriodo || 0) / observedDays : 0;
+  let rotationState = 'sin_movimiento';
+  if (soldUnits > 0) {
+    rotationState = rotation === null || rotation < 0.25 ? 'baja'
+      : rotation < 1 ? 'media' : 'alta';
+  }
   let movementClassification = 'con_movimiento';
   if (ageDays < Number(configuration.diasProductoNuevo)) movementClassification = 'nuevo';
   else if (!lastSale) movementClassification = 'nunca_vendido';
@@ -376,10 +422,13 @@ function analyzeProduct(product, configuration, range) {
       aislado: 0,
       tecnico: 0
     },
+    stockProximoVencer: Number(product.stockProximoVencer || 0),
     stockMinimo: Number(product.stockMinimo),
     unidadesVendidasPeriodo: soldUnits,
     ingresosPeriodo: round(product.ingresosPeriodo, 2),
     cantidadVentasPeriodo: Number(product.ventasPeriodo),
+    diasConVentaPeriodo: Number(product.diasConVentaPeriodo),
+    frecuenciaVentaDiaria: round(salesFrequency, 4),
     ultimaVenta: mysqlDate(product.ultimaVenta),
     diasObservados: observedDays,
     historialSuficiente: enoughHistory,
@@ -400,6 +449,7 @@ function analyzeProduct(product, configuration, range) {
     stockFinPeriodo: stockAtEnd,
     stockPromedio: round(averageStock, 2),
     rotacion: rotation === null ? null : round(rotation, 4),
+    clasificacionRotacion: rotationState,
     rotacionEsEstimacion: true,
     clasificacionMovimiento: movementClassification,
     diasSinVenta: daysWithoutSale === null ? null : round(daysWithoutSale, 1),
@@ -422,6 +472,8 @@ async function stockAvailability(connection, idTienda) {
   const classification = hasClassification
     ? 'lp.clasificacionInventario'
     : "CASE WHEN lp.origen='reversion' THEN 'tecnico' WHEN lp.estadoOperativo='bloqueado' THEN 'bloqueado' ELSE 'vendible' END";
+  const today = formatLocalDate();
+  const warningEnd = formatLocalDate(addLocalDays(getLocalNow(), EXPIRATION_WARNING_DAYS));
   const [rows] = await connection.query(
     `SELECT lp.idProducto,
             SUM(CASE
@@ -432,6 +484,11 @@ async function stockAvailability(connection, idTienda) {
             SUM(CASE WHEN lp.estadoOperativo<>'anulado'
               AND lp.fechaVencimiento IS NOT NULL AND lp.fechaVencimiento<?
               THEN lp.cantidadRestante ELSE 0 END) vencido,
+            SUM(CASE WHEN lp.estadoOperativo='disponible'
+              AND ${classification}='vendible'
+              AND lp.fechaVencimiento IS NOT NULL
+              AND lp.fechaVencimiento>=? AND lp.fechaVencimiento<=?
+              THEN lp.cantidadRestante ELSE 0 END) proximoVencer,
             SUM(CASE WHEN lp.estadoOperativo<>'anulado'
               AND ${classification}='bloqueado'
               THEN lp.cantidadRestante ELSE 0 END) bloqueado,
@@ -444,11 +501,12 @@ async function stockAvailability(connection, idTienda) {
      FROM loteProducto lp
      WHERE lp.idTienda=?
      GROUP BY lp.idProducto`,
-    [formatLocalDate(), formatLocalDate(), idTienda]
+    [today, today, today, warningEnd, idTienda]
   );
   return new Map(rows.map((row) => [Number(row.idProducto), {
     stockVendible: Number(row.stockVendible),
     vencido: Number(row.vencido),
+    proximoVencer: Number(row.proximoVencer),
     bloqueado: Number(row.bloqueado),
     aislado: Number(row.aislado),
     tecnico: Number(row.tecnico)
@@ -468,19 +526,22 @@ async function analysisContext(connection, idTienda, query = {}, options = {}) {
       return { ...product, stockVendibleCalculado: Number(product.stockUnidadesTotal) };
     }
     const current = availability.get(Number(product.idProducto)) || {
-      stockVendible: 0, vencido: 0, bloqueado: 0, aislado: 0, tecnico: 0
+      stockVendible: 0, vencido: 0, proximoVencer: 0, bloqueado: 0, aislado: 0, tecnico: 0
     };
     return {
       ...product,
       stockVendibleCalculado: current.stockVendible,
-      desgloseNoVendible: current
+      desgloseNoVendible: current,
+      stockProximoVencer: current.proximoVencer
     };
   });
+  const filtered = enriched.map((product) => analyzeProduct(product, configuration, range))
+    .filter((product) => !filters.estado || product.estadoInventario === filters.estado);
   return {
     configuration,
     range,
     filters,
-    products: enriched.map((product) => analyzeProduct(product, configuration, range))
+    products: filtered
   };
 }
 
@@ -489,6 +550,7 @@ function publicRange(range) {
     desde: range.desde,
     hastaExclusivo: range.hastaExclusivo,
     dias: range.dias,
+    ventana: range.ventana,
     limitadoPorConfiguracion: range.limitadoPorConfiguracion
   };
 }
@@ -516,8 +578,81 @@ async function inventorySummary(connection, idTienda, query = {}) {
 
 async function inventoryAlerts(connection, idTienda, query = {}, options = {}) {
   const context = await analysisContext(connection, idTienda, query);
-  const alerts = context.products.filter((product) => ['agotado', 'bajo', 'en_minimo'].includes(product.estadoInventario));
-  return { periodo: publicRange(context.range), ...paginate(alerts, query, options.maximumLimit || MAX_PAGE_SIZE) };
+  const reconciliationByProduct = new Map(
+    (await inventoryReconciliationSnapshot(connection, idTienda))
+      .filter((row) => row.conciliacion.estado === 'error')
+      .map((row) => [row.idProducto, row.conciliacion])
+  );
+  const requestedPriority = query.prioridad === undefined || query.prioridad === ''
+    ? null : String(query.prioridad).trim().toLowerCase();
+  const requestedType = query.tipoAlerta === undefined || query.tipoAlerta === ''
+    ? null : String(query.tipoAlerta).trim().toLowerCase();
+  if (requestedPriority && !ALERT_PRIORITIES.has(requestedPriority)) {
+    throw inventoryError(400, 'La prioridad de alerta no es valida.', 'INVALID_INVENTORY_ALERT_FILTER');
+  }
+  if (requestedType && !ALERT_TYPES.has(requestedType)) {
+    throw inventoryError(400, 'El tipo de alerta no es valido.', 'INVALID_INVENTORY_ALERT_FILTER');
+  }
+  const alerts = [];
+  const add = (product, tipo, prioridad, mensaje) => alerts.push({
+    idProducto: product.idProducto,
+    nombre: product.nombre,
+    categoria: product.categoria,
+    unidadBase: product.unidadBase,
+    tipo,
+    prioridad,
+    mensaje,
+    estadoInventario: product.estadoInventario,
+    stockFisico: product.stockFisico,
+    stockVendible: product.stockVendible,
+    stockNoVendible: product.stockNoVendible,
+    stockMinimo: product.stockMinimo,
+    stockProximoVencer: product.stockProximoVencer,
+    desgloseNoVendible: product.desgloseNoVendible,
+    diasRestantes: product.diasRestantes,
+    clasificacionRotacion: product.clasificacionRotacion,
+    clasificacionMovimiento: product.clasificacionMovimiento
+  });
+  for (const product of context.products) {
+    if (product.estadoInventario === 'agotado') {
+      add(product, 'sin_stock_vendible', 'critical', 'No hay stock vendible disponible para la venta.');
+    } else if (product.estadoInventario === 'bajo' || product.estadoInventario === 'en_minimo') {
+      add(product, 'stock_vendible_bajo', product.estadoInventario === 'bajo' ? 'warning' : 'info',
+        'El stock vendible esta en o por debajo del minimo configurado.');
+    }
+    if (product.historialSuficiente && product.promedioDiario > 0
+      && product.stockVendible > Math.max(product.stockObjetivo, product.stockMinimo) * 1.5) {
+      add(product, 'exceso_inventario', 'info', 'El stock vendible supera en 50% el objetivo calculado.');
+    }
+    if (product.clasificacionRotacion === 'baja') {
+      add(product, 'baja_rotacion', 'warning', 'La rotacion neta del periodo es baja.');
+    }
+    if (product.clasificacionRotacion === 'sin_movimiento' && product.stockVendible > 0
+      && !['nuevo', 'con_movimiento'].includes(product.clasificacionMovimiento)) {
+      add(product, 'sin_movimiento', 'info', 'El producto tiene stock vendible y no registra movimiento reciente.');
+    }
+    if (product.stockProximoVencer > 0) {
+      add(product, 'proximo_vencimiento', 'warning', `Hay mercancia vendible que vence en los proximos ${EXPIRATION_WARNING_DAYS} dias.`);
+    }
+    if (product.desgloseNoVendible.vencido > 0) {
+      add(product, 'vencido', 'critical', 'Hay mercancia vencida que no se considera vendible.');
+    }
+    if (product.stockFisico > 0 && (product.stockNoVendible / product.stockFisico) * 100 >= HIGH_UNSELLABLE_PERCENT) {
+      add(product, 'stock_no_vendible_alto', 'warning', 'Una parte relevante del stock fisico no esta disponible para venta.');
+    }
+    if (reconciliationByProduct.has(product.idProducto)) {
+      add(product, 'conciliacion', 'critical', 'La conciliacion detecto una inconsistencia que requiere revision manual.');
+    }
+  }
+  const filtered = alerts
+    .filter((alert) => !requestedPriority || alert.prioridad === requestedPriority)
+    .filter((alert) => !requestedType || alert.tipo === requestedType)
+    .sort((a, b) => {
+      const priority = { critical: 0, warning: 1, info: 2 };
+      return priority[a.prioridad] - priority[b.prioridad]
+        || a.nombre.localeCompare(b.nombre, 'es-BO') || a.tipo.localeCompare(b.tipo);
+    });
+  return { periodo: publicRange(context.range), ...paginate(filtered, query, options.maximumLimit || MAX_PAGE_SIZE) };
 }
 
 async function inventoryRanking(connection, idTienda, query = {}, options = {}) {
@@ -598,11 +733,40 @@ async function inventoryValuation(connection, idTienda, query = {}, options = {}
 
 async function suggestedPurchases(connection, idTienda, query = {}, options = {}) {
   const context = await analysisContext(connection, idTienda, query);
-  const suggestions = context.products.filter((product) => (
-    product.estadoInventario !== 'inactivo' && product.cantidadSugeridaUnidades > 0
-  ));
+  const requestedState = query.estadoSugerencia === undefined || query.estadoSugerencia === ''
+    ? 'accionables' : String(query.estadoSugerencia).trim().toLowerCase();
+  if (requestedState !== 'accionables' && requestedState !== 'todos' && !SUGGESTION_STATES.has(requestedState)) {
+    throw inventoryError(400, 'El estado de sugerencia no es valido.', 'INVALID_PURCHASE_SUGGESTION_FILTER');
+  }
+  const classified = context.products.filter((product) => product.estadoInventario !== 'inactivo').map((product) => {
+    let estadoSugerencia = 'suficiente';
+    if (!product.historialSuficiente) estadoSugerencia = 'sin_datos';
+    else if (product.historialSuficiente && product.promedioDiario > 0
+      && product.stockVendible > Math.max(product.stockObjetivo, product.stockMinimo) * 1.5) estadoSugerencia = 'exceso';
+    else if (product.cantidadSugeridaUnidades > 0
+      && (product.stockVendible === 0 || product.diasRestantes === null
+        || product.diasRestantes <= product.configuracionEfectiva.diasReposicion)) estadoSugerencia = 'urgente';
+    else if (product.cantidadSugeridaUnidades > 0) estadoSugerencia = 'recomendada';
+    return { ...product, estadoSugerencia };
+  });
+  const suggestions = classified
+    .filter((product) => requestedState === 'todos'
+      || (requestedState === 'accionables'
+        ? ['urgente', 'recomendada'].includes(product.estadoSugerencia)
+          || (product.estadoSugerencia === 'sin_datos' && product.cantidadSugeridaUnidades > 0)
+        : product.estadoSugerencia === requestedState))
+    .sort((a, b) => {
+      const order = { urgente: 0, recomendada: 1, sin_datos: 2, exceso: 3, suficiente: 4 };
+      return order[a.estadoSugerencia] - order[b.estadoSugerencia]
+        || a.nombre.localeCompare(b.nombre, 'es-BO') || a.idProducto - b.idProducto;
+    });
+  const resumen = classified.reduce((result, product) => {
+    result[product.estadoSugerencia] += 1;
+    return result;
+  }, { urgente: 0, recomendada: 0, suficiente: 0, exceso: 0, sin_datos: 0 });
   return {
     periodo: publicRange(context.range),
+    resumen,
     ...paginate(suggestions, query, options.maximumLimit || MAX_PAGE_SIZE)
   };
 }
@@ -615,10 +779,18 @@ async function inventoryRotation(connection, idTienda, query = {}, options = {})
     categoria: product.categoria,
     unidadBase: product.unidadBase,
     unidadesVendidasPeriodo: product.unidadesVendidasPeriodo,
+    cantidadVentasPeriodo: product.cantidadVentasPeriodo,
+    diasConVentaPeriodo: product.diasConVentaPeriodo,
+    frecuenciaVentaDiaria: product.frecuenciaVentaDiaria,
+    ultimaVenta: product.ultimaVenta,
     stockInicioPeriodo: product.stockInicioPeriodo,
     stockFinPeriodo: product.stockFinPeriodo,
     stockPromedio: product.stockPromedio,
     rotacion: product.rotacion,
+    clasificacionRotacion: product.clasificacionRotacion,
+    stockFisico: product.stockFisico,
+    stockVendible: product.stockVendible,
+    stockNoVendible: product.stockNoVendible,
     diasRestantes: product.diasRestantes,
     diasObservados: product.diasObservados,
     historialSuficiente: product.historialSuficiente,

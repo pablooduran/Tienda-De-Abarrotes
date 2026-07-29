@@ -570,6 +570,16 @@ npm.cmd run db:check-inventory-intelligence
 
 La inteligencia de inventario usa `stockUnidadesTotal` como saldo real y calcula recomendaciones sin registrar compras ni cambiar stock. El plan basico recibe resumen, alertas, ranking y valoracion esencial. El avanzado agrega compras sugeridas, rotacion, dias de cobertura, productos sin movimiento y exportacion Excel. Las fechas de seguimiento y configuracion se escriben explicitamente en hora local.
 
+### Cierre de inteligencia de inventario
+
+La inteligencia final usa el **stock vendible** para alertas, cobertura y sugerencias: los lotes vencidos, bloqueados, aislados o tecnicos nunca se ofrecen como disponibilidad. La rotacion contabiliza ventas netas: excluye ventas anuladas y descuenta devoluciones aplicadas. Se puede consultar una ventana de 7, 30 o 90 dias, o un rango manual de hasta 365 dias.
+
+Las rutas de solo lectura son `GET /api/inventario-inteligente/rotacion`, `GET /api/inventario-inteligente/compras-sugeridas` y `GET /api/inventario-inteligente/alertas`. Requieren sesion, tenant, suscripcion activa y la funcionalidad correspondiente; no aceptan `idTienda` del navegador y devuelven `Cache-Control: no-store`. Las alertas exponen una prioridad legible (`info`, `warning` o `critical`) y un motivo, sin detalles internos.
+
+Las sugerencias son informativas: clasifican cada producto como `urgente`, `recomendada`, `suficiente`, `exceso` o `sin_datos`. Una sugerencia urgente ocurre sin stock vendible o cuando la cobertura no alcanza el plazo de reposicion; exceso significa mas de 150% del objetivo calculado. No se crean proveedores, ordenes de compra ni compras automaticas.
+
+El XLSX protegido conserva los filtros y permite exportar el informe visible con `tipoExportacion=rotacion`, `sugerencias` o `alertas`; el limite de analisis es 5.000 productos. Las celdas de texto neutralizan formulas, incluidos espacios y caracteres de control iniciales. La consulta de sugerencias y las exportaciones de rotacion o alertas generan los eventos administrativos permitidos, sin registrar filtros completos ni informacion sensible.
+
 ### Crear el primer administrador
 
 Defina temporalmente `ADMIN_USER` y `ADMIN_PASSWORD` en su entorno local. La contrasena debe tener al menos 12 caracteres. Luego ejecute:
@@ -948,7 +958,7 @@ $env:APP_ENV='local'
 npm.cmd run test:inventory-intelligence
 ```
 
-La prueba valida estados de stock, historial suficiente, demanda, sugerencias por unidad y paquete, dias restantes, rotacion, productos sin movimiento, valoracion, aislamiento, permisos por plan, solo lectura y exportacion Excel segura. Crea dos tiendas temporales en localhost y elimina todos los datos que genera.
+La prueba valida estados de stock, historial suficiente, demanda neta, ventas anuladas excluidas, sugerencias por unidad y paquete, ventanas 7/30/90, prioridades de alertas, rotacion, productos sin movimiento, valoracion, aislamiento, permisos por plan, solo lectura y exportacion Excel segura. Crea dos tiendas temporales en localhost y elimina todos los datos que genera. La comprobacion estatica complementaria es `npm.cmd run test:inventory-intelligence-frontend`.
 
 ### Prueba local de lotes y vencimientos
 
@@ -1172,7 +1182,7 @@ Limitaciones conocidas y trabajo futuro:
 
 ### Validacion manual de la interfaz de inteligencia de inventario
 
-Inicie el servidor local y abra la seccion **Inteligencia de inventario** desde el menu de la tienda. Pruebe filtros de fecha, categoria, proveedor, producto y estado; el rango maximo admitido es de 365 dias.
+Inicie el servidor local y abra la seccion **Inteligencia de inventario** desde el menu de la tienda. Pruebe ventanas de 7, 30 y 90 dias o filtros de fecha, categoria, proveedor, producto, estado y prioridad; el rango manual maximo admitido es de 365 dias.
 
 Con una tienda de plan basico, confirme:
 
@@ -1184,7 +1194,8 @@ Con una tienda de plan basico, confirme:
 Con una tienda de plan avanzado, confirme:
 
 - se muestran compras sugeridas, rotacion, dias restantes y productos sin movimiento;
-- una sugerencia explica su confianza y no modifica stock ni registra una compra;
+- una sugerencia explica si es urgente, recomendada, suficiente, exceso o sin datos y no modifica stock ni registra una compra;
+- las alertas distinguen prioridad y motivo con texto, ademas del color;
 - la configuracion general valida sus rangos y guarda los cambios;
 - la configuracion de un producto permite volver a los valores automaticos dejando campos vacios;
 - **Exportar inventario** descarga un archivo XLSX limitado a la tienda y filtros actuales.

@@ -88,6 +88,11 @@ async function scalar(connection, sql, params = []) {
 }
 
 async function cleanupStore(connection, idTienda) {
+  await connection.query('DELETE FROM detalleCompensacionLote WHERE idTienda=?', [idTienda]);
+  await connection.query('DELETE FROM detalleCompensacionVenta WHERE idTienda=?', [idTienda]);
+  await connection.query('DELETE FROM liquidacionCompensacionVenta WHERE idTienda=?', [idTienda]);
+  await connection.query('DELETE FROM compensacionVenta WHERE idTienda=?', [idTienda]);
+  await connection.query('DELETE FROM operacionCompensatoria WHERE idTienda=?', [idTienda]);
   await connection.query('DELETE FROM eventoAuditoriaAdministrativa WHERE idTienda=?', [idTienda]);
   await connection.query('DELETE FROM cierreCaja WHERE idTienda=?', [idTienda]);
   await connection.query('DELETE FROM gasto WHERE idTienda=?', [idTienda]);
@@ -144,6 +149,8 @@ async function createProduct(connection, fixture, specification) {
   const sold = specification.sold || 0;
   const currentStock = specification.stock;
   const initialStock = currentStock + sold;
+  let idVenta = null;
+  let idDetalleVenta = null;
   const [result] = await connection.query(
     `INSERT INTO producto
       (idTienda, nombre, categoria, unidadMedida, unidadesPorPaquete, precioVenta,
@@ -175,9 +182,10 @@ async function createProduct(connection, fixture, specification) {
     const [sale] = await connection.query(
       `INSERT INTO venta
         (idTienda, fecha, subtotal, descuento, total, montoPagado, saldoPendiente,
-         estadoPago, tipo, claveOperacion, codigoComprobante)
-       VALUES (?, ?, ?, 0, ?, ?, 0, 'pagada', 'pagada', ?, ?)`,
+        estadoPago, estadoOperacion, tipo, claveOperacion, codigoComprobante)
+       VALUES (?, ?, ?, 0, ?, ?, 0, 'pagada', ?, 'pagada', ?, ?)`,
       [fixture.advancedStore, saleDate, subtotal, subtotal, subtotal,
+        specification.saleState || 'vigente',
         `inv-test-venta:${fixture.marker}:${idProducto}`, `INV-${fixture.marker}-${idProducto}`]
     );
     const cost = specification.cost || 0;
@@ -189,6 +197,8 @@ async function createProduct(connection, fixture, specification) {
       [fixture.advancedStore, sale.insertId, idProducto, sold, specification.price || 10, cost,
         subtotal, cost * sold, subtotal - cost * sold, cost > 0 ? 'real' : 'desconocido', sold]
     );
+    idVenta = Number(sale.insertId);
+    idDetalleVenta = Number(detail.insertId);
     await connection.query(
       `INSERT INTO pagoVenta
         (idTienda, idVenta, metodoPago, monto, montoRecibido, cambio,
@@ -208,7 +218,41 @@ async function createProduct(connection, fixture, specification) {
         `inv-test-venta-mov:${fixture.marker}:${idProducto}`, fixture.advancedOwner, saleDate]
     );
   }
-  return idProducto;
+  if (sold > 0) {
+    fixture.salesByProduct.set(Number(idProducto), {
+      idProducto: Number(idProducto),
+      idVenta,
+      idDetalleVenta
+    });
+  }
+  return Number(idProducto);
+}
+
+async function addAppliedReturn(connection, fixture, sale, units, amount, date) {
+  const timestamp = formatLocalDateTime(date);
+  const key = `inv-test-devolucion:${fixture.marker}:${sale.idDetalleVenta}`;
+  const [operation] = await connection.query(
+    `INSERT INTO operacionCompensatoria
+      (idTienda, tipoOperacion, estado, motivoCodigo, observacion, requiereAprobacion,
+       idAdministradorSolicitante, idAdministradorAprobador, claveOperacion, huellaSolicitud,
+       fechaSolicitud, fechaAprobacion, fechaAplicacion, creadoEn, actualizadoEn)
+     VALUES (?, 'devolucion_venta', 'aplicada', 'devolucion_cliente', NULL, 0,
+       ?, NULL, ?, REPEAT('a',64), ?, NULL, ?, ?, ?)`,
+    [fixture.advancedStore, fixture.advancedOwner, key, timestamp, timestamp, timestamp, timestamp]
+  );
+  const [compensation] = await connection.query(
+    `INSERT INTO compensacionVenta
+      (idTienda,idOperacionCompensatoria,idVenta,tipoCompensacion,montoCompensado,costoCompensado,creadoEn)
+     VALUES (?, ?, ?, 'devolucion_parcial', ?, 0, ?)`,
+    [fixture.advancedStore, operation.insertId, sale.idVenta, amount, timestamp]
+  );
+  await connection.query(
+    `INSERT INTO detalleCompensacionVenta
+      (idTienda,idCompensacionVenta,idDetalleVenta,idProducto,unidadesDevueltas,montoCompensado,
+       costoCompensado,tratamientoInventario,resultadoInventario,idMovimientoStock,creadoEn)
+     VALUES (?, ?, ?, ?, ?, ?, 0, 'no_reintegrar', 'no_reintegrado', NULL, ?)`,
+    [fixture.advancedStore, compensation.insertId, sale.idDetalleVenta, sale.idProducto, units, amount, timestamp]
+  );
 }
 
 async function addNonDemandOperations(connection, fixture, productId, operationDate) {
@@ -312,7 +356,7 @@ async function main() {
   }
 
   const marker = crypto.randomBytes(6).toString('hex');
-  const fixture = { marker, productIds: [], superUser: `super_inv_${marker}` };
+  const fixture = { marker, productIds: [], salesByProduct: new Map(), superUser: `super_inv_${marker}` };
   const superPassword = `Super-${crypto.randomBytes(12).toString('hex')}!`;
   const sessions = [];
   let connection;
@@ -390,7 +434,8 @@ async function main() {
       stale30: `Sin movimiento 30 ${marker}`,
       stale60: `Sin movimiento 60 ${marker}`,
       stale90: `Sin movimiento 90 ${marker}`,
-      rotationNull: `Rotacion nula ${marker}`
+      rotationNull: `Rotacion nula ${marker}`,
+      cancelled: `Venta anulada ${marker}`
     };
     const packageSaleDate = addDays(now, -5);
     await createProduct(connection, fixture, {
@@ -402,6 +447,14 @@ async function main() {
       trackingDate: oldTracking, saleDate: packageSaleDate, unitsPerPackage: 6,
       suggestedPresentation: 'paquete'
     });
+    await addAppliedReturn(
+      connection,
+      fixture,
+      fixture.salesByProduct.get(packageId),
+      6,
+      48,
+      addDays(now, -2)
+    );
     await createProduct(connection, fixture, {
       name: names.minimum, stock: 5, minimum: 5, cost: 3, sold: 2,
       trackingDate: oldTracking, saleDate: addDays(now, -4)
@@ -442,6 +495,10 @@ async function main() {
       name: names.rotationNull, stock: 0, minimum: 1, cost: 1, sold: 0,
       trackingDate: oldTracking
     });
+    await createProduct(connection, fixture, {
+      name: names.cancelled, stock: 8, minimum: 2, cost: 1, sold: 9,
+      trackingDate: oldTracking, saleDate: addDays(now, -6), saleState: 'anulada'
+    });
     await addNonDemandOperations(connection, fixture, sufficientId, addDays(now, -2));
 
     const basicProduct = await expect(basicSession, '/api/productos', {
@@ -457,7 +514,7 @@ async function main() {
     assert(summary.estados.agotado === 2 && summary.estados.bajo >= 2
       && summary.estados.en_minimo === 1 && summary.estados.suficiente >= 1,
     'El resumen no clasifico correctamente los estados de stock.');
-    assert(summary.productosActivos === 11, 'El producto inactivo no fue excluido del resumen normal.');
+    assert(summary.productosActivos === 12, 'El producto inactivo no fue excluido del resumen normal.');
 
     const alerts = await expect(advancedSession, `/api/inventario-inteligente/alertas?${query}`, {}, 200, 'Alertas');
     assert(byName(alerts.rows, names.exhausted)?.estadoInventario === 'agotado'
@@ -480,7 +537,7 @@ async function main() {
     );
     const packageSuggestion = byName(suggestions.rows, names.package);
     const insufficientSuggestion = byName(suggestions.rows, names.insufficient);
-    assert(packageSuggestion && packageSuggestion.promedioDiario === 0.25
+    assert(packageSuggestion && packageSuggestion.promedioDiario === 0.2
       && packageSuggestion.cantidadSugeridaUnidades === 6
       && packageSuggestion.cantidadCompraSugerida === 1
       && packageSuggestion.presentacionCompraSugerida === 'paquete',
@@ -527,8 +584,46 @@ async function main() {
     'La valoracion no separo costos conocidos y desconocidos.');
 
     const soldAfterNonDemand = ranking.masVendidosUnidades.reduce((sum, row) => sum + row.unidadesVendidas, 0);
-    assert(soldAfterNonDemand === 46,
-      'Compras, ajustes o cobros fueron contados como demanda comercial.');
+    assert(soldAfterNonDemand === 40,
+      'Compras, ajustes, cobros, devoluciones o ventas anuladas fueron contados como demanda comercial.');
+    assert(!ranking.masVendidosUnidades.some((row) => row.nombre === names.cancelled),
+      'Una venta anulada fue incluida en la rotacion o el ranking.');
+    const windowRotation = await expect(
+      advancedSession, '/api/inventario-inteligente/rotacion?ventana=30&limite=100', {}, 200, 'Ventana de 30 dias'
+    );
+    assert(windowRotation.periodo.ventana === 30,
+      'La rotacion no devolvio la ventana aplicada de forma explicita.');
+    await expect(advancedSession, '/api/inventario-inteligente/rotacion?ventana=15', {}, 400, 'Ventana invalida');
+    const rotationExport = await advancedSession.fetch(
+      `/api/inventario-inteligente/exportacion.xlsx?${query}&tipoExportacion=rotacion`
+    );
+    assert(rotationExport.status === 200
+      && /spreadsheetml\.sheet/i.test(rotationExport.headers.get('content-type') || '')
+      && /rotacion-inventario-/i.test(rotationExport.headers.get('content-disposition') || ''),
+    'La exportacion de rotacion no devolvio un XLSX seguro con nombre local.');
+    const exportedWorkbook = new ExcelJS.Workbook();
+    await exportedWorkbook.xlsx.load(await rotationExport.arrayBuffer());
+    assert(exportedWorkbook.worksheets.length === 1 && exportedWorkbook.worksheets[0].name === 'Rotacion',
+      'La exportacion seleccionada incluyo hojas ajenas al informe de rotacion.');
+    const rotationSheet = exportedWorkbook.worksheets[0];
+    const headers = rotationSheet.getRow(1).values.map((value) => String(value || '').toLowerCase());
+    const nameColumn = headers.indexOf('nombre');
+    const formulaSafeName = rotationSheet.getRows(2, rotationSheet.rowCount - 1)
+      .map((row) => row.getCell(nameColumn).value)
+      .find((value) => String(value).includes(`Nunca vendido ${marker}`));
+    assert(typeof formulaSafeName === 'string' && formulaSafeName.startsWith("'="),
+      'La exportacion XLSX no neutralizo el nombre que inicia con formula.');
+    const allSuggestions = await expect(
+      advancedSession, `/api/inventario-inteligente/compras-sugeridas?${query}&estadoSugerencia=todos`, {}, 200, 'Estados de sugerencia'
+    );
+    assert(allSuggestions.resumen && Number.isInteger(allSuggestions.resumen.urgente)
+      && allSuggestions.rows.some((row) => row.estadoSugerencia),
+    'Las sugerencias no distinguen estados operativos explicables.');
+    const priorityAlerts = await expect(
+      advancedSession, `/api/inventario-inteligente/alertas?${query}&prioridad=critical`, {}, 200, 'Alertas priorizadas'
+    );
+    assert(priorityAlerts.rows.every((row) => row.prioridad === 'critical' && row.tipo && row.mensaje),
+      'Las alertas no aplicaron prioridad o no explican el motivo.');
     const stockBeforeSuggestion = await scalar(connection,
       'SELECT stockUnidadesTotal total FROM producto WHERE idTienda=? AND idProducto=?',
       [fixture.advancedStore, packageId]);
