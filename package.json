@@ -74,7 +74,8 @@
     "check:operational-health": "node scripts/check-operational-health.js",
     "check:web-security": "node scripts/check-web-security.js",
     "codex:status": "node scripts/codex-project-status.js",
-    "codex:cleanup-check": "node scripts/codex-cleanup-check.js"
+    "codex:cleanup-check": "node scripts/codex-cleanup-check.js",
+    "codex:precommit": "node scripts/codex-precommit.js"
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",
