@@ -20,6 +20,12 @@ inferir autorización de Git, migraciones o limpieza.
 - Durante implementación, con pruebas pendientes, sin lista de archivos o sin
   autorización expresa de commit/push.
 
+## Modo simulación de cierre
+
+Activarlo cuando el usuario pida simular o planificar el cierre. En este modo
+solo listar verificaciones y comandos previstos: no ejecutar staging,
+precommit ni ninguna modificación de Git.
+
 ## Entradas esperadas
 
 - Lista explícita de archivos permitidos.
@@ -38,6 +44,14 @@ No leer `.env*`, backups, dumps o logs. No revisar datos comerciales salvo que
 el cierre lo autorice y requiera una comprobación segura.
 
 ## Procedimiento
+
+Antes de cualquier acción de cierre, exigir una lista explícita de archivos
+permitidos para `--allow`. Sin ella, permanecer en simulación: no ejecutar
+`codex:precommit`, `git add`, `git commit` ni `git push`.
+
+Sin autorización explícita de commit, no crear commit. Sin autorización
+explícita de push, no publicar cambios. Si está activo el modo simulación de
+cierre, aplicar sus límites y detenerse después del listado.
 
 1. Confirmar rama, `HEAD`, alcance y resultados de las pruebas acordadas.
 2. Ejecutar `codex:status`, `codex:cleanup-check` y

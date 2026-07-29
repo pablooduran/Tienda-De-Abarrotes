@@ -20,6 +20,21 @@ de cualquier edición.
 - Para editar, ejecutar migraciones, iniciar servidores, consultar la base o
   cerrar un bloque. Delegar esas acciones a la tarea autorizada correspondiente.
 
+## Modo solo contexto
+
+Activarlo cuando el usuario pida únicamente ubicar archivos, módulos,
+documentos o pruebas y no exista riesgo real de edición, base, Git, seguridad
+o cierre. En este modo:
+
+- leer `AGENTS.md`;
+- leer `docs/REGLAS_CODEX.md` solo si aparece un riesgo real;
+- seleccionar como máximo tres documentos complementarios;
+- no ejecutar comandos que modifiquen, consultar la base ni editar archivos;
+- devolver solo el contexto mínimo.
+
+Este modo evita cargar reglas extensas innecesariamente cuando la tarea es
+puramente orientativa.
+
 ## Entradas esperadas
 
 - Descripción concreta de la tarea y alcance.
@@ -44,6 +59,8 @@ No recorrer `node_modules`, ni leer `.env*`, backups, dumps, logs, artefactos,
 ni documentación ajena al dominio. No consultar la base.
 
 ## Procedimiento
+
+Si está activo el modo solo contexto, aplicar sus límites antes de este flujo.
 
 1. Confirmar rama, `HEAD` y estado Git.
 2. Identificar dominio y riesgo: rutas, servicio, frontend, migración o prueba.

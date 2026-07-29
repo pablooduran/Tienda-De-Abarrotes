@@ -20,6 +20,19 @@ creados por la ejecución actual sin borrar datos o procesos ajenos.
 - Para ejecutar una regresión integral sin alcance justificado.
 - Para limpiar fixtures ajenos, datos comerciales o procesos no atribuibles.
 
+## Modo planificación sin ejecución
+
+Tiene prioridad sobre el flujo normal cuando el usuario pida planificar
+pruebas sin ejecutarlas. En este modo:
+
+- no ejecutar ningún comando ni iniciar procesos;
+- usar únicamente `package.json` y `docs/MAPA_PRUEBAS.md`;
+- proponer Nivel 1, Nivel 2 y, si corresponde, Nivel 3;
+- indicar qué pruebas crean servidor, navegador, fixtures o bases temporales;
+- indicar limpieza requerida;
+- no tocar la base ni hacer cleanup real;
+- devolver solo el plan.
+
 ## Entradas esperadas
 
 - Archivos cambiados, módulo y alcance.
@@ -37,6 +50,9 @@ No leer `.env*`, backups, dumps, logs o datos reales. No usar producción ni
 conexiones remotas.
 
 ## Procedimiento
+
+Si está activo el modo planificación sin ejecución, aplicar sus límites y
+detenerse después de devolver el plan.
 
 1. Relacionar archivos modificados con la matriz de pruebas y confirmar cada
    nombre en `package.json`.
