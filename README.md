@@ -1078,6 +1078,7 @@ npm.cmd run db:check-session-security
 npm.cmd run test:session-revocation
 npm.cmd run test:email-verification
 npm.cmd run test:password-recovery
+npm.cmd run test:saas-a-e2e
 ```
 
 El comprobador es de solo lectura y reconoce estados pre, parcial y post migracion. La prueba requiere el servidor local y una base cuyo nombre contenga `prueba` o `test`; usa cuentas y tiendas temporales sin imprimir contrasenas ni identificadores de sesion.

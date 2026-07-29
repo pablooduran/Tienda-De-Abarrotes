@@ -79,6 +79,7 @@
     "test:store-configuration": "node scripts/test-store-configuration.js",
     "test:onboarding": "node scripts/test-onboarding.js",
     "test:onboarding-browser": "node scripts/test-onboarding-browser.js",
+    "test:saas-a-e2e": "node scripts/test-saas-a-e2e.js",
     "check:operational-health": "node scripts/check-operational-health.js",
     "check:web-security": "node scripts/check-web-security.js",
     "codex:status": "node scripts/codex-project-status.js",

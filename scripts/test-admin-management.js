@@ -10,6 +10,8 @@ function assert(condition, message) {
   if (!condition) throw new Error(message);
 }
 
+let capturedAuditRequestIds = null;
+
 class HttpSession {
   constructor(baseUrl) {
     this.baseUrl = baseUrl;
@@ -25,6 +27,8 @@ class HttpSession {
     applyTestRequestSecurity(this.baseUrl, request);
     if (this.cookie) request.headers.cookie = this.cookie;
     const response = await fetch(`${this.baseUrl}${path}`, { ...request, redirect: 'manual' });
+    const requestId = response.headers.get('x-request-id');
+    if (capturedAuditRequestIds && requestId) capturedAuditRequestIds.add(requestId);
     const setCookie = response.headers.get('set-cookie');
     if (setCookie) this.cookie = setCookie.split(';')[0];
     const text = await response.text();
@@ -69,38 +73,74 @@ function assertUniformLoginRejection(body, label, referenceBody = null, forbidde
 
 async function cleanup(connection, fixture) {
   if (!connection) return;
-  const [stores] = await connection.query(
-    'SELECT idTienda FROM tienda WHERE slug IN (?, ?)',
-    [fixture.slug, fixture.duplicateUserSlug]
-  );
-  for (const store of stores) {
-    const idTienda = store.idTienda;
-    await connection.query('DELETE FROM cierreCaja WHERE idTienda=?', [idTienda]);
-    await connection.query('DELETE FROM gasto WHERE idTienda=?', [idTienda]);
-    await connection.query('DELETE FROM categoriaGasto WHERE idTienda=?', [idTienda]);
-    await connection.query('DELETE FROM movimientoStock WHERE idTienda=?', [idTienda]);
-    await connection.query('DELETE FROM seguimientoCobranza WHERE idTienda=?', [idTienda]);
-    await connection.query('DELETE FROM pagoVenta WHERE idTienda=?', [idTienda]);
-    await connection.query('DELETE FROM pagoFiado WHERE idTienda=?', [idTienda]);
-    await connection.query('DELETE FROM cobroFiado WHERE idTienda=?', [idTienda]);
-    await connection.query('DELETE FROM detalleFiado WHERE idTienda=?', [idTienda]);
-    await connection.query('DELETE FROM detalleVenta WHERE idTienda=?', [idTienda]);
-    await connection.query('DELETE FROM detalleCompra WHERE idTienda=?', [idTienda]);
-    await connection.query('DELETE FROM fiado WHERE idTienda=?', [idTienda]);
-    await connection.query('DELETE FROM venta WHERE idTienda=?', [idTienda]);
-    await connection.query('DELETE FROM compra WHERE idTienda=?', [idTienda]);
-    await connection.query('DELETE FROM producto WHERE idTienda=?', [idTienda]);
-    await connection.query('DELETE FROM cliente WHERE idTienda=?', [idTienda]);
-    await connection.query('DELETE FROM proveedor WHERE idTienda=?', [idTienda]);
-    await connection.query('DELETE FROM plantillaCobranzaTienda WHERE idTienda=?', [idTienda]);
-    await connection.query('DELETE FROM configuracionCreditoTienda WHERE idTienda=?', [idTienda]);
-    await connection.query('DELETE FROM configuracionInventarioTienda WHERE idTienda=?', [idTienda]);
-    await connection.query('DELETE FROM suscripcionTienda WHERE idTienda=?', [idTienda]);
-    await connection.query('DELETE FROM administrador WHERE idTienda=?', [idTienda]);
-    await connection.query('DELETE FROM tienda WHERE idTienda=?', [idTienda]);
-  }
-  if (fixture.superUser) {
-    await connection.query('DELETE FROM administrador WHERE usuario=?', [fixture.superUser]);
+  await connection.beginTransaction();
+  try {
+    const [stores] = await connection.query(
+      'SELECT idTienda FROM tienda WHERE slug IN (?, ?)',
+      [fixture.slug, fixture.duplicateUserSlug]
+    );
+    const storeIds = stores.map((store) => Number(store.idTienda));
+    const [administrators] = await connection.query(
+      `SELECT idAdministrador FROM administrador
+       WHERE usuario=? OR idTienda IN (?)`,
+      [fixture.superUser, storeIds.length ? storeIds : [0]]
+    );
+    const administratorIds = administrators.map((row) => Number(row.idAdministrador));
+    const auditPredicates = [];
+    const auditParameters = [];
+    if (storeIds.length) {
+      auditPredicates.push('idTienda IN (?)');
+      auditParameters.push(storeIds);
+    }
+    if (administratorIds.length) {
+      auditPredicates.push('idAdministradorActor IN (?)');
+      auditParameters.push(administratorIds);
+    }
+    const requestIds = [...(capturedAuditRequestIds || [])];
+    if (requestIds.length) {
+      auditPredicates.push('requestId IN (?)');
+      auditParameters.push(requestIds);
+    }
+    if (auditPredicates.length) {
+      await connection.query(
+        `DELETE FROM eventoAuditoriaAdministrativa WHERE ${auditPredicates.join(' OR ')}`,
+        auditParameters
+      );
+    }
+    for (const store of stores) {
+      const idTienda = store.idTienda;
+      await connection.query('DELETE FROM cierreCaja WHERE idTienda=?', [idTienda]);
+      await connection.query('DELETE FROM gasto WHERE idTienda=?', [idTienda]);
+      await connection.query('DELETE FROM categoriaGasto WHERE idTienda=?', [idTienda]);
+      await connection.query('DELETE FROM movimientoStock WHERE idTienda=?', [idTienda]);
+      await connection.query('DELETE FROM seguimientoCobranza WHERE idTienda=?', [idTienda]);
+      await connection.query('DELETE FROM pagoVenta WHERE idTienda=?', [idTienda]);
+      await connection.query('DELETE FROM pagoFiado WHERE idTienda=?', [idTienda]);
+      await connection.query('DELETE FROM cobroFiado WHERE idTienda=?', [idTienda]);
+      await connection.query('DELETE FROM detalleFiado WHERE idTienda=?', [idTienda]);
+      await connection.query('DELETE FROM detalleVenta WHERE idTienda=?', [idTienda]);
+      await connection.query('DELETE FROM detalleCompra WHERE idTienda=?', [idTienda]);
+      await connection.query('DELETE FROM fiado WHERE idTienda=?', [idTienda]);
+      await connection.query('DELETE FROM venta WHERE idTienda=?', [idTienda]);
+      await connection.query('DELETE FROM compra WHERE idTienda=?', [idTienda]);
+      await connection.query('DELETE FROM producto WHERE idTienda=?', [idTienda]);
+      await connection.query('DELETE FROM cliente WHERE idTienda=?', [idTienda]);
+      await connection.query('DELETE FROM proveedor WHERE idTienda=?', [idTienda]);
+      await connection.query('DELETE FROM plantillaCobranzaTienda WHERE idTienda=?', [idTienda]);
+      await connection.query('DELETE FROM configuracionCreditoTienda WHERE idTienda=?', [idTienda]);
+      await connection.query('DELETE FROM configuracionInventarioTienda WHERE idTienda=?', [idTienda]);
+      await connection.query('DELETE FROM configuracionTienda WHERE idTienda=?', [idTienda]);
+      await connection.query('DELETE FROM suscripcionTienda WHERE idTienda=?', [idTienda]);
+      await connection.query('DELETE FROM administrador WHERE idTienda=?', [idTienda]);
+      await connection.query('DELETE FROM tienda WHERE idTienda=?', [idTienda]);
+    }
+    if (fixture.superUser) {
+      await connection.query('DELETE FROM administrador WHERE usuario=?', [fixture.superUser]);
+    }
+    await connection.commit();
+  } catch (error) {
+    try { await connection.rollback(); } catch { /* La conexion puede estar cerrada. */ }
+    throw error;
   }
 }
 
@@ -125,6 +165,7 @@ async function main() {
   const secondOwnerPassword = `Extra-${crypto.randomBytes(12).toString('hex')}!`;
   const sessions = [];
   let connection;
+  capturedAuditRequestIds = new Set();
 
   try {
     connection = await createDatabaseConnection(config);
@@ -335,6 +376,7 @@ async function main() {
     try {
       await cleanup(connection, fixture);
     } finally {
+      capturedAuditRequestIds = null;
       if (connection) await connection.end();
     }
   }

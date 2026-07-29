@@ -130,6 +130,10 @@ async function main() {
     assert.strictEqual(fixture.requests.filter((request) => request.method === 'PATCH').length, 1);
     assert.strictEqual(fixture.requests.filter((request) => request.method === 'POST').length, 1);
     assert(fixture.requests.every((request) => !Object.prototype.hasOwnProperty.call(request.body, 'idTienda')));
+    assert.strictEqual(
+      fixture.requests.find((request) => request.method === 'PATCH').body.nombreMostrado,
+      'Tienda de prueba'
+    );
     assert(fixture.requests.every((request) => request.requestedWith === 'XMLHttpRequest'));
     assert.deepStrictEqual(errors, [], 'La pantalla debe mantener la consola limpia.');
     await page.close();

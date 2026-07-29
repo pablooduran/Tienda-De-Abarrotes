@@ -98,12 +98,13 @@
       const save = async ({ complete = false } = {}) => {
         if (submitting) return;
         submitting = true;
+        const payload = bodyFrom(form);
         const controls = root.querySelectorAll('button, input, select, textarea');
         controls.forEach((control) => { control.disabled = true; });
         root.querySelector('[data-onboarding-screen]').setAttribute('aria-busy', 'true');
         error.textContent = '';
         try {
-          current = await request('/onboarding', { method: 'PATCH', body: JSON.stringify(bodyFrom(form)) });
+          current = await request('/onboarding', { method: 'PATCH', body: JSON.stringify(payload) });
           if (complete) {
             current = await request('/onboarding/completar', { method: 'POST', body: JSON.stringify({}) });
             renderCompleted(current);

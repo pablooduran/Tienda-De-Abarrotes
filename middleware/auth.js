@@ -2,7 +2,9 @@ const { destroyRequestSession, validateSession } = require('../services/session-
 const { administrativeAuditService } = require('../services/administrative-audit-service');
 
 function expectsJson(req) {
-  return req.originalUrl.startsWith('/api') || req.originalUrl.startsWith('/auth');
+  return req.originalUrl.startsWith('/api')
+    || req.originalUrl.startsWith('/auth')
+    || /^\/onboarding(?:\/|$)/.test(req.originalUrl);
 }
 
 async function requireAuth(req, res, next) {
