@@ -25,6 +25,11 @@ function registrationKey(req) {
   return crypto.createHash('sha256').update(`${ip}\0${identity}`).digest('hex').slice(0, 32);
 }
 
+function verificationIdentityKey(req) {
+  const identity = normalizedRegistrationIdentity(req) || 'verificacion-sin-correo';
+  return crypto.createHash('sha256').update(`verificacion\0${identity}`).digest('hex').slice(0, 32);
+}
+
 function limiter(config, {
   identifier,
   limit,
@@ -103,8 +108,28 @@ function createRateLimiters(config, { onLoginLimited = null } = {}) {
       identifier: 'public-registration', limit: config.publicRegistrationMax,
       code: 'PUBLIC_REGISTRATION_RATE_LIMIT_EXCEEDED', message: commonMessage,
       keyGenerator: registrationKey
+    }),
+    emailVerificationConfirm: limiter(config, {
+      identifier: 'email-verification-confirm', limit: config.emailVerificationConfirmMax,
+      code: 'EMAIL_VERIFICATION_RATE_LIMIT_EXCEEDED', message: commonMessage
+    }),
+    emailVerificationResendIp: limiter(config, {
+      identifier: 'email-verification-resend-ip', limit: config.emailVerificationResendIpMax,
+      code: 'EMAIL_VERIFICATION_RESEND_RATE_LIMIT_EXCEEDED', message: commonMessage
+    }),
+    emailVerificationResendIdentity: limiter(config, {
+      identifier: 'email-verification-resend-identity', limit: config.emailVerificationResendIdentityMax,
+      code: 'EMAIL_VERIFICATION_RESEND_RATE_LIMIT_EXCEEDED', message: commonMessage,
+      keyGenerator: verificationIdentityKey
     })
   });
 }
 
-module.exports = { createRateLimiters, identityKey, normalizedRegistrationIdentity, normalizedUsername, registrationKey };
+module.exports = {
+  createRateLimiters,
+  identityKey,
+  normalizedRegistrationIdentity,
+  normalizedUsername,
+  registrationKey,
+  verificationIdentityKey
+};

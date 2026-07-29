@@ -15,6 +15,7 @@ const files = {
   errorHandler: read('middleware/error-handler.js'),
   logger: read('utils/security-logger.js'),
   webConfig: read('config/web-security.js'),
+  emailVerificationContract: read('config/email-verification-contract.js'),
   httpSecurity: read('public/js/http-security.js'),
   appHtml: read('public/app.html'),
   adminHtml: read('public/admin.html'),
@@ -109,6 +110,11 @@ check('rateLimitLoginEspecifico', files.server.includes("app.use('/auth/login', 
 check('rateLimitRegistroPublico', files.server.includes("app.use('/auth/registro', rateLimiters.publicRegistration)")
   && files.rateLimits.includes("identifier: 'public-registration'")
   && files.webConfig.includes('PUBLIC_REGISTRATION_RATE_LIMIT_MAX'));
+check('rateLimitVerificacionCorreo', files.server.includes("app.use('/auth/verificar-correo', rateLimiters.emailVerificationConfirm)")
+  && files.server.includes("app.use('/auth/reenviar-verificacion', rateLimiters.emailVerificationResendIp, rateLimiters.emailVerificationResendIdentity)")
+  && files.rateLimits.includes("identifier: 'email-verification-confirm'")
+  && files.rateLimits.includes("identifier: 'email-verification-resend-identity'")
+  && files.emailVerificationContract.includes('EMAIL_VERIFICATION_TTL_HOURS'));
 check('rateLimitExportacion', files.server.includes('rateLimiters.export'));
 check('rateLimitWhatsapp', files.server.includes('rateLimiters.whatsapp'));
 check('rateLimitHealth', files.server.includes("app.use('/health', rateLimiters.health"));

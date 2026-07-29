@@ -1025,17 +1025,30 @@ La respuesta incluye `descripcion`, `criterios`, `parametrosAplicados`, resumen 
 
 La migracion `013` agrega `administrador.versionSesion`. Cada peticion autenticada contrasta el administrador, su rol, asociacion, tienda y version contra la base. Desactivar una cuenta o tienda, cambiar el usuario o restablecer una contrasena invalida las sesiones anteriores.
 
-### Registro publico pendiente de verificacion
+### Registro publico y verificacion de correo
 
 `POST /auth/registro` crea una tienda, su propietario y una suscripcion de prueba
 del plan Basico por 30 dias en una unica transaccion. El servidor decide plan,
 duracion, rol y tenant; el cliente solo puede enviar nombre de tienda, slug,
 usuario, correo, contrasena y la cabecera `Idempotency-Key`. El propietario queda
-en `pendiente_verificacion` y no puede iniciar una sesion comercial hasta una
-etapa posterior de verificacion de correo. La respuesta no expone identificadores
-internos, tokens ni datos sobre duplicados. La ruta conserva `Cache-Control:
-no-store`, validacion de origen y un rate limiter dedicado. No envia correos ni
-habilita recuperacion de contrasena todavia.
+en `pendiente_verificacion` y no puede iniciar una sesion comercial hasta
+verificar el correo. La transaccion emite un token aleatorio de un solo uso y
+guarda exclusivamente su hash en `tokenAccesoAdministrador`; el adaptador local
+lo conserva solo en memoria para las pruebas, sin SMTP, archivos ni respuestas
+HTTP con tokens.
+
+`POST /auth/verificar-correo` acepta unicamente el token. Si es vigente, activa
+al propietario, conserva la suscripcion Basica de prueba y deja el onboarding en
+pendiente; no crea una sesion. `POST /auth/reenviar-verificacion` acepta correo,
+responde siempre de forma neutra e invalida el token anterior solo para una
+cuenta pendiente valida. Ambos endpoints usan `Cache-Control: no-store`,
+validacion de origen y limites dedicados. El token dura 24 horas por defecto,
+configurable mediante `EMAIL_VERIFICATION_TOKEN_TTL_HOURS` con limites validados
+de 1 a 72 horas.
+
+Un fallo del adaptador local ocurre despues del commit: el registro y el token
+siguen vigentes para permitir un reenvio posterior. No hay proveedor real de
+correo, recuperacion de contrasena ni login por correo todavia.
 
 Las solicitudes incompletas se conservan solo como estado idempotente minimo y quedan
 indexadas para una futura politica de mantenimiento autorizada; SAAS-A1 no elimina
@@ -1046,6 +1059,7 @@ $env:APP_ENV='local'
 $env:DB_HOST='localhost'
 npm.cmd run db:check-session-security
 npm.cmd run test:session-revocation
+npm.cmd run test:email-verification
 ```
 
 El comprobador es de solo lectura y reconoce estados pre, parcial y post migracion. La prueba requiere el servidor local y una base cuyo nombre contenga `prueba` o `test`; usa cuentas y tiendas temporales sin imprimir contrasenas ni identificadores de sesion.

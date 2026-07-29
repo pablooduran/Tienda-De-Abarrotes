@@ -26,6 +26,9 @@ function rateConfig(overrides = {}) {
     loginIpMax: 100,
     loginIdentityMax: 3,
     publicRegistrationMax: 100,
+    emailVerificationConfirmMax: 100,
+    emailVerificationResendIpMax: 100,
+    emailVerificationResendIdentityMax: 100,
     authMax: 100,
     adminMax: 100,
     exportMax: 100,
@@ -60,6 +63,9 @@ async function startFixture({ production = false, limits = {}, trustProxy = fals
   app.post('/auth/registro', rateLimiters.publicRegistration, (req, res) => res.status(202).json({
     message: 'Registro recibido correctamente.', estado: 'pendiente_verificacion'
   }));
+  app.post('/auth/verificar-correo', rateLimiters.emailVerificationConfirm, (req, res) => res.json({ ok: true }));
+  app.post('/auth/reenviar-verificacion', rateLimiters.emailVerificationResendIp,
+    rateLimiters.emailVerificationResendIdentity, (req, res) => res.status(202).json({ ok: true }));
   app.use('/api/exportaciones', rateLimiters.export);
   app.use('/api/cobranza/mensaje-whatsapp/preparar', rateLimiters.whatsapp);
   app.use('/api', rateLimiters.api);
@@ -277,6 +283,20 @@ async function testIpAndSpecificLimits() {
     check('Registro publico tiene limite independiente', first.status === 202 && second.status === 429
       && second.body.code === 'PUBLIC_REGISTRATION_RATE_LIMIT_EXCEEDED');
     check('Registro publico limitado conserva respuesta sanitizada', !JSON.stringify(second.body).includes('registro@example.test'));
+  });
+
+  await withFixture({ limits: { emailVerificationConfirmMax: 1 } }, async (fixture) => {
+    const first = await request(fixture, '/auth/verificar-correo', { method: 'POST', body: { token: 'simulado' } });
+    const second = await request(fixture, '/auth/verificar-correo', { method: 'POST', body: { token: 'simulado' } });
+    check('Verificacion de correo tiene limite dedicado', first.status === 200 && second.status === 429
+      && second.body.code === 'EMAIL_VERIFICATION_RATE_LIMIT_EXCEEDED');
+  });
+
+  await withFixture({ limits: { emailVerificationResendIpMax: 1, emailVerificationResendIdentityMax: 100 } }, async (fixture) => {
+    const first = await request(fixture, '/auth/reenviar-verificacion', { method: 'POST', body: { correo: 'registro@example.test' } });
+    const second = await request(fixture, '/auth/reenviar-verificacion', { method: 'POST', body: { correo: 'otro@example.test' } });
+    check('Reenvio de verificacion limita por IP', first.status === 202 && second.status === 429
+      && second.body.code === 'EMAIL_VERIFICATION_RESEND_RATE_LIMIT_EXCEEDED');
   });
 }
 

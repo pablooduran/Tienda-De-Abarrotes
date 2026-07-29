@@ -13,6 +13,7 @@ const {
   administratorActor
 } = require('../services/administrative-audit-service');
 const { publicRegistrationService } = require('../services/public-registration-service');
+const { emailVerificationService } = require('../services/email-verification-service');
 
 const router = express.Router();
 const dummyPasswordHash = bcrypt.hash(crypto.randomBytes(32).toString('hex'), 12);
@@ -148,6 +149,30 @@ router.post('/registro', async (req, res, next) => {
       requestId: req.requestId
     });
     return res.status(201).json(result);
+  } catch (error) {
+    return next(error);
+  }
+});
+
+router.post('/verificar-correo', async (req, res, next) => {
+  try {
+    const result = await emailVerificationService.confirm({
+      token: req.body?.token,
+      requestId: req.requestId
+    });
+    return res.json(result);
+  } catch (error) {
+    return next(error);
+  }
+});
+
+router.post('/reenviar-verificacion', async (req, res, next) => {
+  try {
+    const result = await emailVerificationService.resend({
+      email: req.body?.correo,
+      requestId: req.requestId
+    });
+    return res.status(202).json(result);
   } catch (error) {
     return next(error);
   }

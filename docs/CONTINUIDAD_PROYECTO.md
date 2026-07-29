@@ -50,7 +50,7 @@ Si la rama, el HEAD o el estado difieren, detenerse y entender los cambios exist
 | `routes/` | Contratos HTTP de autenticacion, administracion y modulos comerciales. |
 | `services/` | Reglas de negocio, transacciones, reportes, POS, stock, clientes y cobranza. |
 | `public/` | Aplicacion web, administracion, login, estilos y JavaScript del navegador. |
-| `database/migrations/` | Migraciones historicas y modernas, numeradas de 001 a 019; la base principal local validada esta en 019. |
+| `database/migrations/` | Migraciones historicas y modernas, numeradas de 001 a 020; la base principal local validada esta en 020. |
 | `database/tienda_abarrotes.sql` | Esquema inicial equivalente al estado final esperado. |
 | `scripts/` | Migrador, comprobadores, pruebas, administracion local y backups. |
 | `utils/` | Utilidades compartidas, incluidas fechas locales y errores. |
@@ -122,7 +122,7 @@ El contexto de tienda proviene de la sesion validada. El navegador no debe envia
 | INV-A - stock vendible y conciliacion | Terminado | Clasificacion explicita, conciliacion read-only, ajustes idempotentes, auditoria, interfaz y pruebas; 019 aplicada en localhost. |
 | INV-B - reposicion | Terminado | Rotacion neta, cobertura, alertas priorizadas, sugerencias informativas, exportacion XLSX y accesibilidad basica sin ordenes de compra. |
 | Optimizacion de Codex, etapas 1-10 | Terminado | Indice, mapas compactos, comprobadores, seis skills versionables y validacion segura. Ver `AGENTS.md` y `docs/GUIA_CODEX_SKILLS.md`. |
-| Fase 11 - acceso publico | Parcial: SAAS-A1 | Registro publico transaccional pendiente de verificacion; faltan verificacion, recuperacion, onboarding y cierre. |
+| Fase 11 - acceso publico | Parcial: SAAS-A1 y SAAS-A2 | Registro publico transaccional, token hasheado, verificacion y reenvio local en memoria. Faltan recuperacion, onboarding y cierre. |
 | Suscripciones comerciales | No iniciada | No hay cobro automatizado de planes ni pasarela comercial. |
 | Staging y produccion | Pendiente | No se ha desplegado este estado. |
 
@@ -475,7 +475,7 @@ No mostrar estas variables en logs ni respuestas. Nunca versionar `.env`, `.env.
 - Un proceso caido no puede emitir su propia recuperacion o alerta. Hace falta un monitor externo
   autorizado para invocar el comprobador o los endpoints y un almacenamiento fuera del host.
 - No hay staging configurado ni despliegue de este estado.
-- SAAS-A1 incorpora registro publico pendiente de verificacion; aun no hay verificacion por correo, recuperacion por correo, invitaciones ni login social.
+- SAAS-A1/A2 incorporan registro publico pendiente, token de verificacion hasheado, confirmacion y reenvio neutro mediante adaptador local en memoria. Aun no hay proveedor real, recuperacion por correo, invitaciones ni login social.
 - No hay cobro automatizado de suscripciones comerciales.
 - WhatsApp solo prepara texto/enlace; no envia mensajes automaticamente.
 - No hay PDF general, portal del cliente ni facturacion fiscal.
@@ -604,7 +604,7 @@ En ambos casos, conservar el repositorio o base anterior hasta completar smoke t
 ### Base local
 
 - Base de pruebas esperada: `tienda_abarrotes_pruebas`.
-- Migraciones registradas en la base principal conocida: 001 a 019.
+- Migraciones registradas en la base principal conocida: 001 a 020.
 - No deberian existir bases `tmp_tienda_restore_*` ni `tmp_tienda_legacy_*` despues de las pruebas.
 
 ### Ultimo estado conocido de pruebas

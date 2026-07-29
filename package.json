@@ -73,6 +73,7 @@
     "test:inventory-adjustments-frontend": "node scripts/test-inventory-adjustments-frontend.js",
     "test:inventory-adjustments-browser": "node scripts/test-inventory-adjustments-browser.js",
     "test:public-registration": "node scripts/test-public-registration.js",
+    "test:email-verification": "node scripts/test-email-verification.js",
     "check:operational-health": "node scripts/check-operational-health.js",
     "check:web-security": "node scripts/check-web-security.js",
     "codex:status": "node scripts/codex-project-status.js",

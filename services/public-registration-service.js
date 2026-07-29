@@ -5,6 +5,7 @@ const { formatLocalDateTime } = require('../utils/local-datetime');
 const { createSubscription } = require('./subscription-service');
 const { bootstrapStore } = require('./store-bootstrap-service');
 const { administrativeAuditService } = require('./administrative-audit-service');
+const { emailVerificationService } = require('./email-verification-service');
 const {
   INITIAL_ONBOARDING_STATUS,
   INITIAL_PLAN_CODE,
@@ -54,6 +55,7 @@ function createPublicRegistrationService({
   auditService = administrativeAuditService,
   bcryptLib = bcrypt,
   bootstrap = bootstrapStore,
+  verificationService = emailVerificationService,
   clock = () => formatLocalDateTime(),
   fingerprintSecret = null
 } = {}) {
@@ -74,6 +76,7 @@ function createPublicRegistrationService({
 
   async function register({ body, idempotencyKey, requestId = null }) {
     let connection;
+    let verificationIssue = null;
     try {
       const registration = normalizeRegistration(body);
       const key = validateIdempotencyKey(idempotencyKey);
@@ -135,6 +138,10 @@ function createPublicRegistrationService({
         duracionDias: INITIAL_TRIAL_DAYS,
         creadoPor: null
       });
+      verificationIssue = await verificationService.issueWithinTransaction(connection, {
+        idAdministrador,
+        requestId
+      });
       await connection.query(
         `UPDATE solicitudRegistroPublico
          SET estado='completada', idTienda=?, idAdministrador=?, completadaEn=?, actualizadoEn=?
@@ -150,6 +157,7 @@ function createPublicRegistrationService({
         metadata: { planCodigo: subscription.planCodigo, tipoSuscripcion: subscription.tipo }
       });
       await connection.commit();
+      await verificationService.deliver(verificationIssue, requestId);
       return safeRegistrationResponse(false);
     } catch (error) {
       if (connection) await connection.rollback();

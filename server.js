@@ -170,6 +170,8 @@ app.use(mutationProtection(appSecurityConfig.trustedOrigins));
 app.use('/auth', rateLimiters.auth);
 app.use('/auth/login', rateLimiters.loginIp, rateLimiters.loginIdentity);
 app.use('/auth/registro', rateLimiters.publicRegistration);
+app.use('/auth/verificar-correo', rateLimiters.emailVerificationConfirm);
+app.use('/auth/reenviar-verificacion', rateLimiters.emailVerificationResendIp, rateLimiters.emailVerificationResendIdentity);
 app.use('/api/admin/catalogo/importaciones/plantilla.xlsx', rateLimiters.export);
 app.use('/api/exportaciones', rateLimiters.export);
 app.use('/api/inventario-inteligente/exportacion.xlsx', rateLimiters.export);

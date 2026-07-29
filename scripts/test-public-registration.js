@@ -8,6 +8,8 @@ const { readSqlStatements } = require('./db-utils');
 const { inspectPublicRegistration } = require('./check-public-registration');
 const { createPublicRegistrationService } = require('../services/public-registration-service');
 const { createAdministrativeAuditService } = require('../services/administrative-audit-service');
+const { createEmailVerificationService } = require('../services/email-verification-service');
+const { createLocalVerificationMailAdapter } = require('../services/local-verification-mail-adapter');
 const { normalizeRegistration, normalizeSlug } = require('../config/public-registration-contract');
 
 const ROOT = path.resolve(__dirname, '..');
@@ -133,10 +135,22 @@ async function main() {
 
     const bootstrapCalls = [];
     const auditService = createAdministrativeAuditService({ database: connection });
+    const mailAdapter = createLocalVerificationMailAdapter();
+    const verificationService = createEmailVerificationService({
+      database: { getConnection: async () => connection },
+      auditService,
+      mailAdapter,
+      clock: () => new Date('2026-07-29T14:00:00Z')
+    });
+    const noopVerificationService = Object.freeze({
+      issueWithinTransaction: async () => Object.freeze({}),
+      deliver: async () => true
+    });
     const service = createPublicRegistrationService({
       database: { getConnection: async () => connection },
       auditService,
       fingerprintSecret: 'test-only-registration-secret',
+      verificationService,
       clock: () => '2026-07-29 10:00:00',
       bootstrap: async (_connection, idTienda) => { bootstrapCalls.push(idTienda); }
     });
@@ -147,7 +161,7 @@ async function main() {
     assert.strictEqual(result.repetida, false);
     assert.strictEqual(bootstrapCalls.length, 1);
     const [[owner]] = await connection.query(
-      `SELECT a.correoNormalizado,a.correoVerificadoEn,a.estadoAcceso,a.rol,a.idTienda,
+      `SELECT a.idAdministrador,a.correoNormalizado,a.correoVerificadoEn,a.estadoAcceso,a.rol,a.idTienda,
               t.estadoOnboarding,s.tipo,s.estado,s.fechaInicio,s.fechaFin
        FROM administrador a JOIN tienda t ON t.idTienda=a.idTienda
        JOIN suscripcionTienda s ON s.idTienda=t.idTienda
@@ -161,6 +175,13 @@ async function main() {
     assert.strictEqual(owner.tipo, 'prueba');
     assert.strictEqual(owner.estado, 'activa');
     assert.strictEqual(Math.round((new Date(owner.fechaFin) - new Date(owner.fechaInicio)) / 86400000), 30);
+    const [[tokenCount]] = await connection.query(
+      `SELECT COUNT(*) total FROM tokenAccesoAdministrador
+       WHERE idAdministrador=? AND tipo='verificacion_correo'`,
+      [owner.idAdministrador]
+    );
+    assert.strictEqual(Number(tokenCount.total), 1);
+    assert(mailAdapter.takeLatestForTests()?.token, 'El adaptador local debe recibir el token en claro.');
 
     const repeated = await service.register({ body, idempotencyKey: key, requestId: '22222222-2222-4222-8222-222222222222' });
     assert.strictEqual(repeated.repetida, true);
@@ -187,12 +208,13 @@ async function main() {
     const concurrentKey = `registro:${marker}:concurrente`;
     const concurrentService = createPublicRegistrationService({
       database: { getConnection: async () => connection }, fingerprintSecret: 'test-only-registration-secret', auditService,
+      verificationService: noopVerificationService,
       bootstrap: async () => { markBootstrapStarted(); await bootstrapRelease; }
     });
     const secondAuditService = createAdministrativeAuditService({ database: concurrentConnection });
     const secondService = createPublicRegistrationService({
       database: { getConnection: async () => concurrentConnection }, fingerprintSecret: 'test-only-registration-secret',
-      auditService: secondAuditService, bootstrap: async () => {}
+      auditService: secondAuditService, verificationService: noopVerificationService, bootstrap: async () => {}
     });
     const firstConcurrent = concurrentService.register({ body: concurrentBody, idempotencyKey: concurrentKey });
     await bootstrapStarted;
@@ -206,7 +228,7 @@ async function main() {
 
     const failing = createPublicRegistrationService({
       database: { getConnection: async () => connection }, fingerprintSecret: 'test-only-registration-secret',
-      auditService,
+      auditService, verificationService: noopVerificationService,
       bootstrap: async () => { throw new Error('fallo simulado'); }
     });
     const failedBody = request(`${marker}d`);
