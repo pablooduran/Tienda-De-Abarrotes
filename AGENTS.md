@@ -25,6 +25,23 @@ web JavaScript sin framework. El trabajo activo ocurre en `mejora-multitienda`.
 No asumir que la documentacion reemplaza al codigo: verificar las afirmaciones
 importantes contra rutas, servicios, migraciones y pruebas reales.
 
+## Skills operativas
+
+Usar solo las skills necesarias; no invocar todas por defecto. La guia breve y
+ejemplos viven en [GUIA_CODEX_SKILLS.md](docs/GUIA_CODEX_SKILLS.md).
+
+| Skill | Uso principal |
+| --- | --- |
+| `$project-navigator` | Ubicar contexto y archivos minimos. |
+| `$test-and-cleanup` | Planificar o ejecutar regresion proporcional y limpieza propia. |
+| `$release-close` | Revisar y cerrar un bloque ya autorizado. |
+| `$safe-migration` | Planificar, ensayar o aplicar una migracion autorizada. |
+| `$multitenant-security-review` | Revisar tenant, autorizacion y exposicion de datos. |
+| `$browser-harness` | Planificar o ejecutar un arnes browser aislado. |
+
+Prioridad de modos: solo contexto, planificacion sin ejecucion, revision
+estatica, simulacion y, solo con autorizacion expresa, ejecucion autorizada.
+
 ## Entorno local autorizado
 - Usar `APP_ENV=local` para trabajo local y la base local autorizada en
   `localhost`.

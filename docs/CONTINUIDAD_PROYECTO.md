@@ -11,6 +11,9 @@ Documento de relevo tecnico para continuar el proyecto sin depender del historia
 - El HEAD indicado es una referencia local conocida. Confirmar si tambien existe en el remoto antes de depender de el para una recuperacion.
 - La base principal local esta en 019. INV-A e INV-B estan cerrados y no agregaron
   migraciones posteriores.
+- La optimizacion operativa de Codex queda cerrada en las etapas 1 a 10. El
+  HEAD esperado despues de este cierre es el commit `docs: cerrar optimizacion
+  operativa de Codex` posterior a `2959093`; confirmar el hash real con Git.
 
 Comprobacion inicial obligatoria:
 
@@ -118,6 +121,7 @@ El contexto de tienda proviene de la sesion validada. El navegador no debe envia
 | Auditoria administrativa global | AUD-A y AUD-B implementados | Bitacora append-only, allowlists, eventos administrativos y comerciales, consulta tenant/global, pantalla responsive y politica documental de retencion. No hay borrado automatico. |
 | INV-A - stock vendible y conciliacion | Terminado | Clasificacion explicita, conciliacion read-only, ajustes idempotentes, auditoria, interfaz y pruebas; 019 aplicada en localhost. |
 | INV-B - reposicion | Terminado | Rotacion neta, cobertura, alertas priorizadas, sugerencias informativas, exportacion XLSX y accesibilidad basica sin ordenes de compra. |
+| Optimizacion de Codex, etapas 1-10 | Terminado | Indice, mapas compactos, comprobadores, seis skills versionables y validacion segura. Ver `AGENTS.md` y `docs/GUIA_CODEX_SKILLS.md`. |
 | Fase 11 - acceso publico | No iniciada | Registro publico, alta automatica, verificacion, recuperacion y proteccion antiabuso. |
 | Suscripciones comerciales | No iniciada | No hay cobro automatizado de planes ni pasarela comercial. |
 | Staging y produccion | Pendiente | No se ha desplegado este estado. |
@@ -588,6 +592,10 @@ En ambos casos, conservar el repositorio o base anterior hasta completar smoke t
 
 - Rama local: `mejora-multitienda`.
 - INV-A e INV-B estan cerrados sobre la rama `mejora-multitienda`.
+- La optimizacion de Codex esta cerrada: `AGENTS.md`, `docs/MAPA_PRUEBAS.md`,
+  `docs/ARQUITECTURA_RESUMIDA.md`, `docs/SEGURIDAD_Y_MULTITIENDA.md`,
+  `docs/MODELO_DATOS_RESUMIDO.md`, `docs/GUIA_CODEX_SKILLS.md`,
+  `codex:status`, `codex:cleanup-check`, `codex:precommit` y seis skills.
 - Working tree esperado despues del cierre: limpio. Verificar siempre el HEAD
   real con `git log -1 --oneline`.
 - No consta despliegue de este estado. Verificar el remoto antes de asumir que todos los commits locales fueron publicados.
@@ -633,12 +641,9 @@ Han sido validadas en bloques anteriores:
 
 Estos resultados corresponden al ultimo estado conocido. Antes de iniciar el siguiente bloque, repetir las comprobaciones relevantes en localhost y registrar resultados exactos.
 
-## 17. Criterio de trabajo futuro
+## 17. Siguiente macrofase
 
-El subbloque B1 implementa `GET|HEAD /health/live`, `GET|HEAD /health/ready`, timeout, cache,
-deduplicacion, rate limit, arranque degradado y cierre por SIGTERM/SIGINT. B2 agrega
-`GET /api/admin/health`, exclusivo de superadmin, y verifica el backup mas reciente en modo de solo
-lectura con umbrales de 24/48 horas y cache de cinco minutos. B3 agrega transiciones en memoria,
-eventos estructurados sanitizados, cooldowns y `check:operational-health`; no programa sondeos ni
-envia alertas. Cualquier proveedor, recurso externo, cambio de esquema, despliegue o secreto
-requiere una autorizacion separada.
+La siguiente macrofase es **SAAS-A: registro publico y onboarding**. Antes de
+iniciarla, confirmar el estado real de Git, migracion 019, backup, limpieza y
+reglas de seguridad. Cualquier migracion, proveedor externo, despliegue o
+secreto requiere una autorizacion separada.
