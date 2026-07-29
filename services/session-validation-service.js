@@ -27,7 +27,7 @@ async function validateSession(sessionAdmin, connection = pool) {
   if (!identity) return invalidResult('sesion_incompleta');
 
   const [rows] = await connection.query(
-    `SELECT a.idAdministrador, a.usuario, a.rol, a.idTienda, a.activo AS administradorActivo,
+    `SELECT a.idAdministrador, a.usuario, a.rol, a.idTienda, a.activo AS administradorActivo, a.estadoAcceso,
        a.versionSesion, t.idTienda AS tiendaEncontrada, t.activo AS tiendaActiva,
        t.estado AS estadoTienda
      FROM administrador a
@@ -40,7 +40,7 @@ async function validateSession(sessionAdmin, connection = pool) {
 
   const current = rows[0];
   const currentStore = current.idTienda === null ? null : Number(current.idTienda);
-  if (!Number(current.administradorActivo)) return invalidResult('administrador_inactivo');
+  if (!Number(current.administradorActivo) || current.estadoAcceso !== 'activo') return invalidResult('administrador_inactivo');
   if (!VALID_ROLES.has(current.rol)) return invalidResult('rol_invalido');
   if (current.rol !== identity.rol || currentStore !== identity.idTienda) {
     return invalidResult('asociacion_modificada');

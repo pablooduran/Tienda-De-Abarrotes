@@ -105,6 +105,7 @@ function webSecurityConfig(environment = process.env) {
       apiMax: integerSetting(environment, 'RATE_LIMIT_MAX', 3000, 10, 100000),
       loginIpMax: integerSetting(environment, 'LOGIN_RATE_LIMIT_MAX', 10, 2, 1000),
       loginIdentityMax: integerSetting(environment, 'LOGIN_IDENTITY_RATE_LIMIT_MAX', 6, 2, 1000),
+      publicRegistrationMax: integerSetting(environment, 'PUBLIC_REGISTRATION_RATE_LIMIT_MAX', 5, 1, 1000),
       authMax: integerSetting(environment, 'AUTH_RATE_LIMIT_MAX', 120, 5, 10000),
       adminMax: integerSetting(environment, 'ADMIN_RATE_LIMIT_MAX', 600, 10, 10000),
       exportMax: integerSetting(environment, 'EXPORT_RATE_LIMIT_MAX', 30, 1, 1000),

@@ -122,7 +122,7 @@ El contexto de tienda proviene de la sesion validada. El navegador no debe envia
 | INV-A - stock vendible y conciliacion | Terminado | Clasificacion explicita, conciliacion read-only, ajustes idempotentes, auditoria, interfaz y pruebas; 019 aplicada en localhost. |
 | INV-B - reposicion | Terminado | Rotacion neta, cobertura, alertas priorizadas, sugerencias informativas, exportacion XLSX y accesibilidad basica sin ordenes de compra. |
 | Optimizacion de Codex, etapas 1-10 | Terminado | Indice, mapas compactos, comprobadores, seis skills versionables y validacion segura. Ver `AGENTS.md` y `docs/GUIA_CODEX_SKILLS.md`. |
-| Fase 11 - acceso publico | No iniciada | Registro publico, alta automatica, verificacion, recuperacion y proteccion antiabuso. |
+| Fase 11 - acceso publico | Parcial: SAAS-A1 | Registro publico transaccional pendiente de verificacion; faltan verificacion, recuperacion, onboarding y cierre. |
 | Suscripciones comerciales | No iniciada | No hay cobro automatizado de planes ni pasarela comercial. |
 | Staging y produccion | Pendiente | No se ha desplegado este estado. |
 
@@ -237,7 +237,8 @@ conocida `tienda_abarrotes_pruebas` esta validada en 019.
 | `016_compensaciones_financieras.sql` | Resolucion de liquidaciones, deuda compensada, reembolsos pendientes, compensacion de cobros y correccion de metodos. |
 | `017_integracion_compensaciones.sql` | Liquidaciones materiales inmutables, reportes netos y trazabilidad explicativa de cierres futuros. |
 | `018_auditoria_administrativa_critica.sql` | Bitacora append-only y eventos criticos de autenticacion, sesiones, credenciales, tiendas, propietarios, planes y suscripciones. |
-| `019_stock_vendible_ajustes.sql` | Clasificacion de lotes, stock vendible y ajustes manuales trazables e idempotentes. |
+| `019_stock_vendible_ajustes.sql` | Stock fisico, vendible/no vendible, conciliacion y ajustes manuales. |
+| `020_registro_publico_onboarding.sql` | Registro publico idempotente, correo normalizado, estado de acceso/onboarding y tokens futuros. |
 
 Reglas:
 
@@ -474,7 +475,7 @@ No mostrar estas variables en logs ni respuestas. Nunca versionar `.env`, `.env.
 - Un proceso caido no puede emitir su propia recuperacion o alerta. Hace falta un monitor externo
   autorizado para invocar el comprobador o los endpoints y un almacenamiento fuera del host.
 - No hay staging configurado ni despliegue de este estado.
-- No hay registro publico, verificacion por correo, recuperacion por correo, invitaciones ni login social.
+- SAAS-A1 incorpora registro publico pendiente de verificacion; aun no hay verificacion por correo, recuperacion por correo, invitaciones ni login social.
 - No hay cobro automatizado de suscripciones comerciales.
 - WhatsApp solo prepara texto/enlace; no envia mensajes automaticamente.
 - No hay PDF general, portal del cliente ni facturacion fiscal.

@@ -25,6 +25,7 @@ function rateConfig(overrides = {}) {
     apiMax: 100,
     loginIpMax: 100,
     loginIdentityMax: 3,
+    publicRegistrationMax: 100,
     authMax: 100,
     adminMax: 100,
     exportMax: 100,
@@ -56,6 +57,9 @@ async function startFixture({ production = false, limits = {}, trustProxy = fals
     return res.status(401).json({ error: 'Credenciales incorrectas.', code: 'INVALID_CREDENTIALS' });
   });
   app.post('/auth/logout', rateLimiters.auth, (req, res) => res.json({ message: 'Sesion cerrada.' }));
+  app.post('/auth/registro', rateLimiters.publicRegistration, (req, res) => res.status(202).json({
+    message: 'Registro recibido correctamente.', estado: 'pendiente_verificacion'
+  }));
   app.use('/api/exportaciones', rateLimiters.export);
   app.use('/api/cobranza/mensaje-whatsapp/preparar', rateLimiters.whatsapp);
   app.use('/api', rateLimiters.api);
@@ -264,6 +268,15 @@ async function testIpAndSpecificLimits() {
     const first = await request(fixture, '/api/cobranza/mensaje-whatsapp/preparar', options);
     const second = await request(fixture, '/api/cobranza/mensaje-whatsapp/preparar', options);
     check('WhatsApp preparado tiene limite especifico', first.status === 200 && second.status === 429);
+  });
+
+  await withFixture({ limits: { publicRegistrationMax: 1 } }, async (fixture) => {
+    const body = { correo: 'registro@example.test' };
+    const first = await request(fixture, '/auth/registro', { method: 'POST', body });
+    const second = await request(fixture, '/auth/registro', { method: 'POST', body });
+    check('Registro publico tiene limite independiente', first.status === 202 && second.status === 429
+      && second.body.code === 'PUBLIC_REGISTRATION_RATE_LIMIT_EXCEEDED');
+    check('Registro publico limitado conserva respuesta sanitizada', !JSON.stringify(second.body).includes('registro@example.test'));
   });
 }
 

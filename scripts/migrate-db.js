@@ -867,6 +867,36 @@ const migrationRequirements = {
         'administrador', ['idTienda', 'idAdministrador'],
         'RESTRICT', 'RESTRICT']
     ]
+  },
+  '020_registro_publico_onboarding.sql': {
+    columns: {
+      administrador: ['correoNormalizado', 'correoVerificadoEn', 'estadoAcceso'],
+      tienda: ['estadoOnboarding', 'onboardingCompletadoEn'],
+      tokenAccesoAdministrador: ['idTokenAcceso', 'idAdministrador', 'tipo', 'tokenHash', 'expiraEn', 'usadoEn', 'invalidadoEn', 'creadoEn'],
+      solicitudRegistroPublico: ['idSolicitudRegistro', 'claveHash', 'huellaSolicitud', 'estado', 'idTienda', 'idAdministrador', 'completadaEn', 'creadoEn', 'actualizadoEn']
+    },
+    indexes: [
+      ['administrador', 'uq_administrador_correo_normalizado', ['correoNormalizado'], true],
+      ['administrador', 'idx_administrador_estado_acceso', ['estadoAcceso', 'activo'], false],
+      ['tienda', 'idx_tienda_onboarding', ['estadoOnboarding', 'activo'], false],
+      ['tokenAccesoAdministrador', 'uq_tokenAcceso_hash', ['tokenHash'], true],
+      ['tokenAccesoAdministrador', 'idx_tokenAcceso_administrador_tipo_estado', ['idAdministrador', 'tipo', 'usadoEn', 'invalidadoEn', 'expiraEn'], false],
+      ['solicitudRegistroPublico', 'uq_solicitudRegistro_clave_hash', ['claveHash'], true],
+      ['solicitudRegistroPublico', 'idx_solicitudRegistro_estado_fecha', ['estado', 'actualizadoEn'], false],
+      ['solicitudRegistroPublico', 'idx_solicitudRegistro_tienda', ['idTienda'], false],
+      ['solicitudRegistroPublico', 'idx_solicitudRegistro_administrador', ['idAdministrador'], false]
+    ],
+    checks: [
+      ['tokenAccesoAdministrador', 'chk_tokenAcceso_hash'],
+      ['tokenAccesoAdministrador', 'chk_tokenAcceso_fechas'],
+      ['solicitudRegistroPublico', 'chk_solicitudRegistro_hashes'],
+      ['solicitudRegistroPublico', 'chk_solicitudRegistro_resultado']
+    ],
+    foreignKeyConstraints: [
+      ['tokenAccesoAdministrador', 'fk_tokenAcceso_administrador', ['idAdministrador'], 'administrador', ['idAdministrador'], 'RESTRICT', 'RESTRICT'],
+      ['solicitudRegistroPublico', 'fk_solicitudRegistro_tienda', ['idTienda'], 'tienda', ['idTienda'], 'RESTRICT', 'RESTRICT'],
+      ['solicitudRegistroPublico', 'fk_solicitudRegistro_administrador', ['idAdministrador'], 'administrador', ['idAdministrador'], 'RESTRICT', 'RESTRICT']
+    ]
   }
 };
 
@@ -3452,7 +3482,9 @@ async function main() {
               '015_compensaciones_venta_inventario.sql',
               '016_compensaciones_financieras.sql',
               '017_integracion_compensaciones.sql',
-              '018_auditoria_administrativa_critica.sql'
+              '018_auditoria_administrativa_critica.sql',
+              '019_stock_vendible_ajustes.sql',
+              '020_registro_publico_onboarding.sql'
             ].includes(file)
             && !await requirementsSatisfied(connection, file);
         if (registeredMigrationIsIncomplete) {
@@ -3481,7 +3513,9 @@ async function main() {
           '015_compensaciones_venta_inventario.sql',
           '016_compensaciones_financieras.sql',
           '017_integracion_compensaciones.sql',
-          '018_auditoria_administrativa_critica.sql'
+          '018_auditoria_administrativa_critica.sql',
+          '019_stock_vendible_ajustes.sql',
+          '020_registro_publico_onboarding.sql'
         ].includes(file)) {
           await connection.query('INSERT IGNORE INTO schema_migrations (nombre) VALUES (?)', [file]);
           const [finalRecord] = await connection.query(

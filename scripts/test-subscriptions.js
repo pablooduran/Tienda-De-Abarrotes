@@ -9,6 +9,8 @@ function assert(condition, message) {
   if (!condition) throw new Error(message);
 }
 
+let capturedAuditRequestIds = null;
+
 class HttpSession {
   constructor(baseUrl) {
     this.baseUrl = baseUrl;
@@ -25,6 +27,8 @@ class HttpSession {
     applyTestRequestSecurity(this.baseUrl, request);
     if (this.cookie) request.headers.cookie = this.cookie;
     const response = await fetch(`${this.baseUrl}${path}`, { ...request, redirect: 'manual' });
+    const requestId = response.headers.get('x-request-id');
+    if (capturedAuditRequestIds && requestId) capturedAuditRequestIds.add(requestId);
     const setCookie = response.headers.get('set-cookie');
     if (setCookie) this.cookie = setCookie.split(';')[0];
     const text = await response.text();
@@ -292,19 +296,59 @@ async function cleanupStore(connection, idTienda) {
   await connection.query('DELETE FROM tienda WHERE idTienda=?', [idTienda]);
 }
 
+async function deleteFixtureAudit(connection, { storeIds = [], administratorIds = [], requestIds = [] } = {}) {
+  const predicates = [];
+  const parameters = [];
+  if (storeIds.length) {
+    predicates.push('idTienda IN (?)');
+    parameters.push(storeIds);
+  }
+  if (administratorIds.length) {
+    predicates.push('idAdministradorActor IN (?)');
+    parameters.push(administratorIds);
+  }
+  if (requestIds.length) {
+    predicates.push('requestId IN (?)');
+    parameters.push(requestIds);
+  }
+  if (!predicates.length) return;
+  await connection.query(
+    `DELETE FROM eventoAuditoriaAdministrativa WHERE ${predicates.join(' OR ')}`,
+    parameters
+  );
+}
+
 async function cleanup(connection, fixture) {
   if (!connection) return;
-  const [stores] = await connection.query(
-    `SELECT idTienda FROM tienda
+  await connection.beginTransaction();
+  try {
+    const [stores] = await connection.query(
+      `SELECT idTienda FROM tienda
      WHERE slug LIKE ? OR slug IN (?, ?)`,
-    [`tienda-sus-%-${fixture.marker}`, fixture.invalidPlanSlug, fixture.inactivePlanSlug]
-  );
-  for (const store of stores) await cleanupStore(connection, store.idTienda);
-  if (fixture.inactivePlanCode) {
-    await connection.query('DELETE FROM plan WHERE codigo=?', [fixture.inactivePlanCode]);
-  }
-  if (fixture.superUser) {
-    await connection.query('DELETE FROM administrador WHERE usuario=?', [fixture.superUser]);
+      [`tienda-sus-%-${fixture.marker}`, fixture.invalidPlanSlug, fixture.inactivePlanSlug]
+    );
+    const storeIds = stores.map((store) => Number(store.idTienda));
+    const [administrators] = await connection.query(
+      `SELECT idAdministrador FROM administrador
+       WHERE usuario=? OR idTienda IN (?)`,
+      [fixture.superUser, storeIds.length ? storeIds : [0]]
+    );
+    await deleteFixtureAudit(connection, {
+      storeIds,
+      administratorIds: administrators.map((row) => Number(row.idAdministrador)),
+      requestIds: [...(capturedAuditRequestIds || [])]
+    });
+    for (const store of stores) await cleanupStore(connection, store.idTienda);
+    if (fixture.inactivePlanCode) {
+      await connection.query('DELETE FROM plan WHERE codigo=?', [fixture.inactivePlanCode]);
+    }
+    if (fixture.superUser) {
+      await connection.query('DELETE FROM administrador WHERE usuario=?', [fixture.superUser]);
+    }
+    await connection.commit();
+  } catch (error) {
+    try { await connection.rollback(); } catch { /* La conexion puede estar cerrada. */ }
+    throw error;
   }
 }
 
@@ -325,6 +369,7 @@ async function main() {
   };
   const superPassword = `Super-${crypto.randomBytes(12).toString('hex')}!`;
   const sessions = [];
+  capturedAuditRequestIds = new Set();
   let connection;
 
   try {
@@ -600,7 +645,10 @@ async function main() {
     for (const session of sessions) {
       try { await session.request('/auth/logout', { method: 'POST' }); } catch { /* El servidor puede haber finalizado. */ }
     }
-    try { await cleanup(connection, fixture); } finally { if (connection) await connection.end(); }
+    try { await cleanup(connection, fixture); } finally {
+      capturedAuditRequestIds = null;
+      if (connection) await connection.end();
+    }
   }
 }
 

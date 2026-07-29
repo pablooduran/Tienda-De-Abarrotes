@@ -106,6 +106,9 @@ check('permissionsPolicy', files.server.includes('app.use(permissionsPolicy)'));
 check('rateLimitDependency', Boolean(files.package.dependencies?.['express-rate-limit']));
 check('rateLimitGeneral', files.server.includes("app.use('/api', rateLimiters.api)"));
 check('rateLimitLoginEspecifico', files.server.includes("app.use('/auth/login', rateLimiters.loginIp, rateLimiters.loginIdentity)"));
+check('rateLimitRegistroPublico', files.server.includes("app.use('/auth/registro', rateLimiters.publicRegistration)")
+  && files.rateLimits.includes("identifier: 'public-registration'")
+  && files.webConfig.includes('PUBLIC_REGISTRATION_RATE_LIMIT_MAX'));
 check('rateLimitExportacion', files.server.includes('rateLimiters.export'));
 check('rateLimitWhatsapp', files.server.includes('rateLimiters.whatsapp'));
 check('rateLimitHealth', files.server.includes("app.use('/health', rateLimiters.health"));

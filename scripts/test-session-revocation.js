@@ -9,6 +9,8 @@ function assert(condition, message) {
   if (!condition) throw new Error(message);
 }
 
+let capturedAuditRequestIds = null;
+
 function safeValue(value) {
   if (Array.isArray(value)) return value.map(safeValue);
   if (!value || typeof value !== 'object') return value;
@@ -33,6 +35,8 @@ class HttpSession {
     applyTestRequestSecurity(this.baseUrl, request);
     if (this.cookie) request.headers.cookie = this.cookie;
     const response = await fetch(`${this.baseUrl}${path}`, { ...request, redirect: 'manual' });
+    const requestId = response.headers.get('x-request-id');
+    if (capturedAuditRequestIds && requestId) capturedAuditRequestIds.add(requestId);
     const setCookie = response.headers.get('set-cookie') || '';
     this.lastSetCookie = setCookie;
     if (setCookie) {
@@ -128,6 +132,28 @@ async function cleanupStore(connection, idTienda) {
   await connection.query('DELETE FROM tienda WHERE idTienda=?', [idTienda]);
 }
 
+async function deleteFixtureAudit(connection, { storeIds = [], administratorIds = [], requestIds = [] } = {}) {
+  const predicates = [];
+  const parameters = [];
+  if (storeIds.length) {
+    predicates.push('idTienda IN (?)');
+    parameters.push(storeIds);
+  }
+  if (administratorIds.length) {
+    predicates.push('idAdministradorActor IN (?)');
+    parameters.push(administratorIds);
+  }
+  if (requestIds.length) {
+    predicates.push('requestId IN (?)');
+    parameters.push(requestIds);
+  }
+  if (!predicates.length) return;
+  await connection.query(
+    `DELETE FROM eventoAuditoriaAdministrativa WHERE ${predicates.join(' OR ')}`,
+    parameters
+  );
+}
+
 async function main() {
   const config = { ...requireLocalhostDatabase('La prueba de revocacion de sesiones'), decimalNumbers: true };
   if (!/(prueba|test)/i.test(config.database)) {
@@ -141,6 +167,7 @@ async function main() {
   const ownPassword = `Own-${crypto.randomBytes(12).toString('hex')}!`;
   const renamedUser = `owner_session_renamed_${marker}`;
   const sessions = [];
+  capturedAuditRequestIds = new Set();
   let connection;
   let storeA;
   let storeB;
@@ -317,6 +344,7 @@ async function main() {
     const deletedSession = new HttpSession(baseUrl);
     sessions.push(deletedSession);
     await login(deletedSession, deletedUser, deletedPassword, 'Login administrador temporal');
+    await deleteFixtureAudit(connection, { administratorIds: [Number(deletedResult.insertId)] });
     await connection.query('DELETE FROM administrador WHERE idAdministrador=?', [deletedResult.insertId]);
     await expectRevoked(deletedSession, 401, 'SESSION_REVOKED', 'Administrador inexistente queda bloqueado');
 
@@ -332,6 +360,18 @@ async function main() {
     }
     if (connection) {
       try {
+        const storeIds = [storeA?.idTienda, storeB?.idTienda].filter(Boolean).map(Number);
+        const [fixtureAdministrators] = await connection.query(
+          `SELECT idAdministrador FROM administrador
+           WHERE idTienda IN (?) OR usuario IN (?, ?, ?, ?)`,
+          [storeIds.length ? storeIds : [0], superUser, storeA?.usuario || '', storeB?.usuario || '', renamedUser]
+        );
+        await connection.beginTransaction();
+        await deleteFixtureAudit(connection, {
+          storeIds,
+          administratorIds: fixtureAdministrators.map((row) => Number(row.idAdministrador)),
+          requestIds: [...(capturedAuditRequestIds || [])]
+        });
         await cleanupStore(connection, storeA?.idTienda);
         await cleanupStore(connection, storeB?.idTienda);
         await connection.query(
@@ -345,7 +385,12 @@ async function main() {
             deletedUser || ''
           ]
         );
+        await connection.commit();
+      } catch (error) {
+        try { await connection.rollback(); } catch { /* La conexion puede estar cerrada. */ }
+        throw error;
       } finally {
+        capturedAuditRequestIds = null;
         await connection.end();
       }
     }

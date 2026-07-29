@@ -132,6 +132,8 @@ Migraciones actuales, en orden:
 16. `016_compensaciones_financieras.sql`: reduccion de deuda, obligaciones de reembolso, compensacion de cobros y correccion de metodos.
 17. `017_integracion_compensaciones.sql`: liquidaciones materiales inmutables, reportes netos y explicacion compensatoria de cierres futuros.
 18. `018_auditoria_administrativa_critica.sql`: bitacora append-only para autenticacion, sesiones, credenciales y superadministracion critica.
+19. `019_stock_vendible_ajustes.sql`: separacion entre stock fisico, vendible y no vendible, conciliacion y ajustes trazables.
+20. `020_registro_publico_onboarding.sql`: base para registro publico pendiente de verificacion, tokens futuros y onboarding.
 19. `019_stock_vendible_ajustes.sql`: clasificacion explicita de lotes, stock vendible y ajustes manuales idempotentes y auditados.
 
 ### Auditoria administrativa
@@ -1023,6 +1025,22 @@ La respuesta incluye `descripcion`, `criterios`, `parametrosAplicados`, resumen 
 
 La migracion `013` agrega `administrador.versionSesion`. Cada peticion autenticada contrasta el administrador, su rol, asociacion, tienda y version contra la base. Desactivar una cuenta o tienda, cambiar el usuario o restablecer una contrasena invalida las sesiones anteriores.
 
+### Registro publico pendiente de verificacion
+
+`POST /auth/registro` crea una tienda, su propietario y una suscripcion de prueba
+del plan Basico por 30 dias en una unica transaccion. El servidor decide plan,
+duracion, rol y tenant; el cliente solo puede enviar nombre de tienda, slug,
+usuario, correo, contrasena y la cabecera `Idempotency-Key`. El propietario queda
+en `pendiente_verificacion` y no puede iniciar una sesion comercial hasta una
+etapa posterior de verificacion de correo. La respuesta no expone identificadores
+internos, tokens ni datos sobre duplicados. La ruta conserva `Cache-Control:
+no-store`, validacion de origen y un rate limiter dedicado. No envia correos ni
+habilita recuperacion de contrasena todavia.
+
+Las solicitudes incompletas se conservan solo como estado idempotente minimo y quedan
+indexadas para una futura politica de mantenimiento autorizada; SAAS-A1 no elimina
+solicitudes ni tokens automaticamente.
+
 ```powershell
 $env:APP_ENV='local'
 $env:DB_HOST='localhost'
@@ -1059,6 +1077,7 @@ RATE_LIMIT_WINDOW_MS=900000
 RATE_LIMIT_MAX=3000
 LOGIN_RATE_LIMIT_MAX=10
 LOGIN_IDENTITY_RATE_LIMIT_MAX=6
+PUBLIC_REGISTRATION_RATE_LIMIT_MAX=5
 AUTH_RATE_LIMIT_MAX=120
 ADMIN_RATE_LIMIT_MAX=600
 EXPORT_RATE_LIMIT_MAX=30

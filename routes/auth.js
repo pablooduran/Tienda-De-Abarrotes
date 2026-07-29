@@ -12,6 +12,7 @@ const {
   administrativeAuditService,
   administratorActor
 } = require('../services/administrative-audit-service');
+const { publicRegistrationService } = require('../services/public-registration-service');
 
 const router = express.Router();
 const dummyPasswordHash = bcrypt.hash(crypto.randomBytes(32).toString('hex'), 12);
@@ -71,7 +72,7 @@ router.post('/login', async (req, res, next) => {
     }
 
     const [rows] = await pool.query(
-      `SELECT a.idAdministrador, a.usuario, a.password, a.rol, a.idTienda, a.activo, a.versionSesion,
+      `SELECT a.idAdministrador, a.usuario, a.password, a.rol, a.idTienda, a.activo, a.estadoAcceso, a.versionSesion,
         t.activo AS tiendaActiva, t.estado AS estadoTienda
        FROM administrador a
        LEFT JOIN tienda t ON t.idTienda=a.idTienda
@@ -86,7 +87,7 @@ router.post('/login', async (req, res, next) => {
     }
 
     const ok = await bcrypt.compare(password, rows[0].password);
-    if (!ok || !Number(rows[0].activo)) {
+    if (!ok || !Number(rows[0].activo) || rows[0].estadoAcceso !== 'activo') {
       await auditLoginRejected(req);
       return invalidCredentials(res);
     }
@@ -136,6 +137,19 @@ router.post('/login', async (req, res, next) => {
     res.json({ message: 'Sesion iniciada.', admin: publicAdmin(req.session.admin) });
   } catch (error) {
     next(error);
+  }
+});
+
+router.post('/registro', async (req, res, next) => {
+  try {
+    const result = await publicRegistrationService.register({
+      body: req.body,
+      idempotencyKey: req.get('Idempotency-Key'),
+      requestId: req.requestId
+    });
+    return res.status(201).json(result);
+  } catch (error) {
+    return next(error);
   }
 });
 

@@ -9,8 +9,18 @@ function normalizedUsername(req) {
   return String(req.body?.usuario || '').trim().toLowerCase().slice(0, 80);
 }
 
+function normalizedRegistrationIdentity(req) {
+  return String(req.body?.correo || '').trim().toLowerCase().slice(0, 160);
+}
+
 function identityKey(req) {
   const identity = normalizedUsername(req) || 'identidad-ausente';
+  const ip = ipKeyGenerator(req.ip || req.socket?.remoteAddress || 'ip-ausente');
+  return crypto.createHash('sha256').update(`${ip}\0${identity}`).digest('hex').slice(0, 32);
+}
+
+function registrationKey(req) {
+  const identity = normalizedRegistrationIdentity(req) || 'registro-sin-correo';
   const ip = ipKeyGenerator(req.ip || req.socket?.remoteAddress || 'ip-ausente');
   return crypto.createHash('sha256').update(`${ip}\0${identity}`).digest('hex').slice(0, 32);
 }
@@ -88,8 +98,13 @@ function createRateLimiters(config, { onLoginLimited = null } = {}) {
       skipSuccessfulRequests: true,
       keyGenerator: identityKey,
       onLimit: onLoginLimited
+    }),
+    publicRegistration: limiter(config, {
+      identifier: 'public-registration', limit: config.publicRegistrationMax,
+      code: 'PUBLIC_REGISTRATION_RATE_LIMIT_EXCEEDED', message: commonMessage,
+      keyGenerator: registrationKey
     })
   });
 }
 
-module.exports = { createRateLimiters, identityKey, normalizedUsername };
+module.exports = { createRateLimiters, identityKey, normalizedRegistrationIdentity, normalizedUsername, registrationKey };
