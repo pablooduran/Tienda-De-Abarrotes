@@ -30,6 +30,16 @@ function verificationIdentityKey(req) {
   return crypto.createHash('sha256').update(`verificacion\0${identity}`).digest('hex').slice(0, 32);
 }
 
+function recoveryIdentityKey(req) {
+  const identity = normalizedRegistrationIdentity(req) || 'recuperacion-sin-correo';
+  return crypto.createHash('sha256').update(`recuperacion\0${identity}`).digest('hex').slice(0, 32);
+}
+
+function recoveryTokenKey(req) {
+  const token = String(req.body?.token || '').trim();
+  return crypto.createHash('sha256').update(`recuperacion-token\0${token}`).digest('hex').slice(0, 32);
+}
+
 function limiter(config, {
   identifier,
   limit,
@@ -121,6 +131,24 @@ function createRateLimiters(config, { onLoginLimited = null } = {}) {
       identifier: 'email-verification-resend-identity', limit: config.emailVerificationResendIdentityMax,
       code: 'EMAIL_VERIFICATION_RESEND_RATE_LIMIT_EXCEEDED', message: commonMessage,
       keyGenerator: verificationIdentityKey
+    }),
+    passwordRecoveryRequestIp: limiter(config, {
+      identifier: 'password-recovery-request-ip', limit: config.passwordRecoveryRequestIpMax,
+      code: 'PASSWORD_RECOVERY_RATE_LIMIT_EXCEEDED', message: commonMessage
+    }),
+    passwordRecoveryRequestIdentity: limiter(config, {
+      identifier: 'password-recovery-request-identity', limit: config.passwordRecoveryRequestIdentityMax,
+      code: 'PASSWORD_RECOVERY_RATE_LIMIT_EXCEEDED', message: commonMessage,
+      keyGenerator: recoveryIdentityKey
+    }),
+    passwordRecoveryConfirmIp: limiter(config, {
+      identifier: 'password-recovery-confirm-ip', limit: config.passwordRecoveryConfirmIpMax,
+      code: 'PASSWORD_RESET_RATE_LIMIT_EXCEEDED', message: commonMessage
+    }),
+    passwordRecoveryConfirmToken: limiter(config, {
+      identifier: 'password-recovery-confirm-token', limit: config.passwordRecoveryConfirmTokenMax,
+      code: 'PASSWORD_RESET_RATE_LIMIT_EXCEEDED', message: commonMessage,
+      keyGenerator: recoveryTokenKey
     })
   });
 }
@@ -131,5 +159,7 @@ module.exports = {
   normalizedRegistrationIdentity,
   normalizedUsername,
   registrationKey,
-  verificationIdentityKey
+  verificationIdentityKey,
+  recoveryIdentityKey,
+  recoveryTokenKey
 };

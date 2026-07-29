@@ -1047,8 +1047,15 @@ configurable mediante `EMAIL_VERIFICATION_TOKEN_TTL_HOURS` con limites validados
 de 1 a 72 horas.
 
 Un fallo del adaptador local ocurre despues del commit: el registro y el token
-siguen vigentes para permitir un reenvio posterior. No hay proveedor real de
-correo, recuperacion de contrasena ni login por correo todavia.
+siguen vigentes para permitir un reenvio posterior. La recuperacion de
+contrasena usa el mismo transporte local en memoria, pero un tipo de token,
+TTL y contrato separados. `POST /auth/solicitar-recuperacion` siempre responde
+de forma neutra; `POST /auth/restablecer-password` acepta solo token y nueva
+contrasena, cambia la clave dentro de una transaccion, incrementa
+`versionSesion`, invalida sesiones previas y no modifica estado de tienda,
+suscripcion u onboarding. El token de recuperacion dura 60 minutos por defecto
+y nunca verifica el correo ni crea una sesion. No hay proveedor real de correo,
+onboarding ni login por correo todavia.
 
 Las solicitudes incompletas se conservan solo como estado idempotente minimo y quedan
 indexadas para una futura politica de mantenimiento autorizada; SAAS-A1 no elimina
@@ -1060,6 +1067,7 @@ $env:DB_HOST='localhost'
 npm.cmd run db:check-session-security
 npm.cmd run test:session-revocation
 npm.cmd run test:email-verification
+npm.cmd run test:password-recovery
 ```
 
 El comprobador es de solo lectura y reconoce estados pre, parcial y post migracion. La prueba requiere el servidor local y una base cuyo nombre contenga `prueba` o `test`; usa cuentas y tiendas temporales sin imprimir contrasenas ni identificadores de sesion.
@@ -1092,6 +1100,11 @@ RATE_LIMIT_MAX=3000
 LOGIN_RATE_LIMIT_MAX=10
 LOGIN_IDENTITY_RATE_LIMIT_MAX=6
 PUBLIC_REGISTRATION_RATE_LIMIT_MAX=5
+PASSWORD_RECOVERY_TOKEN_TTL_MINUTES=60
+PASSWORD_RECOVERY_REQUEST_IP_RATE_LIMIT_MAX=5
+PASSWORD_RECOVERY_REQUEST_IDENTITY_RATE_LIMIT_MAX=3
+PASSWORD_RECOVERY_CONFIRM_IP_RATE_LIMIT_MAX=20
+PASSWORD_RECOVERY_CONFIRM_TOKEN_RATE_LIMIT_MAX=10
 AUTH_RATE_LIMIT_MAX=120
 ADMIN_RATE_LIMIT_MAX=600
 EXPORT_RATE_LIMIT_MAX=30

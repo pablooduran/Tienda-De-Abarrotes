@@ -172,6 +172,8 @@ app.use('/auth/login', rateLimiters.loginIp, rateLimiters.loginIdentity);
 app.use('/auth/registro', rateLimiters.publicRegistration);
 app.use('/auth/verificar-correo', rateLimiters.emailVerificationConfirm);
 app.use('/auth/reenviar-verificacion', rateLimiters.emailVerificationResendIp, rateLimiters.emailVerificationResendIdentity);
+app.use('/auth/solicitar-recuperacion', rateLimiters.passwordRecoveryRequestIp, rateLimiters.passwordRecoveryRequestIdentity);
+app.use('/auth/restablecer-password', rateLimiters.passwordRecoveryConfirmIp, rateLimiters.passwordRecoveryConfirmToken);
 app.use('/api/admin/catalogo/importaciones/plantilla.xlsx', rateLimiters.export);
 app.use('/api/exportaciones', rateLimiters.export);
 app.use('/api/inventario-inteligente/exportacion.xlsx', rateLimiters.export);

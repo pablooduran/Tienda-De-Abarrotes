@@ -14,6 +14,7 @@ const {
 } = require('../services/administrative-audit-service');
 const { publicRegistrationService } = require('../services/public-registration-service');
 const { emailVerificationService } = require('../services/email-verification-service');
+const { passwordRecoveryService } = require('../services/password-recovery-service');
 
 const router = express.Router();
 const dummyPasswordHash = bcrypt.hash(crypto.randomBytes(32).toString('hex'), 12);
@@ -173,6 +174,30 @@ router.post('/reenviar-verificacion', async (req, res, next) => {
       requestId: req.requestId
     });
     return res.status(202).json(result);
+  } catch (error) {
+    return next(error);
+  }
+});
+
+router.post('/solicitar-recuperacion', async (req, res, next) => {
+  try {
+    const result = await passwordRecoveryService.request({
+      body: req.body,
+      requestId: req.requestId
+    });
+    return res.status(202).json(result);
+  } catch (error) {
+    return next(error);
+  }
+});
+
+router.post('/restablecer-password', async (req, res, next) => {
+  try {
+    const result = await passwordRecoveryService.reset({
+      body: req.body,
+      requestId: req.requestId
+    });
+    return res.json(result);
   } catch (error) {
     return next(error);
   }

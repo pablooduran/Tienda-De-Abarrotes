@@ -29,6 +29,10 @@ function rateConfig(overrides = {}) {
     emailVerificationConfirmMax: 100,
     emailVerificationResendIpMax: 100,
     emailVerificationResendIdentityMax: 100,
+    passwordRecoveryRequestIpMax: 100,
+    passwordRecoveryRequestIdentityMax: 100,
+    passwordRecoveryConfirmIpMax: 100,
+    passwordRecoveryConfirmTokenMax: 100,
     authMax: 100,
     adminMax: 100,
     exportMax: 100,
@@ -66,6 +70,10 @@ async function startFixture({ production = false, limits = {}, trustProxy = fals
   app.post('/auth/verificar-correo', rateLimiters.emailVerificationConfirm, (req, res) => res.json({ ok: true }));
   app.post('/auth/reenviar-verificacion', rateLimiters.emailVerificationResendIp,
     rateLimiters.emailVerificationResendIdentity, (req, res) => res.status(202).json({ ok: true }));
+  app.post('/auth/solicitar-recuperacion', rateLimiters.passwordRecoveryRequestIp,
+    rateLimiters.passwordRecoveryRequestIdentity, (req, res) => res.status(202).json({ ok: true }));
+  app.post('/auth/restablecer-password', rateLimiters.passwordRecoveryConfirmIp,
+    rateLimiters.passwordRecoveryConfirmToken, (req, res) => res.json({ ok: true }));
   app.use('/api/exportaciones', rateLimiters.export);
   app.use('/api/cobranza/mensaje-whatsapp/preparar', rateLimiters.whatsapp);
   app.use('/api', rateLimiters.api);
@@ -297,6 +305,21 @@ async function testIpAndSpecificLimits() {
     const second = await request(fixture, '/auth/reenviar-verificacion', { method: 'POST', body: { correo: 'otro@example.test' } });
     check('Reenvio de verificacion limita por IP', first.status === 202 && second.status === 429
       && second.body.code === 'EMAIL_VERIFICATION_RESEND_RATE_LIMIT_EXCEEDED');
+  });
+
+  await withFixture({ limits: { passwordRecoveryRequestIpMax: 1, passwordRecoveryRequestIdentityMax: 100 } }, async (fixture) => {
+    const first = await request(fixture, '/auth/solicitar-recuperacion', { method: 'POST', body: { correo: 'registro@example.test' } });
+    const second = await request(fixture, '/auth/solicitar-recuperacion', { method: 'POST', body: { correo: 'otro@example.test' } });
+    check('Solicitud de recuperacion limita por IP', first.status === 202 && second.status === 429
+      && second.body.code === 'PASSWORD_RECOVERY_RATE_LIMIT_EXCEEDED');
+  });
+
+  await withFixture({ limits: { passwordRecoveryConfirmIpMax: 100, passwordRecoveryConfirmTokenMax: 1 } }, async (fixture) => {
+    const options = { method: 'POST', body: { token: 'simulado' } };
+    const first = await request(fixture, '/auth/restablecer-password', options);
+    const second = await request(fixture, '/auth/restablecer-password', options);
+    check('Confirmacion de recuperacion limita por token', first.status === 200 && second.status === 429
+      && second.body.code === 'PASSWORD_RESET_RATE_LIMIT_EXCEEDED');
   });
 }
 

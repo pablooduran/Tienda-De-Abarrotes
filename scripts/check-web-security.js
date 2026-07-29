@@ -16,6 +16,7 @@ const files = {
   logger: read('utils/security-logger.js'),
   webConfig: read('config/web-security.js'),
   emailVerificationContract: read('config/email-verification-contract.js'),
+  passwordRecoveryContract: read('config/password-recovery-contract.js'),
   httpSecurity: read('public/js/http-security.js'),
   appHtml: read('public/app.html'),
   adminHtml: read('public/admin.html'),
@@ -115,6 +116,11 @@ check('rateLimitVerificacionCorreo', files.server.includes("app.use('/auth/verif
   && files.rateLimits.includes("identifier: 'email-verification-confirm'")
   && files.rateLimits.includes("identifier: 'email-verification-resend-identity'")
   && files.emailVerificationContract.includes('EMAIL_VERIFICATION_TTL_HOURS'));
+check('rateLimitRecuperacionPassword', files.server.includes("app.use('/auth/solicitar-recuperacion', rateLimiters.passwordRecoveryRequestIp, rateLimiters.passwordRecoveryRequestIdentity)")
+  && files.server.includes("app.use('/auth/restablecer-password', rateLimiters.passwordRecoveryConfirmIp, rateLimiters.passwordRecoveryConfirmToken)")
+  && files.rateLimits.includes("identifier: 'password-recovery-request-identity'")
+  && files.rateLimits.includes("identifier: 'password-recovery-confirm-token'")
+  && files.passwordRecoveryContract.includes('PASSWORD_RECOVERY_TTL_MINUTES'));
 check('rateLimitExportacion', files.server.includes('rateLimiters.export'));
 check('rateLimitWhatsapp', files.server.includes('rateLimiters.whatsapp'));
 check('rateLimitHealth', files.server.includes("app.use('/health', rateLimiters.health"));

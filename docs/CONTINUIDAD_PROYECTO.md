@@ -122,7 +122,7 @@ El contexto de tienda proviene de la sesion validada. El navegador no debe envia
 | INV-A - stock vendible y conciliacion | Terminado | Clasificacion explicita, conciliacion read-only, ajustes idempotentes, auditoria, interfaz y pruebas; 019 aplicada en localhost. |
 | INV-B - reposicion | Terminado | Rotacion neta, cobertura, alertas priorizadas, sugerencias informativas, exportacion XLSX y accesibilidad basica sin ordenes de compra. |
 | Optimizacion de Codex, etapas 1-10 | Terminado | Indice, mapas compactos, comprobadores, seis skills versionables y validacion segura. Ver `AGENTS.md` y `docs/GUIA_CODEX_SKILLS.md`. |
-| Fase 11 - acceso publico | Parcial: SAAS-A1 y SAAS-A2 | Registro publico transaccional, token hasheado, verificacion y reenvio local en memoria. Faltan recuperacion, onboarding y cierre. |
+| Fase 11 - acceso publico | Parcial: SAAS-A1, SAAS-A2 y SAAS-A3 | Registro publico transaccional, verificacion, reenvio y recuperacion de contrasena mediante tokens hash-only y adaptador local en memoria. Faltan onboarding y cierre. |
 | Suscripciones comerciales | No iniciada | No hay cobro automatizado de planes ni pasarela comercial. |
 | Staging y produccion | Pendiente | No se ha desplegado este estado. |
 
