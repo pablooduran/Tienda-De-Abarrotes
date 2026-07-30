@@ -935,6 +935,87 @@ const migrationRequirements = {
       ['configuracionTienda', 'fk_configuracionTienda_tienda',
         ['idTienda'], 'tienda', ['idTienda'], 'RESTRICT', 'RESTRICT']
     ]
+  },
+  '022_ciclo_vida_suscripciones.sql': {
+    columns: {
+      suscripcionTienda: [
+        'fechaFinGracia', 'suspendidaEn', 'reactivadaEn', 'canceladaEn',
+        'motivoTransicion', 'idPlanSiguiente', 'fechaAplicacionPlanSiguiente',
+        'planCodigoSnapshot', 'planNombreSnapshot', 'tipoPeriodoSnapshot',
+        'duracionDiasSnapshot', 'precioReferenciaSnapshot',
+        'limitePropietariosSnapshot', 'limiteProductosSnapshot',
+        'limiteClientesSnapshot', 'limiteProveedoresSnapshot'
+      ],
+      suscripcionFuncionalidadSnapshot: [
+        'idTienda', 'idSuscripcion', 'codigoFuncionalidad',
+        'nombreFuncionalidad', 'creadoEn'
+      ],
+      historialSuscripcionTienda: [
+        'idHistorialSuscripcion', 'idTienda', 'idSuscripcion',
+        'estadoAnterior', 'estadoNuevo', 'tipoOperacion', 'motivo',
+        'actorTipo', 'idAdministradorActor', 'metadatos', 'creadoEn'
+      ],
+      operacionSuscripcionTienda: [
+        'idOperacionSuscripcion', 'idTienda', 'tipoOperacion', 'claveHash',
+        'huellaSolicitud', 'estado', 'idSuscripcionResultado',
+        'idHistorialResultado', 'codigoResultado', 'completadaEn',
+        'fallidaEn', 'expiraEn', 'creadoEn', 'actualizadoEn'
+      ]
+    },
+    indexes: [
+      ['suscripcionTienda', 'uq_suscripcion_tienda_id',
+        ['idTienda', 'idSuscripcion'], true],
+      ['suscripcionTienda', 'idx_suscripcion_tienda_gracia',
+        ['idTienda', 'estado', 'fechaFin', 'fechaFinGracia'], false],
+      ['suscripcionTienda', 'idx_suscripcion_plan_siguiente',
+        ['idPlanSiguiente', 'fechaAplicacionPlanSiguiente'], false],
+      ['suscripcionFuncionalidadSnapshot', 'PRIMARY',
+        ['idTienda', 'idSuscripcion', 'codigoFuncionalidad'], true],
+      ['suscripcionFuncionalidadSnapshot', 'idx_suscripcionFuncionalidad_codigo',
+        ['codigoFuncionalidad'], false],
+      ['historialSuscripcionTienda', 'idx_historialSuscripcion_tienda_fecha',
+        ['idTienda', 'creadoEn', 'idHistorialSuscripcion'], false],
+      ['historialSuscripcionTienda', 'idx_historialSuscripcion_suscripcion_fecha',
+        ['idTienda', 'idSuscripcion', 'creadoEn', 'idHistorialSuscripcion'], false],
+      ['historialSuscripcionTienda', 'idx_historialSuscripcion_actor_fecha',
+        ['idAdministradorActor', 'creadoEn', 'idHistorialSuscripcion'], false],
+      ['operacionSuscripcionTienda', 'uq_operacionSuscripcion_clave',
+        ['idTienda', 'tipoOperacion', 'claveHash'], true],
+      ['operacionSuscripcionTienda', 'idx_operacionSuscripcion_estado_expira',
+        ['estado', 'expiraEn', 'idOperacionSuscripcion'], false],
+      ['operacionSuscripcionTienda', 'idx_operacionSuscripcion_resultado',
+        ['idTienda', 'idSuscripcionResultado'], false]
+    ],
+    checks: [
+      ['suscripcionTienda', 'chk_suscripcion_fechas_ciclo'],
+      ['suscripcionTienda', 'chk_suscripcion_plan_siguiente'],
+      ['suscripcionTienda', 'chk_suscripcion_snapshot'],
+      ['suscripcionFuncionalidadSnapshot', 'chk_suscripcionFuncionalidad_codigo'],
+      ['historialSuscripcionTienda', 'chk_historialSuscripcion_actor'],
+      ['operacionSuscripcionTienda', 'chk_operacionSuscripcion_hashes'],
+      ['operacionSuscripcionTienda', 'chk_operacionSuscripcion_fechas']
+    ],
+    foreignKeyConstraints: [
+      ['suscripcionTienda', 'fk_suscripcion_plan_siguiente',
+        ['idPlanSiguiente'], 'plan', ['idPlan'], 'RESTRICT', 'RESTRICT'],
+      ['suscripcionFuncionalidadSnapshot', 'fk_suscripcionFuncionalidad_suscripcion',
+        ['idTienda', 'idSuscripcion'], 'suscripcionTienda',
+        ['idTienda', 'idSuscripcion'], 'RESTRICT', 'RESTRICT'],
+      ['historialSuscripcionTienda', 'fk_historialSuscripcion_suscripcion',
+        ['idTienda', 'idSuscripcion'], 'suscripcionTienda',
+        ['idTienda', 'idSuscripcion'], 'RESTRICT', 'RESTRICT'],
+      ['historialSuscripcionTienda', 'fk_historialSuscripcion_actor',
+        ['idAdministradorActor'], 'administrador', ['idAdministrador'],
+        'RESTRICT', 'RESTRICT'],
+      ['operacionSuscripcionTienda', 'fk_operacionSuscripcion_tienda',
+        ['idTienda'], 'tienda', ['idTienda'], 'RESTRICT', 'RESTRICT'],
+      ['operacionSuscripcionTienda', 'fk_operacionSuscripcion_resultado',
+        ['idTienda', 'idSuscripcionResultado'], 'suscripcionTienda',
+        ['idTienda', 'idSuscripcion'], 'RESTRICT', 'RESTRICT'],
+      ['operacionSuscripcionTienda', 'fk_operacionSuscripcion_historial',
+        ['idHistorialResultado'], 'historialSuscripcionTienda',
+        ['idHistorialSuscripcion'], 'RESTRICT', 'RESTRICT']
+    ]
   }
 };
 
@@ -1955,6 +2036,31 @@ async function requirementsSatisfied(connection, file) {
                           'inventario_sin_movimiento','exportacion_inventario','vencimientos_lote')`
     );
     if (Number(advancedInBasic.total) > 0) return false;
+  }
+  if (file === '022_ciclo_vida_suscripciones.sql') {
+    const [[invalid]] = await connection.query(
+      `SELECT
+         (SELECT COUNT(*) FROM suscripcionTienda
+          WHERE planCodigoSnapshot IS NULL
+             OR planNombreSnapshot IS NULL
+             OR tipoPeriodoSnapshot IS NULL
+             OR duracionDiasSnapshot<1
+             OR precioReferenciaSnapshot<0
+             OR fechaFin<=fechaInicio
+             OR (fechaFinGracia IS NOT NULL AND fechaFinGracia<=fechaFin)
+             OR (estado='gracia' AND fechaFinGracia IS NULL)
+             OR ((idPlanSiguiente IS NULL)<>(fechaAplicacionPlanSiguiente IS NULL))
+         ) suscripcionesInvalidas,
+         (SELECT COUNT(*) FROM historialSuscripcionTienda h
+          WHERE (h.actorTipo='administrador' AND h.idAdministradorActor IS NULL)
+             OR (h.actorTipo<>'administrador' AND h.idAdministradorActor IS NOT NULL)
+         ) historialInvalido,
+         (SELECT COUNT(*) FROM operacionSuscripcionTienda
+          WHERE claveHash NOT REGEXP '^[0-9a-f]{64}$'
+             OR huellaSolicitud NOT REGEXP '^[0-9a-f]{64}$'
+         ) operacionesInvalidas`
+    );
+    if (Object.values(invalid).some((value) => Number(value) > 0)) return false;
   }
   return true;
 }
@@ -3523,7 +3629,8 @@ async function main() {
               '018_auditoria_administrativa_critica.sql',
               '019_stock_vendible_ajustes.sql',
               '020_registro_publico_onboarding.sql',
-              '021_configuracion_base_tienda.sql'
+              '021_configuracion_base_tienda.sql',
+              '022_ciclo_vida_suscripciones.sql'
             ].includes(file)
             && !await requirementsSatisfied(connection, file);
         if (registeredMigrationIsIncomplete) {
@@ -3555,7 +3662,8 @@ async function main() {
           '018_auditoria_administrativa_critica.sql',
           '019_stock_vendible_ajustes.sql',
           '020_registro_publico_onboarding.sql',
-          '021_configuracion_base_tienda.sql'
+          '021_configuracion_base_tienda.sql',
+          '022_ciclo_vida_suscripciones.sql'
         ].includes(file)) {
           await connection.query('INSERT IGNORE INTO schema_migrations (nombre) VALUES (?)', [file]);
           const [finalRecord] = await connection.query(

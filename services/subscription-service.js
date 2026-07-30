@@ -4,6 +4,12 @@ const {
   getLocalNow,
   parseLocalDateTime
 } = require('../utils/local-datetime');
+const {
+  SUBSCRIPTION_ACTOR_TYPES,
+  SUBSCRIPTION_GRACE_DAYS,
+  sanitizeLifecycleMetadata,
+  snapshotFromPlan
+} = require('../config/subscription-lifecycle-contract');
 
 const LIMITS = Object.freeze({
   propietarios: {
@@ -56,6 +62,12 @@ function effectiveStatus(subscription, now = getLocalNow()) {
   const end = parseLocalDateTime(subscription.fechaFin);
   if (subscription.estado === 'cancelada') return 'cancelada';
   if (subscription.estado === 'suspendida') return 'suspendida';
+  if (subscription.estado === 'gracia') {
+    const graceEnd = subscription.fechaFinGracia
+      ? parseLocalDateTime(subscription.fechaFinGracia)
+      : null;
+    return graceEnd && now < graceEnd ? 'gracia' : 'vencida';
+  }
   if (subscription.estado === 'vencida' || now >= end) return 'vencida';
   if (now < start) return 'pendiente';
   if (subscription.estado === 'pendiente') return 'activa';
@@ -86,17 +98,58 @@ async function usageForStore(connection, idTienda) {
   return Object.fromEntries(entries);
 }
 
-async function enabledFeatures(connection, idPlan) {
-  if (!idPlan) return [];
+async function enabledFeatures(connection, idTienda, idSuscripcion) {
+  if (!idSuscripcion) return [];
   const [rows] = await connection.query(
-    `SELECT f.codigo
-     FROM planFuncionalidad pf
-     JOIN funcionalidad f ON f.idFuncionalidad=pf.idFuncionalidad
-     WHERE pf.idPlan=? AND pf.habilitada=1 AND f.activo=1
-     ORDER BY f.codigo`,
-    [idPlan]
+    `SELECT codigoFuncionalidad codigo
+     FROM suscripcionFuncionalidadSnapshot
+     WHERE idTienda=? AND idSuscripcion=?
+     ORDER BY codigoFuncionalidad`,
+    [idTienda, idSuscripcion]
   );
   return rows.map((row) => row.codigo);
+}
+
+async function insertFeatureSnapshot(connection, subscription, plan) {
+  await connection.query(
+    `INSERT INTO suscripcionFuncionalidadSnapshot
+      (idTienda,idSuscripcion,codigoFuncionalidad,nombreFuncionalidad,creadoEn)
+     SELECT ?, ?, f.codigo, f.nombre, ?
+     FROM planFuncionalidad pf
+     JOIN funcionalidad f ON f.idFuncionalidad=pf.idFuncionalidad
+     WHERE pf.idPlan=? AND pf.habilitada=1 AND f.activo=1`,
+    [subscription.idTienda, subscription.idSuscripcion, subscription.creadoEn, plan.idPlan]
+  );
+}
+
+async function insertLifecycleHistory(connection, input) {
+  const actorType = SUBSCRIPTION_ACTOR_TYPES.includes(input.actorTipo)
+    ? input.actorTipo
+    : input.idAdministradorActor ? 'administrador' : 'sistema';
+  const actorId = actorType === 'administrador' ? Number(input.idAdministradorActor) : null;
+  if (actorType === 'administrador' && (!Number.isInteger(actorId) || actorId <= 0)) {
+    throw new Error('El actor administrativo del historial no es valido.');
+  }
+  const metadata = sanitizeLifecycleMetadata(input.tipoOperacion, input.metadatos);
+  const [result] = await connection.query(
+    `INSERT INTO historialSuscripcionTienda
+      (idTienda,idSuscripcion,estadoAnterior,estadoNuevo,tipoOperacion,motivo,
+       actorTipo,idAdministradorActor,metadatos,creadoEn)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    [
+      input.idTienda,
+      input.idSuscripcion,
+      input.estadoAnterior || null,
+      input.estadoNuevo,
+      input.tipoOperacion,
+      input.motivo,
+      actorType,
+      actorId,
+      Object.keys(metadata).length ? JSON.stringify(metadata) : null,
+      input.creadoEn
+    ]
+  );
+  return Number(result.insertId);
 }
 
 async function resolveSubscriptionContext(connection, idTienda) {
@@ -104,10 +157,13 @@ async function resolveSubscriptionContext(connection, idTienda) {
   const [rows] = await connection.query(
     `SELECT t.idTienda, t.nombre AS tiendaNombre, t.slug AS tiendaSlug,
        t.activo AS tiendaActiva, t.estado AS tiendaEstado,
-       s.idSuscripcion, s.tipo, s.estado, s.fechaInicio, s.fechaFin,
+       s.idSuscripcion, s.tipo, s.estado, s.fechaInicio, s.fechaFin, s.fechaFinGracia,
        s.renovacionAutomatica, s.idPlan,
-       p.codigo AS planCodigo, p.nombre AS planNombre, p.activo AS planActivo,
-       p.limitePropietarios, p.limiteProductos, p.limiteClientes, p.limiteProveedores
+       s.planCodigoSnapshot AS planCodigo, s.planNombreSnapshot AS planNombre,
+       s.limitePropietariosSnapshot AS limitePropietarios,
+       s.limiteProductosSnapshot AS limiteProductos,
+       s.limiteClientesSnapshot AS limiteClientes,
+       s.limiteProveedoresSnapshot AS limiteProveedores
      FROM tienda t
      LEFT JOIN suscripcionTienda s ON s.idSuscripcion=(
        SELECT s2.idSuscripcion FROM suscripcionTienda s2
@@ -123,7 +179,6 @@ async function resolveSubscriptionContext(connection, idTienda) {
          s2.idSuscripcion DESC
        LIMIT 1
      )
-     LEFT JOIN plan p ON p.idPlan=s.idPlan
      WHERE t.idTienda=?`,
     [localNow, localNow, localNow, localNow, idTienda]
   );
@@ -131,7 +186,7 @@ async function resolveSubscriptionContext(connection, idTienda) {
   const row = rows[0];
   const estadoEfectivo = effectiveStatus(row);
   const [features, usage] = await Promise.all([
-    enabledFeatures(connection, row.idPlan),
+    enabledFeatures(connection, idTienda, row.idSuscripcion),
     usageForStore(connection, idTienda)
   ]);
   const limits = {
@@ -158,6 +213,7 @@ async function resolveSubscriptionContext(connection, idTienda) {
       estadoEfectivo,
       fechaInicio: row.fechaInicio,
       fechaFin: row.fechaFin,
+      fechaFinGracia: row.fechaFinGracia,
       diasRestantes: daysRemaining,
       renovacionAutomatica: Number(row.renovacionAutomatica) === 1
     } : null,
@@ -165,12 +221,12 @@ async function resolveSubscriptionContext(connection, idTienda) {
       idPlan: Number(row.idPlan),
       codigo: row.planCodigo,
       nombre: row.planNombre,
-      activo: Number(row.planActivo) === 1
+      activo: true
     } : null,
     caracteristicas: features,
     limites: limits,
     uso: usage,
-    soloLectura: estadoEfectivo !== 'activa' || Number(row.planActivo) !== 1
+    soloLectura: estadoEfectivo !== 'activa'
   };
 }
 
@@ -197,7 +253,10 @@ async function createSubscription(connection, input) {
   const [stores] = await connection.query('SELECT idTienda FROM tienda WHERE idTienda=? FOR UPDATE', [idTienda]);
   if (!stores.length) throw httpError(404, 'La tienda no existe.');
 
-  const plan = await findPlanByCode(connection, input.planCodigo, { requireActive: true });
+  const plan = await findPlanByCode(connection, input.planCodigo, {
+    requireActive: true,
+    forUpdate: true
+  });
   const tipo = cleanText(input.tipo).toLowerCase();
   if (!SUBSCRIPTION_TYPES.has(tipo)) throw httpError(400, 'El tipo de suscripcion no es valido.');
 
@@ -225,6 +284,14 @@ async function createSubscription(connection, input) {
   const endSql = formatLocalDateTime(end);
   const localNow = formatLocalDateTime(now);
   const status = start > now ? 'pendiente' : 'activa';
+  const durationDays = Math.max(1, Math.round((end.getTime() - start.getTime()) / 86400000));
+  const snapshot = snapshotFromPlan(plan, durationDays);
+  const graceEndSql = formatLocalDateTime(addLocalDays(end, SUBSCRIPTION_GRACE_DAYS));
+  const actorType = SUBSCRIPTION_ACTOR_TYPES.includes(input.actorTipo)
+    ? input.actorTipo
+    : input.creadoPor ? 'administrador' : 'sistema';
+  const operation = tipo === 'prueba' ? 'inicio_prueba' : 'activacion';
+  const transitionReason = tipo === 'prueba' ? 'inicio_prueba' : 'asignacion_administrativa';
 
   await connection.query(
     `UPDATE suscripcionTienda SET estado='vencida', actualizadoEn=?
@@ -239,21 +306,53 @@ async function createSubscription(connection, input) {
   );
   const [result] = await connection.query(
     `INSERT INTO suscripcionTienda
-      (idTienda, idPlan, tipo, estado, fechaInicio, fechaFin, renovacionAutomatica,
-       observacion, creadoPor, creadoEn, actualizadoEn)
-     VALUES (?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?)`,
-    [idTienda, plan.idPlan, tipo, status, startSql, endSql, observation,
-      input.creadoPor || null, localNow, localNow]
+      (idTienda,idPlan,tipo,estado,fechaInicio,fechaFin,fechaFinGracia,
+       motivoTransicion,planCodigoSnapshot,planNombreSnapshot,tipoPeriodoSnapshot,
+       duracionDiasSnapshot,precioReferenciaSnapshot,limitePropietariosSnapshot,
+       limiteProductosSnapshot,limiteClientesSnapshot,limiteProveedoresSnapshot,
+       renovacionAutomatica,observacion,creadoPor,creadoEn,actualizadoEn)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?)`,
+    [
+      idTienda, plan.idPlan, tipo, status, startSql, endSql, graceEndSql,
+      transitionReason, snapshot.planCodigo, snapshot.planNombre,
+      snapshot.tipoPeriodo, snapshot.duracionDias, snapshot.precioReferencia,
+      snapshot.limitePropietarios, snapshot.limiteProductos,
+      snapshot.limiteClientes, snapshot.limiteProveedores, observation,
+      input.creadoPor || null, localNow, localNow
+    ]
   );
-  return {
-    idSuscripcion: result.insertId,
+  const subscription = {
+    idSuscripcion: Number(result.insertId),
+    idTienda,
     idPlan: plan.idPlan,
     planCodigo: plan.codigo,
     tipo,
     estado: status,
     fechaInicio: startSql,
-    fechaFin: endSql
+    fechaFin: endSql,
+    fechaFinGracia: graceEndSql,
+    creadoEn: localNow
   };
+  await insertFeatureSnapshot(connection, subscription, plan);
+  await insertLifecycleHistory(connection, {
+    idTienda,
+    idSuscripcion: subscription.idSuscripcion,
+    estadoAnterior: null,
+    estadoNuevo: status,
+    tipoOperacion: operation,
+    motivo: transitionReason,
+    actorTipo: actorType,
+    idAdministradorActor: input.creadoPor || null,
+    metadatos: {
+      planCodigo: snapshot.planCodigo,
+      tipoSuscripcion: tipo,
+      tipoPeriodo: snapshot.tipoPeriodo
+    },
+    creadoEn: localNow
+  });
+  delete subscription.idTienda;
+  delete subscription.creadoEn;
+  return subscription;
 }
 
 module.exports = {

@@ -16,7 +16,8 @@ const { normalizeRegistration, normalizeSlug } = require('../config/public-regis
 const ROOT = path.resolve(__dirname, '..');
 const MIGRATION_FILES = Object.freeze([
   path.join(ROOT, 'database', 'migrations', '020_registro_publico_onboarding.sql'),
-  path.join(ROOT, 'database', 'migrations', '021_configuracion_base_tienda.sql')
+  path.join(ROOT, 'database', 'migrations', '021_configuracion_base_tienda.sql'),
+  path.join(ROOT, 'database', 'migrations', '022_ciclo_vida_suscripciones.sql')
 ]);
 const TEMP_PREFIX = 'tmp_tienda_restore_saas_a1_';
 
@@ -67,6 +68,25 @@ async function createPre020Schema(connection) {
       limitePropietarios INT NULL, limiteProductos INT NULL, limiteClientes INT NULL, limiteProveedores INT NULL,
       creadoEn DATETIME NOT NULL, actualizadoEn DATETIME NOT NULL
     ) ENGINE=InnoDB`,
+    `CREATE TABLE funcionalidad (
+      idFuncionalidad INT AUTO_INCREMENT PRIMARY KEY,
+      codigo VARCHAR(80) NOT NULL UNIQUE,
+      nombre VARCHAR(120) NOT NULL,
+      descripcion VARCHAR(255) NULL,
+      activo TINYINT(1) NOT NULL DEFAULT 1,
+      creadoEn DATETIME NOT NULL,
+      actualizadoEn DATETIME NOT NULL
+    ) ENGINE=InnoDB`,
+    `CREATE TABLE planFuncionalidad (
+      idPlan INT NOT NULL,
+      idFuncionalidad INT NOT NULL,
+      habilitada TINYINT(1) NOT NULL DEFAULT 1,
+      creadoEn DATETIME NOT NULL,
+      PRIMARY KEY (idPlan,idFuncionalidad),
+      CONSTRAINT fk_test_plan_func_plan FOREIGN KEY (idPlan) REFERENCES plan(idPlan),
+      CONSTRAINT fk_test_plan_func_feature FOREIGN KEY (idFuncionalidad)
+        REFERENCES funcionalidad(idFuncionalidad)
+    ) ENGINE=InnoDB`,
     `CREATE TABLE suscripcionTienda (
       idSuscripcion INT AUTO_INCREMENT PRIMARY KEY, idTienda INT NOT NULL, idPlan INT NOT NULL,
       tipo ENUM('prueba','pagada','cortesia') NOT NULL, estado ENUM('pendiente','activa','vencida','suspendida','cancelada') NOT NULL,
@@ -106,10 +126,11 @@ async function applyRegistrationMigrations(connection) {
     }
   }
   await connection.query(
-    'INSERT INTO schema_migrations (nombre) VALUES (?),(?)',
+    'INSERT INTO schema_migrations (nombre) VALUES (?),(?),(?)',
     [
       '020_registro_publico_onboarding.sql',
-      '021_configuracion_base_tienda.sql'
+      '021_configuracion_base_tienda.sql',
+      '022_ciclo_vida_suscripciones.sql'
     ]
   );
 }
@@ -181,7 +202,8 @@ async function main() {
     assert.strictEqual(bootstrapCalls.length, 1);
     const [[owner]] = await connection.query(
       `SELECT a.idAdministrador,a.correoNormalizado,a.correoVerificadoEn,a.estadoAcceso,a.rol,a.idTienda,
-              t.estadoOnboarding,s.tipo,s.estado,s.fechaInicio,s.fechaFin
+              t.estadoOnboarding,s.tipo,s.estado,s.fechaInicio,s.fechaFin,
+              s.fechaFinGracia,s.planCodigoSnapshot,s.tipoPeriodoSnapshot
        FROM administrador a JOIN tienda t ON t.idTienda=a.idTienda
        JOIN suscripcionTienda s ON s.idTienda=t.idTienda
        WHERE a.usuario=?`, [body.usuario]
@@ -194,6 +216,17 @@ async function main() {
     assert.strictEqual(owner.tipo, 'prueba');
     assert.strictEqual(owner.estado, 'activa');
     assert.strictEqual(Math.round((new Date(owner.fechaFin) - new Date(owner.fechaInicio)) / 86400000), 30);
+    assert.strictEqual(Math.round((new Date(owner.fechaFinGracia) - new Date(owner.fechaFin)) / 86400000), 7);
+    assert.strictEqual(owner.planCodigoSnapshot, 'basico');
+    assert.strictEqual(owner.tipoPeriodoSnapshot, 'mensual');
+    const [[lifecycleHistory]] = await connection.query(
+      `SELECT COUNT(*) total FROM historialSuscripcionTienda
+       WHERE idTienda=? AND idSuscripcion=(
+         SELECT idSuscripcion FROM suscripcionTienda WHERE idTienda=? ORDER BY idSuscripcion DESC LIMIT 1
+       ) AND tipoOperacion='inicio_prueba' AND actorTipo='anonimo'`,
+      [owner.idTienda, owner.idTienda]
+    );
+    assert.strictEqual(Number(lifecycleHistory.total), 1);
     const [[baseConfiguration]] = await connection.query(
       `SELECT nombreMostrado,moneda,zonaHoraria
        FROM configuracionTienda WHERE idTienda=?`,

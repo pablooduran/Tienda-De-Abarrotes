@@ -119,6 +119,9 @@ async function createStore(superSession, marker, suffix, planCode) {
 
 async function cleanupStore(connection, idTienda) {
   if (!idTienda) return;
+  await connection.query('DELETE FROM operacionSuscripcionTienda WHERE idTienda=?', [idTienda]);
+  await connection.query('DELETE FROM historialSuscripcionTienda WHERE idTienda=?', [idTienda]);
+  await connection.query('DELETE FROM suscripcionFuncionalidadSnapshot WHERE idTienda=?', [idTienda]);
   for (const table of [
     'seguimientoCobranza', 'pagoVenta', 'pagoFiado', 'cobroFiado', 'detalleFiado',
     'detalleVenta', 'detalleCompra', 'fiado', 'venta', 'compra', 'movimientoLote',

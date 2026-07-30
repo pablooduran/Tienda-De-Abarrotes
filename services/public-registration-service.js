@@ -136,7 +136,8 @@ function createPublicRegistrationService({
         planCodigo: INITIAL_PLAN_CODE,
         tipo: INITIAL_SUBSCRIPTION_TYPE,
         duracionDias: INITIAL_TRIAL_DAYS,
-        creadoPor: null
+        creadoPor: null,
+        actorTipo: 'anonimo'
       });
       verificationIssue = await verificationService.issueWithinTransaction(connection, {
         idAdministrador,

@@ -49,7 +49,7 @@ Si la rama, el HEAD o el estado difieren, detenerse y entender los cambios exist
 | `routes/` | Contratos HTTP de autenticacion, administracion y modulos comerciales. |
 | `services/` | Reglas de negocio, transacciones, reportes, POS, stock, clientes y cobranza. |
 | `public/` | Aplicacion web, administracion, login, estilos y JavaScript del navegador. |
-| `database/migrations/` | Migraciones historicas y modernas, numeradas de 001 a 021; la base principal local validada esta en 021. |
+| `database/migrations/` | Migraciones historicas y modernas, numeradas de 001 a 022; la base principal local validada permanece en 021 y 022 solo se ensaya en temporal. |
 | `database/tienda_abarrotes.sql` | Esquema inicial equivalente al estado final esperado. |
 | `scripts/` | Migrador, comprobadores, pruebas, administracion local y backups. |
 | `utils/` | Utilidades compartidas, incluidas fechas locales y errores. |
@@ -239,6 +239,7 @@ conocida `tienda_abarrotes_pruebas` esta validada en 021.
 | `019_stock_vendible_ajustes.sql` | Stock fisico, vendible/no vendible, conciliacion y ajustes manuales. |
 | `020_registro_publico_onboarding.sql` | Registro publico idempotente, correo normalizado, estado de acceso/onboarding y tokens futuros. |
 | `021_configuracion_base_tienda.sql` | Configuracion base uno a uno de nombre mostrado, moneda, zona horaria y datos opcionales. |
+| `022_ciclo_vida_suscripciones.sql` | Contrato de gracia, snapshot por periodo, historial append-only e idempotencia futura de suscripciones. |
 
 Reglas:
 
@@ -247,7 +248,7 @@ Reglas:
 - Las modernas usan inspeccion pre/parcial/post y registro tardio.
 - Una migracion registrada pero fisicamente incompleta debe bloquear el proceso.
 - Una estructura completa no registrada solo puede adoptarse despues de validarla.
-- `database/tienda_abarrotes.sql` debe conservar equivalencia con el estado post-021 para instalaciones nuevas.
+- `database/tienda_abarrotes.sql` debe conservar equivalencia con el estado post-022 para instalaciones nuevas.
 - Antes de cualquier futura migracion: backup verificado, ensayo sobre copia, revision del SQL y comprobacion posterior.
 
 ## 6. Scripts npm y nivel de seguridad
@@ -284,6 +285,8 @@ Todos requieren credenciales MySQL y deben apuntar a la base local correcta. No 
 
 - `db:check-multitenant`: estructura y aislamiento multitienda.
 - `db:check-subscriptions`: planes, funcionalidades y suscripciones.
+- `db:check-subscription-lifecycle`: snapshot, historial, idempotencia y
+  coherencia temporal post-022.
 - `db:check-master-catalog`: catalogo maestro y enlaces locales.
 - `db:check-stock-movements`: movimientos y conciliacion de stock.
 - `db:check-pos-payments`: estructura de POS y pagos.
@@ -306,6 +309,8 @@ Estas pruebas pueden crear y limpiar datos temporales en la base local de prueba
 - `test:tenant-isolation`: cruces entre tiendas y rutas comerciales.
 - `test:admin-management`: superadmin, tiendas y administradores.
 - `test:subscriptions`: planes, suscripciones, downgrade y solo lectura.
+- `test:subscription-lifecycle-schema`: ensayo temporal de 022, backfill,
+  snapshot, concurrencia, rollback y huella principal.
 - `test:master-catalog`: catalogo maestro.
 - `test:stock-movements`: movimientos, ajustes y conciliacion.
 - `test:pos-payments`: ventas, stock, pagos e idempotencia.
@@ -644,6 +649,7 @@ Estos resultados corresponden al ultimo estado conocido. Antes de iniciar el sig
 
 ## 17. Siguiente macrofase
 
-La siguiente macrofase es **SAAS-B**. Antes de definirla, confirmar Git,
-migracion 021, backup y limpieza. Cualquier proveedor externo, despliegue o
-secreto requiere una autorizacion separada.
+**SAAS-B1** define el contrato y la migracion 022; la base principal permanece
+en 021 hasta una aplicacion controlada separada. El siguiente bloque permitido
+es aplicar y validar 022. SAAS-B2 no debe iniciarse antes de cerrar esa
+aplicacion.

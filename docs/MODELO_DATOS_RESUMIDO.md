@@ -32,7 +32,7 @@ columna, FK o constraint exacto.
 | Dominio | Tablas principales y PK | Ownership | Relaciones e historicos | Restricciones y notas | Migraciones |
 | --- | --- | --- | --- | --- | --- |
 | Tiendas y administracion | `tienda(idTienda)`, `configuracionTienda(idConfiguracionTienda)`, `administrador(idAdministrador)` | `tienda` es raiz; configuracion es uno a uno por `idTienda`; superadmin puede no tener tienda | administrador propietario referencia tienda; configuracion conserva nombre mostrado, moneda y zona; version de sesion invalida sesiones | usuario y rol controlados; configuracion base no contiene plan, permisos ni datos comerciales | 004, 013, 020, 021 |
-| Planes y suscripciones | `plan(idPlan)`, `funcionalidad(idFuncionalidad)`, `planFuncionalidad`, `suscripcionTienda(idSuscripcion)` | suscripcion pertenece a tienda | plan define caracteristicas; suscripcion determina escritura y lectura | limites y caracteristicas se resuelven en backend | 005 |
+| Planes y suscripciones | `plan(idPlan)`, `funcionalidad(idFuncionalidad)`, `planFuncionalidad`, `suscripcionTienda(idSuscripcion)`, `suscripcionFuncionalidadSnapshot`, `historialSuscripcionTienda(idHistorialSuscripcion)`, `operacionSuscripcionTienda(idOperacionSuscripcion)` | suscripcion, snapshot, historial y operacion pertenecen a tienda | el catalogo alimenta altas; cada periodo congela plan, limites y funciones; historial es append-only | bloqueo operativo en orden tienda-suscripcion; claves y payloads idempotentes solo mediante hash | 005, 022 |
 | Sesiones y autenticacion | `administrador`; tabla `sessions` gestionada por el store MySQL | actor puede ser global o de tienda | sesion valida administrador y su version | no documentar ni consultar contenido de sesion fuera del servicio | 013 |
 | Catalogo y productos | `categoriaMaestra`, `marcaMaestra`, `productoMaestro`, `auditoriaCatalogo`, `producto(idProducto)`, `proveedor(idProveedor)` | producto y proveedor pertenecen a tienda; catalogo maestro es global | producto puede referenciar catalogo; auditoria de catalogo conserva cambios | precio, stock y activo se validan por servicio; no usar maestro como tenant comercial | 001, 004, 006 |
 | Clientes y credito | `cliente(idCliente)`, `configuracionCreditoTienda(idTienda)` | cliente y configuracion son de tienda | venta y fiado referencian cliente; ocultacion conserva historial | documento unico por tenant; activo/oculto no borra deuda ni historial | 003, 012 |
@@ -81,7 +81,7 @@ columna, FK o constraint exacto.
 - Auditoria y compensaciones son append-only. La correccion crea una nueva
   operacion vinculada, no una edicion silenciosa.
 
-## Migraciones 001-021
+## Migraciones 001-022
 
 | Numero | Proposito | Dominio | Cambio principal | Backfill / criticidad |
 | --- | --- | --- | --- | --- |
@@ -106,6 +106,7 @@ columna, FK o constraint exacto.
 | 019 | Stock vendible y ajustes | lotes y ajustes | clasificacion operativa y ajuste inventario | backfill de clasificacion, critica para vendible |
 | 020 | Registro publico y acceso | tienda, administrador y tokens | correo normalizado, estados de acceso/onboarding, tokens e idempotencia | compatible con cuentas existentes |
 | 021 | Configuracion base de tienda | tienda y onboarding | tabla uno a uno con nombre mostrado, moneda, zona y datos opcionales | backfill desde `tienda.nombre`; no altera datos comerciales |
+| 022 | Ciclo de vida de suscripciones | planes y suscripciones | gracia, fechas, snapshot, historial e idempotencia | backfill de snapshots; no crea gracia ni historial retroactivos |
 
 Para una definicion exacta de PK, FK, indice, CHECK o columna, leer la
 migracion correspondiente y el esquema actual. No aplicar ni editar una

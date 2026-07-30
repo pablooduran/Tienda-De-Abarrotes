@@ -17,7 +17,10 @@ const {
 } = require('../config/email-verification-contract');
 
 const ROOT = path.resolve(__dirname, '..');
-const MIGRATION_FILE = path.join(ROOT, 'database', 'migrations', '020_registro_publico_onboarding.sql');
+const MIGRATION_FILES = Object.freeze([
+  path.join(ROOT, 'database', 'migrations', '020_registro_publico_onboarding.sql'),
+  path.join(ROOT, 'database', 'migrations', '022_ciclo_vida_suscripciones.sql')
+]);
 const TEMP_PREFIX = 'tmp_tienda_restore_saas_a2_';
 
 function quoteIdentifier(value) {
@@ -52,6 +55,25 @@ async function createSchema(connection) {
       duracionDias INT NOT NULL DEFAULT 30, limitePropietarios INT NULL, limiteProductos INT NULL,
       limiteClientes INT NULL, limiteProveedores INT NULL, creadoEn DATETIME NOT NULL, actualizadoEn DATETIME NOT NULL
     ) ENGINE=InnoDB`,
+    `CREATE TABLE funcionalidad (
+      idFuncionalidad INT AUTO_INCREMENT PRIMARY KEY,
+      codigo VARCHAR(80) NOT NULL UNIQUE,
+      nombre VARCHAR(120) NOT NULL,
+      descripcion VARCHAR(255) NULL,
+      activo TINYINT(1) NOT NULL DEFAULT 1,
+      creadoEn DATETIME NOT NULL,
+      actualizadoEn DATETIME NOT NULL
+    ) ENGINE=InnoDB`,
+    `CREATE TABLE planFuncionalidad (
+      idPlan INT NOT NULL,
+      idFuncionalidad INT NOT NULL,
+      habilitada TINYINT(1) NOT NULL DEFAULT 1,
+      creadoEn DATETIME NOT NULL,
+      PRIMARY KEY (idPlan,idFuncionalidad),
+      CONSTRAINT fk_a2_plan_func_plan FOREIGN KEY (idPlan) REFERENCES plan(idPlan),
+      CONSTRAINT fk_a2_plan_func_feature FOREIGN KEY (idFuncionalidad)
+        REFERENCES funcionalidad(idFuncionalidad)
+    ) ENGINE=InnoDB`,
     `CREATE TABLE suscripcionTienda (
       idSuscripcion INT AUTO_INCREMENT PRIMARY KEY, idTienda INT NOT NULL, idPlan INT NOT NULL,
       tipo ENUM('prueba','pagada','cortesia') NOT NULL, estado ENUM('pendiente','activa','vencida','suspendida','cancelada') NOT NULL,
@@ -77,8 +99,13 @@ async function createSchema(connection) {
     `INSERT INTO plan (codigo,nombre,activo,precioMensual,duracionDias,limitePropietarios,creadoEn,actualizadoEn)
      VALUES ('basico','Basico',1,0,30,1,'2026-07-29 10:00:00','2026-07-29 10:00:00')`
   );
-  for (const statement of readSqlStatements(MIGRATION_FILE)) await connection.query(statement);
-  await connection.query('INSERT INTO schema_migrations (nombre) VALUES (?)', ['020_registro_publico_onboarding.sql']);
+  for (const migrationFile of MIGRATION_FILES) {
+    for (const statement of readSqlStatements(migrationFile)) await connection.query(statement);
+  }
+  await connection.query(
+    'INSERT INTO schema_migrations (nombre) VALUES (?),(?)',
+    ['020_registro_publico_onboarding.sql', '022_ciclo_vida_suscripciones.sql']
+  );
 }
 
 function registration(marker, suffix = '') {

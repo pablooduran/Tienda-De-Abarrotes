@@ -109,6 +109,9 @@ async function cleanup(connection, fixture) {
     }
     for (const store of stores) {
       const idTienda = store.idTienda;
+      await connection.query('DELETE FROM operacionSuscripcionTienda WHERE idTienda=?', [idTienda]);
+      await connection.query('DELETE FROM historialSuscripcionTienda WHERE idTienda=?', [idTienda]);
+      await connection.query('DELETE FROM suscripcionFuncionalidadSnapshot WHERE idTienda=?', [idTienda]);
       await connection.query('DELETE FROM cierreCaja WHERE idTienda=?', [idTienda]);
       await connection.query('DELETE FROM gasto WHERE idTienda=?', [idTienda]);
       await connection.query('DELETE FROM categoriaGasto WHERE idTienda=?', [idTienda]);

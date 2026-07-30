@@ -135,6 +135,7 @@ Migraciones actuales, en orden:
 19. `019_stock_vendible_ajustes.sql`: separacion entre stock fisico, vendible y no vendible, conciliacion y ajustes trazables.
 20. `020_registro_publico_onboarding.sql`: base para registro publico pendiente de verificacion, tokens futuros y onboarding.
 21. `021_configuracion_base_tienda.sql`: configuracion base uno a uno por tienda para nombre mostrado, moneda, zona horaria y datos opcionales.
+22. `022_ciclo_vida_suscripciones.sql`: contrato de gracia, snapshot por periodo, historial append-only e idempotencia futura de suscripciones.
 
 ### Auditoria administrativa
 
@@ -527,6 +528,18 @@ npm.cmd run db:check-subscriptions
 
 La migracion crea los planes `basico` y `avanzado`. Las tiendas existentes reciben una suscripcion avanzada de cortesia por 3650 dias para conservar el acceso durante la transicion; el superadmin puede reemplazarla desde el panel sin borrar su historial.
 
+La migracion `022` conserva esas suscripciones sin convertirlas a prueba ni
+crear gracia retroactiva. Congela por periodo el plan, limites y
+funcionalidades; prepara historial e idempotencia para el motor posterior, sin
+implementar aun renovacion, cambios de plan ni pagos. Debe ensayarse primero en
+una base temporal:
+
+```powershell
+$env:APP_ENV='local'
+npm.cmd run test:subscription-lifecycle-schema
+npm.cmd run db:check-subscription-lifecycle
+```
+
 Antes y despues de aplicar `006`, compruebe la estructura del catalogo, vinculos, codigos de barras y acceso de ambos planes:
 
 ```powershell
@@ -868,7 +881,7 @@ Las APIs operativas aceptan solamente sesiones con rol `dueno_tienda` y una tien
 
 El superadmin puede crear una tienda junto con su primer propietario en una sola transaccion, agregar propietarios adicionales, actualizar los datos de la tienda, suspender o reactivar accesos y restablecer contrasenas. Estas acciones no borran ni modifican los datos comerciales de una tienda.
 
-Cada tienda tiene un plan y un historial de suscripciones. El plan basico permite un propietario activo, 500 productos, 500 clientes activos y 100 proveedores. El avanzado permite cinco propietarios activos y no limita esas tres entidades. Una suscripcion vencida, suspendida o cancelada mantiene login, consultas, dashboard y reportes, pero bloquea cambios y operaciones comerciales hasta su renovacion.
+Cada tienda tiene un plan y un historial de suscripciones. El plan basico permite un propietario activo, 500 productos, 500 clientes activos y 100 proveedores. El avanzado permite cinco propietarios activos y no limita esas tres entidades. Las condiciones de cada periodo se leen desde su snapshot, por lo que editar el catalogo no cambia retroactivamente limites o funcionalidades ya contratados. Una suscripcion vencida, suspendida o cancelada mantiene login, consultas, dashboard y reportes, pero bloquea cambios y operaciones comerciales hasta su renovacion.
 
 El catalogo maestro pertenece a la plataforma. El superadmin administra categorias, marcas y productos, y puede importar archivos `.xlsx` de hasta 2 MB y 2000 filas mediante previsualizacion y confirmacion. El codigo de barras es opcional, se conserva como texto y es unico incluso si el producto maestro esta inactivo. Los posibles duplicados sin codigo se advierten por nombre, marca, presentacion y contenido; nunca se fusionan automaticamente.
 
@@ -898,7 +911,7 @@ La prueba tiene las mismas protecciones de host y nombre de base. Crea credencia
 
 ### Prueba local de planes y suscripciones
 
-Con `005` aplicada y el servidor local iniciado, ejecute:
+Con el esquema de suscripciones aplicado y el servidor local iniciado, ejecute:
 
 ```powershell
 $env:APP_ENV='local'
