@@ -113,7 +113,6 @@ function assertUniformLoginRejection(body, referenceBody, forbiddenValues = []) 
 const BASIC_REQUIRED_FEATURES = Object.freeze([
   'gastos',
   'reportes_financieros',
-  'exportacion_reportes',
   'dashboard_financiero',
   'inventario_resumen',
   'alertas_stock',
@@ -127,6 +126,7 @@ const BASIC_REQUIRED_FEATURES = Object.freeze([
 
 const ADVANCED_ONLY_FEATURES = Object.freeze([
   'reportes_avanzados',
+  'exportacion_reportes',
   'compras_sugeridas',
   'recordatorios_fiado',
   'cierre_caja',
@@ -191,8 +191,8 @@ function basicContextComparison(context, expectedSlug, expectedPlanCode) {
     soloLectura: context?.soloLectura === false,
     limitePropietarios: limits.propietarios === 1,
     limiteProductos: limits.productos === 500,
-    limiteClientes: limits.clientes === 500,
-    limiteProveedores: limits.proveedores === 100,
+    limiteClientes: limits.clientes === 25,
+    limiteProveedores: limits.proveedores === 15,
     funcionesBasicasPresentes: BASIC_REQUIRED_FEATURES.every((code) => features.includes(code)),
     sinFuncionesExclusivasAvanzado: !features.some((code) => ADVANCED_ONLY_FEATURES.includes(code)),
     fechasValidas: validDates
@@ -205,7 +205,7 @@ function basicContextComparison(context, expectedSlug, expectedPlanCode) {
       planCodigo: expectedPlanCode,
       estadoEfectivo: 'activa',
       soloLectura: false,
-      limites: { propietarios: 1, productos: 500, clientes: 500, proveedores: 100 },
+      limites: { propietarios: 1, productos: 500, clientes: 25, proveedores: 15 },
       funcionesRequeridasBasico: BASIC_REQUIRED_FEATURES,
       funcionesExclusivasAvanzado: [],
       fechasValidas: true

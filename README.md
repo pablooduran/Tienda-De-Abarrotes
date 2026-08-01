@@ -136,6 +136,7 @@ Migraciones actuales, en orden:
 20. `020_registro_publico_onboarding.sql`: base para registro publico pendiente de verificacion, tokens futuros y onboarding.
 21. `021_configuracion_base_tienda.sql`: configuracion base uno a uno por tienda para nombre mostrado, moneda, zona horaria y datos opcionales.
 22. `022_ciclo_vida_suscripciones.sql`: contrato de gracia, snapshot por periodo, historial append-only e idempotencia futura de suscripciones.
+23. `023_estructura_pagos_suscripcion.sql`: catalogo Basic/Standard/Pro, precios USD versionados, tasa manual USD/BOB y estructura segura de pagos manuales sin rutas ni archivos.
 
 ### Auditoria administrativa
 
@@ -542,6 +543,18 @@ npm.cmd run test:subscription-plan-changes
 npm.cmd run test:subscription-limits
 ```
 
+La migracion `023` reutiliza `basico` como Basic, agrega Standard y Pro y
+mantiene `avanzado` como legado no publico. Los precios USD quedan versionados
+para 1, 3 y 12 meses; no se inserta tipo de cambio ni informacion bancaria. La
+estructura de solicitudes, comprobantes, revisiones, aplicacion e idempotencia
+permanece sin operaciones reales hasta las fases siguientes:
+
+```powershell
+$env:APP_ENV='local'
+npm.cmd run test:saas-c-schema
+npm.cmd run db:check-saas-c
+```
+
 Antes y despues de aplicar `006`, compruebe la estructura del catalogo, vinculos, codigos de barras y acceso de ambos planes:
 
 ```powershell
@@ -885,7 +898,16 @@ El superadmin puede crear una tienda junto con su primer propietario en una sola
 
 El panel global de suscripciones usa `GET /api/admin/suscripciones`, `GET /api/admin/suscripciones/resumen` y `GET /api/admin/suscripciones/:referencia` para listado, resumen, detalle e historial. Las mutaciones `suspender`, `reactivar`, `renovar`, `cancelar`, `upgrade` y `downgrade` son `POST` idempotentes bajo la misma referencia validada, requieren superadmin, origen/CSRF y no registran pagos. La renovacion es exclusivamente tecnica; cancelacion y suspension conservan todos los datos.
 
-Cada tienda tiene un plan y un historial de suscripciones. El plan basico permite un propietario activo, 500 productos, 500 clientes activos y 100 proveedores. El avanzado permite cinco propietarios activos y no limita esas tres entidades. Las condiciones de cada periodo se leen desde su snapshot, por lo que editar el catalogo no cambia retroactivamente limites o funcionalidades ya contratados. Durante gracia se conserva una allowlist explicita de consultas y se bloquean todas las escrituras comerciales. Una suscripcion suspendida o cancelada conserva login, logout, contexto minimo y consulta de suscripcion, pero no permite acceso comercial general.
+Cada tienda tiene un plan y un historial de suscripciones. El catalogo futuro
+ofrece Basic (1/500/25/15), Standard (3/1200/70/50) y Pro (limites
+ilimitados) para propietarios, productos, clientes y proveedores. `avanzado`
+permanece legado para suscripciones existentes. Las condiciones de cada periodo
+se leen desde su snapshot, por lo que editar el catalogo no cambia
+retroactivamente limites o funcionalidades ya contratados. Durante gracia se
+conserva una allowlist explicita de consultas y se bloquean todas las escrituras
+comerciales. Una suscripcion suspendida o cancelada conserva login, logout,
+contexto minimo y consulta de suscripcion, pero no permite acceso comercial
+general.
 
 El catalogo maestro pertenece a la plataforma. El superadmin administra categorias, marcas y productos, y puede importar archivos `.xlsx` de hasta 2 MB y 2000 filas mediante previsualizacion y confirmacion. El codigo de barras es opcional, se conserva como texto y es unico incluso si el producto maestro esta inactivo. Los posibles duplicados sin codigo se advierten por nombre, marca, presentacion y contenido; nunca se fusionan automaticamente.
 

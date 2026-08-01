@@ -408,37 +408,43 @@ La vista no reemplaza controles backend. Browser futuro: 360x800, 768x1024 y
 1366x768, teclado, foco, dialogos, cargas, error de red, doble clic, consola y
 `pageerror` limpios.
 
-## Migracion 023 propuesta
+## Migracion 023 de SAAS-C1
+
+`023_estructura_pagos_suscripcion.sql` materializa solo el contrato persistente.
+No expone rutas, no almacena archivos y no aplica pagos a una suscripcion.
 
 Tablas nuevas:
 
-1. `metodoPagoSuscripcion`: metodos e instrucciones manuales allowlisted.
-2. `precioPlanPeriodo`: FK plan, periodo, moneda, monto, vigencia y activo.
-3. `solicitudPagoSuscripcion`: tenant, referencias, estados, operacion,
+1. `precioPlanPeriodo`: precios USD versionados por plan y meses calendario.
+2. `tipoCambioSuscripcion`: tasas USD/BOB manuales, versionadas y sin seed.
+3. `metodoPagoSuscripcion`: metodos e instrucciones manuales allowlisted.
+4. `solicitudPagoSuscripcion`: tenant, referencias, estados, operacion,
    snapshots, monto, vencimiento y enlaces de aplicacion.
-4. `solicitudPagoFuncionalidadSnapshot`: snapshot normalizado de funciones.
-5. `comprobantePagoSuscripcion`: versiones y metadata de almacenamiento.
-6. `revisionPagoSuscripcion`: decisiones append-only.
-7. `historialSolicitudPagoSuscripcion`: transiciones append-only.
-8. `operacionPagoSuscripcion`: idempotencia hash-only.
+5. `solicitudPagoFuncionalidadSnapshot`: snapshot normalizado de funciones.
+6. `comprobantePagoSuscripcion`: versiones y metadata, sin binario ni ruta fisica.
+7. `revisionPagoSuscripcion`: decisiones append-only.
+8. `historialSolicitudPagoSuscripcion`: transiciones append-only.
+9. `aplicacionPagoSuscripcion`: enlace unico al efecto futuro B2/B4.
+10. `operacionPagoSuscripcion`: idempotencia hash-only por tenant y actor.
 
 Indices y restricciones minimos:
 
 - referencias publicas unicas y opacas;
 - FKs compuestas por `idTienda` para solicitud, comprobante e historial;
-- `(idTienda,estado,creadoEn)` para solicitudes abiertas;
+- columna generada y `UNIQUE` para una sola solicitud abierta por tienda;
 - `(idTienda,idSolicitud,version)` UNIQUE para comprobantes;
 - indices por hash de archivo, cola de revision y vencimiento;
-- CHECKs para hashes hexadecimales, montos positivos, moneda `BOB`, fechas,
+- CHECKs para hashes hexadecimales, montos positivos, USD/BOB, fechas,
   actor/estado y enlaces de aplicacion coherentes;
 - `ON DELETE RESTRICT` en historicos y comprobantes;
-- no intentar un indice parcial para solicitud abierta o archivo vigente: el
-  servicio lo garantiza bloqueando la tienda y solicitud.
+- una unica aplicacion por solicitud y una unica version activa de comprobante.
 
-Backfill: crear precios mensuales BOB solo para valores positivos confirmados;
-los ceros actuales no se vuelven cobrables. No crear metodos activos,
-solicitudes, revisiones, comprobantes, operaciones ni eventos retroactivos. Los
-precios y metodos deben configurarse expresamente antes de habilitar solicitudes.
+El seed crea Basic, Standard y Pro con precios USD mensuales, trimestrales y
+anuales confirmados. `basico` se reutiliza; `avanzado` conserva identidad,
+condiciones y suscripciones, pero queda legado y no publico. QR y transferencia
+quedan inactivos y sin instrucciones reales. Efectivo queda solo para
+administracion. No se inventa tipo de cambio y no se crean solicitudes,
+revisiones, comprobantes, aplicaciones, operaciones ni eventos retroactivos.
 Rollback conceptual: solo sobre base temporal sin datos C; en una base usada,
 preservar historicos y revertir mediante migracion posterior, no `DROP` manual.
 
@@ -446,7 +452,7 @@ preservar historicos y revertir mediante migracion posterior, no `DROP` manual.
 
 | Nivel | Scripts sugeridos | Cobertura y recursos |
 | --- | --- | --- |
-| Esquema | `test:subscription-payments-schema`, `db:check-subscription-payments` | 023, backfill, FKs, CHECKs, snapshots, temporal |
+| Esquema | `test:saas-c-schema`, `db:check-saas-c` | 001-023, 022-023, FKs, CHECKs, snapshots, tenant y limpieza temporal |
 | Dominio | `test:subscription-payment-requests` | precios backend, estados, vencimiento, duplicados, tenant |
 | Archivos | `test:subscription-payment-receipts` | MIME real, tamano, hash, versiones, traversal, huerfanos |
 | Revision | `test:subscription-payment-review` | observar, rechazar, aprobar, idempotencia, rollback |
@@ -464,7 +470,7 @@ atribuible y limpieza en `finally` de DB, objetos, browser, procesos y puertos.
 | Fase | Objetivo | Condicion de cierre |
 | --- | --- | --- |
 | C0 | Auditoria y este diseno | documentacion validada; cero codigo/base |
-| C1 | Contratos, precios y migracion 023 | ensayo temporal, snapshot/backfill y principal sin aplicar |
+| C1 | Contratos, precios y migracion 023 | ensayo temporal, backup/restore y principal local validada |
 | C2 | Solicitud/cotizacion del propietario | API tenant, precio backend, estados, idempotencia |
 | C3 | Comprobantes y storage privado | upload/descarga, versiones, MIME/hash, huerfanos, backup |
 | C4 | Cola y revision superadmin | filtros, detalle, observar/rechazar/cancelar, auditoria |
@@ -473,15 +479,14 @@ atribuible y limpieza en `finally` de DB, objetos, browser, procesos y puertos.
 | C7 | Seguridad y regresion integral | dos tenants, archivos, carreras, browser y compatibilidad A/B |
 | C8 | Cierre documental y Git | huella intacta, cero residuos y macrofase cerrada |
 
-## Decisiones pendientes antes de C1
+## Decisiones pendientes para C2 y C3
 
-1. Catalogo real de precios BOB, en especial precio anual y formula de cobro
-   para upgrade sin prorrateo.
-2. Metodos e instrucciones manuales permitidos y si contienen datos que deban
+1. Fuente operativa y vigencia que usara el superadmin al registrar manualmente
+   el tipo de cambio USD/BOB.
+2. Instrucciones reales de QR/transferencia y si contienen datos que deban
    administrarse fuera del repositorio.
-3. Plazos definitivos: vigencia de cotizacion/observacion, maximo de archivo y
-   politica legal/comercial de retencion y destruccion.
+3. Politica definitiva de observacion, retencion de comprobantes y destruccion;
+   el limite tecnico inicial de archivo queda en 5 MiB.
 
-No son bloqueos de C0. Si no se confirman antes de C1, la migracion puede crear
-la estructura, pero no debe habilitar solicitudes cobrables con valores
-inventados.
+No bloquean el esquema. C2 no debe crear una solicitud cobrable mientras no
+existan tasa activa y metodo propietario configurado.

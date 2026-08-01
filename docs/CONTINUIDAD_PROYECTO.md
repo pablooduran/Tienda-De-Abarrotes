@@ -123,7 +123,7 @@ El contexto de tienda proviene de la sesion validada. El navegador no debe envia
 | Optimizacion de Codex, etapas 1-10 | Terminado | Indice, mapas compactos, comprobadores, seis skills versionables y validacion segura. Ver `AGENTS.md` y `docs/GUIA_CODEX_SKILLS.md`. |
 | Fase 11 - acceso publico | SAAS-A1-SAAS-A5 terminados | Registro publico transaccional, verificacion y reenvio local, recuperacion de contrasena, configuracion base, onboarding inicial y regresion integral E2E. |
 | Suscripciones SaaS | SAAS-B terminado | Ciclo de vida, acceso, planes, limites y administracion global sobre 022. |
-| Pagos manuales de suscripcion | SAAS-C0 terminado; auditoria previa C1 terminada | Diseno en `docs/SAAS_C_DISENO_PAGOS.md` y catalogo real auditado en `docs/AUDITORIA_PLANES_FUNCIONALIDADES.md`; sin tablas, rutas, archivos ni pagos implementados. |
+| Pagos manuales de suscripcion | SAAS-C1 implementado; cierre Git pendiente | Migracion 023 agrega Basic/Standard/Pro, avanzado legado, precios USD, tasa manual USD/BOB y estructura financiera; no hay rutas, archivos ni pagos aplicados. |
 | Staging y produccion | Pendiente | No se ha desplegado este estado. |
 
 ## 4. Funcionalidades implementadas
@@ -488,8 +488,9 @@ No mostrar estas variables en logs ni respuestas. Nunca versionar `.env`, `.env.
   autorizado para invocar el comprobador o los endpoints y un almacenamiento fuera del host.
 - No hay staging configurado ni despliegue de este estado.
 - SAAS-A incorpora registro publico pendiente, verificacion, recuperacion de contrasena y onboarding mediante adaptador local en memoria. Aun no hay proveedor real de correo, invitaciones ni login social.
-- No hay pagos de suscripcion implementados. SAAS-C0 define el futuro flujo
-  manual y sus comprobantes; no hay pasarela ni cobro automatico.
+- SAAS-C1 define la estructura persistente de pagos manuales. No existen rutas,
+  carga fisica, revision operativa ni aplicacion de pagos; tampoco hay pasarela,
+  cotizacion automatica o cobro automatico.
 - SAAS-B esta completo sobre la migracion 022: ciclo de vida, gracia,
   suspension, reactivacion, renovacion tecnica, acceso por estado, cambio de
   plan, limites y administracion global para superadmin. No hay pagos ni jobs.
@@ -664,12 +665,13 @@ Estos resultados corresponden al ultimo estado conocido. Antes de iniciar el sig
 
 ## 17. Siguiente macrofase
 
-**SAAS-B esta cerrado** sobre la migracion 022. B1-B5 implementan el modelo,
+**SAAS-B esta cerrado**. B1-B5 implementan el modelo,
 motor, acceso por estado, cambios de plan, limites y administracion SaaS global;
 B6 valida integralmente seguridad, concurrencia, multitienda, browser y
 compatibilidad con SAAS-A. **SAAS-C0 esta cerrado** con la auditoria y el diseno
 de pagos manuales en `docs/SAAS_C_DISENO_PAGOS.md`. La auditoria previa de
 planes, limites y funcionalidades esta en
-`docs/AUDITORIA_PLANES_FUNCIONALIDADES.md`. La siguiente etapa sigue siendo
-**SAAS-C1**, modelo estructural y migracion 023; todavia no existen pagos,
-comprobantes persistentes, pasarela automatica ni jobs.
+`docs/AUDITORIA_PLANES_FUNCIONALIDADES.md`. **SAAS-C1 implementa la migracion
+023 y su contrato estructural**; la siguiente etapa es SAAS-C2 para cotizacion y
+solicitud del propietario. Todavia no existen pagos aplicados, archivos,
+pasarela automatica ni jobs.

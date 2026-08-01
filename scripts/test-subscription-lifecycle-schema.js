@@ -102,6 +102,10 @@ function pre022Schema() {
   const source = fs.readFileSync(SCHEMA_FILE, 'utf8');
   const withoutLifecycle = source
     .replace(
+      /-- SAAS_C_PAYMENT_SCHEMA_START[\s\S]*?-- SAAS_C_PAYMENT_SCHEMA_END/,
+      ''
+    )
+    .replace(
       /-- SUBSCRIPTION_LIFECYCLE_SCHEMA_START[\s\S]*?-- SUBSCRIPTION_LIFECYCLE_SCHEMA_END/,
       PRE_022_SUBSCRIPTION_SCHEMA
     )

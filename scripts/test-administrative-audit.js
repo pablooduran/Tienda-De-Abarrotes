@@ -104,10 +104,15 @@ function readSqlStatements(sql) {
 }
 
 function schemaWithoutAdministrativeAudit() {
-  return fs.readFileSync(SCHEMA_FILE, 'utf8').replace(
-    /-- ADMINISTRATIVE_AUDIT_FOUNDATION_START[\s\S]*?-- ADMINISTRATIVE_AUDIT_FOUNDATION_END/g,
-    ''
-  );
+  return fs.readFileSync(SCHEMA_FILE, 'utf8')
+    .replace(
+      /-- ADMINISTRATIVE_AUDIT_FOUNDATION_START[\s\S]*?-- ADMINISTRATIVE_AUDIT_FOUNDATION_END/g,
+      ''
+    )
+    .replace(
+      /-- SAAS_C_PAYMENT_SCHEMA_START[\s\S]*?-- SAAS_C_PAYMENT_SCHEMA_END/g,
+      ''
+    );
 }
 
 async function executeSql(connection, sql) {

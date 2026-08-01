@@ -1016,6 +1016,159 @@ const migrationRequirements = {
         ['idHistorialResultado'], 'historialSuscripcionTienda',
         ['idHistorialSuscripcion'], 'RESTRICT', 'RESTRICT']
     ]
+  },
+  '023_estructura_pagos_suscripcion.sql': {
+    columns: {
+      plan: ['visiblePublicamente', 'esLegado', 'ordenComercial'],
+      precioPlanPeriodo: [
+        'idPrecioPlanPeriodo', 'idPlan', 'periodo', 'monedaBase', 'monto',
+        'cantidadMeses', 'versionPrecio', 'vigenteDesde', 'vigenteHasta',
+        'activo', 'actorTipo', 'creadoPor', 'vigenciaActiva'
+      ],
+      tipoCambioSuscripcion: [
+        'idTipoCambioSuscripcion', 'monedaOrigen', 'monedaDestino', 'valor',
+        'direccion', 'fuente', 'fechaEfectiva', 'vigenteDesde', 'vigenteHasta',
+        'versionTipoCambio', 'activo', 'registradoPor', 'vigenciaActiva'
+      ],
+      metodoPagoSuscripcion: [
+        'idMetodoPagoSuscripcion', 'codigo', 'tipo', 'nombre', 'instrucciones',
+        'configurado', 'visiblePropietario', 'activo', 'requiereComprobante',
+        'soloAdministracion', 'orden', 'configuradoPor'
+      ],
+      solicitudPagoSuscripcion: [
+        'idSolicitudPago', 'referenciaPublica', 'idTienda', 'idSuscripcion',
+        'idPlanActual', 'idPlanObjetivo', 'idPrecioPlanPeriodo',
+        'idTipoCambioSuscripcion', 'idMetodoPagoSuscripcion', 'operacion',
+        'periodo', 'cantidadMeses', 'planCodigoSnapshot', 'planNombreSnapshot',
+        'versionPrecioSnapshot', 'precioBaseUSD', 'tipoCambioUsdBob',
+        'montoCalculadoBOB', 'montoFinalBOB', 'monedaBase', 'monedaCobro',
+        'estado', 'creadaPor', 'creadaEn', 'venceEn', 'ultimaTransicionEn',
+        'idTiendaAbierta'
+      ],
+      solicitudPagoFuncionalidadSnapshot: [
+        'idTienda', 'idSolicitudPago', 'codigoFuncionalidad',
+        'nombreFuncionalidad', 'creadoEn'
+      ],
+      comprobantePagoSuscripcion: [
+        'idComprobantePago', 'referenciaPublica', 'idTienda', 'idSolicitudPago',
+        'versionComprobante', 'estado', 'nombreGenerado',
+        'nombreOriginalSanitizado', 'extensionDetectada', 'mimeDetectado',
+        'tamanoBytes', 'hashSha256', 'claveAlmacenamiento', 'cargadoPor',
+        'cargadoEn', 'reemplazadoEn', 'idSolicitudActiva'
+      ],
+      revisionPagoSuscripcion: [
+        'idRevisionPago', 'idTienda', 'idSolicitudPago', 'idComprobantePago',
+        'decision', 'estadoAnterior', 'estadoNuevo', 'motivo', 'observacion',
+        'revisadoPor', 'metadatos', 'creadoEn'
+      ],
+      historialSolicitudPagoSuscripcion: [
+        'idHistorialSolicitudPago', 'idTienda', 'idSolicitudPago', 'evento',
+        'estadoAnterior', 'estadoNuevo', 'actorTipo',
+        'idAdministradorActor', 'metadatos', 'creadoEn'
+      ],
+      aplicacionPagoSuscripcion: [
+        'idAplicacionPago', 'idTienda', 'idSolicitudPago', 'idSuscripcion',
+        'operacionAplicada', 'idOperacionSuscripcion',
+        'idHistorialSuscripcion', 'idPlanAnterior', 'idPlanNuevo', 'periodo',
+        'fechaInicio', 'fechaFin', 'codigoResultado', 'aplicadaPor', 'aplicadaEn'
+      ],
+      operacionPagoSuscripcion: [
+        'idOperacionPago', 'idTienda', 'idSolicitudPago', 'actorTipo',
+        'idAdministradorActor', 'alcance', 'claveHash', 'huellaPayload',
+        'estado', 'resultadoReferencia', 'codigoResultado', 'creadaEn',
+        'completadaEn', 'fallidaEn', 'expiraEn', 'idActorClave'
+      ]
+    },
+    indexes: [
+      ['plan', 'idx_plan_catalogo_publico',
+        ['activo', 'visiblePublicamente', 'esLegado', 'ordenComercial', 'codigo'], false],
+      ['historialSuscripcionTienda', 'uq_historialSuscripcion_tienda_id',
+        ['idTienda', 'idHistorialSuscripcion'], true],
+      ['operacionSuscripcionTienda', 'uq_operacionSuscripcion_tienda_id',
+        ['idTienda', 'idOperacionSuscripcion'], true],
+      ['precioPlanPeriodo', 'uq_precioPlan_version',
+        ['idPlan', 'periodo', 'monedaBase', 'versionPrecio'], true],
+      ['precioPlanPeriodo', 'uq_precioPlan_activo',
+        ['idPlan', 'periodo', 'monedaBase', 'vigenciaActiva'], true],
+      ['tipoCambioSuscripcion', 'uq_tipoCambio_activo',
+        ['monedaOrigen', 'monedaDestino', 'vigenciaActiva'], true],
+      ['metodoPagoSuscripcion', 'uq_metodoPago_codigo', ['codigo'], true],
+      ['solicitudPagoSuscripcion', 'uq_solicitudPago_referencia',
+        ['referenciaPublica'], true],
+      ['solicitudPagoSuscripcion', 'uq_solicitudPago_abierta',
+        ['idTiendaAbierta'], true],
+      ['solicitudPagoSuscripcion', 'idx_solicitudPago_cola',
+        ['estado', 'ultimaTransicionEn', 'idSolicitudPago'], false],
+      ['solicitudPagoFuncionalidadSnapshot', 'PRIMARY',
+        ['idTienda', 'idSolicitudPago', 'codigoFuncionalidad'], true],
+      ['comprobantePagoSuscripcion', 'uq_comprobantePago_version',
+        ['idTienda', 'idSolicitudPago', 'versionComprobante'], true],
+      ['comprobantePagoSuscripcion', 'uq_comprobantePago_activo',
+        ['idSolicitudActiva'], true],
+      ['revisionPagoSuscripcion', 'idx_revisionPago_solicitud',
+        ['idTienda', 'idSolicitudPago', 'creadoEn', 'idRevisionPago'], false],
+      ['historialSolicitudPagoSuscripcion', 'idx_historialSolicitudPago_solicitud',
+        ['idTienda', 'idSolicitudPago', 'creadoEn', 'idHistorialSolicitudPago'], false],
+      ['aplicacionPagoSuscripcion', 'uq_aplicacionPago_solicitud',
+        ['idTienda', 'idSolicitudPago'], true],
+      ['operacionPagoSuscripcion', 'uq_operacionPago_clave',
+        ['idTienda', 'actorTipo', 'idActorClave', 'alcance', 'claveHash'], true]
+    ],
+    checks: [
+      ['plan', 'chk_plan_presentacion'],
+      ['precioPlanPeriodo', 'chk_precioPlan_valores'],
+      ['precioPlanPeriodo', 'chk_precioPlan_actor'],
+      ['tipoCambioSuscripcion', 'chk_tipoCambio_valores'],
+      ['metodoPagoSuscripcion', 'chk_metodoPago_flags'],
+      ['metodoPagoSuscripcion', 'chk_metodoPago_codigo'],
+      ['solicitudPagoSuscripcion', 'chk_solicitudPago_referencia'],
+      ['solicitudPagoSuscripcion', 'chk_solicitudPago_importes'],
+      ['solicitudPagoSuscripcion', 'chk_solicitudPago_snapshot'],
+      ['solicitudPagoSuscripcion', 'chk_solicitudPago_fechas'],
+      ['solicitudPagoFuncionalidadSnapshot', 'chk_solicitudPagoFuncion_codigo'],
+      ['comprobantePagoSuscripcion', 'chk_comprobantePago_referencia'],
+      ['comprobantePagoSuscripcion', 'chk_comprobantePago_archivo'],
+      ['comprobantePagoSuscripcion', 'chk_comprobantePago_fechas'],
+      ['revisionPagoSuscripcion', 'chk_revisionPago_transicion'],
+      ['historialSolicitudPagoSuscripcion', 'chk_historialSolicitudPago_actor'],
+      ['aplicacionPagoSuscripcion', 'chk_aplicacionPago_resultado'],
+      ['operacionPagoSuscripcion', 'chk_operacionPago_hashes'],
+      ['operacionPagoSuscripcion', 'chk_operacionPago_actor'],
+      ['operacionPagoSuscripcion', 'chk_operacionPago_fechas']
+    ],
+    foreignKeyConstraints: [
+      ['precioPlanPeriodo', 'fk_precioPlan_plan',
+        ['idPlan'], 'plan', ['idPlan'], 'RESTRICT', 'RESTRICT'],
+      ['tipoCambioSuscripcion', 'fk_tipoCambio_actor',
+        ['registradoPor'], 'administrador', ['idAdministrador'], 'RESTRICT', 'RESTRICT'],
+      ['solicitudPagoSuscripcion', 'fk_solicitudPago_suscripcion',
+        ['idTienda', 'idSuscripcion'], 'suscripcionTienda',
+        ['idTienda', 'idSuscripcion'], 'RESTRICT', 'RESTRICT'],
+      ['solicitudPagoSuscripcion', 'fk_solicitudPago_precio',
+        ['idPrecioPlanPeriodo', 'idPlanObjetivo', 'periodo'], 'precioPlanPeriodo',
+        ['idPrecioPlanPeriodo', 'idPlan', 'periodo'], 'RESTRICT', 'RESTRICT'],
+      ['solicitudPagoFuncionalidadSnapshot', 'fk_solicitudPagoFuncion_solicitud',
+        ['idTienda', 'idSolicitudPago'], 'solicitudPagoSuscripcion',
+        ['idTienda', 'idSolicitudPago'], 'RESTRICT', 'RESTRICT'],
+      ['comprobantePagoSuscripcion', 'fk_comprobantePago_solicitud',
+        ['idTienda', 'idSolicitudPago'], 'solicitudPagoSuscripcion',
+        ['idTienda', 'idSolicitudPago'], 'RESTRICT', 'RESTRICT'],
+      ['revisionPagoSuscripcion', 'fk_revisionPago_solicitud',
+        ['idTienda', 'idSolicitudPago'], 'solicitudPagoSuscripcion',
+        ['idTienda', 'idSolicitudPago'], 'RESTRICT', 'RESTRICT'],
+      ['historialSolicitudPagoSuscripcion', 'fk_historialSolicitudPago_solicitud',
+        ['idTienda', 'idSolicitudPago'], 'solicitudPagoSuscripcion',
+        ['idTienda', 'idSolicitudPago'], 'RESTRICT', 'RESTRICT'],
+      ['aplicacionPagoSuscripcion', 'fk_aplicacionPago_solicitud',
+        ['idTienda', 'idSolicitudPago'], 'solicitudPagoSuscripcion',
+        ['idTienda', 'idSolicitudPago'], 'RESTRICT', 'RESTRICT'],
+      ['aplicacionPagoSuscripcion', 'fk_aplicacionPago_operacion',
+        ['idTienda', 'idOperacionSuscripcion'], 'operacionSuscripcionTienda',
+        ['idTienda', 'idOperacionSuscripcion'], 'RESTRICT', 'RESTRICT'],
+      ['operacionPagoSuscripcion', 'fk_operacionPago_solicitud',
+        ['idTienda', 'idSolicitudPago'], 'solicitudPagoSuscripcion',
+        ['idTienda', 'idSolicitudPago'], 'RESTRICT', 'RESTRICT']
+    ]
   }
 };
 
@@ -2059,6 +2212,51 @@ async function requirementsSatisfied(connection, file) {
           WHERE claveHash NOT REGEXP '^[0-9a-f]{64}$'
              OR huellaSolicitud NOT REGEXP '^[0-9a-f]{64}$'
          ) operacionesInvalidas`
+    );
+    if (Object.values(invalid).some((value) => Number(value) > 0)) return false;
+  }
+  if (file === '023_estructura_pagos_suscripcion.sql') {
+    const [[catalog]] = await connection.query(
+      `SELECT
+         (SELECT COUNT(*) FROM plan
+          WHERE codigo IN ('basico','standard','pro')
+            AND activo=1 AND visiblePublicamente=1 AND esLegado=0) publicPlans,
+         (SELECT COUNT(*) FROM plan
+          WHERE codigo='avanzado' AND esLegado=1 AND visiblePublicamente=0) legacyPlans,
+         (SELECT COUNT(*) FROM precioPlanPeriodo pp
+          JOIN plan p ON p.idPlan=pp.idPlan
+          WHERE p.codigo IN ('basico','standard','pro')
+            AND pp.monedaBase='USD' AND pp.versionPrecio=1
+            AND pp.periodo IN ('mensual','trimestral','anual')) seededPrices,
+         (SELECT COUNT(*) FROM metodoPagoSuscripcion
+          WHERE codigo IN ('qr_manual','transferencia_deposito','efectivo_administrativo')) methods,
+         (SELECT COUNT(*) FROM plan p
+          JOIN planFuncionalidad pf ON pf.idPlan=p.idPlan AND pf.habilitada=1
+          JOIN funcionalidad f ON f.idFuncionalidad=pf.idFuncionalidad
+          WHERE p.codigo IN ('basico','standard','pro')
+            AND f.codigo IN ('portal_clientes','reportes_avanzados')) excludedFeatures`
+    );
+    if (Number(catalog.publicPlans) !== 3
+      || Number(catalog.legacyPlans) !== 1
+      || Number(catalog.seededPrices) !== 9
+      || Number(catalog.methods) !== 3
+      || Number(catalog.excludedFeatures) !== 0) return false;
+    const [[invalid]] = await connection.query(
+      `SELECT
+         (SELECT COUNT(*) FROM precioPlanPeriodo
+          WHERE monedaBase<>'USD' OR monto<=0 OR versionPrecio<1) prices,
+         (SELECT COUNT(*) FROM tipoCambioSuscripcion
+          WHERE monedaOrigen<>'USD' OR monedaDestino<>'BOB' OR valor<=0) rates,
+         (SELECT COUNT(*) FROM solicitudPagoSuscripcion
+          WHERE monedaBase<>'USD' OR monedaCobro<>'BOB'
+             OR precioBaseUSD<=0 OR tipoCambioUsdBob<=0
+             OR montoCalculadoBOB<=0 OR montoFinalBOB<=0) requests,
+         (SELECT COUNT(*) FROM comprobantePagoSuscripcion
+          WHERE hashSha256 NOT REGEXP '^[0-9a-f]{64}$'
+             OR tamanoBytes NOT BETWEEN 1 AND 5242880) receipts,
+         (SELECT COUNT(*) FROM operacionPagoSuscripcion
+          WHERE claveHash NOT REGEXP '^[0-9a-f]{64}$'
+             OR huellaPayload NOT REGEXP '^[0-9a-f]{64}$') operations`
     );
     if (Object.values(invalid).some((value) => Number(value) > 0)) return false;
   }
@@ -3630,7 +3828,8 @@ async function main() {
               '019_stock_vendible_ajustes.sql',
               '020_registro_publico_onboarding.sql',
               '021_configuracion_base_tienda.sql',
-              '022_ciclo_vida_suscripciones.sql'
+              '022_ciclo_vida_suscripciones.sql',
+              '023_estructura_pagos_suscripcion.sql'
             ].includes(file)
             && !await requirementsSatisfied(connection, file);
         if (registeredMigrationIsIncomplete) {
@@ -3663,7 +3862,8 @@ async function main() {
           '019_stock_vendible_ajustes.sql',
           '020_registro_publico_onboarding.sql',
           '021_configuracion_base_tienda.sql',
-          '022_ciclo_vida_suscripciones.sql'
+          '022_ciclo_vida_suscripciones.sql',
+          '023_estructura_pagos_suscripcion.sql'
         ].includes(file)) {
           await connection.query('INSERT IGNORE INTO schema_migrations (nombre) VALUES (?)', [file]);
           const [finalRecord] = await connection.query(

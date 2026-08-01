@@ -228,7 +228,7 @@ trimestral, orden comercial, visibilidad publica independiente ni editor seguro
 del catalogo. La fuente para un periodo vigente es siempre su snapshot; el
 catalogo solo alimenta nuevas altas/cambios.
 
-## Precios y periodos
+## Precios y periodos auditados antes de 023
 
 - Los dos `precioMensual` valen 0 y su moneda es implicita.
 - Backend y frontend consumen ese valor como `precioReferencia`; no sirve como
@@ -257,7 +257,7 @@ para suscripciones existentes.
   explicita; agregar Standard/Pro sin renombrados destructivos.
 - Auditar cambios de catalogo y precio; no generar eventos historicos ficticios.
 
-## Migracion 023 futura
+## Contrato resuelto por migracion 023
 
 ### A. Imprescindible para SAAS-C1
 
@@ -272,17 +272,17 @@ para suscripciones existentes.
 - snapshot tipado de limites y tabla normalizada de funciones objetivo;
 - historial de solicitud append-only e idempotencia hash-only.
 
-### B. Puede esperar a C2
+### B. Diferido a C2
 
 - rutas y servicios de cotizacion/solicitud;
 - materializacion de vencimiento al consultar;
 - exposicion del catalogo Basic/Standard/Pro al propietario.
 
-### C. Puede esperar a C3/C4
+### C. Estructura en C1; comportamiento diferido a C3/C4
 
-- metadata y versiones de comprobante privado;
+- metadata y versiones de comprobante privado ya tienen tabla, sin archivo;
 - almacenamiento privado, MIME real, checksum y descarga autenticada;
-- revision humana append-only, observacion, rechazo y cola superadmin.
+- la tabla de revision es append-only; rutas, decisiones y cola quedan diferidas.
 
 ### D. Mejora futura
 
@@ -291,11 +291,15 @@ para suscripciones existentes.
 - QR dinamico, verificacion automatica, tarjeta y renovacion automatica;
 - impuestos, promociones, cupones, prorrateo, conciliacion y jobs.
 
-Una 023 coherente puede crear de una vez las tablas de solicitud, comprobante,
-revision e historiales definidas en SAAS-C0, pero C1 debe mantenerlas vacias y
-sin metodos cobrables hasta confirmar precios, tipo de cambio e instrucciones.
-No se requiere una tabla JSON de limites: las cuatro columnas tipadas y los
-snapshots normalizados existentes son suficientes.
+023 crea de una vez las tablas de solicitud, comprobante, revision, aplicacion,
+historial e idempotencia definidas en SAAS-C0. C1 las mantiene vacias, no
+registra tasa inventada y no publica QR o transferencia sin configuracion. Los
+limites usan cuatro columnas tipadas y las funcionalidades un snapshot
+normalizado; no se usa JSON para condiciones comerciales.
+
+Basic reutiliza `basico`; Standard y Pro son filas nuevas. `avanzado` conserva
+su id, limites, funciones, suscripciones y snapshots, y queda marcado legado/no
+publico. Los snapshots vigentes anteriores a 023 no se recalculan.
 
 ## Seguridad multitienda
 
@@ -329,13 +333,10 @@ Para esta auditoria solo se ejecutaron validaciones read-only del estado y
 agregados del catalogo. No se crearon fixtures, bases temporales, servidores ni
 pruebas nuevas.
 
-## Decisiones pendientes antes de SAAS-C1
+## Decisiones pendientes despues de SAAS-C1
 
-1. Confirmar si el codigo interno de Basic sigue siendo `basico` y si
-   `avanzado` queda legado/oculto o se conserva como plan comercial.
-2. Confirmar fuente, vigencia y precision del tipo de cambio USD->BOB, ademas
-   de los precios provisionales y su fecha efectiva.
-3. Confirmar si 023 crea toda la estructura C0 de una vez o separa comprobantes
-   y revisiones en migraciones posteriores.
+1. Definir la fuente y vigencia operativa al registrar cada tasa USD/BOB.
+2. Configurar instrucciones reales y privadas para QR o transferencia.
+3. Definir retencion de comprobantes y observaciones antes de C3.
 
-No bloquean esta auditoria. Ninguna debe resolverse inventando datos en la base.
+No bloquean 023. Ninguna debe resolverse inventando datos en la base.
