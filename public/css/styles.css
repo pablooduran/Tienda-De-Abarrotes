@@ -2285,6 +2285,28 @@ textarea:focus-visible { outline: 3px solid rgba(40, 106, 89, .28); outline-offs
   padding-bottom: 24px;
 }
 .subscription-actions #future-action-help { flex-basis: 100%; color: var(--muted); font-size: 13px; }
+.subscription-plans {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+.subscription-plan {
+  display: grid;
+  align-content: start;
+  gap: 10px;
+  min-width: 0;
+  padding: 16px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: #fff;
+}
+.subscription-plan header { display: flex; justify-content: space-between; gap: 12px; align-items: baseline; }
+.subscription-plan h3, .subscription-plan p { margin: 0; }
+.subscription-plan header strong { color: var(--muted); font-size: 12px; font-weight: 700; text-transform: capitalize; }
+.subscription-plan-help { color: var(--muted); font-size: 13px; line-height: 1.45; }
+.subscription-plan-excess { padding: 10px; border-left: 3px solid #c49a16; background: #fff8dc; font-size: 13px; }
+.subscription-plan-scheduled { padding: 12px; background: #eaf4fb; border-left: 3px solid #1f5f8b; }
+[data-plan-feedback] { min-height: 22px; margin: 10px 0 0; color: #155e45; }
 .button-link {
   display: inline-flex;
   align-items: center;
@@ -2310,6 +2332,7 @@ textarea:focus-visible { outline: 3px solid rgba(40, 106, 89, .28); outline-offs
   .subscription-heading { display: grid; gap: 14px; }
   .subscription-status { justify-self: start; }
   .subscription-details, .subscription-metrics, .subscription-features { grid-template-columns: 1fr 1fr; }
+  .subscription-plans { grid-template-columns: 1fr; }
 }
 @media (max-width: 480px) {
   .subscription-heading h1 { font-size: 25px; }

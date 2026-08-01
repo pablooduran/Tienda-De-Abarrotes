@@ -29,8 +29,14 @@ const REASON_TO_SCHEMA_MOTIVE = Object.freeze({
   seguridad: 'suspension_administrativa',
   otro_controlado: 'suspension_administrativa'
 });
-const OPERATION_TYPES = new Set(['renovar', 'suspender', 'reactivar']);
+const OPERATION_TYPES = new Set(['renovar', 'suspender', 'reactivar', 'cambiar_plan']);
 const OPERATION_TTL_DAYS = 2;
+const LIMIT_USAGE_SQL = Object.freeze({
+  propietarios: "SELECT COUNT(*) total FROM administrador WHERE idTienda=? AND rol='dueno_tienda' AND activo=1",
+  productos: 'SELECT COUNT(*) total FROM producto WHERE idTienda=? AND activo=1',
+  clientes: 'SELECT COUNT(*) total FROM cliente WHERE idTienda=? AND activo=1',
+  proveedores: 'SELECT COUNT(*) total FROM proveedor WHERE idTienda=?'
+});
 
 function lifecycleError(status, message, code) {
   const error = new Error(message);
@@ -414,6 +420,102 @@ async function renewSubscription(database = pool, input = {}) {
     if (subscription.estado === 'cancelada') throw lifecycleError(409, 'La suscripcion cancelada no puede renovarse.', 'SUBSCRIPTION_CANCELLED');
     const suspendedOrExpired = subscription.estado === 'suspendida'
       || now >= parseLocalDateTime(subscription.fechaFin);
+    if (subscription.idPlanSiguiente) {
+      const [plans] = await connection.query(
+        `SELECT idPlan,codigo,nombre,precioMensual,duracionDias,
+                limitePropietarios,limiteProductos,limiteClientes,limiteProveedores
+         FROM plan WHERE idPlan=? FOR UPDATE`,
+        [subscription.idPlanSiguiente]
+      );
+      if (!plans.length) {
+        throw lifecycleError(409, 'El plan programado ya no esta disponible.', 'SCHEDULED_PLAN_NOT_AVAILABLE');
+      }
+      const target = plans[0];
+      const start = suspendedOrExpired ? now : parseLocalDateTime(subscription.fechaFin);
+      const end = addLocalDays(start, PERIOD_DAYS[period]);
+      const startText = formatLocalDateTime(start);
+      const endText = formatLocalDateTime(end);
+      const graceText = formatLocalDateTime(addLocalDays(end, 7));
+      const nowText = formatLocalDateTime(now);
+      const [created] = await connection.query(
+        `INSERT INTO suscripcionTienda
+          (idTienda,idPlan,tipo,estado,fechaInicio,fechaFin,fechaFinGracia,
+           motivoTransicion,planCodigoSnapshot,planNombreSnapshot,tipoPeriodoSnapshot,
+           duracionDiasSnapshot,precioReferenciaSnapshot,limitePropietariosSnapshot,
+           limiteProductosSnapshot,limiteClientesSnapshot,limiteProveedoresSnapshot,
+           renovacionAutomatica,observacion,creadoPor,creadoEn,actualizadoEn)
+         VALUES (?, ?, ?, 'activa', ?, ?, ?, 'reemplazo_periodo', ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?)`,
+        [idTienda, target.idPlan, subscription.tipo, startText, endText, graceText,
+          target.codigo, target.nombre, period, PERIOD_DAYS[period], target.precioMensual,
+          target.limitePropietarios, target.limiteProductos, target.limiteClientes,
+          target.limiteProveedores, subscription.observacion, actor.idAdministrador,
+          nowText, nowText]
+      );
+      const nextId = Number(created.insertId);
+      await connection.query(
+        `INSERT INTO suscripcionFuncionalidadSnapshot
+          (idTienda,idSuscripcion,codigoFuncionalidad,nombreFuncionalidad,creadoEn)
+         SELECT ?, ?, f.codigo, f.nombre, ?
+         FROM planFuncionalidad pf
+         JOIN funcionalidad f ON f.idFuncionalidad=pf.idFuncionalidad
+         WHERE pf.idPlan=? AND pf.habilitada=1 AND f.activo=1`,
+        [idTienda, nextId, nowText, target.idPlan]
+      );
+      await connection.query(
+        `UPDATE suscripcionTienda
+         SET idPlanSiguiente=NULL,fechaAplicacionPlanSiguiente=NULL,
+             motivoTransicion='reemplazo_periodo',actualizadoEn=?
+         WHERE idTienda=? AND idSuscripcion=?`,
+        [nowText, idTienda, idSuscripcion]
+      );
+      const limitColumns = {
+        propietarios: target.limitePropietarios,
+        productos: target.limiteProductos,
+        clientes: target.limiteClientes,
+        proveedores: target.limiteProveedores
+      };
+      const exceeded = [];
+      for (const [key, sql] of Object.entries(LIMIT_USAGE_SQL)) {
+        const [[usage]] = await connection.query(sql, [idTienda]);
+        if (limitColumns[key] !== null && Number(usage.total) > Number(limitColumns[key])) exceeded.push(key);
+      }
+      const historyId = await insertHistory(connection, {
+        idTienda, idSuscripcion: nextId, estadoAnterior: null, estadoNuevo: 'activa',
+        tipoOperacion: 'downgrade_aplicado', motivo: 'reemplazo_periodo',
+        actorTipo: actor.actorTipo, idAdministrador: actor.idAdministrador, now,
+        metadatos: {
+          planCodigoAnterior: subscription.planCodigoSnapshot,
+          planCodigoNuevo: target.codigo,
+          limitesExcedidos: exceeded.join(',')
+        }
+      });
+      const nextSubscription = {
+        ...subscription,
+        idSuscripcion: nextId,
+        idPlan: target.idPlan,
+        estado: 'activa',
+        fechaInicio: startText,
+        fechaFin: endText,
+        fechaFinGracia: graceText,
+        planCodigoSnapshot: target.codigo,
+        planNombreSnapshot: target.nombre,
+        idPlanSiguiente: null,
+        fechaAplicacionPlanSiguiente: null,
+        suspendidaEn: null
+      };
+      const result = operationResult(subscriptionOutput(nextSubscription, now), historyId, 'SUBSCRIPTION_RENEWED_WITH_SCHEDULED_PLAN');
+      await completeOperation(connection, operation.id, result, now);
+      return result;
+    }
+    const [futurePeriods] = await connection.query(
+      `SELECT idSuscripcion FROM suscripcionTienda
+       WHERE idTienda=? AND idSuscripcion<>? AND fechaInicio>=?
+       ORDER BY fechaInicio,idSuscripcion LIMIT 1 FOR UPDATE`,
+      [idTienda, idSuscripcion, subscription.fechaFin]
+    );
+    if (futurePeriods.length) {
+      throw lifecycleError(409, 'La suscripcion ya tiene un periodo siguiente.', 'SUBSCRIPTION_NEXT_PERIOD_EXISTS');
+    }
     const start = suspendedOrExpired ? now : parseLocalDateTime(subscription.fechaInicio);
     const base = suspendedOrExpired ? now : parseLocalDateTime(subscription.fechaFin);
     const end = addLocalDays(base, PERIOD_DAYS[period]);
@@ -447,9 +549,15 @@ module.exports = {
   assertManualReason,
   assertPeriod,
   canonicalPayload,
+  claimOperation,
+  completeOperation,
   computeEffectiveStatus,
+  insertHistory,
+  lifecycleError,
+  lockStoreAndSubscription,
   materializeSubscriptionLifecycle,
   reactivateSubscription,
   renewSubscription,
-  suspendSubscription
+  suspendSubscription,
+  withTransaction
 };

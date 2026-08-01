@@ -530,14 +530,16 @@ La migracion crea los planes `basico` y `avanzado`. Las tiendas existentes recib
 
 La migracion `022` conserva esas suscripciones sin convertirlas a prueba ni
 crear gracia retroactiva. Congela por periodo el plan, limites y
-funcionalidades; prepara historial e idempotencia para el motor posterior, sin
-implementar aun renovacion, cambios de plan ni pagos. Debe ensayarse primero en
-una base temporal:
+funcionalidades y soporta historial e idempotencia. El motor aplica gracia,
+suspension, renovacion y cambios tecnicos de plan; los pagos siguen fuera de
+alcance. La migracion debe ensayarse primero en una base temporal:
 
 ```powershell
 $env:APP_ENV='local'
 npm.cmd run test:subscription-lifecycle-schema
 npm.cmd run db:check-subscription-lifecycle
+npm.cmd run test:subscription-plan-changes
+npm.cmd run test:subscription-limits
 ```
 
 Antes y despues de aplicar `006`, compruebe la estructura del catalogo, vinculos, codigos de barras y acceso de ambos planes:

@@ -11,6 +11,7 @@ const {
   snapshotFromPlan
 } = require('../config/subscription-lifecycle-contract');
 const { computeEffectiveStatus } = require('./subscription-lifecycle-service');
+const { limitAvailability } = require('../config/subscription-plan-change-contract');
 
 const LIMITS = Object.freeze({
   propietarios: {
@@ -148,7 +149,8 @@ async function resolveSubscriptionContext(connection, idTienda, options = {}) {
     `SELECT t.idTienda, t.nombre AS tiendaNombre, t.slug AS tiendaSlug,
        t.activo AS tiendaActiva, t.estado AS tiendaEstado,
        s.idSuscripcion, s.tipo, s.estado, s.fechaInicio, s.fechaFin, s.fechaFinGracia,
-       s.renovacionAutomatica, s.idPlan, s.tipoPeriodoSnapshot, s.duracionDiasSnapshot,
+       s.renovacionAutomatica, s.idPlan, s.idPlanSiguiente, s.fechaAplicacionPlanSiguiente,
+       s.tipoPeriodoSnapshot, s.duracionDiasSnapshot,
        s.planCodigoSnapshot AS planCodigo, s.planNombreSnapshot AS planNombre,
        s.limitePropietariosSnapshot AS limitePropietarios,
        s.limiteProductosSnapshot AS limiteProductos,
@@ -207,7 +209,9 @@ async function resolveSubscriptionContext(connection, idTienda, options = {}) {
       diasGraciaRestantes: graceDaysRemaining,
       tipoPeriodo: row.tipoPeriodoSnapshot,
       duracionDias: Number(row.duracionDiasSnapshot),
-      renovacionAutomatica: Number(row.renovacionAutomatica) === 1
+      renovacionAutomatica: Number(row.renovacionAutomatica) === 1,
+      idPlanSiguiente: row.idPlanSiguiente === null ? null : Number(row.idPlanSiguiente),
+      fechaAplicacionPlanSiguiente: row.fechaAplicacionPlanSiguiente
     } : null,
     plan: row.idPlan ? {
       idPlan: Number(row.idPlan),
@@ -218,6 +222,7 @@ async function resolveSubscriptionContext(connection, idTienda, options = {}) {
     caracteristicas: features,
     limites: limits,
     uso: usage,
+    disponibilidad: limitAvailability(limits, usage),
     soloLectura: estadoEfectivo !== 'activa'
   };
 }

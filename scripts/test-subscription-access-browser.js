@@ -89,6 +89,9 @@ function createServer() {
     if (url.pathname === '/api/suscripcion') {
       return json(response, 200, state(mode));
     }
+    if (url.pathname === '/api/suscripcion/planes') {
+      return json(response, 200, { planActual: { codigo: 'basico', nombre: 'Basico' }, planProgramado: null, planes: [] });
+    }
     if (url.pathname === '/auth/logout') return json(response, 200, { ok: true });
     if (url.pathname === '/login.html' || url.pathname === '/app.html') {
       response.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });

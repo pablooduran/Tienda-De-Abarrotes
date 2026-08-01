@@ -71,8 +71,8 @@ const METADATA_FIELDS = Object.freeze({
   reactivacion: Object.freeze([]),
   renovacion: Object.freeze(['planCodigo', 'tipoPeriodo']),
   upgrade: Object.freeze(['planCodigoAnterior', 'planCodigoNuevo']),
-  downgrade_programado: Object.freeze(['planCodigoAnterior', 'planCodigoNuevo']),
-  downgrade_aplicado: Object.freeze(['planCodigoAnterior', 'planCodigoNuevo']),
+  downgrade_programado: Object.freeze(['planCodigoAnterior', 'planCodigoNuevo', 'fechaAplicacion']),
+  downgrade_aplicado: Object.freeze(['planCodigoAnterior', 'planCodigoNuevo', 'limitesExcedidos']),
   cancelacion: Object.freeze([])
 });
 

@@ -53,6 +53,7 @@ function publicSubscriptionSummary(context) {
     acceso: access,
     limites: context?.limites || {},
     uso: context?.uso || {},
+    disponibilidad: context?.disponibilidad || {},
     funcionalidades: Array.isArray(context?.caracteristicas) ? [...context.caracteristicas] : [],
     puedeRenovar: ['gracia', 'suspendida'].includes(status),
     puedeReactivar: status === 'suspendida'

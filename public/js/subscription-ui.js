@@ -34,6 +34,10 @@
       return body;
     }
 
+    function operationKey() {
+      return `plan-change:${global.crypto.randomUUID()}`;
+    }
+
     async function logout() {
       try {
         await request('/auth/logout', { method: 'POST', body: JSON.stringify({}) });
@@ -47,7 +51,69 @@
       return `<article class="subscription-metric"><span>${escapeHtml(labelText)}</span><strong>${escapeHtml(usage ?? 0)} / ${escapeHtml(visibleLimit)}</strong></article>`;
     }
 
-    function renderData(data) {
+    function planChoices(data) {
+      if (!data || !Array.isArray(data.planes)) return '';
+      const scheduled = data.planProgramado
+        ? `<p class="subscription-plan-scheduled" role="status">Cambio programado a <strong>${escapeHtml(data.planProgramado.nombre)}</strong> para ${escapeHtml(formatDate(data.planProgramado.fechaAplicacion))}.</p>`
+        : '';
+      const choices = data.planes.map((plan) => {
+        const action = plan.tipoCambio === 'upgrade' ? 'upgrade'
+          : (plan.tipoCambio === 'downgrade' ? 'downgrade' : null);
+        const exceeded = Object.entries(plan.disponibilidad || {})
+          .filter(([, value]) => value.excedido)
+          .map(([key]) => label(key));
+        const message = plan.tipoCambio === 'upgrade'
+          ? 'Se aplica inmediatamente y conserva la fecha de finalizacion actual.'
+          : (plan.tipoCambio === 'downgrade'
+            ? 'Se aplicara en el siguiente periodo. Tus datos no se eliminaran.'
+            : (plan.tipoCambio === 'mismo_plan' ? 'Este es tu plan actual.' : 'Este cambio combina ampliaciones y reducciones y no esta disponible.'));
+        return `<article class="subscription-plan" data-plan-code="${escapeHtml(plan.codigo)}">
+          <header><h3>${escapeHtml(plan.nombre)}</h3><strong>${escapeHtml(label(plan.tipoCambio))}</strong></header>
+          <p>${escapeHtml(plan.descripcion || message)}</p>
+          <p class="subscription-plan-help">${escapeHtml(message)}</p>
+          ${exceeded.length ? `<p class="subscription-plan-excess">Limites excedidos: ${escapeHtml(exceeded.join(', '))}. Se conservaran los datos y se bloquearan nuevas altas.</p>` : ''}
+          <button type="button" data-plan-action="${escapeHtml(action || '')}" data-plan-code="${escapeHtml(plan.codigo)}" ${action ? '' : 'disabled'}>${action === 'upgrade' ? 'Aplicar upgrade' : (action === 'downgrade' ? 'Programar downgrade' : 'No disponible')}</button>
+        </article>`;
+      }).join('');
+      return `<section class="subscription-section" aria-labelledby="subscription-plans-title">
+        <h2 id="subscription-plans-title">Planes disponibles</h2>
+        ${scheduled}
+        <div class="subscription-plans">${choices}</div>
+        <p data-plan-feedback role="status" aria-live="polite"></p>
+      </section>`;
+    }
+
+    function bindPlanActions() {
+      root.querySelectorAll('[data-plan-action]:not([disabled])').forEach((button) => {
+        button.addEventListener('click', async () => {
+          const action = button.dataset.planAction;
+          const feedback = root.querySelector('[data-plan-feedback]');
+          const key = button.dataset.operationKey || operationKey();
+          button.dataset.operationKey = key;
+          button.disabled = true;
+          feedback.textContent = action === 'upgrade' ? 'Aplicando cambio...' : 'Programando cambio...';
+          try {
+            const result = await request(`/api/suscripcion/${action}`, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'Idempotency-Key': key
+              },
+              body: JSON.stringify({ codigoPlan: button.dataset.planCode })
+            });
+            feedback.textContent = action === 'upgrade'
+              ? 'El plan se actualizo correctamente.'
+              : `El cambio quedo programado para ${formatDate(result.fechaAplicacion)}.`;
+            await render();
+          } catch (error) {
+            feedback.textContent = error.message || 'No se pudo cambiar el plan.';
+            button.disabled = false;
+          }
+        });
+      });
+    }
+
+    function renderData(data, plans = null) {
       const access = data.acceso || {};
       const restricted = access.nivel === 'restringido';
       const grace = access.nivel === 'solo_lectura';
@@ -96,6 +162,7 @@
             <h2 id="subscription-features-title">Funcionalidades incluidas</h2>
             <ul class="subscription-features">${features}</ul>
           </section>
+          ${planChoices(plans)}
           <div class="subscription-actions">
             ${restricted ? '' : '<a class="button-link secondary" href="/app.html" data-subscription-panel>Volver al panel</a>'}
             <button type="button" disabled aria-describedby="future-action-help">${data.puedeReactivar ? 'Reactivar' : 'Renovar'}: proximamente</button>
@@ -104,13 +171,18 @@
           </div>
         </div>`;
       root.querySelector('[data-subscription-logout]').addEventListener('click', () => { void logout(); });
+      bindPlanActions();
     }
 
     async function render() {
       root.setAttribute('aria-busy', 'true');
       root.innerHTML = '<p class="subscription-loading" role="status">Cargando suscripcion...</p>';
       try {
-        renderData(await request('/api/suscripcion'));
+        const data = await request('/api/suscripcion');
+        const plans = data.acceso?.nivel === 'completo'
+          ? await request('/api/suscripcion/planes')
+          : null;
+        renderData(data, plans);
       } catch (error) {
         root.innerHTML = `<section class="subscription-error" role="alert"><h1>No se pudo cargar la suscripcion</h1><p>${escapeHtml(error.message || 'Intenta nuevamente.')}</p><button type="button" data-subscription-retry>Reintentar</button><button type="button" class="secondary" data-subscription-logout>Cerrar sesion</button></section>`;
         root.querySelector('[data-subscription-retry]').addEventListener('click', () => { void render(); });

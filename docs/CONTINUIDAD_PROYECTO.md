@@ -658,5 +658,7 @@ Estos resultados corresponden al ultimo estado conocido. Antes de iniciar el sig
 
 **SAAS-B1** definio el contrato y la migracion 022; la base principal esta en
 022. **SAAS-B2** implementa el motor interno y **SAAS-B3** la consulta protegida
-y la politica explicita de acceso. El siguiente bloque permitido es SAAS-B4;
-no se han iniciado cambios de plan, pagos ni jobs.
+y la politica explicita de acceso. **SAAS-B4** implementa comparacion por
+capacidades, upgrade inmediato, downgrade programado, snapshots por periodo y
+bloqueo de nuevas altas al alcanzar limites. El siguiente bloque permitido es
+SAAS-B5; no se han iniciado pagos, administracion SaaS global ni jobs.
