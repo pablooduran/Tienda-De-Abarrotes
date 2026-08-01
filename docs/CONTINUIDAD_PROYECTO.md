@@ -123,7 +123,7 @@ El contexto de tienda proviene de la sesion validada. El navegador no debe envia
 | Optimizacion de Codex, etapas 1-10 | Terminado | Indice, mapas compactos, comprobadores, seis skills versionables y validacion segura. Ver `AGENTS.md` y `docs/GUIA_CODEX_SKILLS.md`. |
 | Fase 11 - acceso publico | SAAS-A1-SAAS-A5 terminados | Registro publico transaccional, verificacion y reenvio local, recuperacion de contrasena, configuracion base, onboarding inicial y regresion integral E2E. |
 | Suscripciones SaaS | SAAS-B terminado | Ciclo de vida, acceso, planes, limites y administracion global sobre 022. |
-| Pagos manuales de suscripcion | SAAS-C0 terminado | Auditoria y diseno en `docs/SAAS_C_DISENO_PAGOS.md`; sin tablas, rutas, archivos ni pagos implementados. |
+| Pagos manuales de suscripcion | SAAS-C0 terminado; auditoria previa C1 terminada | Diseno en `docs/SAAS_C_DISENO_PAGOS.md` y catalogo real auditado en `docs/AUDITORIA_PLANES_FUNCIONALIDADES.md`; sin tablas, rutas, archivos ni pagos implementados. |
 | Staging y produccion | Pendiente | No se ha desplegado este estado. |
 
 ## 4. Funcionalidades implementadas
@@ -668,6 +668,8 @@ Estos resultados corresponden al ultimo estado conocido. Antes de iniciar el sig
 motor, acceso por estado, cambios de plan, limites y administracion SaaS global;
 B6 valida integralmente seguridad, concurrencia, multitienda, browser y
 compatibilidad con SAAS-A. **SAAS-C0 esta cerrado** con la auditoria y el diseno
-de pagos manuales en `docs/SAAS_C_DISENO_PAGOS.md`. La siguiente etapa es
+de pagos manuales en `docs/SAAS_C_DISENO_PAGOS.md`. La auditoria previa de
+planes, limites y funcionalidades esta en
+`docs/AUDITORIA_PLANES_FUNCIONALIDADES.md`. La siguiente etapa sigue siendo
 **SAAS-C1**, modelo estructural y migracion 023; todavia no existen pagos,
 comprobantes persistentes, pasarela automatica ni jobs.
