@@ -9,7 +9,7 @@ Documento de relevo tecnico para continuar el proyecto sin depender del historia
 - Punto de partida de INV-A: `89cc85a feat: completar auditoria administrativa`
 - No trabajar directamente en `main`.
 - El HEAD indicado es una referencia local conocida. Confirmar si tambien existe en el remoto antes de depender de el para una recuperacion.
-- La base principal local esta en 021. INV-A e INV-B permanecen cerrados.
+- La base principal local esta en 022. INV-A e INV-B permanecen cerrados.
 - La optimizacion operativa de Codex queda cerrada en las etapas 1 a 10. El
   HEAD esperado despues de este cierre es el commit `docs: cerrar optimizacion
   operativa de Codex` posterior a `2959093`; confirmar el hash real con Git.
@@ -49,7 +49,7 @@ Si la rama, el HEAD o el estado difieren, detenerse y entender los cambios exist
 | `routes/` | Contratos HTTP de autenticacion, administracion y modulos comerciales. |
 | `services/` | Reglas de negocio, transacciones, reportes, POS, stock, clientes y cobranza. |
 | `public/` | Aplicacion web, administracion, login, estilos y JavaScript del navegador. |
-| `database/migrations/` | Migraciones historicas y modernas, numeradas de 001 a 022; la base principal local validada permanece en 021 y 022 solo se ensaya en temporal. |
+| `database/migrations/` | Migraciones historicas y modernas, numeradas de 001 a 022; la base principal local validada esta en 022. |
 | `database/tienda_abarrotes.sql` | Esquema inicial equivalente al estado final esperado. |
 | `scripts/` | Migrador, comprobadores, pruebas, administracion local y backups. |
 | `utils/` | Utilidades compartidas, incluidas fechas locales y errores. |
@@ -122,7 +122,8 @@ El contexto de tienda proviene de la sesion validada. El navegador no debe envia
 | INV-B - reposicion | Terminado | Rotacion neta, cobertura, alertas priorizadas, sugerencias informativas, exportacion XLSX y accesibilidad basica sin ordenes de compra. |
 | Optimizacion de Codex, etapas 1-10 | Terminado | Indice, mapas compactos, comprobadores, seis skills versionables y validacion segura. Ver `AGENTS.md` y `docs/GUIA_CODEX_SKILLS.md`. |
 | Fase 11 - acceso publico | SAAS-A1-SAAS-A5 terminados | Registro publico transaccional, verificacion y reenvio local, recuperacion de contrasena, configuracion base, onboarding inicial y regresion integral E2E. |
-| Suscripciones comerciales | No iniciada | No hay cobro automatizado de planes ni pasarela comercial. |
+| Suscripciones SaaS | SAAS-B terminado | Ciclo de vida, acceso, planes, limites y administracion global sobre 022. |
+| Pagos manuales de suscripcion | SAAS-C0 terminado | Auditoria y diseno en `docs/SAAS_C_DISENO_PAGOS.md`; sin tablas, rutas, archivos ni pagos implementados. |
 | Staging y produccion | Pendiente | No se ha desplegado este estado. |
 
 ## 4. Funcionalidades implementadas
@@ -487,7 +488,8 @@ No mostrar estas variables en logs ni respuestas. Nunca versionar `.env`, `.env.
   autorizado para invocar el comprobador o los endpoints y un almacenamiento fuera del host.
 - No hay staging configurado ni despliegue de este estado.
 - SAAS-A incorpora registro publico pendiente, verificacion, recuperacion de contrasena y onboarding mediante adaptador local en memoria. Aun no hay proveedor real de correo, invitaciones ni login social.
-- No hay cobro automatizado de suscripciones comerciales.
+- No hay pagos de suscripcion implementados. SAAS-C0 define el futuro flujo
+  manual y sus comprobantes; no hay pasarela ni cobro automatico.
 - SAAS-B esta completo sobre la migracion 022: ciclo de vida, gracia,
   suspension, reactivacion, renovacion tecnica, acceso por estado, cambio de
   plan, limites y administracion global para superadmin. No hay pagos ni jobs.
@@ -505,7 +507,7 @@ No mostrar estas variables en logs ni respuestas. Nunca versionar `.env`, `.env.
 No alterar este orden sin una decision explicita:
 
 1. Fase 11: acceso publico.
-3. Suscripciones comerciales.
+3. SAAS-C: pagos manuales de suscripciones.
 4. Staging.
 5. Produccion.
 
@@ -665,5 +667,7 @@ Estos resultados corresponden al ultimo estado conocido. Antes de iniciar el sig
 **SAAS-B esta cerrado** sobre la migracion 022. B1-B5 implementan el modelo,
 motor, acceso por estado, cambios de plan, limites y administracion SaaS global;
 B6 valida integralmente seguridad, concurrencia, multitienda, browser y
-compatibilidad con SAAS-A. La siguiente macrofase permitida es **SAAS-C** para
-pagos manuales; no se ha iniciado y no existen pagos automaticos ni jobs.
+compatibilidad con SAAS-A. **SAAS-C0 esta cerrado** con la auditoria y el diseno
+de pagos manuales en `docs/SAAS_C_DISENO_PAGOS.md`. La siguiente etapa es
+**SAAS-C1**, modelo estructural y migracion 023; todavia no existen pagos,
+comprobantes persistentes, pasarela automatica ni jobs.
