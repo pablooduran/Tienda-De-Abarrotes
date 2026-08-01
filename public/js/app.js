@@ -213,6 +213,9 @@ async function api(url, options = {}) {
   if (!response.ok) {
     const error = SecurityHttp.errorFromResponse(response, data, 'No se pudo completar la operación.');
     if (response.status === 401) window.location.href = '/login.html';
+    if (['SUBSCRIPTION_SUSPENDED', 'SUBSCRIPTION_CANCELLED', 'SUBSCRIPTION_RESTRICTED'].includes(error.code)) {
+      window.location.href = '/suscripcion.html';
+    }
     throw error;
   }
   return data;

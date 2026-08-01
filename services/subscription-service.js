@@ -10,6 +10,7 @@ const {
   sanitizeLifecycleMetadata,
   snapshotFromPlan
 } = require('../config/subscription-lifecycle-contract');
+const { computeEffectiveStatus } = require('./subscription-lifecycle-service');
 
 const LIMITS = Object.freeze({
   propietarios: {
@@ -57,21 +58,7 @@ function parseDate(value, label) {
 }
 
 function effectiveStatus(subscription, now = getLocalNow()) {
-  if (!subscription?.idSuscripcion) return 'sin_suscripcion';
-  const start = parseLocalDateTime(subscription.fechaInicio);
-  const end = parseLocalDateTime(subscription.fechaFin);
-  if (subscription.estado === 'cancelada') return 'cancelada';
-  if (subscription.estado === 'suspendida') return 'suspendida';
-  if (subscription.estado === 'gracia') {
-    const graceEnd = subscription.fechaFinGracia
-      ? parseLocalDateTime(subscription.fechaFinGracia)
-      : null;
-    return graceEnd && now < graceEnd ? 'gracia' : 'vencida';
-  }
-  if (subscription.estado === 'vencida' || now >= end) return 'vencida';
-  if (now < start) return 'pendiente';
-  if (subscription.estado === 'pendiente') return 'activa';
-  return subscription.estado === 'activa' ? 'activa' : subscription.estado;
+  return computeEffectiveStatus(subscription, now);
 }
 
 async function findPlanByCode(connection, code, { requireActive = true, forUpdate = false } = {}) {
@@ -152,13 +139,16 @@ async function insertLifecycleHistory(connection, input) {
   return Number(result.insertId);
 }
 
-async function resolveSubscriptionContext(connection, idTienda) {
-  const localNow = formatLocalDateTime();
+async function resolveSubscriptionContext(connection, idTienda, options = {}) {
+  const now = options.now === undefined || options.now === null
+    ? getLocalNow()
+    : parseLocalDateTime(options.now);
+  const localNow = formatLocalDateTime(now);
   const [rows] = await connection.query(
     `SELECT t.idTienda, t.nombre AS tiendaNombre, t.slug AS tiendaSlug,
        t.activo AS tiendaActiva, t.estado AS tiendaEstado,
        s.idSuscripcion, s.tipo, s.estado, s.fechaInicio, s.fechaFin, s.fechaFinGracia,
-       s.renovacionAutomatica, s.idPlan,
+       s.renovacionAutomatica, s.idPlan, s.tipoPeriodoSnapshot, s.duracionDiasSnapshot,
        s.planCodigoSnapshot AS planCodigo, s.planNombreSnapshot AS planNombre,
        s.limitePropietariosSnapshot AS limitePropietarios,
        s.limiteProductosSnapshot AS limiteProductos,
@@ -169,22 +159,18 @@ async function resolveSubscriptionContext(connection, idTienda) {
        SELECT s2.idSuscripcion FROM suscripcionTienda s2
        WHERE s2.idTienda=t.idTienda
        ORDER BY
-         CASE
-           WHEN s2.estado IN ('activa','pendiente') AND ?>=s2.fechaInicio AND ?<s2.fechaFin THEN 0
-           WHEN s2.estado='pendiente' AND s2.fechaInicio>? THEN 1
-           WHEN s2.estado='suspendida' THEN 2
-           ELSE 3
-         END,
+         CASE WHEN s2.fechaInicio<=? THEN 0 ELSE 1 END,
+         CASE WHEN s2.fechaInicio<=? THEN s2.fechaInicio END DESC,
          CASE WHEN s2.fechaInicio>? THEN s2.fechaInicio END ASC,
          s2.idSuscripcion DESC
        LIMIT 1
      )
      WHERE t.idTienda=?`,
-    [localNow, localNow, localNow, localNow, idTienda]
+    [localNow, localNow, localNow, idTienda]
   );
   if (!rows.length) throw httpError(404, 'La tienda no existe.');
   const row = rows[0];
-  const estadoEfectivo = effectiveStatus(row);
+  const estadoEfectivo = effectiveStatus(row, now);
   const [features, usage] = await Promise.all([
     enabledFeatures(connection, idTienda, row.idSuscripcion),
     usageForStore(connection, idTienda)
@@ -196,7 +182,10 @@ async function resolveSubscriptionContext(connection, idTienda) {
     proveedores: row.limiteProveedores === null ? null : Number(row.limiteProveedores)
   };
   const daysRemaining = row.fechaFin
-    ? Math.max(0, Math.ceil((parseLocalDateTime(row.fechaFin).getTime() - getLocalNow().getTime()) / 86400000))
+    ? Math.max(0, Math.ceil((parseLocalDateTime(row.fechaFin).getTime() - now.getTime()) / 86400000))
+    : null;
+  const graceDaysRemaining = estadoEfectivo === 'gracia' && row.fechaFinGracia
+    ? Math.max(0, Math.ceil((parseLocalDateTime(row.fechaFinGracia).getTime() - now.getTime()) / 86400000))
     : null;
   return {
     tienda: {
@@ -215,6 +204,9 @@ async function resolveSubscriptionContext(connection, idTienda) {
       fechaFin: row.fechaFin,
       fechaFinGracia: row.fechaFinGracia,
       diasRestantes: daysRemaining,
+      diasGraciaRestantes: graceDaysRemaining,
+      tipoPeriodo: row.tipoPeriodoSnapshot,
+      duracionDias: Number(row.duracionDiasSnapshot),
       renovacionAutomatica: Number(row.renovacionAutomatica) === 1
     } : null,
     plan: row.idPlan ? {

@@ -581,10 +581,10 @@ async function main() {
       basicSession, '/api/contexto', {}, 200, 'Contexto antes de renovar'
     );
     assert(
-      contextBeforeRenewal.suscripcion?.estadoEfectivo === 'vencida' && contextBeforeRenewal.soloLectura === true,
-      `El contexto vencido es incorrecto: ${JSON.stringify(subscriptionSnapshot(contextBeforeRenewal))}`
+      contextBeforeRenewal.suscripcion?.estadoEfectivo === 'gracia' && contextBeforeRenewal.soloLectura === true,
+      `El contexto de gracia es incorrecto: ${JSON.stringify(subscriptionSnapshot(contextBeforeRenewal))}`
     );
-    await expect(basicSession, '/api/productos', {}, 200, 'Lectura con suscripcion vencida');
+    await expect(basicSession, '/api/productos', {}, 200, 'Lectura con suscripcion en gracia');
     await expect(basicSession, `/api/productos/${firstProduct.idProducto}`, {
       method: 'PUT', body: updateProduct
     }, 403, 'Escritura bloqueada por vencimiento');
@@ -609,7 +609,7 @@ async function main() {
     await expect(superSession, `/api/admin/suscripciones/${renewed.suscripcion.idSuscripcion}/suspender`, {
       method: 'PATCH'
     }, 200, 'Suspension de suscripcion');
-    await expect(basicSession, '/api/productos', {}, 200, 'Lectura con suscripcion suspendida');
+    await expect(basicSession, '/api/productos', {}, 403, 'Lectura bloqueada por suspension');
     await expect(basicSession, `/api/productos/${firstProduct.idProducto}`, {
       method: 'PUT', body: updateProduct
     }, 403, 'Escritura bloqueada por suspension');

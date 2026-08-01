@@ -27,7 +27,11 @@ const { mutationProtection, noStoreSensitiveResponses } = require('./middleware/
 const { createCommercialAuditMiddleware } = require('./middleware/administrative-audit-middleware');
 const { requireRole } = require('./middleware/roles');
 const { permissionsPolicy, securityHeaders } = require('./middleware/security-headers');
-const { requireActiveSubscription, resolveSubscription } = require('./middleware/subscription');
+const {
+  requireActiveSubscription,
+  requireFullSubscriptionAccess,
+  resolveSubscription
+} = require('./middleware/subscription');
 const { requireTenant } = require('./middleware/tenant');
 const { createSecurityLogger } = require('./utils/security-logger');
 const { administrativeAuditService } = require('./services/administrative-audit-service');
@@ -61,9 +65,11 @@ const inventoryIntelligenceRoutes = require('./routes/inventory-intelligence');
 const lotRoutes = require('./routes/lots');
 const masterCatalogRoutes = require('./routes/master-catalog');
 const onboardingRoutes = require('./routes/onboarding');
+const subscriptionRoutes = require('./routes/subscription');
 const posRoutes = require('./routes/pos');
 const salesCompensationRoutes = require('./routes/sales-compensations');
 const stockRoutes = require('./routes/stock');
+const { ownerDestination } = require('./services/subscription-access-service');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -192,8 +198,32 @@ app.use('/api/admin/health', requireAuth, requireRole('superadmin'), adminHealth
 app.use('/api/admin/auditoria', requireAuth, requireRole('superadmin'), adminAuditRoutes);
 app.use('/api/admin/catalogo', requireAuth, requireRole('superadmin'), adminCatalogRoutes);
 app.use('/api/admin', requireAuth, requireRole('superadmin'), adminRoutes);
-app.use('/api/auditoria', rateLimiters.admin, requireAuth, requireTenant, tenantAuditRoutes);
-app.use('/onboarding', rateLimiters.api, requireAuth, requireTenant, resolveSubscription, requireActiveSubscription, onboardingRoutes);
+app.use(
+  '/api/auditoria',
+  rateLimiters.admin,
+  requireAuth,
+  requireTenant,
+  resolveSubscription,
+  requireActiveSubscription,
+  tenantAuditRoutes
+);
+app.use(
+  '/api/suscripcion',
+  requireAuth,
+  requireTenant,
+  resolveSubscription,
+  requireActiveSubscription,
+  subscriptionRoutes
+);
+app.use(
+  '/onboarding',
+  rateLimiters.api,
+  requireAuth,
+  requireTenant,
+  resolveSubscription,
+  requireFullSubscriptionAccess,
+  onboardingRoutes
+);
 app.use('/api/catalogo-maestro', requireAuth, requireTenant, resolveSubscription, requireActiveSubscription, masterCatalogRoutes);
 app.use(
   '/api',
@@ -213,17 +243,26 @@ app.use(
   apiRoutes
 );
 
-app.get('/app.html', requireAuth, (req, res) => {
-  if (req.auth.rol !== 'dueno_tienda') return res.redirect('/admin.html');
-  if (req.auth.estadoOnboarding !== 'completado') return res.redirect('/onboarding.html');
-  res.sendFile(path.join(__dirname, 'public', 'app.html'));
+function requireOwnerPage(req, res, next) {
+  if (req.auth.rol === 'dueno_tienda') return next();
+  return res.redirect('/admin.html');
+}
+
+app.get('/app.html', requireAuth, requireOwnerPage, requireTenant, resolveSubscription, (req, res) => {
+  const destination = ownerDestination(req.subscriptionContext, req.auth.estadoOnboarding);
+  if (destination !== '/app.html') return res.redirect(destination);
+  return res.sendFile(path.join(__dirname, 'public', 'app.html'));
 });
 
-app.get('/onboarding.html', requireAuth, (req, res) => {
-  if (req.auth.rol === 'superadmin') return res.redirect('/admin.html');
-  if (req.auth.estadoOnboarding === 'completado') return res.redirect('/app.html');
+app.get('/onboarding.html', requireAuth, requireOwnerPage, requireTenant, resolveSubscription, (req, res) => {
+  const destination = ownerDestination(req.subscriptionContext, req.auth.estadoOnboarding);
+  if (destination !== '/onboarding.html') return res.redirect(destination);
   return res.sendFile(path.join(__dirname, 'public', 'onboarding.html'));
 });
+
+app.get('/suscripcion.html', requireAuth, requireOwnerPage, requireTenant, resolveSubscription, (req, res) => (
+  res.sendFile(path.join(__dirname, 'public', 'subscription.html'))
+));
 
 app.get('/admin.html', requireAuth, (req, res) => {
   if (req.auth.rol !== 'superadmin') return res.redirect('/app.html');
@@ -232,12 +271,14 @@ app.get('/admin.html', requireAuth, (req, res) => {
 
 app.use(express.static(path.join(__dirname, 'public')));
 
-app.get('/', requireAuth, (req, res) => {
-  const destination = req.auth.rol === 'superadmin'
-    ? '/admin.html'
-    : (req.auth.estadoOnboarding === 'completado' ? '/app.html' : '/onboarding.html');
-  res.redirect(destination);
-});
+app.get(
+  '/',
+  requireAuth,
+  (req, res, next) => (req.auth.rol === 'superadmin' ? res.redirect('/admin.html') : next()),
+  requireTenant,
+  resolveSubscription,
+  (req, res) => res.redirect(ownerDestination(req.subscriptionContext, req.auth.estadoOnboarding))
+);
 
 app.use(notFoundHandler);
 app.use(createErrorHandler({ logger: securityLogger, production: appSecurityConfig.production }));

@@ -15,6 +15,7 @@ const {
 const { publicRegistrationService } = require('../services/public-registration-service');
 const { emailVerificationService } = require('../services/email-verification-service');
 const { passwordRecoveryService } = require('../services/password-recovery-service');
+const { ownerDestination, resolveSubscriptionAccess } = require('../services/subscription-access-service');
 
 const router = express.Router();
 const dummyPasswordHash = bcrypt.hash(crypto.randomBytes(32).toString('hex'), 12);
@@ -112,6 +113,10 @@ router.post('/login', async (req, res, next) => {
       return invalidCredentials(res);
     }
 
+    const subscriptionContext = admin.rol === 'dueno_tienda'
+      ? await resolveSubscriptionAccess(pool, Number(admin.idTienda))
+      : null;
+
     await regenerateSession(req);
     req.session.admin = {
       id: admin.idAdministrador,
@@ -136,9 +141,9 @@ router.post('/login', async (req, res, next) => {
       await destroyRequestSession(req, res);
       throw error;
     }
-    const destination = admin.rol === 'dueno_tienda' && admin.estadoOnboarding !== 'completado'
-      ? '/onboarding.html'
-      : (admin.rol === 'superadmin' ? '/admin.html' : '/app.html');
+    const destination = admin.rol === 'superadmin'
+      ? '/admin.html'
+      : ownerDestination(subscriptionContext, admin.estadoOnboarding);
     res.json({ message: 'Sesion iniciada.', admin: publicAdmin(req.session.admin), destination });
   } catch (error) {
     next(error);

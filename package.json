@@ -80,6 +80,8 @@
     "test:store-configuration": "node scripts/test-store-configuration.js",
     "test:subscription-lifecycle-schema": "node scripts/test-subscription-lifecycle-schema.js",
     "test:subscription-lifecycle-engine": "node scripts/test-subscription-lifecycle-engine.js",
+    "test:subscription-access": "node scripts/test-subscription-access.js",
+    "test:subscription-access-browser": "node scripts/test-subscription-access-browser.js",
     "test:onboarding": "node scripts/test-onboarding.js",
     "test:onboarding-browser": "node scripts/test-onboarding-browser.js",
     "test:saas-a-e2e": "node scripts/test-saas-a-e2e.js",

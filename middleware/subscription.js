@@ -1,20 +1,20 @@
 const pool = require('../config/db');
-const { enforcePlanLimit, resolveSubscriptionContext } = require('../services/subscription-service');
+const { subscriptionRequestDecision } = require('../config/subscription-access-policy');
+const { enforcePlanLimit } = require('../services/subscription-service');
+const { resolveSubscriptionAccess } = require('../services/subscription-access-service');
 const { logRejectedStockAction } = require('../services/stock-movement-service');
 
 async function resolveSubscription(req, res, next) {
   try {
-    req.subscriptionContext = await resolveSubscriptionContext(pool, req.tenant.idTienda);
+    req.subscriptionContext = await resolveSubscriptionAccess(pool, req.tenant.idTienda);
     next();
   } catch (error) {
     next(error);
   }
 }
 
-function requireActiveSubscription(req, res, next) {
-  if (['GET', 'HEAD', 'OPTIONS'].includes(req.method)) return next();
+function blockedSubscriptionResponse(req, res) {
   const context = req.subscriptionContext;
-  if (context && !context.soloLectura) return next();
   const adjustmentMatch = req.originalUrl.match(/\/productos\/(\d+)\/ajustar-stock(?:\?|$)/);
   if (adjustmentMatch) {
     logRejectedStockAction('ajuste_manual', {
@@ -24,12 +24,34 @@ function requireActiveSubscription(req, res, next) {
       codigo: 'SUSCRIPCION_SOLO_LECTURA'
     });
   }
+  const status = context?.suscripcion?.estadoEfectivo || 'sin_suscripcion';
+  const codes = {
+    gracia: 'SUBSCRIPTION_GRACE_READ_ONLY',
+    suspendida: 'SUBSCRIPTION_SUSPENDED',
+    cancelada: 'SUBSCRIPTION_CANCELLED'
+  };
   return res.status(403).json({
-    error: 'La suscripcion no permite realizar cambios. Los datos siguen disponibles en modo de solo lectura.',
-    code: 'SUBSCRIPTION_READ_ONLY',
-    estadoSuscripcion: context?.suscripcion?.estadoEfectivo || 'sin_suscripcion',
-    fechaFin: context?.suscripcion?.fechaFin || null
+    error: context?.acceso?.mensaje || 'La suscripcion no permite acceder a esta operacion.',
+    code: codes[status] || 'SUBSCRIPTION_RESTRICTED',
+    estadoSuscripcion: status,
+    nivelAcceso: context?.estadoAcceso || 'restringido',
+    siguienteAccion: context?.acceso?.siguienteAccion || 'contactar_soporte'
   });
+}
+
+function requireActiveSubscription(req, res, next) {
+  const decision = subscriptionRequestDecision({
+    method: req.method,
+    path: req.originalUrl,
+    accessLevel: req.subscriptionContext?.estadoAcceso
+  });
+  if (decision.allowed) return next();
+  return blockedSubscriptionResponse(req, res);
+}
+
+function requireFullSubscriptionAccess(req, res, next) {
+  if (req.subscriptionContext?.estadoAcceso === 'completo') return next();
+  return blockedSubscriptionResponse(req, res);
 }
 
 function requirePlanFeature(featureCode) {
@@ -53,6 +75,7 @@ function enforcePlanEntityLimit(entity) {
 module.exports = {
   enforcePlanEntityLimit,
   requireActiveSubscription,
+  requireFullSubscriptionAccess,
   requirePlanFeature,
   resolveSubscription
 };

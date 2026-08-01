@@ -485,8 +485,9 @@ No mostrar estas variables en logs ni respuestas. Nunca versionar `.env`, `.env.
 - SAAS-A incorpora registro publico pendiente, verificacion, recuperacion de contrasena y onboarding mediante adaptador local en memoria. Aun no hay proveedor real de correo, invitaciones ni login social.
 - No hay cobro automatizado de suscripciones comerciales.
 - SAAS-B2 incorpora el motor interno de estado efectivo, gracia, suspension,
-  reactivacion y renovacion idempotente. No hay rutas nuevas, frontend, jobs ni
-  pagos; la materializacion se invoca de forma explicita.
+  reactivacion y renovacion idempotente. SAAS-B3 agrega consulta protegida,
+  acceso de solo lectura durante gracia y denegacion por defecto durante
+  suspension o cancelacion. No hay rutas de pago, cambios de plan ni jobs.
 - WhatsApp solo prepara texto/enlace; no envia mensajes automaticamente.
 - No hay PDF general, portal del cliente ni facturacion fiscal.
 - Los comprobantes de cobro no son facturas y algunos cobros legados tienen datos parciales.
@@ -656,5 +657,6 @@ Estos resultados corresponden al ultimo estado conocido. Antes de iniciar el sig
 ## 17. Siguiente macrofase
 
 **SAAS-B1** definio el contrato y la migracion 022; la base principal esta en
-022. **SAAS-B2** implementa el motor interno sin rutas ni frontend. El siguiente
-bloque permitido es el acceso y consulta protegida de suscripciones (SAAS-B3).
+022. **SAAS-B2** implementa el motor interno y **SAAS-B3** la consulta protegida
+y la politica explicita de acceso. El siguiente bloque permitido es SAAS-B4;
+no se han iniciado cambios de plan, pagos ni jobs.
