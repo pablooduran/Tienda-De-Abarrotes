@@ -300,10 +300,15 @@ async function main() {
   if (primary.host !== 'localhost' || !/(prueba|test)/i.test(primary.database)) {
     throw new Error('SAAS-A5 requiere la base principal local de pruebas.');
   }
-  assert.deepStrictEqual(migrationNames().slice(-2), [
+  const migrations = migrationNames();
+  for (const required of [
     '020_registro_publico_onboarding.sql',
-    '021_configuracion_base_tienda.sql'
-  ]);
+    '021_configuracion_base_tienda.sql',
+    '022_ciclo_vida_suscripciones.sql'
+  ]) {
+    assert(migrations.includes(required), `Falta la migracion requerida ${required}.`);
+  }
+  assert.strictEqual(migrations.at(-1), '022_ciclo_vida_suscripciones.sql');
   const primaryBefore = await primaryFingerprint(primary);
   const serverConnection = await connect({ ...databaseOptions(), database: undefined });
   const temporaryBefore = await temporaryDatabases(serverConnection);

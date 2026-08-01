@@ -488,10 +488,9 @@ No mostrar estas variables en logs ni respuestas. Nunca versionar `.env`, `.env.
 - No hay staging configurado ni despliegue de este estado.
 - SAAS-A incorpora registro publico pendiente, verificacion, recuperacion de contrasena y onboarding mediante adaptador local en memoria. Aun no hay proveedor real de correo, invitaciones ni login social.
 - No hay cobro automatizado de suscripciones comerciales.
-- SAAS-B2 incorpora el motor interno de estado efectivo, gracia, suspension,
-  reactivacion y renovacion idempotente. SAAS-B3 agrega consulta protegida,
-  acceso de solo lectura durante gracia y denegacion por defecto durante
-  suspension o cancelacion. No hay rutas de pago, cambios de plan ni jobs.
+- SAAS-B esta completo sobre la migracion 022: ciclo de vida, gracia,
+  suspension, reactivacion, renovacion tecnica, acceso por estado, cambio de
+  plan, limites y administracion global para superadmin. No hay pagos ni jobs.
 - WhatsApp solo prepara texto/enlace; no envia mensajes automaticamente.
 - No hay PDF general, portal del cliente ni facturacion fiscal.
 - Los comprobantes de cobro no son facturas y algunos cobros legados tienen datos parciales.
@@ -653,6 +652,9 @@ Han sido validadas en bloques anteriores:
   validan tenant, filtros, paginacion, sanitizacion, ausencia de rutas de
   escritura, teclado, foco y responsive sin modificar MySQL.
 - Backup: `test:backup-restore` con 26 comprobaciones, backup real local, verificacion de hash/manifiesto y restauracion temporal.
+- SAAS-B6: regresion integral de estructura 022, ciclo de vida, acceso, planes,
+  limites, administracion SaaS, tenant, seguridad y browser; `test:saas-a-e2e`
+  confirma compatibilidad SAAS-A sobre base temporal y huella principal intacta.
 - Durante la restauracion se ejecutaron `db:check-legacy-migrations`, `db:check-session-security`, `db:check-timezone-tls` y `db:check-customers-credit` contra la base temporal.
 - La validacion final de backup elimino los archivos generados y la base temporal; no dejo procesos auxiliares activos.
 
@@ -660,11 +662,8 @@ Estos resultados corresponden al ultimo estado conocido. Antes de iniciar el sig
 
 ## 17. Siguiente macrofase
 
-**SAAS-B1** definio el contrato y la migracion 022; la base principal esta en
-022. **SAAS-B2** implementa el motor interno y **SAAS-B3** la consulta protegida
-y la politica explicita de acceso. **SAAS-B4** implementa comparacion por
-capacidades, upgrade inmediato, downgrade programado, snapshots por periodo y
-bloqueo de nuevas altas al alcanzar limites. **SAAS-B5** agrega administracion
-SaaS global para superadmin, con listado, detalle, historial, suspension,
-reactivacion, renovacion tecnica, cancelacion y cambio de plan. El siguiente
-bloque permitido es SAAS-B6; no se han iniciado pagos ni jobs.
+**SAAS-B esta cerrado** sobre la migracion 022. B1-B5 implementan el modelo,
+motor, acceso por estado, cambios de plan, limites y administracion SaaS global;
+B6 valida integralmente seguridad, concurrencia, multitienda, browser y
+compatibilidad con SAAS-A. La siguiente macrofase permitida es **SAAS-C** para
+pagos manuales; no se ha iniciado y no existen pagos automaticos ni jobs.
