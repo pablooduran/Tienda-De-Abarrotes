@@ -311,6 +311,8 @@ Estas pruebas pueden crear y limpiar datos temporales en la base local de prueba
 - `test:subscriptions`: planes, suscripciones, downgrade y solo lectura.
 - `test:subscription-lifecycle-schema`: ensayo temporal de 022, backfill,
   snapshot, concurrencia, rollback y huella principal.
+- `test:subscription-lifecycle-engine`: estado efectivo, gracia, suspension,
+  reactivacion, renovacion, reloj inyectado, idempotencia y limpieza de B2.
 - `test:master-catalog`: catalogo maestro.
 - `test:stock-movements`: movimientos, ajustes y conciliacion.
 - `test:pos-payments`: ventas, stock, pagos e idempotencia.
@@ -482,6 +484,9 @@ No mostrar estas variables en logs ni respuestas. Nunca versionar `.env`, `.env.
 - No hay staging configurado ni despliegue de este estado.
 - SAAS-A incorpora registro publico pendiente, verificacion, recuperacion de contrasena y onboarding mediante adaptador local en memoria. Aun no hay proveedor real de correo, invitaciones ni login social.
 - No hay cobro automatizado de suscripciones comerciales.
+- SAAS-B2 incorpora el motor interno de estado efectivo, gracia, suspension,
+  reactivacion y renovacion idempotente. No hay rutas nuevas, frontend, jobs ni
+  pagos; la materializacion se invoca de forma explicita.
 - WhatsApp solo prepara texto/enlace; no envia mensajes automaticamente.
 - No hay PDF general, portal del cliente ni facturacion fiscal.
 - Los comprobantes de cobro no son facturas y algunos cobros legados tienen datos parciales.
@@ -609,8 +614,9 @@ En ambos casos, conservar el repositorio o base anterior hasta completar smoke t
 ### Base local
 
 - Base de pruebas esperada: `tienda_abarrotes_pruebas`.
-- Migraciones registradas en la base principal conocida: 001 a 021.
-- No deberian existir bases `tmp_tienda_restore_*` ni `tmp_tienda_legacy_*` despues de las pruebas.
+- Migraciones registradas en la base principal conocida: 001 a 022.
+- No deberian existir bases `tmp_tienda_restore_*`, `tmp_tienda_legacy_*` ni
+  fixtures de ciclo de vida despues de las pruebas.
 
 ### Ultimo estado conocido de pruebas
 
@@ -649,7 +655,6 @@ Estos resultados corresponden al ultimo estado conocido. Antes de iniciar el sig
 
 ## 17. Siguiente macrofase
 
-**SAAS-B1** define el contrato y la migracion 022; la base principal permanece
-en 021 hasta una aplicacion controlada separada. El siguiente bloque permitido
-es aplicar y validar 022. SAAS-B2 no debe iniciarse antes de cerrar esa
-aplicacion.
+**SAAS-B1** definio el contrato y la migracion 022; la base principal esta en
+022. **SAAS-B2** implementa el motor interno sin rutas ni frontend. El siguiente
+bloque permitido es el acceso y consulta protegida de suscripciones (SAAS-B3).
