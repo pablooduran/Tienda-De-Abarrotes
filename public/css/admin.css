@@ -471,6 +471,90 @@ tbody tr:hover {
   text-align: center;
 }
 
+.saas-subscriptions-section {
+  min-width: 0;
+  overflow: hidden;
+  scroll-margin-top: 18px;
+}
+
+.saas-subscriptions-section .table-wrap {
+  contain: inline-size;
+  min-width: 0;
+  max-width: 100%;
+  overscroll-behavior-inline: contain;
+}
+
+.saas-summary {
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  margin-bottom: 20px;
+}
+
+.saas-filter-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  align-items: end;
+  margin-bottom: 20px;
+}
+
+.saas-check {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  min-height: 40px;
+  color: var(--muted);
+  font-size: 0.82rem;
+  font-weight: 700;
+}
+
+.saas-check input {
+  width: 18px;
+  min-height: 18px;
+}
+
+.saas-detail {
+  margin-top: 28px;
+  padding-top: 24px;
+  border-top: 1px solid var(--line);
+}
+
+.saas-detail-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 18px;
+}
+
+.saas-limit-row,
+.saas-plan-row,
+.saas-history-item {
+  display: grid;
+  gap: 5px;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.saas-limit-row {
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+
+.saas-limit-row span,
+.saas-plan-row span,
+.saas-history-item span {
+  color: var(--muted);
+  font-size: 0.8rem;
+}
+
+.saas-limit-exceeded strong {
+  color: var(--danger);
+}
+
+.saas-action-help {
+  margin: 0;
+  padding: 0 22px 18px;
+  color: var(--muted);
+  line-height: 1.5;
+}
+
 .modal {
   width: min(620px, calc(100vw - 28px));
   max-height: calc(100vh - 32px);
@@ -971,5 +1055,58 @@ textarea {
 
   .button-row .button {
     flex: 1 1 auto;
+  }
+}
+
+@media (max-width: 920px) {
+  .saas-summary,
+  .saas-filter-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 900px) {
+  .saas-summary,
+  .saas-filter-grid,
+  .saas-detail-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .saas-subscriptions-section .table-wrap {
+    overflow: visible;
+  }
+
+  .saas-subscriptions-section table,
+  .saas-subscriptions-section tbody,
+  .saas-subscriptions-section tr,
+  .saas-subscriptions-section td {
+    display: block;
+    width: 100%;
+  }
+
+  .saas-subscriptions-section thead {
+    display: none;
+  }
+
+  .saas-subscriptions-section tr {
+    margin-bottom: 12px;
+    padding: 10px;
+    border: 1px solid var(--line);
+    border-radius: 6px;
+  }
+
+  .saas-subscriptions-section td {
+    display: grid;
+    grid-template-columns: minmax(90px, 0.45fr) minmax(0, 1fr);
+    gap: 10px;
+    padding: 8px 4px;
+  }
+
+  .saas-subscriptions-section td::before {
+    color: var(--muted);
+    content: attr(data-label);
+    font-size: 0.72rem;
+    font-weight: 800;
+    text-transform: uppercase;
   }
 }

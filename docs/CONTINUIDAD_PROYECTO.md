@@ -313,6 +313,10 @@ Estas pruebas pueden crear y limpiar datos temporales en la base local de prueba
   snapshot, concurrencia, rollback y huella principal.
 - `test:subscription-lifecycle-engine`: estado efectivo, gracia, suspension,
   reactivacion, renovacion, reloj inyectado, idempotencia y limpieza de B2.
+- `test:saas-subscription-admin`: listado global, detalle, ciclo de vida,
+  cambio de plan, permisos, idempotencia y limpieza del panel B5.
+- `test:saas-subscription-admin-browser`: responsive, teclado, foco,
+  confirmaciones y doble envio del panel B5 con HTTP local aislado.
 - `test:master-catalog`: catalogo maestro.
 - `test:stock-movements`: movimientos, ajustes y conciliacion.
 - `test:pos-payments`: ventas, stock, pagos e idempotencia.
@@ -660,5 +664,7 @@ Estos resultados corresponden al ultimo estado conocido. Antes de iniciar el sig
 022. **SAAS-B2** implementa el motor interno y **SAAS-B3** la consulta protegida
 y la politica explicita de acceso. **SAAS-B4** implementa comparacion por
 capacidades, upgrade inmediato, downgrade programado, snapshots por periodo y
-bloqueo de nuevas altas al alcanzar limites. El siguiente bloque permitido es
-SAAS-B5; no se han iniciado pagos, administracion SaaS global ni jobs.
+bloqueo de nuevas altas al alcanzar limites. **SAAS-B5** agrega administracion
+SaaS global para superadmin, con listado, detalle, historial, suspension,
+reactivacion, renovacion tecnica, cancelacion y cambio de plan. El siguiente
+bloque permitido es SAAS-B6; no se han iniciado pagos ni jobs.

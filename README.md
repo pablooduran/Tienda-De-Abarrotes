@@ -883,6 +883,8 @@ Las APIs operativas aceptan solamente sesiones con rol `dueno_tienda` y una tien
 
 El superadmin puede crear una tienda junto con su primer propietario en una sola transaccion, agregar propietarios adicionales, actualizar los datos de la tienda, suspender o reactivar accesos y restablecer contrasenas. Estas acciones no borran ni modifican los datos comerciales de una tienda.
 
+El panel global de suscripciones usa `GET /api/admin/suscripciones`, `GET /api/admin/suscripciones/resumen` y `GET /api/admin/suscripciones/:referencia` para listado, resumen, detalle e historial. Las mutaciones `suspender`, `reactivar`, `renovar`, `cancelar`, `upgrade` y `downgrade` son `POST` idempotentes bajo la misma referencia validada, requieren superadmin, origen/CSRF y no registran pagos. La renovacion es exclusivamente tecnica; cancelacion y suspension conservan todos los datos.
+
 Cada tienda tiene un plan y un historial de suscripciones. El plan basico permite un propietario activo, 500 productos, 500 clientes activos y 100 proveedores. El avanzado permite cinco propietarios activos y no limita esas tres entidades. Las condiciones de cada periodo se leen desde su snapshot, por lo que editar el catalogo no cambia retroactivamente limites o funcionalidades ya contratados. Durante gracia se conserva una allowlist explicita de consultas y se bloquean todas las escrituras comerciales. Una suscripcion suspendida o cancelada conserva login, logout, contexto minimo y consulta de suscripcion, pero no permite acceso comercial general.
 
 El catalogo maestro pertenece a la plataforma. El superadmin administra categorias, marcas y productos, y puede importar archivos `.xlsx` de hasta 2 MB y 2000 filas mediante previsualizacion y confirmacion. El codigo de barras es opcional, se conserva como texto y es unico incluso si el producto maestro esta inactivo. Los posibles duplicados sin codigo se advierten por nombre, marca, presentacion y contenido; nunca se fusionan automaticamente.
@@ -920,6 +922,8 @@ $env:APP_ENV='local'
 npm.cmd run test:subscriptions
 npm.cmd run test:subscription-access
 npm.cmd run test:subscription-access-browser
+npm.cmd run test:saas-subscription-admin
+npm.cmd run test:saas-subscription-admin-browser
 ```
 
 La prueba valida altas basicas, avanzadas y de prueba, limites, modo de solo lectura, renovaciones, historial y permisos. Solo funciona en localhost y en una base cuyo nombre contenga `prueba` o `test`; elimina los datos temporales que crea.

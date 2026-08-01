@@ -54,6 +54,7 @@ const {
 } = require('./services/server-lifecycle-service');
 const adminCatalogRoutes = require('./routes/admin-catalog');
 const adminRoutes = require('./routes/admin');
+const { createAdminSubscriptionsRouter } = require('./routes/admin-subscriptions');
 const { createAuditRouter } = require('./routes/audit');
 const apiRoutes = require('./routes/api');
 const authRoutes = require('./routes/auth');
@@ -197,6 +198,7 @@ app.use('/auth', authRoutes);
 app.use('/api/admin/health', requireAuth, requireRole('superadmin'), adminHealthRoutes);
 app.use('/api/admin/auditoria', requireAuth, requireRole('superadmin'), adminAuditRoutes);
 app.use('/api/admin/catalogo', requireAuth, requireRole('superadmin'), adminCatalogRoutes);
+app.use('/api/admin/suscripciones', requireAuth, requireRole('superadmin'), createAdminSubscriptionsRouter());
 app.use('/api/admin', requireAuth, requireRole('superadmin'), adminRoutes);
 app.use(
   '/api/auditoria',

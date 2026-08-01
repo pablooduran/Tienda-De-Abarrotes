@@ -29,7 +29,7 @@ const REASON_TO_SCHEMA_MOTIVE = Object.freeze({
   seguridad: 'suspension_administrativa',
   otro_controlado: 'suspension_administrativa'
 });
-const OPERATION_TYPES = new Set(['renovar', 'suspender', 'reactivar', 'cambiar_plan']);
+const OPERATION_TYPES = new Set(['renovar', 'suspender', 'reactivar', 'cancelar', 'cambiar_plan']);
 const OPERATION_TTL_DAYS = 2;
 const LIMIT_USAGE_SQL = Object.freeze({
   propietarios: "SELECT COUNT(*) total FROM administrador WHERE idTienda=? AND rol='dueno_tienda' AND activo=1",
@@ -254,10 +254,55 @@ async function recordManualAudit(connection, input) {
     administratorId: input.idAdministrador,
     storeId: input.idTienda,
     reference: `suscripcion:${input.idSuscripcion}`,
+    requestId: input.requestId || null,
     before: { estado: input.estadoAnterior },
     after: { estado: input.estadoNuevo },
     metadata: { motivoCodigo: input.motivoCodigo },
     createdAt: formatLocalDateTime(input.now)
+  });
+}
+
+async function cancelSubscription(database = pool, input = {}) {
+  const idTienda = positiveId(input.idTienda, 'La tienda');
+  const idSuscripcion = positiveId(input.idSuscripcion, 'La suscripcion');
+  const actor = actorFor(input);
+  const reason = assertManualReason(input.motivoCodigo);
+  const now = normalizeNow(input.now);
+  return withTransaction(database, async (connection) => {
+    let subscription = await lockStoreAndSubscription(connection, idTienda, idSuscripcion);
+    const operation = await claimOperation(connection, {
+      idTienda, tipoOperacion: 'cancelar', claveOperacion: input.claveOperacion,
+      payload: { idSuscripcion, motivoCodigo: reason }
+    }, now);
+    if (operation.replayed) return { ...subscriptionOutput(subscription, now), replayed: true };
+    if (subscription.estado === 'cancelada') {
+      const result = operationResult(subscriptionOutput(subscription, now), null, 'SUBSCRIPTION_ALREADY_CANCELLED');
+      await completeOperation(connection, operation.id, result, now);
+      return result;
+    }
+    const nowText = formatLocalDateTime(now);
+    await connection.query(
+      `UPDATE suscripcionTienda
+       SET estado='cancelada', canceladaEn=?, motivoTransicion='cancelacion_administrativa',
+           idPlanSiguiente=NULL, fechaAplicacionPlanSiguiente=NULL, actualizadoEn=?
+       WHERE idTienda=? AND idSuscripcion=?`,
+      [nowText, nowText, idTienda, idSuscripcion]
+    );
+    const historyId = await insertHistory(connection, {
+      idTienda, idSuscripcion, estadoAnterior: subscription.estado, estadoNuevo: 'cancelada',
+      tipoOperacion: 'cancelacion', motivo: 'cancelacion_administrativa',
+      actorTipo: actor.actorTipo, idAdministrador: actor.idAdministrador, now, metadatos: {}
+    });
+    await recordManualAudit(connection, {
+      action: 'cancelacion_suscripcion', resultCode: 'SUBSCRIPTION_CANCELLED',
+      idTienda, idSuscripcion, idAdministrador: actor.idAdministrador,
+      estadoAnterior: subscription.estado, estadoNuevo: 'cancelada', motivoCodigo: reason,
+      requestId: input.requestId, now
+    });
+    subscription = { ...subscription, estado: 'cancelada', canceladaEn: nowText };
+    const result = operationResult(subscriptionOutput(subscription, now), historyId, 'SUBSCRIPTION_CANCELLED');
+    await completeOperation(connection, operation.id, result, now);
+    return result;
   });
 }
 
@@ -348,7 +393,7 @@ async function suspendSubscription(database = pool, input = {}) {
     await recordManualAudit(connection, {
       action: 'suspension_suscripcion', resultCode: 'SUBSCRIPTION_SUSPENDED', idTienda, idSuscripcion,
       idAdministrador: actor.idAdministrador, estadoAnterior: subscription.estado, estadoNuevo: 'suspendida',
-      motivoCodigo: reason, now
+      motivoCodigo: reason, requestId: input.requestId, now
     });
     subscription = { ...subscription, estado: 'suspendida', suspendidaEn: formatLocalDateTime(now) };
     const result = operationResult(subscriptionOutput(subscription, now), historyId, 'SUBSCRIPTION_SUSPENDED');
@@ -395,7 +440,7 @@ async function reactivateSubscription(database = pool, input = {}) {
     await recordManualAudit(connection, {
       action: 'reactivacion_suscripcion', resultCode: 'SUBSCRIPTION_REACTIVATED', idTienda, idSuscripcion,
       idAdministrador: actor.idAdministrador, estadoAnterior: subscription.estado, estadoNuevo: 'activa',
-      motivoCodigo: 'reactivacion_administrativa', now
+      motivoCodigo: 'reactivacion_administrativa', requestId: input.requestId, now
     });
     subscription = { ...subscription, estado: 'activa', fechaInicio: formatLocalDateTime(start), fechaFin: formatLocalDateTime(end), fechaFinGracia: formatLocalDateTime(addLocalDays(end, 7)), suspendidaEn: null, reactivadaEn: formatLocalDateTime(now) };
     const result = operationResult(subscriptionOutput(subscription, now), historyId, 'SUBSCRIPTION_REACTIVATED');
@@ -412,6 +457,7 @@ async function renewSubscription(database = pool, input = {}) {
   const now = normalizeNow(input.now);
   return withTransaction(database, async (connection) => {
     let subscription = await lockStoreAndSubscription(connection, idTienda, idSuscripcion);
+    const previousState = subscription.estado;
     const operation = await claimOperation(connection, {
       idTienda, tipoOperacion: 'renovar', claveOperacion: input.claveOperacion,
       payload: { idSuscripcion, periodo: period }
@@ -504,6 +550,14 @@ async function renewSubscription(database = pool, input = {}) {
         suspendidaEn: null
       };
       const result = operationResult(subscriptionOutput(nextSubscription, now), historyId, 'SUBSCRIPTION_RENEWED_WITH_SCHEDULED_PLAN');
+      if (actor.actorTipo === 'administrador') {
+        await recordManualAudit(connection, {
+          action: 'renovacion_suscripcion', resultCode: 'SUBSCRIPTION_RENEWED',
+          idTienda, idSuscripcion: nextId, idAdministrador: actor.idAdministrador,
+          estadoAnterior: previousState, estadoNuevo: 'activa',
+          motivoCodigo: 'renovacion', requestId: input.requestId, now
+        });
+      }
       await completeOperation(connection, operation.id, result, now);
       return result;
     }
@@ -538,6 +592,14 @@ async function renewSubscription(database = pool, input = {}) {
     });
     subscription = { ...subscription, estado: 'activa', fechaInicio: formatLocalDateTime(start), fechaFin: formatLocalDateTime(end), fechaFinGracia: formatLocalDateTime(addLocalDays(end, 7)), suspendidaEn: null };
     const result = operationResult(subscriptionOutput(subscription, now), historyId, 'SUBSCRIPTION_RENEWED');
+    if (actor.actorTipo === 'administrador') {
+      await recordManualAudit(connection, {
+        action: 'renovacion_suscripcion', resultCode: 'SUBSCRIPTION_RENEWED',
+        idTienda, idSuscripcion, idAdministrador: actor.idAdministrador,
+        estadoAnterior: previousState, estadoNuevo: 'activa',
+        motivoCodigo: 'renovacion', requestId: input.requestId, now
+      });
+    }
     await completeOperation(connection, operation.id, result, now);
     return result;
   });
@@ -549,6 +611,7 @@ module.exports = {
   assertManualReason,
   assertPeriod,
   canonicalPayload,
+  cancelSubscription,
   claimOperation,
   completeOperation,
   computeEffectiveStatus,

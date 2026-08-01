@@ -85,6 +85,8 @@
     "test:subscription-plan-changes": "node scripts/test-subscription-plan-changes.js",
     "test:subscription-limits": "node scripts/test-subscription-limits.js",
     "test:subscription-plan-browser": "node scripts/test-subscription-plan-browser.js",
+    "test:saas-subscription-admin": "node scripts/test-saas-subscription-admin.js",
+    "test:saas-subscription-admin-browser": "node scripts/test-saas-subscription-admin-browser.js",
     "test:onboarding": "node scripts/test-onboarding.js",
     "test:onboarding-browser": "node scripts/test-onboarding-browser.js",
     "test:saas-a-e2e": "node scripts/test-saas-a-e2e.js",

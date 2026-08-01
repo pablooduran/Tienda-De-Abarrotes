@@ -84,7 +84,8 @@ const BASE_AUDIT_ACTIONS = {
   ),
   suspension_suscripcion: definition('suscripcion', 'suscripcion', ['estado'], ['estado'], ['motivoCodigo']),
   reactivacion_suscripcion: definition('suscripcion', 'suscripcion', ['estado'], ['estado'], ['motivoCodigo']),
-  cancelacion_suscripcion: definition('suscripcion', 'suscripcion', ['estado'], ['estado'])
+  renovacion_suscripcion: definition('suscripcion', 'suscripcion', ['estado'], ['estado'], ['motivoCodigo']),
+  cancelacion_suscripcion: definition('suscripcion', 'suscripcion', ['estado'], ['estado'], ['motivoCodigo'])
 };
 
 const COMMERCIAL_AUDIT_ACTIONS = {
@@ -226,6 +227,7 @@ const BASE_ACTION_RESULT_CODES = {
   creacion_suscripcion: Object.freeze(['SUBSCRIPTION_CREATED', ...ADMIN_FAILURE_CODES]),
   suspension_suscripcion: Object.freeze(['SUBSCRIPTION_SUSPENDED', ...ADMIN_FAILURE_CODES]),
   reactivacion_suscripcion: Object.freeze(['SUBSCRIPTION_REACTIVATED', ...ADMIN_FAILURE_CODES]),
+  renovacion_suscripcion: Object.freeze(['SUBSCRIPTION_RENEWED', ...ADMIN_FAILURE_CODES]),
   cancelacion_suscripcion: Object.freeze(['SUBSCRIPTION_CANCELLED', ...ADMIN_FAILURE_CODES])
 };
 const INVENTORY_ACTION_RESULT_CODES = Object.freeze({
@@ -297,6 +299,7 @@ const AUDIT_RESULT_CODES = Object.freeze([
   'SUBSCRIPTION_CREATED',
   'SUBSCRIPTION_SUSPENDED',
   'SUBSCRIPTION_REACTIVATED',
+  'SUBSCRIPTION_RENEWED',
   'SUBSCRIPTION_CANCELLED',
   'ADMIN_OPERATION_REJECTED',
   'ADMIN_OPERATION_FAILED',
@@ -354,6 +357,7 @@ const AUDIT_RESULTS_BY_CODE = Object.freeze({
   SUBSCRIPTION_CREATED: Object.freeze(['correcto']),
   SUBSCRIPTION_SUSPENDED: Object.freeze(['correcto']),
   SUBSCRIPTION_REACTIVATED: Object.freeze(['correcto']),
+  SUBSCRIPTION_RENEWED: Object.freeze(['correcto']),
   SUBSCRIPTION_CANCELLED: Object.freeze(['correcto']),
   ADMIN_OPERATION_REJECTED: Object.freeze(['rechazado']),
   ADMIN_OPERATION_FAILED: Object.freeze(['fallido']),
