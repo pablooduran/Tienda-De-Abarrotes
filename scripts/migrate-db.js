@@ -1,6 +1,6 @@
 const fs = require('fs');
 const path = require('path');
-const { logDatabaseTarget } = require('../config/env');
+const { logDatabaseTarget, requireLocalhostDatabase } = require('../config/env');
 const { formatLocalDateTime } = require('../utils/local-datetime');
 const {
   createConnection,
@@ -38,6 +38,48 @@ const {
 } = require('../config/compensation-contract');
 
 const MIGRATION_LOCAL_DATETIME_TOKEN = '__MIGRATION_LOCAL_DATETIME__';
+
+function selectedMigration(files) {
+  const args = process.argv.slice(2);
+  if (args.length === 0) return null;
+  if (args.length !== 2 || args[0] !== '--only') {
+    throw new Error('Uso: npm.cmd run db:migrate -- --only <migracion.sql>');
+  }
+  const target = String(args[1] || '').trim();
+  if (!/^\d{3}_[a-z0-9_]+\.sql$/.test(target) || !files.includes(target)) {
+    throw new Error('La migracion exacta solicitada no existe o tiene un nombre invalido.');
+  }
+  return target;
+}
+
+async function validateExactMigrationContext(connection, allFiles, target) {
+  requireLocalhostDatabase('Aplicacion de migracion exacta');
+  const targetIndex = allFiles.indexOf(target);
+  if (targetIndex <= 0) {
+    throw new Error('La migracion exacta requiere una predecesora registrada.');
+  }
+  const previous = allFiles.slice(0, targetIndex);
+  const [registeredRows] = await connection.query(
+    'SELECT nombre FROM schema_migrations ORDER BY nombre'
+  );
+  const registered = new Set(registeredRows.map((row) => String(row.nombre)));
+  const missing = previous.filter((file) => !registered.has(file));
+  const later = registeredRows
+    .map((row) => String(row.nombre))
+    .filter((file) => file > target);
+  if (missing.length || later.length) {
+    throw new Error(
+      `Contexto invalido para ${target}: previas faltantes=${missing.length}; posteriores=${later.length}.`
+    );
+  }
+  const predecessor = previous[previous.length - 1];
+  if (!await requirementsSatisfied(connection, predecessor)) {
+    throw new Error(
+      `La predecesora ${predecessor} no satisface su contrato fisico; no se aplico ${target}.`
+    );
+  }
+  console.log(`Migracion exacta autorizada: ${target}; predecesora validada: ${predecessor}.`);
+}
 
 function prepareMigrationStatement(file, statement, context = {}) {
   if (![
@@ -1168,6 +1210,37 @@ const migrationRequirements = {
       ['operacionPagoSuscripcion', 'fk_operacionPago_solicitud',
         ['idTienda', 'idSolicitudPago'], 'solicitudPagoSuscripcion',
         ['idTienda', 'idSolicitudPago'], 'RESTRICT', 'RESTRICT']
+    ]
+  },
+  '024_corregir_idempotencia_y_snapshot_pagos.sql': {
+    columns: {
+      solicitudPagoSuscripcion: [
+        'planActualCodigoSnapshot', 'planActualNombreSnapshot'
+      ],
+      operacionPagoSuscripcion: [
+        'idTipoCambioResultado', 'idMetodoPagoResultado', 'idTiendaClave'
+      ]
+    },
+    indexes: [
+      ['operacionPagoSuscripcion', 'uq_operacionPago_clave_ambito',
+        ['idTiendaClave', 'actorTipo', 'idActorClave', 'alcance', 'claveHash'], true],
+      ['operacionPagoSuscripcion', 'idx_operacionPago_tipoCambio_resultado',
+        ['idTipoCambioResultado'], false],
+      ['operacionPagoSuscripcion', 'idx_operacionPago_metodo_resultado',
+        ['idMetodoPagoResultado'], false]
+    ],
+    checks: [
+      ['solicitudPagoSuscripcion', 'chk_solicitudPago_plan_actual_snapshot'],
+      ['operacionPagoSuscripcion', 'chk_operacionPago_alcance_tenant'],
+      ['operacionPagoSuscripcion', 'chk_operacionPago_resultado_tipado']
+    ],
+    foreignKeyConstraints: [
+      ['operacionPagoSuscripcion', 'fk_operacionPago_tipoCambio_resultado',
+        ['idTipoCambioResultado'], 'tipoCambioSuscripcion',
+        ['idTipoCambioSuscripcion'], 'RESTRICT', 'RESTRICT'],
+      ['operacionPagoSuscripcion', 'fk_operacionPago_metodo_resultado',
+        ['idMetodoPagoResultado'], 'metodoPagoSuscripcion',
+        ['idMetodoPagoSuscripcion'], 'RESTRICT', 'RESTRICT']
     ]
   }
 };
@@ -3760,7 +3833,10 @@ async function main() {
     `);
 
     const migrationsDir = path.join(__dirname, '..', 'database', 'migrations');
-    const files = fs.readdirSync(migrationsDir).filter((file) => file.endsWith('.sql')).sort();
+    const allFiles = fs.readdirSync(migrationsDir).filter((file) => file.endsWith('.sql')).sort();
+    const target = selectedMigration(allFiles);
+    if (target) await validateExactMigrationContext(connection, allFiles, target);
+    const files = target ? [target] : allFiles;
 
     for (const file of files) {
       if (isLegacyMigration(file)) {
@@ -3829,7 +3905,8 @@ async function main() {
               '020_registro_publico_onboarding.sql',
               '021_configuracion_base_tienda.sql',
               '022_ciclo_vida_suscripciones.sql',
-              '023_estructura_pagos_suscripcion.sql'
+              '023_estructura_pagos_suscripcion.sql',
+              '024_corregir_idempotencia_y_snapshot_pagos.sql'
             ].includes(file)
             && !await requirementsSatisfied(connection, file);
         if (registeredMigrationIsIncomplete) {
@@ -3863,7 +3940,8 @@ async function main() {
           '020_registro_publico_onboarding.sql',
           '021_configuracion_base_tienda.sql',
           '022_ciclo_vida_suscripciones.sql',
-          '023_estructura_pagos_suscripcion.sql'
+          '023_estructura_pagos_suscripcion.sql',
+          '024_corregir_idempotencia_y_snapshot_pagos.sql'
         ].includes(file)) {
           await connection.query('INSERT IGNORE INTO schema_migrations (nombre) VALUES (?)', [file]);
           const [finalRecord] = await connection.query(

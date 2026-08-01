@@ -92,6 +92,7 @@
     "test:onboarding-browser": "node scripts/test-onboarding-browser.js",
     "test:saas-a-e2e": "node scripts/test-saas-a-e2e.js",
     "test:saas-c-schema": "node scripts/test-saas-c-schema.js",
+    "test:saas-c-idempotency-schema": "node scripts/test-saas-c-schema.js",
     "check:operational-health": "node scripts/check-operational-health.js",
     "check:web-security": "node scripts/check-web-security.js",
     "codex:status": "node scripts/codex-project-status.js",

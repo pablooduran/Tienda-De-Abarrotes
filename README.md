@@ -137,6 +137,7 @@ Migraciones actuales, en orden:
 21. `021_configuracion_base_tienda.sql`: configuracion base uno a uno por tienda para nombre mostrado, moneda, zona horaria y datos opcionales.
 22. `022_ciclo_vida_suscripciones.sql`: contrato de gracia, snapshot por periodo, historial append-only e idempotencia futura de suscripciones.
 23. `023_estructura_pagos_suscripcion.sql`: catalogo Basic/Standard/Pro, precios USD versionados, tasa manual USD/BOB y estructura segura de pagos manuales sin rutas ni archivos.
+24. `024_corregir_idempotencia_y_snapshot_pagos.sql`: separacion global/tenant de idempotencia, resultados tipados y snapshot del plan actual.
 
 ### Auditoria administrativa
 

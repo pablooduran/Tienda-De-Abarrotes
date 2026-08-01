@@ -8,7 +8,8 @@ const {
   STANDARD_FEATURES
 } = require('../config/saas-c-payment-contract');
 
-const MIGRATION = '023_estructura_pagos_suscripcion.sql';
+const MIGRATION_023 = '023_estructura_pagos_suscripcion.sql';
+const MIGRATION = '024_corregir_idempotencia_y_snapshot_pagos.sql';
 const TABLES = Object.freeze([
   'precioPlanPeriodo',
   'tipoCambioSuscripcion',
@@ -32,7 +33,10 @@ const REQUIRED_INDEXES = Object.freeze([
   ['comprobantePagoSuscripcion', 'uq_comprobantePago_version'],
   ['comprobantePagoSuscripcion', 'uq_comprobantePago_activo'],
   ['aplicacionPagoSuscripcion', 'uq_aplicacionPago_solicitud'],
-  ['operacionPagoSuscripcion', 'uq_operacionPago_clave']
+  ['operacionPagoSuscripcion', 'uq_operacionPago_clave'],
+  ['operacionPagoSuscripcion', 'uq_operacionPago_clave_ambito'],
+  ['operacionPagoSuscripcion', 'idx_operacionPago_tipoCambio_resultado'],
+  ['operacionPagoSuscripcion', 'idx_operacionPago_metodo_resultado']
 ]);
 const REQUIRED_CONSTRAINTS = Object.freeze([
   ['plan', 'chk_plan_presentacion'],
@@ -51,8 +55,21 @@ const REQUIRED_CONSTRAINTS = Object.freeze([
   ['aplicacionPagoSuscripcion', 'fk_aplicacionPago_solicitud'],
   ['aplicacionPagoSuscripcion', 'fk_aplicacionPago_operacion'],
   ['operacionPagoSuscripcion', 'chk_operacionPago_hashes'],
-  ['operacionPagoSuscripcion', 'fk_operacionPago_solicitud']
+  ['operacionPagoSuscripcion', 'fk_operacionPago_solicitud'],
+  ['solicitudPagoSuscripcion', 'chk_solicitudPago_plan_actual_snapshot'],
+  ['operacionPagoSuscripcion', 'chk_operacionPago_alcance_tenant'],
+  ['operacionPagoSuscripcion', 'chk_operacionPago_resultado_tipado'],
+  ['operacionPagoSuscripcion', 'fk_operacionPago_tipoCambio_resultado'],
+  ['operacionPagoSuscripcion', 'fk_operacionPago_metodo_resultado']
 ]);
+const CORRECTION_COLUMNS = Object.freeze({
+  solicitudPagoSuscripcion: [
+    'planActualCodigoSnapshot', 'planActualNombreSnapshot'
+  ],
+  operacionPagoSuscripcion: [
+    'idTipoCambioResultado', 'idMetodoPagoResultado', 'idTiendaClave'
+  ]
+});
 
 async function existingNames(connection, table, source, column) {
   const [rows] = await connection.query(
@@ -67,6 +84,10 @@ async function inspectSaasC(connection) {
   const [[migration]] = await connection.query(
     'SELECT COUNT(*) total FROM schema_migrations WHERE nombre=?',
     [MIGRATION]
+  );
+  const [[migration023]] = await connection.query(
+    'SELECT COUNT(*) total FROM schema_migrations WHERE nombre=?',
+    [MIGRATION_023]
   );
   const [tableRows] = await connection.query(
     `SELECT TABLE_NAME FROM information_schema.TABLES
@@ -84,6 +105,11 @@ async function inspectSaasC(connection) {
   }
 
   const planColumns = await existingNames(connection, 'plan', 'COLUMNS', 'COLUMN_NAME');
+  let correctionColumns = true;
+  for (const [table, columns] of Object.entries(CORRECTION_COLUMNS)) {
+    const names = await existingNames(connection, table, 'COLUMNS', 'COLUMN_NAME');
+    if (!columns.every((column) => names.has(column))) correctionColumns = false;
+  }
   let indexes = true;
   for (const [table, name] of REQUIRED_INDEXES) {
     const names = await existingNames(connection, table, 'STATISTICS', 'INDEX_NAME');
@@ -186,8 +212,10 @@ async function inspectSaasC(connection) {
 
   return {
     migration: Number(migration.total),
+    migration023: Number(migration023.total),
     tables,
     planColumns: PLAN_COLUMNS.every((column) => planColumns.has(column)),
+    correctionColumns,
     indexes,
     constraints,
     publicPlansValid: publicPlansValid && proUnlimited,
@@ -217,9 +245,11 @@ async function inspectSaasC(connection) {
 
 function isValidState(state) {
   return state.migration === 1
+    && state.migration023 === 1
     && state.complete
     && Object.values(state.tables).every(Boolean)
     && state.planColumns
+    && state.correctionColumns
     && state.indexes
     && state.constraints
     && state.publicPlansValid

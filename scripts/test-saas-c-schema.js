@@ -21,7 +21,8 @@ const {
 const ROOT = path.resolve(__dirname, '..');
 const SCHEMA_FILE = path.join(ROOT, 'database', 'tienda_abarrotes.sql');
 const MIGRATIONS_DIR = path.join(ROOT, 'database', 'migrations');
-const MIGRATION = '023_estructura_pagos_suscripcion.sql';
+const MIGRATION_023 = '023_estructura_pagos_suscripcion.sql';
+const MIGRATION = '024_corregir_idempotencia_y_snapshot_pagos.sql';
 const TEMP_PREFIX = 'tmp_tienda_restore_saas_c1_';
 
 function quoteIdentifier(value) {
@@ -88,7 +89,7 @@ function schemaBefore023() {
   return withoutC1;
 }
 
-async function registerMigrations(connection, include023) {
+async function registerMigrations(connection, include024) {
   await connection.query(
     `CREATE TABLE schema_migrations (
       nombre VARCHAR(255) PRIMARY KEY,
@@ -96,7 +97,7 @@ async function registerMigrations(connection, include023) {
     ) ENGINE=InnoDB`
   );
   const migrations = fs.readdirSync(MIGRATIONS_DIR)
-    .filter((name) => name.endsWith('.sql') && (include023 || name < MIGRATION))
+    .filter((name) => name.endsWith('.sql') && (include024 || name < MIGRATION_023))
     .sort();
   for (const migration of migrations) {
     await connection.query('INSERT INTO schema_migrations (nombre) VALUES (?)', [migration]);
@@ -118,6 +119,13 @@ function runScript(script, database) {
 }
 
 async function applyMigration023(connection) {
+  for (const statement of readSqlStatements(path.join(MIGRATIONS_DIR, MIGRATION_023))) {
+    await connection.query(statement);
+  }
+  await connection.query('INSERT INTO schema_migrations (nombre) VALUES (?)', [MIGRATION_023]);
+}
+
+async function applyMigration024(connection) {
   for (const statement of readSqlStatements(path.join(MIGRATIONS_DIR, MIGRATION))) {
     await connection.query(statement);
   }
@@ -300,7 +308,8 @@ async function assertFinancialConstraints(connection) {
     `INSERT INTO solicitudPagoSuscripcion
       (referenciaPublica,idTienda,idSuscripcion,idPlanActual,idPlanObjetivo,
        idPrecioPlanPeriodo,idTipoCambioSuscripcion,idMetodoPagoSuscripcion,
-       operacion,periodo,cantidadMeses,planCodigoSnapshot,planNombreSnapshot,
+       operacion,periodo,cantidadMeses,planActualCodigoSnapshot,
+       planActualNombreSnapshot,planCodigoSnapshot,planNombreSnapshot,
        versionPrecioSnapshot,precioBaseUSD,tipoCambioUsdBob,
        fuenteTipoCambioSnapshot,fechaEfectivaTipoCambioSnapshot,
        montoCalculadoBOB,montoFinalBOB,monedaBase,monedaCobro,
@@ -308,13 +317,14 @@ async function assertFinancialConstraints(connection) {
        limiteProveedoresSnapshot,metodoCodigoSnapshot,metodoNombreSnapshot,
        instruccionesMetodoSnapshot,estado,creadaPor,creadaEn,venceEn,
        enviadaEn,aplicadaEn,canceladaEn,ultimaTransicionEn,actualizadoEn)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'renovacion','mensual',1,?, ?,1,3.00,
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'renovacion','mensual',1,?, ?,?, ?,1,3.00,
        7.00000000,?, ?,21.00,21.00,'USD','BOB',?,?,?,?,?,?,NULL,
        'pendiente_revision',?,?,DATE_ADD(?,INTERVAL 72 HOUR),?,NULL,NULL,?,?)`,
     [
       reference, actor.idTienda, subscription.idSuscripcion, subscription.idPlan,
       price.idPlan, price.idPrecioPlanPeriodo, rateResult.insertId,
       method.idMetodoPagoSuscripcion, price.codigo, price.nombre,
+      price.codigo, price.nombre,
       'Prueba local controlada', now, price.limitePropietarios,
       price.limiteProductos, price.limiteClientes, price.limiteProveedores,
       method.codigo, method.nombre, actor.idOwner, now, now, now, now, now
@@ -326,7 +336,8 @@ async function assertFinancialConstraints(connection) {
       `INSERT INTO solicitudPagoSuscripcion
         (referenciaPublica,idTienda,idSuscripcion,idPlanActual,idPlanObjetivo,
          idPrecioPlanPeriodo,idTipoCambioSuscripcion,idMetodoPagoSuscripcion,
-         operacion,periodo,cantidadMeses,planCodigoSnapshot,planNombreSnapshot,
+         operacion,periodo,cantidadMeses,planActualCodigoSnapshot,
+         planActualNombreSnapshot,planCodigoSnapshot,planNombreSnapshot,
          versionPrecioSnapshot,precioBaseUSD,tipoCambioUsdBob,
          fuenteTipoCambioSnapshot,fechaEfectivaTipoCambioSnapshot,
          montoCalculadoBOB,montoFinalBOB,monedaBase,monedaCobro,
@@ -334,7 +345,8 @@ async function assertFinancialConstraints(connection) {
          venceEn,ultimaTransicionEn,actualizadoEn)
        SELECT ?,idTienda,idSuscripcion,idPlanActual,idPlanObjetivo,
          idPrecioPlanPeriodo,idTipoCambioSuscripcion,idMetodoPagoSuscripcion,
-         operacion,periodo,cantidadMeses,planCodigoSnapshot,planNombreSnapshot,
+         operacion,periodo,cantidadMeses,planActualCodigoSnapshot,
+         planActualNombreSnapshot,planCodigoSnapshot,planNombreSnapshot,
          versionPrecioSnapshot,precioBaseUSD,tipoCambioUsdBob,
          fuenteTipoCambioSnapshot,fechaEfectivaTipoCambioSnapshot,
          montoCalculadoBOB,montoFinalBOB,monedaBase,monedaCobro,
@@ -410,6 +422,138 @@ async function assertFinancialConstraints(connection) {
     ),
     (error) => error.code === 'ER_CHECK_CONSTRAINT_VIOLATED'
   );
+
+  const globalKey = crypto.createHash('sha256').update('global-key').digest('hex');
+  const globalPayload = crypto.createHash('sha256').update('global-payload').digest('hex');
+  await connection.query(
+    `INSERT INTO operacionPagoSuscripcion
+      (idTienda,idSolicitudPago,actorTipo,idAdministradorActor,alcance,
+       claveHash,huellaPayload,estado,resultadoReferencia,codigoResultado,
+       idTipoCambioResultado,idMetodoPagoResultado,creadaEn,completadaEn,
+       fallidaEn,expiraEn,actualizadaEn)
+     VALUES (NULL,NULL,'superadmin',?,'registrar_tipo_cambio',?,?,'completada',
+       NULL,'TIPO_CAMBIO_REGISTRADO',?,NULL,?,?,NULL,
+       DATE_ADD(?,INTERVAL 24 HOUR),?)`,
+    [actor.idSuperadmin, globalKey, globalPayload, rateResult.insertId,
+      now, now, now, now]
+  );
+  await assert.rejects(
+    connection.query(
+      `INSERT INTO operacionPagoSuscripcion
+        (idTienda,idSolicitudPago,actorTipo,idAdministradorActor,alcance,
+         claveHash,huellaPayload,estado,creadaEn,completadaEn,expiraEn,actualizadaEn,
+         idTipoCambioResultado)
+       VALUES (NULL,NULL,'superadmin',?,'registrar_tipo_cambio',?,?,'completada',
+         ?,?,DATE_ADD(?,INTERVAL 24 HOUR),?,?)`,
+      [actor.idSuperadmin, globalKey, globalPayload,
+        now, now, now, now, rateResult.insertId]
+    ),
+    (error) => error.code === 'ER_DUP_ENTRY'
+  );
+  await assert.rejects(
+    connection.query(
+      `INSERT INTO operacionPagoSuscripcion
+        (idTienda,idSolicitudPago,actorTipo,idAdministradorActor,alcance,
+         claveHash,huellaPayload,estado,creadaEn,completadaEn,expiraEn,actualizadaEn,
+         idTipoCambioResultado)
+       VALUES (NULL,NULL,'superadmin',?,'registrar_tipo_cambio',?,?,'completada',
+         ?,?,DATE_ADD(?,INTERVAL 24 HOUR),?,?)`,
+      [actor.idSuperadmin, globalKey,
+        crypto.createHash('sha256').update('payload-distinto').digest('hex'),
+        now, now, now, now, rateResult.insertId]
+    ),
+    (error) => error.code === 'ER_DUP_ENTRY'
+  );
+  await connection.query(
+    `INSERT INTO operacionPagoSuscripcion
+      (idTienda,idSolicitudPago,actorTipo,idAdministradorActor,alcance,
+       claveHash,huellaPayload,estado,codigoResultado,idMetodoPagoResultado,
+       creadaEn,completadaEn,fallidaEn,expiraEn,actualizadaEn)
+     VALUES (NULL,NULL,'superadmin',?,'configurar_metodo',?,?,'completada',
+       'METODO_CONFIGURADO',?,?,?,NULL,DATE_ADD(?,INTERVAL 24 HOUR),?)`,
+    [actor.idSuperadmin, globalKey, globalPayload, method.idMetodoPagoSuscripcion,
+      now, now, now, now]
+  );
+  await assert.rejects(
+    connection.query(
+      `INSERT INTO operacionPagoSuscripcion
+        (idTienda,idSolicitudPago,actorTipo,idAdministradorActor,alcance,
+         claveHash,huellaPayload,estado,creadaEn,completadaEn,expiraEn,
+         actualizadaEn,idTipoCambioResultado)
+       VALUES (?,NULL,'superadmin',?,'registrar_tipo_cambio',?,?,'completada',
+         ?,?,DATE_ADD(?,INTERVAL 24 HOUR),?,?)`,
+      [actor.idTienda, actor.idSuperadmin,
+        crypto.createHash('sha256').update('global-con-tenant').digest('hex'),
+        globalPayload, now, now, now, now, rateResult.insertId]
+    ),
+    (error) => error.code === 'ER_CHECK_CONSTRAINT_VIOLATED'
+  );
+  await assert.rejects(
+    connection.query(
+      `INSERT INTO operacionPagoSuscripcion
+        (idTienda,idSolicitudPago,actorTipo,idAdministradorActor,alcance,
+         claveHash,huellaPayload,estado,creadaEn,expiraEn,actualizadaEn)
+       VALUES (NULL,NULL,'propietario',?,'crear_solicitud',?,?,'en_proceso',
+         ?,DATE_ADD(?,INTERVAL 24 HOUR),?)`,
+      [actor.idOwner,
+        crypto.createHash('sha256').update('tenant-sin-tenant').digest('hex'),
+        globalPayload, now, now, now]
+    ),
+    (error) => error.code === 'ER_CHECK_CONSTRAINT_VIOLATED'
+  );
+  await assert.rejects(
+    connection.query(
+      `INSERT INTO operacionPagoSuscripcion
+        (idTienda,idSolicitudPago,actorTipo,idAdministradorActor,alcance,
+         claveHash,huellaPayload,estado,codigoResultado,idMetodoPagoResultado,
+         creadaEn,completadaEn,expiraEn,actualizadaEn)
+       VALUES (NULL,NULL,'superadmin',?,'registrar_tipo_cambio',?,?,'completada',
+         'RESULTADO_INCORRECTO',?,?,?,DATE_ADD(?,INTERVAL 24 HOUR),?)`,
+      [actor.idSuperadmin,
+        crypto.createHash('sha256').update('resultado-incorrecto').digest('hex'),
+        globalPayload, method.idMetodoPagoSuscripcion, now, now, now, now]
+    ),
+    (error) => error.code === 'ER_CHECK_CONSTRAINT_VIOLATED'
+  );
+
+  const [secondStore] = await connection.query(
+    `INSERT INTO tienda (nombre,slug,activo,estado,estadoOnboarding,onboardingCompletadoEn)
+     VALUES (? ,?,1,'activa','completado',?)`,
+    ['Tienda temporal idempotencia', `saas-c-idem-${crypto.randomBytes(6).toString('hex')}`, now]
+  );
+  const tenantSharedKey = crypto.createHash('sha256').update('tenant-shared-key').digest('hex');
+  for (const idTienda of [actor.idTienda, Number(secondStore.insertId)]) {
+    await connection.query(
+      `INSERT INTO operacionPagoSuscripcion
+        (idTienda,idSolicitudPago,actorTipo,idAdministradorActor,alcance,
+         claveHash,huellaPayload,estado,creadaEn,completadaEn,fallidaEn,
+         expiraEn,actualizadaEn)
+       VALUES (?,NULL,'sistema',NULL,'crear_solicitud',?,?,'en_proceso',
+         ?,NULL,NULL,DATE_ADD(?,INTERVAL 24 HOUR),?)`,
+      [idTienda, tenantSharedKey, globalPayload, now, now, now]
+    );
+  }
+
+  const [[beforeRollback]] = await connection.query(
+    'SELECT COUNT(*) total FROM operacionPagoSuscripcion'
+  );
+  await connection.beginTransaction();
+  await connection.query(
+    `INSERT INTO operacionPagoSuscripcion
+      (idTienda,idSolicitudPago,actorTipo,idAdministradorActor,alcance,
+       claveHash,huellaPayload,estado,creadaEn,completadaEn,fallidaEn,
+       expiraEn,actualizadaEn)
+     VALUES (?,NULL,'sistema',NULL,'crear_solicitud',?,?,'en_proceso',
+       ?,NULL,NULL,DATE_ADD(?,INTERVAL 24 HOUR),?)`,
+    [actor.idTienda,
+      crypto.createHash('sha256').update('rollback-key').digest('hex'),
+      globalPayload, now, now, now]
+  );
+  await connection.rollback();
+  const [[afterRollback]] = await connection.query(
+    'SELECT COUNT(*) total FROM operacionPagoSuscripcion'
+  );
+  assert.strictEqual(Number(afterRollback.total), Number(beforeRollback.total));
 }
 
 async function runUpgradeScenario(server, database) {
@@ -429,8 +573,9 @@ async function runUpgradeScenario(server, database) {
        FROM plan WHERE codigo='avanzado'`
     );
     await applyMigration023(connection);
+    await applyMigration024(connection);
     const after = await commercialFingerprint(connection);
-    assert.strictEqual(after, before, '023 altero la huella comercial temporal.');
+    assert.strictEqual(after, before, '023/024 alteraron la huella comercial temporal.');
     const [[legacyAfter]] = await connection.query(
       `SELECT idPlan,codigo,nombre,activo,precioMensual,duracionDias,
               limitePropietarios,limiteProductos,limiteClientes,limiteProveedores
@@ -497,8 +642,8 @@ async function main() {
     await server.end();
   }
   const after = await primaryFingerprint(primary);
-  assert.strictEqual(after, before, 'La base principal cambio durante el ensayo temporal de 023.');
-  console.log('SAAS-C1: 001-023, 022-023, catalogo, precios, tenant, hashes y limpieza verificados.');
+  assert.strictEqual(after, before, 'La base principal cambio durante el ensayo temporal 023-024.');
+  console.log('SAAS-C1.1: 001-024, 023-024, idempotencia global/tenant, snapshots y limpieza verificados.');
 }
 
 main().catch((error) => {

@@ -425,7 +425,24 @@ Tablas nuevas:
 7. `revisionPagoSuscripcion`: decisiones append-only.
 8. `historialSolicitudPagoSuscripcion`: transiciones append-only.
 9. `aplicacionPagoSuscripcion`: enlace unico al efecto futuro B2/B4.
-10. `operacionPagoSuscripcion`: idempotencia hash-only por tenant y actor.
+10. `operacionPagoSuscripcion`: idempotencia hash-only por ambito, tenant y actor.
+
+### Correccion estructural 024
+
+SAAS-C1.1 corrige dos brechas detectadas antes de exponer el flujo C2:
+
+- `operacionPagoSuscripcion` distingue operaciones tenant-scoped de las
+  operaciones globales `registrar_tipo_cambio` y `configurar_metodo`, sin
+  inventar una tienda global. Una columna derivada normaliza el ambito para la
+  unicidad en MySQL y los CHECK impiden combinar un alcance global con tenant o
+  un alcance comercial sin tenant.
+- Los resultados globales se enlazan mediante FKs tipadas a la tasa o metodo
+  exactos. La clave y el payload continúan almacenándose solo como SHA-256.
+- `solicitudPagoSuscripcion` congela también el codigo y nombre del plan actual
+  cuando la operacion parte de una suscripcion existente.
+
+La migracion 024 no crea solicitudes, tasas, configuraciones, rutas ni pagos.
+SAAS-C2 permanece no iniciada hasta cerrar esta correccion.
 
 Indices y restricciones minimos:
 
@@ -452,7 +469,7 @@ preservar historicos y revertir mediante migracion posterior, no `DROP` manual.
 
 | Nivel | Scripts sugeridos | Cobertura y recursos |
 | --- | --- | --- |
-| Esquema | `test:saas-c-schema`, `db:check-saas-c` | 001-023, 022-023, FKs, CHECKs, snapshots, tenant y limpieza temporal |
+| Esquema | `test:saas-c-schema`, `test:saas-c-idempotency-schema`, `db:check-saas-c` | 001-024, 023-024, FKs, CHECKs, snapshots, ambitos de idempotencia y limpieza temporal |
 | Dominio | `test:subscription-payment-requests` | precios backend, estados, vencimiento, duplicados, tenant |
 | Archivos | `test:subscription-payment-receipts` | MIME real, tamano, hash, versiones, traversal, huerfanos |
 | Revision | `test:subscription-payment-review` | observar, rechazar, aprobar, idempotencia, rollback |

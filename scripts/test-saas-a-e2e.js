@@ -305,11 +305,11 @@ async function main() {
     '020_registro_publico_onboarding.sql',
     '021_configuracion_base_tienda.sql',
     '022_ciclo_vida_suscripciones.sql',
-    '023_estructura_pagos_suscripcion.sql'
+    '024_corregir_idempotencia_y_snapshot_pagos.sql'
   ]) {
     assert(migrations.includes(required), `Falta la migracion requerida ${required}.`);
   }
-  assert.strictEqual(migrations.at(-1), '023_estructura_pagos_suscripcion.sql');
+  assert.strictEqual(migrations.at(-1), '024_corregir_idempotencia_y_snapshot_pagos.sql');
   const primaryBefore = await primaryFingerprint(primary);
   const serverConnection = await connect({ ...databaseOptions(), database: undefined });
   const temporaryBefore = await temporaryDatabases(serverConnection);

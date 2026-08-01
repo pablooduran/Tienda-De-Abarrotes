@@ -123,7 +123,7 @@ El contexto de tienda proviene de la sesion validada. El navegador no debe envia
 | Optimizacion de Codex, etapas 1-10 | Terminado | Indice, mapas compactos, comprobadores, seis skills versionables y validacion segura. Ver `AGENTS.md` y `docs/GUIA_CODEX_SKILLS.md`. |
 | Fase 11 - acceso publico | SAAS-A1-SAAS-A5 terminados | Registro publico transaccional, verificacion y reenvio local, recuperacion de contrasena, configuracion base, onboarding inicial y regresion integral E2E. |
 | Suscripciones SaaS | SAAS-B terminado | Ciclo de vida, acceso, planes, limites y administracion global sobre 022. |
-| Pagos manuales de suscripcion | SAAS-C1 implementado; cierre Git pendiente | Migracion 023 agrega Basic/Standard/Pro, avanzado legado, precios USD, tasa manual USD/BOB y estructura financiera; no hay rutas, archivos ni pagos aplicados. |
+| Pagos manuales de suscripcion | SAAS-C1 cerrado; SAAS-C1.1 implementado, cierre Git pendiente | Migracion 023 agrega la estructura financiera y 024 corrige idempotencia global/tenant y snapshot del plan actual; no hay rutas, archivos ni pagos aplicados. |
 | Staging y produccion | Pendiente | No se ha desplegado este estado. |
 
 ## 4. Funcionalidades implementadas
@@ -491,6 +491,9 @@ No mostrar estas variables en logs ni respuestas. Nunca versionar `.env`, `.env.
 - SAAS-C1 define la estructura persistente de pagos manuales. No existen rutas,
   carga fisica, revision operativa ni aplicacion de pagos; tampoco hay pasarela,
   cotizacion automatica o cobro automatico.
+- SAAS-C1.1 agrega exclusivamente la migracion 024: separa idempotencia global
+  y tenant, tipa resultados de tasa/metodo y congela codigo/nombre del plan
+  actual. SAAS-C2 no se ha iniciado.
 - SAAS-B esta completo sobre la migracion 022: ciclo de vida, gracia,
   suspension, reactivacion, renovacion tecnica, acceso por estado, cambio de
   plan, limites y administracion global para superadmin. No hay pagos ni jobs.
@@ -672,6 +675,6 @@ compatibilidad con SAAS-A. **SAAS-C0 esta cerrado** con la auditoria y el diseno
 de pagos manuales en `docs/SAAS_C_DISENO_PAGOS.md`. La auditoria previa de
 planes, limites y funcionalidades esta en
 `docs/AUDITORIA_PLANES_FUNCIONALIDADES.md`. **SAAS-C1 implementa la migracion
-023 y su contrato estructural**; la siguiente etapa es SAAS-C2 para cotizacion y
-solicitud del propietario. Todavia no existen pagos aplicados, archivos,
+023 y SAAS-C1.1 corrige su contrato mediante 024**; la siguiente etapa es
+SAAS-C2 para cotizacion y solicitud del propietario. Todavia no existen pagos aplicados, archivos,
 pasarela automatica ni jobs.
