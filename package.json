@@ -99,6 +99,8 @@
     "test:saas-c-payment-receipts": "node scripts/test-saas-c-payment-receipts.js",
     "test:saas-c-payment-reviews": "node scripts/test-saas-c-payment-reviews.js",
     "test:saas-c-payment-review-security": "node scripts/test-saas-c-payment-review-security.js",
+    "test:saas-c-payment-applications": "node scripts/test-saas-c-payment-applications.js",
+    "test:saas-c-payment-application-security": "node scripts/test-saas-c-payment-application-security.js",
     "check:operational-health": "node scripts/check-operational-health.js",
     "check:web-security": "node scripts/check-web-security.js",
     "codex:status": "node scripts/codex-project-status.js",

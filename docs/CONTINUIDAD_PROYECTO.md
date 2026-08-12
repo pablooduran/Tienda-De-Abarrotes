@@ -123,7 +123,7 @@ El contexto de tienda proviene de la sesion validada. El navegador no debe envia
 | Optimizacion de Codex, etapas 1-10 | Terminado | Indice, mapas compactos, comprobadores, seis skills versionables y validacion segura. Ver `AGENTS.md` y `docs/GUIA_CODEX_SKILLS.md`. |
 | Fase 11 - acceso publico | SAAS-A1-SAAS-A5 terminados | Registro publico transaccional, verificacion y reenvio local, recuperacion de contrasena, configuracion base, onboarding inicial y regresion integral E2E. |
 | Suscripciones SaaS | SAAS-B terminado | Ciclo de vida, acceso, planes, limites y administracion global sobre 022. |
-| Pagos manuales de suscripcion | SAAS-C1/C1.1/C2 cerrados; SAAS-C3 implementado, cierre tecnico pendiente | C3 agrega comprobantes PDF/JPEG/PNG privados y versionados sobre 024; no hay revision administrativa, aplicacion del pago ni frontend. |
+| Pagos manuales de suscripcion | SAAS-C1-C4 cerrados; SAAS-C5 implementado, cierre tecnico pendiente | C5 aplica renovacion, reactivacion o upgrade desde un snapshot congelado en una transaccion sobre 024; no hay frontend ni pagos automaticos. |
 | Staging y produccion | Pendiente | No se ha desplegado este estado. |
 
 ## 4. Funcionalidades implementadas
@@ -498,6 +498,12 @@ No mostrar estas variables en logs ni respuestas. Nunca versionar `.env`, `.env.
   y transicion a `pendiente_revision`. El adaptador local usa claves opacas en
   un directorio privado configurable fuera del repositorio; no hay revision,
   aprobacion, rechazo, aplicacion del pago ni interfaz.
+- SAAS-C4 agrega listado, detalle, descarga privada, observacion y rechazo para
+  superadmin. SAAS-C5 agrega la transicion atomica
+  `pendiente_revision -> aplicada`: bloquea tienda, suscripcion y solicitud,
+  consume el snapshot financiero congelado, enlaza una sola aplicacion con B2 o
+  B4 y revierte solicitud, suscripcion, historiales y auditoria ante cualquier
+  fallo. No crea un estado aprobado intermedio ni movimiento contable.
 - SAAS-B esta completo sobre la migracion 022: ciclo de vida, gracia,
   suspension, reactivacion, renovacion tecnica, acceso por estado, cambio de
   plan, limites y administracion global para superadmin. No hay pagos ni jobs.
@@ -679,8 +685,8 @@ compatibilidad con SAAS-A. **SAAS-C0 esta cerrado** con la auditoria y el diseno
 de pagos manuales en `docs/SAAS_C_DISENO_PAGOS.md`. La auditoria previa de
 planes, limites y funcionalidades esta en
 `docs/AUDITORIA_PLANES_FUNCIONALIDADES.md`. **SAAS-C1 implementa la migracion
-023 y SAAS-C1.1 corrige su contrato mediante 024**. SAAS-C2 esta cerrado y
-SAAS-C3 implementa comprobantes privados versionados sin migracion nueva; su
-cierre tecnico queda pendiente y la siguiente fase es SAAS-C4. Todavia no
-existen pagos aplicados, revision administrativa, interfaz de pagos, pasarela
-automatica ni jobs.
+023 y SAAS-C1.1 corrige su contrato mediante 024**. SAAS-C2, C3 y C4 estan
+cerrados. SAAS-C5 implementa la aplicacion atomica del pago, sin migracion
+nueva; su cierre tecnico queda pendiente y la siguiente fase es SAAS-C6.
+Todavia no existe interfaz de pagos, pasarela automatica, movimiento contable
+general ni jobs.

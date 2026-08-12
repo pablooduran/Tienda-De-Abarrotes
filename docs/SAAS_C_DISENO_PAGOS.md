@@ -64,10 +64,11 @@ Politicas ya confirmadas:
 - C3 agrega almacenamiento privado local, descarga autenticada, validacion de
   contenido y retirada de objetos/temporales atribuibles. El antivirus externo
   y la cuarentena administrada siguen diferidos.
-- Aun no existen revision administrativa, aprobacion ni aplicacion del pago.
-- Los servicios B2/B4 abren sus propias transacciones. Para aprobar y aplicar
-  en una sola transaccion, C5 necesitara variantes internas que reciban una
-  conexion ya bloqueada, conservando los wrappers publicos actuales.
+- C4 agrega revision administrativa con observacion y rechazo. C5 agrega la
+  aplicacion atomica desde `pendiente_revision`, sin estado intermedio aprobado.
+- C5 reutiliza las primitivas internas de B2/B4 con la misma conexion y el
+  orden tienda, suscripcion, solicitud. No llama rutas HTTP ni abre una
+  transaccion anidada.
 - La allowlist restringida de B3 no incluye pagos. Las rutas futuras deberan
   habilitarse de forma explicita para gracia, suspension y cancelacion sin
   abrir rutas comerciales generales.
@@ -253,6 +254,13 @@ conexion. No debe llamar rutas HTTP ni abrir una transaccion anidada. En una
 aprobacion correcta se actualizan solicitud, suscripcion, historial de pago,
 historial de suscripcion, revision y auditoria antes del commit. Cualquier fallo
 revierte todo.
+
+C5 implementa este contrato para `renovacion`, `reactivacion` y `upgrade`. Usa
+exclusivamente el snapshot inmutable de la solicitud, exige comprobante activo,
+rechaza cambios posteriores incompatibles en la suscripcion y conserva una
+unica aplicacion mediante `aplicacionPagoSuscripcion`. El upgrade preserva la
+vigencia; renovacion y reactivacion usan aritmetica calendario de 1, 3 o 12
+meses. No registra movimientos contables ni pagos automaticos.
 
 Una clave interna determinista enlaza la solicitud con B2/B4, pero solo se
 persiste mediante hash. Repetir la aprobacion devuelve el resultado anterior;
@@ -527,10 +535,10 @@ atribuible y limpieza en `finally` de DB, objetos, browser, procesos y puertos.
 | --- | --- | --- |
 | C0 | Auditoria y este diseno | documentacion validada; cero codigo/base |
 | C1 | Contratos, precios y migracion 023 | ensayo temporal, backup/restore y principal local validada |
-| C2 | Solicitud/cotizacion del propietario | Backend implementado; cierre tecnico pendiente, sin archivos, revision, aplicacion ni UI |
+| C2 | Solicitud/cotizacion del propietario | Backend cerrado; sin archivos, revision, aplicacion ni UI en esa fase |
 | C3 | Comprobantes y storage privado | upload/descarga, versiones, MIME/hash, huerfanos, backup |
 | C4 | Cola y revision superadmin | filtros, detalle, observar/rechazar/cancelar, auditoria |
-| C5 | Aprobacion y aplicacion atomica | B2/B4 en una transaccion, concurrencia y rollback |
+| C5 | Aprobacion y aplicacion atomica | Implementado; B2/B4 en una transaccion, concurrencia y rollback |
 | C6 | Frontend propietario y superadmin | responsive, accesible, sin doble envio ni ids internos |
 | C7 | Seguridad y regresion integral | dos tenants, archivos, carreras, browser y compatibilidad A/B |
 | C8 | Cierre documental y Git | huella intacta, cero residuos y macrofase cerrada |

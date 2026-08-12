@@ -16,8 +16,8 @@ Estado de referencia al crear este documento:
 - Rama: `mejora-multitienda`.
 - HEAD: `7c73562`.
 - SAAS-A, SAAS-B, SAAS-C0 y SAAS-C1 cerrados y publicados.
-- SAAS-C2 implementada, con cierre tecnico pendiente.
-- Base local validada en migracion 024; SAAS-C3 no iniciada.
+- SAAS-C2, SAAS-C3 y SAAS-C4 cerradas; SAAS-C5 implementada con cierre tecnico pendiente.
+- Base local validada en migracion 024; SAAS-C6 no iniciada.
 - Este documento no implementa funcionalidad ni modifica la base.
 
 ## 2. Estados y prioridades
@@ -47,10 +47,10 @@ Las migraciones son posibilidades; ninguna se crea por estar mencionada aqui.
 
 | ID | Nombre | Origen / motivo del aplazamiento | Prioridad | Dependencias e impacto | Migracion posible | Decision / estado | Fase sugerida |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| TECH-001 | SAAS-C2 cotizacion y solicitud | C1 dejo estructura persistente y C1.1 corrigio idempotencia/snapshot | alta | precio, tasa valida, metodo configurado; introduce flujo financiero | 024 resolvio la brecha previa | Implementado; cierre tecnico pendiente, sin aplicacion | SAAS-C2 |
-| TECH-002 | SAAS-C3 comprobantes y storage privado | C1 conserva solo metadata, sin binario ni rutas publicas | alta | almacenamiento privado, MIME, hash, retencion y restauracion | No determinada | Requiere decision de retencion; pendiente | SAAS-C3 |
-| TECH-003 | SAAS-C4 revision administrativa | C1 creo tablas, pero no cola ni decisiones operativas | alta | superadmin, auditoria, permisos y concurrencia | No determinada | Pendiente | SAAS-C4 |
-| TECH-004 | SAAS-C5 aplicacion a suscripcion | C1 prepara el enlace unico, sin efecto B2/B4 | critica antes de pruebas finales | transaccion unica, idempotencia, historial y rollback | No determinada | Pendiente; no aplicar pagos aun | SAAS-C5 |
+| TECH-001 | SAAS-C2 cotizacion y solicitud | C1 dejo estructura persistente y C1.1 corrigio idempotencia/snapshot | alta | precio, tasa valida, metodo configurado; introduce flujo financiero | 024 resolvio la brecha previa | Implementado y cerrado | SAAS-C2 |
+| TECH-002 | SAAS-C3 comprobantes y storage privado | C1 conserva solo metadata, sin binario ni rutas publicas | alta | almacenamiento privado, MIME, hash, retencion y restauracion | No determinada | Implementado; retencion operativa requiere decision | SAAS-C3 |
+| TECH-003 | SAAS-C4 revision administrativa | C1 creo tablas, pero no cola ni decisiones operativas | alta | superadmin, auditoria, permisos y concurrencia | No determinada | Implementado y cerrado | SAAS-C4 |
+| TECH-004 | SAAS-C5 aplicacion a suscripcion | C1 prepara el enlace unico, sin efecto B2/B4 | critica antes de pruebas finales | transaccion unica, idempotencia, historial y rollback | No determinada | Implementado; cierre tecnico pendiente | SAAS-C5 |
 | TECH-005 | SAAS-C6 regresion y cierre | C1 solo valido esquema y compatibilidad | alta | C2-C5, tenant, seguridad, browser y backup | No determinada | Pendiente | SAAS-C6 |
 | TECH-006 | Seguridad publica final | Las fases A validaron el flujo local; correo real y despliegue quedan fuera | alta antes de beta | proveedor de correo, rate limits, monitoreo y secretos | No determinada | En analisis | Pre-beta |
 | TECH-007 | CI y GitHub Actions | No hay pipeline remoto configurado | alta antes de beta | secretos de CI, MySQL temporal, checks y artefactos | No | Pendiente | Pre-beta |

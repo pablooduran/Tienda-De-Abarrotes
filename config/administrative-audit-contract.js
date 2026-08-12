@@ -107,6 +107,10 @@ const BASE_AUDIT_ACTIONS = {
   ),
   revision_solicitud_pago_suscripcion: definition(
     'pago_suscripcion', 'revision_solicitud_pago_suscripcion', ['estado'], ['estado'], ['motivoCodigo']
+  ),
+  aplicacion_pago_suscripcion: definition(
+    'pago_suscripcion', 'solicitud_pago_suscripcion', ['estado'], ['estado'],
+    ['tipoOperacion', 'planCodigo', 'periodo']
   )
 };
 
@@ -256,7 +260,8 @@ const BASE_ACTION_RESULT_CODES = {
   creacion_solicitud_pago_suscripcion: Object.freeze(['PAYMENT_REQUEST_CREATED']),
   cancelacion_solicitud_pago_suscripcion: Object.freeze(['PAYMENT_REQUEST_CANCELLED']),
   carga_comprobante_pago_suscripcion: Object.freeze(['PAYMENT_RECEIPT_UPLOADED']),
-  revision_solicitud_pago_suscripcion: Object.freeze(['PAYMENT_REQUEST_OBSERVED', 'PAYMENT_REQUEST_REJECTED'])
+  revision_solicitud_pago_suscripcion: Object.freeze(['PAYMENT_REQUEST_OBSERVED', 'PAYMENT_REQUEST_REJECTED']),
+  aplicacion_pago_suscripcion: Object.freeze(['PAYMENT_REQUEST_APPLIED'])
 };
 const INVENTORY_ACTION_RESULT_CODES = Object.freeze({
   ajuste_inventario_solicitado: Object.freeze(['INVENTORY_ADJUSTMENT_REQUESTED']),
@@ -336,6 +341,7 @@ const AUDIT_RESULT_CODES = Object.freeze([
   'PAYMENT_RECEIPT_UPLOADED',
   'PAYMENT_REQUEST_OBSERVED',
   'PAYMENT_REQUEST_REJECTED',
+  'PAYMENT_REQUEST_APPLIED',
   'ADMIN_OPERATION_REJECTED',
   'ADMIN_OPERATION_FAILED',
   ...COMMERCIAL_RESULT_CODES,
@@ -401,6 +407,7 @@ const AUDIT_RESULTS_BY_CODE = Object.freeze({
   PAYMENT_RECEIPT_UPLOADED: Object.freeze(['correcto']),
   PAYMENT_REQUEST_OBSERVED: Object.freeze(['correcto']),
   PAYMENT_REQUEST_REJECTED: Object.freeze(['correcto']),
+  PAYMENT_REQUEST_APPLIED: Object.freeze(['correcto']),
   ADMIN_OPERATION_REJECTED: Object.freeze(['rechazado']),
   ADMIN_OPERATION_FAILED: Object.freeze(['fallido']),
   COMMERCIAL_OPERATION_OK: Object.freeze(['correcto']),

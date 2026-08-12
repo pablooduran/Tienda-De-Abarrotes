@@ -2,7 +2,13 @@ const { requestReference, idempotencyKey } = require('./saas-c-payment-request-c
 
 const REVIEW_DECISIONS = Object.freeze(['observada', 'rechazada']);
 const REVIEW_STATES = Object.freeze(['pendiente_revision', 'observada']);
-const REVIEW_MOTIVES = Object.freeze(['comprobante_ilegible', 'datos_inconsistentes', 'metodo_no_verificable', 'otro_controlado']);
+const REVIEW_MOTIVES = Object.freeze([
+  'comprobante_ilegible',
+  'datos_incompletos',
+  'monto_incorrecto',
+  'metodo_no_valido',
+  'otro_controlado'
+]);
 
 function reviewBody(body) {
   if (!body || typeof body !== 'object' || Array.isArray(body)) throw inputError('La revision no es valida.');
