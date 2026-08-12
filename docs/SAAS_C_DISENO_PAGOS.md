@@ -40,7 +40,8 @@ Politicas ya confirmadas:
   `routes/admin-subscriptions.js` con superadmin y referencia de tienda
   validada.
 - `eventoAuditoriaAdministrativa` y su contrato permiten auditoria sanitizada.
-- `multer` existe, pero solo se usa con `memoryStorage` para XLSX de catalogo.
+- `multer` usa `memoryStorage` acotado para XLSX de catalogo y comprobantes C3;
+  los bytes del comprobante se transfieren despues al adaptador privado.
 - `configuracionTienda.moneda` confirma `BOB` para la configuracion inicial.
 
 ### Estructuras que no deben reutilizarse
@@ -55,15 +56,15 @@ Politicas ya confirmadas:
 - `operacionSuscripcionTienda` debe seguir registrando efectos sobre la
   suscripcion; no debe absorber cargas, revisiones ni estados del comprobante.
 
-### Brechas reales
+### Estado de las brechas
 
-- No existe solicitud de pago, comprobante persistente, revision ni historial
-  propio del proceso de pago.
-- `plan.precioMensual` no modela precios mensual y anual versionados. Los
-  precios actuales son `0`, por lo que no hay un monto comercial cobrable.
-- No existe catalogo de metodos ni instrucciones de pago manual.
-- No existe almacenamiento privado persistente, descarga autenticada,
-  deteccion de MIME por contenido, cuarentena ni limpieza de huerfanos.
+- C1/C1.1 agregaron solicitud, precios versionados, metodos, metadata de
+  comprobantes, historiales e idempotencia; C2 implemento cotizacion y
+  solicitudes.
+- C3 agrega almacenamiento privado local, descarga autenticada, validacion de
+  contenido y retirada de objetos/temporales atribuibles. El antivirus externo
+  y la cuarentena administrada siguen diferidos.
+- Aun no existen revision administrativa, aprobacion ni aplicacion del pago.
 - Los servicios B2/B4 abren sus propias transacciones. Para aprobar y aplicar
   en una sola transaccion, C5 necesitara variantes internas que reciban una
   conexion ya bloqueada, conservando los wrappers publicos actuales.
@@ -394,11 +395,28 @@ Configuracion minima de superadmin:
 - `GET /api/admin/pagos-suscripcion/metodos`
 - `PATCH /api/admin/pagos-suscripcion/metodos/:referencia`
 
-Las siguientes rutas siguen siendo conceptuales para fases posteriores:
+SAAS-C3 implementa estas rutas del propietario:
 
 - `POST /api/pagos-suscripcion/solicitudes/:referencia/comprobantes`
-- `POST /api/pagos-suscripcion/solicitudes/:referencia/enviar`
+- `GET /api/pagos-suscripcion/solicitudes/:referencia/comprobantes`
 - `GET /api/pagos-suscripcion/solicitudes/:referencia/comprobantes/:archivo`
+
+La carga usa `multipart/form-data`, campo `comprobante`, `Idempotency-Key` y un
+maximo de 5 MiB. Valida firma/estructura basica, MIME declarado y extension;
+rechaza archivos vacios, corruptos, traversal y extensiones dobles. Una carga
+valida pasa la solicitud a `pendiente_revision`; desde `observada`, crea otra
+version y conserva la anterior como `reemplazado`. La descarga transmite el
+objeto privado con autenticacion, tenant, `no-store`, `nosniff` y nombre de
+descarga generado, sin exponer hash ni clave/ruta fisica.
+
+El adaptador local `private-receipt-storage` implementa `put`, `open`,
+`removeTemporary` y `health`, ademas de retirada exacta para rollback/limpieza.
+Su raiz configurable debe quedar fuera del repositorio. La interfaz acepta un
+inspector de contenido inyectable; C3 no integra antivirus externo.
+
+Las siguientes rutas siguen siendo conceptuales para fases posteriores:
+
+- `POST /api/pagos-suscripcion/solicitudes/:referencia/enviar`
 
 Superadmin:
 
@@ -490,6 +508,8 @@ preservar historicos y revertir mediante migracion posterior, no `DROP` manual.
 | --- | --- | --- |
 | Esquema | `test:saas-c-schema`, `test:saas-c-idempotency-schema`, `db:check-saas-c` | 001-024, 023-024, FKs, CHECKs, snapshots, ambitos de idempotencia y limpieza temporal |
 | Dominio | `test:saas-c-payment-requests` | precios backend, tasa/metodo, estados, vencimiento, duplicados, tenant |
+| Comprobantes | `test:saas-c-payment-receipts` | carga, reemplazo, version activa, descarga, estado, idempotencia y tenant |
+| Archivos | `test:saas-c-payment-receipt-security` | PDF/JPEG/PNG, 5 MiB, MIME/extension, corrupcion, traversal y almacenamiento privado |
 | Archivos | `test:subscription-payment-receipts` | MIME real, tamano, hash, versiones, traversal, huerfanos |
 | Revision | `test:subscription-payment-review` | observar, rechazar, aprobar, idempotencia, rollback |
 | Aplicacion | `test:subscription-payment-application` | B2/B4, periodos, upgrade, downgrade, cancelada, concurrencia |

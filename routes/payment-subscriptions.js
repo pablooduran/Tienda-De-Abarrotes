@@ -1,10 +1,24 @@
 const express = require('express');
+const multer = require('multer');
+const { pipeline } = require('stream/promises');
 const {
   emptyQuery,
   idempotencyKey,
   requestReference
 } = require('../config/saas-c-payment-request-contract');
+const {
+  MAX_RECEIPT_BYTES,
+  RECEIPT_FIELD_NAME,
+  receiptError,
+  receiptReference
+} = require('../config/saas-c-payment-receipt-contract');
 const { createSaasCPaymentService } = require('../services/saas-c-payment-service');
+const { createSaasCPaymentReceiptService } = require('../services/saas-c-payment-receipt-service');
+
+const receiptUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: MAX_RECEIPT_BYTES, files: 1, fields: 0, parts: 2 }
+}).single(RECEIPT_FIELD_NAME);
 
 function asyncRoute(handler) {
   return (req, res, next) => Promise.resolve(handler(req, res, next)).catch(next);
@@ -26,7 +40,23 @@ function ownerContext(req) {
   });
 }
 
-function createPaymentSubscriptionsRouter({ service = createSaasCPaymentService() } = {}) {
+function uploadMiddleware(req, res, next) {
+  receiptUpload(req, res, (error) => {
+    if (!error) return next();
+    if (error instanceof multer.MulterError) {
+      if (error.code === 'LIMIT_FILE_SIZE') {
+        return next(receiptError(413, 'El comprobante supera el limite de 5 MiB.', 'RECEIPT_TOO_LARGE'));
+      }
+      return next(receiptError(400, 'La carga contiene partes no permitidas.', 'INVALID_RECEIPT_MULTIPART'));
+    }
+    return next(error);
+  });
+}
+
+function createPaymentSubscriptionsRouter({
+  service = createSaasCPaymentService(),
+  receiptService = createSaasCPaymentReceiptService()
+} = {}) {
   const router = express.Router();
   router.use((req, res, next) => {
     res.setHeader('Cache-Control', 'no-store, max-age=0');
@@ -66,6 +96,40 @@ function createPaymentSubscriptionsRouter({ service = createSaasCPaymentService(
       ...ownerContext(req),
       reference: requestReference(req.params.reference)
     }));
+  }));
+
+  router.get('/solicitudes/:reference/comprobantes', asyncRoute(async (req, res) => {
+    emptyQuery(req.query);
+    res.json(await receiptService.list({
+      ...ownerContext(req),
+      reference: requestReference(req.params.reference)
+    }));
+  }));
+
+  router.post('/solicitudes/:reference/comprobantes', uploadMiddleware, asyncRoute(async (req, res) => {
+    const result = await receiptService.upload({
+      ...ownerContext(req),
+      reference: requestReference(req.params.reference),
+      idempotencyKey: idempotencyKey(req.get('Idempotency-Key')),
+      file: req.file
+    });
+    res.status(result.comprobante.replayed ? 200 : 201).json(result);
+  }));
+
+  router.get('/solicitudes/:reference/comprobantes/:receiptReference', asyncRoute(async (req, res) => {
+    emptyQuery(req.query);
+    const result = await receiptService.download({
+      ...ownerContext(req),
+      reference: requestReference(req.params.reference),
+      receiptReference: receiptReference(req.params.receiptReference)
+    });
+    res.setHeader('Cache-Control', 'no-store, max-age=0');
+    res.setHeader('Pragma', 'no-cache');
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    res.setHeader('Content-Type', result.mime);
+    res.setHeader('Content-Length', String(result.size));
+    res.setHeader('Content-Disposition', `attachment; filename="${result.filename}"`);
+    await pipeline(result.stream, res);
   }));
 
   router.post('/solicitudes/:reference/cancelar', asyncRoute(async (req, res) => {
