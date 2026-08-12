@@ -76,6 +76,9 @@ function createServer() {
     }
     if (url.pathname === '/api/suscripcion') return json(response, 200, subscription());
     if (url.pathname === '/api/suscripcion/planes') return json(response, 200, plans());
+    if (url.pathname === '/api/pagos-suscripcion/planes') return json(response, 200, { planes: [] });
+    if (url.pathname === '/api/pagos-suscripcion/metodos') return json(response, 200, { disponibles: false, metodos: [] });
+    if (url.pathname === '/api/pagos-suscripcion/solicitudes') return json(response, 200, { resultados: [], paginacion: { paginas: 1 } });
     if (url.pathname.startsWith('/js/') || url.pathname.startsWith('/css/')) {
       const file = path.join(PUBLIC, url.pathname.slice(1));
       response.writeHead(200, { 'Content-Type': url.pathname.endsWith('.css') ? 'text/css' : 'text/javascript' });

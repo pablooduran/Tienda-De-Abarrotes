@@ -522,7 +522,7 @@ preservar historicos y revertir mediante migracion posterior, no `DROP` manual.
 | Revision | `test:subscription-payment-review` | observar, rechazar, aprobar, idempotencia, rollback |
 | Aplicacion | `test:subscription-payment-application` | B2/B4, periodos, upgrade, downgrade, cancelada, concurrencia |
 | Seguridad | `test:saas-c-payment-request-security` | auth, tenant, superadmin, CSRF, no-store, campos y referencias opacas |
-| Browser | `test:subscription-payment-browser` | propietario/admin, tres viewports, teclado, doble clic, errores |
+| Browser | `test:saas-c-payment-browser` | propietario/admin, tres viewports, teclado, doble clic, errores |
 | Cierre | `test:saas-c-e2e` | flujo integral, dos tiendas, limpieza y compatibilidad A/B |
 
 Cada nombre debe agregarse a `package.json` y `MAPA_PRUEBAS.md` solo cuando el
@@ -539,7 +539,7 @@ atribuible y limpieza en `finally` de DB, objetos, browser, procesos y puertos.
 | C3 | Comprobantes y storage privado | upload/descarga, versiones, MIME/hash, huerfanos, backup |
 | C4 | Cola y revision superadmin | filtros, detalle, observar/rechazar/cancelar, auditoria |
 | C5 | Aprobacion y aplicacion atomica | Implementado; B2/B4 en una transaccion, concurrencia y rollback |
-| C6 | Frontend propietario y superadmin | responsive, accesible, sin doble envio ni ids internos |
+| C6 | Frontend propietario y superadmin | Implementado sobre APIs C2-C5: cotización, solicitud, comprobante, revisión, aplicación, tasa y métodos; responsive, accesible, sin doble envío ni IDs internos |
 | C7 | Seguridad y regresion integral | dos tenants, archivos, carreras, browser y compatibilidad A/B |
 | C8 | Cierre documental y Git | huella intacta, cero residuos y macrofase cerrada |
 

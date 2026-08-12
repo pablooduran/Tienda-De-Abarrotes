@@ -20,6 +20,7 @@
       <nav aria-label="Navegación administrativa">
         <a class="nav-link active" href="#tiendas">Tiendas</a>
         <a class="nav-link" id="saasSubscriptionsLink" href="#suscripciones-saas">Suscripciones SaaS</a>
+        <a class="nav-link" id="paymentSubscriptionsLink" href="#pagos-suscripcion">Pagos de suscripción</a>
         <a class="nav-link" href="#catalogo">Catálogo maestro</a>
         <a class="nav-link" id="auditAdminLink" href="#auditoria">Auditoría</a>
       </nav>
@@ -58,6 +59,42 @@
           <span>Propietarios</span>
           <strong id="ownerCount">0</strong>
         </article>
+      </section>
+
+      <section id="pagos-suscripcion" class="content-section payment-admin-section" aria-labelledby="paymentAdminHeading">
+        <div class="section-heading">
+          <div><p class="eyebrow">Pagos manuales</p><h2 id="paymentAdminHeading">Solicitudes de suscripción</h2><p>Revisa solicitudes y configura las condiciones manuales sin registrar cobros automáticos.</p></div>
+          <button id="refreshPaymentAdmin" class="button button-secondary" type="button">Actualizar</button>
+        </div>
+        <div class="payment-admin-grid">
+          <section class="payment-admin-card" aria-labelledby="paymentRateHeading">
+            <h3 id="paymentRateHeading">Tipo de cambio USD/BOB</h3>
+            <p id="paymentCurrentRate" class="payment-muted">Cargando historial...</p>
+            <form id="paymentRateForm" class="payment-form">
+              <label><span>Valor por USD</span><input name="valor" inputmode="decimal" required pattern="[0-9]+(\\.[0-9]{1,8})?"></label>
+              <label><span>Fuente</span><input name="fuente" maxlength="120" required></label>
+              <button class="button button-primary" type="submit">Registrar tasa</button>
+            </form>
+            <div id="paymentRateHistory" class="payment-history"></div>
+          </section>
+          <section class="payment-admin-card" aria-labelledby="paymentMethodsHeading">
+            <h3 id="paymentMethodsHeading">Métodos manuales</h3>
+            <div id="paymentAdminMethods" class="payment-method-admin-list"></div>
+          </section>
+        </div>
+        <form id="paymentReviewFilters" class="saas-filter-grid payment-review-filters">
+          <label class="search-field"><span>Estado</span><select name="estado"><option value="">Pendientes y observadas</option><option value="pendiente_revision">Pendiente de revisión</option><option value="observada">Observada</option></select></label>
+          <label class="search-field"><span>Orden</span><select name="orden"><option value="recientes">Más recientes</option><option value="vencimiento">Vencimiento</option><option value="antiguas">Más antiguas</option></select></label>
+          <button class="button button-primary" type="submit">Aplicar filtros</button>
+        </form>
+        <div class="table-wrap"><table><thead><tr><th>Tienda</th><th>Operación</th><th>Plan</th><th>Monto</th><th>Estado</th><th>Comprobante</th><th><span class="sr-only">Acciones</span></th></tr></thead><tbody id="paymentReviewTableBody"></tbody></table><p id="emptyPaymentReviews" class="empty-state" hidden>No hay solicitudes para revisar.</p></div>
+        <div class="catalog-pagination"><button id="paymentPreviousPage" class="button button-secondary" type="button">Anterior</button><span id="paymentPageLabel">Página 1</span><button id="paymentNextPage" class="button button-secondary" type="button">Siguiente</button></div>
+        <section id="paymentReviewDetail" class="saas-detail" aria-labelledby="paymentReviewDetailTitle" hidden>
+          <div class="section-heading detail-heading"><div><p class="eyebrow">Detalle de solicitud</p><h3 id="paymentReviewDetailTitle"></h3><p id="paymentReviewDetailMessage"></p></div><div id="paymentReviewDetailActions" class="button-row"></div></div>
+          <div id="paymentReviewFacts" class="detail-facts"></div>
+          <div class="saas-detail-grid"><div><h3>Condiciones congeladas</h3><div id="paymentReviewSnapshot" class="payment-history"></div></div><div><h3>Historial</h3><div id="paymentReviewHistory" class="payment-history"></div></div></div>
+          <div><h3>Revisiones</h3><div id="paymentReviewNotes" class="payment-history"></div></div>
+        </section>
       </section>
 
       <section id="suscripciones-saas" class="content-section saas-subscriptions-section" aria-labelledby="saasSubscriptionsHeading">
@@ -336,10 +373,15 @@
     </form>
   </dialog>
 
+  <dialog id="paymentReviewActionDialog" class="modal modal-small">
+    <form id="paymentReviewActionForm" method="dialog"><header><div><p class="eyebrow">Revisión de pago</p><h2 id="paymentReviewActionTitle"></h2></div><button id="closePaymentReviewAction" class="icon-button" type="button" aria-label="Cerrar">x</button></header><div id="paymentReviewActionFields" class="form-grid"></div><p id="paymentReviewActionHelp" class="saas-action-help"></p><p id="paymentReviewActionError" class="form-error" role="alert" hidden></p><footer><button id="cancelPaymentReviewAction" class="button button-secondary" type="button">Cancelar</button><button id="submitPaymentReviewAction" class="button button-danger" type="submit">Confirmar</button></footer></form>
+  </dialog>
+
   <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
   <script src="/js/http-security.js" defer></script>
   <script src="/js/administrative-audit-ui.js" defer></script>
   <script src="/js/admin.js" defer></script>
   <script src="/js/saas-subscription-admin-ui.js" defer></script>
+  <script src="/js/payment-subscription-admin-ui.js" defer></script>
 </body>
 </html>

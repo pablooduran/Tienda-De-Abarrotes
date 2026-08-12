@@ -163,6 +163,7 @@
             <ul class="subscription-features">${features}</ul>
           </section>
           ${planChoices(plans)}
+          <section id="paymentSubscriptionRoot" class="subscription-section payment-subscription-section" aria-live="polite"></section>
           <div class="subscription-actions">
             ${restricted ? '' : '<a class="button-link secondary" href="/app.html" data-subscription-panel>Volver al panel</a>'}
             <button type="button" disabled aria-describedby="future-action-help">${data.puedeReactivar ? 'Reactivar' : 'Renovar'}: proximamente</button>
