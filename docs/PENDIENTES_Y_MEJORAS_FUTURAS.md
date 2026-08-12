@@ -16,8 +16,8 @@ Estado de referencia al crear este documento:
 - Rama: `mejora-multitienda`.
 - HEAD: `7c73562`.
 - SAAS-A, SAAS-B, SAAS-C0 y SAAS-C1 cerrados y publicados.
-- SAAS-C2 no iniciada.
-- Base local validada en migracion 024; SAAS-C2 no iniciada.
+- SAAS-C2 implementada, con cierre tecnico pendiente.
+- Base local validada en migracion 024; SAAS-C3 no iniciada.
 - Este documento no implementa funcionalidad ni modifica la base.
 
 ## 2. Estados y prioridades
@@ -47,7 +47,7 @@ Las migraciones son posibilidades; ninguna se crea por estar mencionada aqui.
 
 | ID | Nombre | Origen / motivo del aplazamiento | Prioridad | Dependencias e impacto | Migracion posible | Decision / estado | Fase sugerida |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| TECH-001 | SAAS-C2 cotizacion y solicitud | C1 dejo estructura persistente y C1.1 corrige idempotencia/snapshot, sin rutas ni aplicacion | alta | precio, tasa valida, metodo configurado; introduce flujo financiero | 024 resuelve la brecha previa | Implementar solicitud backend; pendiente | SAAS-C2 |
+| TECH-001 | SAAS-C2 cotizacion y solicitud | C1 dejo estructura persistente y C1.1 corrigio idempotencia/snapshot | alta | precio, tasa valida, metodo configurado; introduce flujo financiero | 024 resolvio la brecha previa | Implementado; cierre tecnico pendiente, sin aplicacion | SAAS-C2 |
 | TECH-002 | SAAS-C3 comprobantes y storage privado | C1 conserva solo metadata, sin binario ni rutas publicas | alta | almacenamiento privado, MIME, hash, retencion y restauracion | No determinada | Requiere decision de retencion; pendiente | SAAS-C3 |
 | TECH-003 | SAAS-C4 revision administrativa | C1 creo tablas, pero no cola ni decisiones operativas | alta | superadmin, auditoria, permisos y concurrencia | No determinada | Pendiente | SAAS-C4 |
 | TECH-004 | SAAS-C5 aplicacion a suscripcion | C1 prepara el enlace unico, sin efecto B2/B4 | critica antes de pruebas finales | transaccion unica, idempotencia, historial y rollback | No determinada | Pendiente; no aplicar pagos aun | SAAS-C5 |

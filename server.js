@@ -54,6 +54,7 @@ const {
 } = require('./services/server-lifecycle-service');
 const adminCatalogRoutes = require('./routes/admin-catalog');
 const adminRoutes = require('./routes/admin');
+const { createAdminPaymentSubscriptionsRouter } = require('./routes/admin-payment-subscriptions');
 const { createAdminSubscriptionsRouter } = require('./routes/admin-subscriptions');
 const { createAuditRouter } = require('./routes/audit');
 const apiRoutes = require('./routes/api');
@@ -66,6 +67,7 @@ const inventoryIntelligenceRoutes = require('./routes/inventory-intelligence');
 const lotRoutes = require('./routes/lots');
 const masterCatalogRoutes = require('./routes/master-catalog');
 const onboardingRoutes = require('./routes/onboarding');
+const { createPaymentSubscriptionsRouter } = require('./routes/payment-subscriptions');
 const subscriptionRoutes = require('./routes/subscription');
 const posRoutes = require('./routes/pos');
 const salesCompensationRoutes = require('./routes/sales-compensations');
@@ -198,6 +200,12 @@ app.use('/auth', authRoutes);
 app.use('/api/admin/health', requireAuth, requireRole('superadmin'), adminHealthRoutes);
 app.use('/api/admin/auditoria', requireAuth, requireRole('superadmin'), adminAuditRoutes);
 app.use('/api/admin/catalogo', requireAuth, requireRole('superadmin'), adminCatalogRoutes);
+app.use(
+  '/api/admin/pagos-suscripcion',
+  requireAuth,
+  requireRole('superadmin'),
+  createAdminPaymentSubscriptionsRouter()
+);
 app.use('/api/admin/suscripciones', requireAuth, requireRole('superadmin'), createAdminSubscriptionsRouter());
 app.use('/api/admin', requireAuth, requireRole('superadmin'), adminRoutes);
 app.use(
@@ -216,6 +224,13 @@ app.use(
   resolveSubscription,
   requireActiveSubscription,
   subscriptionRoutes
+);
+app.use(
+  '/api/pagos-suscripcion',
+  requireAuth,
+  requireTenant,
+  resolveSubscription,
+  createPaymentSubscriptionsRouter()
 );
 app.use(
   '/onboarding',

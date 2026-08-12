@@ -93,6 +93,8 @@
     "test:saas-a-e2e": "node scripts/test-saas-a-e2e.js",
     "test:saas-c-schema": "node scripts/test-saas-c-schema.js",
     "test:saas-c-idempotency-schema": "node scripts/test-saas-c-schema.js",
+    "test:saas-c-payment-requests": "node scripts/test-saas-c-payment-requests.js",
+    "test:saas-c-payment-request-security": "node scripts/test-saas-c-payment-request-security.js",
     "check:operational-health": "node scripts/check-operational-health.js",
     "check:web-security": "node scripts/check-web-security.js",
     "codex:status": "node scripts/codex-project-status.js",

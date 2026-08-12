@@ -548,12 +548,15 @@ La migracion `023` reutiliza `basico` como Basic, agrega Standard y Pro y
 mantiene `avanzado` como legado no publico. Los precios USD quedan versionados
 para 1, 3 y 12 meses; no se inserta tipo de cambio ni informacion bancaria. La
 estructura de solicitudes, comprobantes, revisiones, aplicacion e idempotencia
-permanece sin operaciones reales hasta las fases siguientes:
+se completa con la correccion 024. SAAS-C2 usa esa estructura para cotizar y
+crear solicitudes tenant; no carga archivos, revisa ni aplica pagos:
 
 ```powershell
 $env:APP_ENV='local'
 npm.cmd run test:saas-c-schema
 npm.cmd run db:check-saas-c
+npm.cmd run test:saas-c-payment-request-security
+npm.cmd run test:saas-c-payment-requests
 ```
 
 Antes y despues de aplicar `006`, compruebe la estructura del catalogo, vinculos, codigos de barras y acceso de ambos planes:

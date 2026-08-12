@@ -9,6 +9,9 @@ const VALUE_TYPES = Object.freeze({
   estadoPago: 'code',
   rol: 'code',
   planCodigo: 'code',
+  periodo: 'code',
+  monedaOrigen: 'code',
+  monedaDestino: 'code',
   tipoSuscripcion: 'code',
   tipoOperacion: 'code',
   tipoAjuste: 'code',
@@ -85,7 +88,20 @@ const BASE_AUDIT_ACTIONS = {
   suspension_suscripcion: definition('suscripcion', 'suscripcion', ['estado'], ['estado'], ['motivoCodigo']),
   reactivacion_suscripcion: definition('suscripcion', 'suscripcion', ['estado'], ['estado'], ['motivoCodigo']),
   renovacion_suscripcion: definition('suscripcion', 'suscripcion', ['estado'], ['estado'], ['motivoCodigo']),
-  cancelacion_suscripcion: definition('suscripcion', 'suscripcion', ['estado'], ['estado'], ['motivoCodigo'])
+  cancelacion_suscripcion: definition('suscripcion', 'suscripcion', ['estado'], ['estado'], ['motivoCodigo']),
+  registro_tipo_cambio_suscripcion: definition(
+    'pago_suscripcion', 'tipo_cambio_suscripcion', [], [], ['monedaOrigen', 'monedaDestino']
+  ),
+  configuracion_metodo_pago_suscripcion: definition(
+    'pago_suscripcion', 'metodo_pago_suscripcion', ['activo'], ['activo'], ['metodoPago']
+  ),
+  creacion_solicitud_pago_suscripcion: definition(
+    'pago_suscripcion', 'solicitud_pago_suscripcion', [], ['estado'],
+    ['tipoOperacion', 'planCodigo', 'periodo', 'metodoPago']
+  ),
+  cancelacion_solicitud_pago_suscripcion: definition(
+    'pago_suscripcion', 'solicitud_pago_suscripcion', ['estado'], ['estado'], ['tipoOperacion']
+  )
 };
 
 const COMMERCIAL_AUDIT_ACTIONS = {
@@ -228,7 +244,11 @@ const BASE_ACTION_RESULT_CODES = {
   suspension_suscripcion: Object.freeze(['SUBSCRIPTION_SUSPENDED', ...ADMIN_FAILURE_CODES]),
   reactivacion_suscripcion: Object.freeze(['SUBSCRIPTION_REACTIVATED', ...ADMIN_FAILURE_CODES]),
   renovacion_suscripcion: Object.freeze(['SUBSCRIPTION_RENEWED', ...ADMIN_FAILURE_CODES]),
-  cancelacion_suscripcion: Object.freeze(['SUBSCRIPTION_CANCELLED', ...ADMIN_FAILURE_CODES])
+  cancelacion_suscripcion: Object.freeze(['SUBSCRIPTION_CANCELLED', ...ADMIN_FAILURE_CODES]),
+  registro_tipo_cambio_suscripcion: Object.freeze(['PAYMENT_EXCHANGE_RATE_REGISTERED']),
+  configuracion_metodo_pago_suscripcion: Object.freeze(['PAYMENT_METHOD_CONFIGURED']),
+  creacion_solicitud_pago_suscripcion: Object.freeze(['PAYMENT_REQUEST_CREATED']),
+  cancelacion_solicitud_pago_suscripcion: Object.freeze(['PAYMENT_REQUEST_CANCELLED'])
 };
 const INVENTORY_ACTION_RESULT_CODES = Object.freeze({
   ajuste_inventario_solicitado: Object.freeze(['INVENTORY_ADJUSTMENT_REQUESTED']),
@@ -301,6 +321,10 @@ const AUDIT_RESULT_CODES = Object.freeze([
   'SUBSCRIPTION_REACTIVATED',
   'SUBSCRIPTION_RENEWED',
   'SUBSCRIPTION_CANCELLED',
+  'PAYMENT_EXCHANGE_RATE_REGISTERED',
+  'PAYMENT_METHOD_CONFIGURED',
+  'PAYMENT_REQUEST_CREATED',
+  'PAYMENT_REQUEST_CANCELLED',
   'ADMIN_OPERATION_REJECTED',
   'ADMIN_OPERATION_FAILED',
   ...COMMERCIAL_RESULT_CODES,
@@ -359,6 +383,10 @@ const AUDIT_RESULTS_BY_CODE = Object.freeze({
   SUBSCRIPTION_REACTIVATED: Object.freeze(['correcto']),
   SUBSCRIPTION_RENEWED: Object.freeze(['correcto']),
   SUBSCRIPTION_CANCELLED: Object.freeze(['correcto']),
+  PAYMENT_EXCHANGE_RATE_REGISTERED: Object.freeze(['correcto']),
+  PAYMENT_METHOD_CONFIGURED: Object.freeze(['correcto']),
+  PAYMENT_REQUEST_CREATED: Object.freeze(['correcto']),
+  PAYMENT_REQUEST_CANCELLED: Object.freeze(['correcto']),
   ADMIN_OPERATION_REJECTED: Object.freeze(['rechazado']),
   ADMIN_OPERATION_FAILED: Object.freeze(['fallido']),
   COMMERCIAL_OPERATION_OK: Object.freeze(['correcto']),

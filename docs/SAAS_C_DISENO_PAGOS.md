@@ -369,16 +369,35 @@ Metadata permitida: operacion, planCodigo, periodo, monto, moneda, transicion y
 codigo de motivo. No incluir archivo, body, ruta, clave, hash completo, cuenta,
 QR, SQL ni stack.
 
-## Rutas conceptuales
+## Rutas de SAAS-C2
+
+SAAS-C2 implementa el backend de cotizacion y solicitudes del propietario sin
+crear comprobantes, revision administrativa, aplicacion a B2/B4 ni interfaz.
+Las cotizaciones se recalculan en backend y no persisten. Las solicitudes
+congelan precio USD, tasa USD/BOB, monto BOB, planes, limites, funcionalidades e
+instrucciones del metodo durante 72 horas.
 
 Propietario:
 
+- `GET /api/pagos-suscripcion/planes`
+- `GET /api/pagos-suscripcion/metodos`
+- `POST /api/pagos-suscripcion/cotizar`
 - `GET /api/pagos-suscripcion/solicitudes`
 - `POST /api/pagos-suscripcion/solicitudes`
 - `GET /api/pagos-suscripcion/solicitudes/:referencia`
+- `POST /api/pagos-suscripcion/solicitudes/:referencia/cancelar`
+
+Configuracion minima de superadmin:
+
+- `GET /api/admin/pagos-suscripcion/tipos-cambio`
+- `POST /api/admin/pagos-suscripcion/tipos-cambio`
+- `GET /api/admin/pagos-suscripcion/metodos`
+- `PATCH /api/admin/pagos-suscripcion/metodos/:referencia`
+
+Las siguientes rutas siguen siendo conceptuales para fases posteriores:
+
 - `POST /api/pagos-suscripcion/solicitudes/:referencia/comprobantes`
 - `POST /api/pagos-suscripcion/solicitudes/:referencia/enviar`
-- `POST /api/pagos-suscripcion/solicitudes/:referencia/cancelar`
 - `GET /api/pagos-suscripcion/solicitudes/:referencia/comprobantes/:archivo`
 
 Superadmin:
@@ -442,7 +461,7 @@ SAAS-C1.1 corrige dos brechas detectadas antes de exponer el flujo C2:
   cuando la operacion parte de una suscripcion existente.
 
 La migracion 024 no crea solicitudes, tasas, configuraciones, rutas ni pagos.
-SAAS-C2 permanece no iniciada hasta cerrar esta correccion.
+SAAS-C2 reutiliza esta estructura sin migracion adicional.
 
 Indices y restricciones minimos:
 
@@ -470,11 +489,11 @@ preservar historicos y revertir mediante migracion posterior, no `DROP` manual.
 | Nivel | Scripts sugeridos | Cobertura y recursos |
 | --- | --- | --- |
 | Esquema | `test:saas-c-schema`, `test:saas-c-idempotency-schema`, `db:check-saas-c` | 001-024, 023-024, FKs, CHECKs, snapshots, ambitos de idempotencia y limpieza temporal |
-| Dominio | `test:subscription-payment-requests` | precios backend, estados, vencimiento, duplicados, tenant |
+| Dominio | `test:saas-c-payment-requests` | precios backend, tasa/metodo, estados, vencimiento, duplicados, tenant |
 | Archivos | `test:subscription-payment-receipts` | MIME real, tamano, hash, versiones, traversal, huerfanos |
 | Revision | `test:subscription-payment-review` | observar, rechazar, aprobar, idempotencia, rollback |
 | Aplicacion | `test:subscription-payment-application` | B2/B4, periodos, upgrade, downgrade, cancelada, concurrencia |
-| Seguridad | `test:subscription-payment-security` | auth, tenant, superadmin, CSRF, rate limit, no-store, descargas |
+| Seguridad | `test:saas-c-payment-request-security` | auth, tenant, superadmin, CSRF, no-store, campos y referencias opacas |
 | Browser | `test:subscription-payment-browser` | propietario/admin, tres viewports, teclado, doble clic, errores |
 | Cierre | `test:saas-c-e2e` | flujo integral, dos tiendas, limpieza y compatibilidad A/B |
 
@@ -488,7 +507,7 @@ atribuible y limpieza en `finally` de DB, objetos, browser, procesos y puertos.
 | --- | --- | --- |
 | C0 | Auditoria y este diseno | documentacion validada; cero codigo/base |
 | C1 | Contratos, precios y migracion 023 | ensayo temporal, backup/restore y principal local validada |
-| C2 | Solicitud/cotizacion del propietario | API tenant, precio backend, estados, idempotencia |
+| C2 | Solicitud/cotizacion del propietario | Backend implementado; cierre tecnico pendiente, sin archivos, revision, aplicacion ni UI |
 | C3 | Comprobantes y storage privado | upload/descarga, versiones, MIME/hash, huerfanos, backup |
 | C4 | Cola y revision superadmin | filtros, detalle, observar/rechazar/cancelar, auditoria |
 | C5 | Aprobacion y aplicacion atomica | B2/B4 en una transaccion, concurrencia y rollback |
@@ -496,7 +515,7 @@ atribuible y limpieza en `finally` de DB, objetos, browser, procesos y puertos.
 | C7 | Seguridad y regresion integral | dos tenants, archivos, carreras, browser y compatibilidad A/B |
 | C8 | Cierre documental y Git | huella intacta, cero residuos y macrofase cerrada |
 
-## Decisiones pendientes para C2 y C3
+## Decisiones pendientes para operacion y C3
 
 1. Fuente operativa y vigencia que usara el superadmin al registrar manualmente
    el tipo de cambio USD/BOB.

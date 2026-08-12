@@ -123,7 +123,7 @@ El contexto de tienda proviene de la sesion validada. El navegador no debe envia
 | Optimizacion de Codex, etapas 1-10 | Terminado | Indice, mapas compactos, comprobadores, seis skills versionables y validacion segura. Ver `AGENTS.md` y `docs/GUIA_CODEX_SKILLS.md`. |
 | Fase 11 - acceso publico | SAAS-A1-SAAS-A5 terminados | Registro publico transaccional, verificacion y reenvio local, recuperacion de contrasena, configuracion base, onboarding inicial y regresion integral E2E. |
 | Suscripciones SaaS | SAAS-B terminado | Ciclo de vida, acceso, planes, limites y administracion global sobre 022. |
-| Pagos manuales de suscripcion | SAAS-C1 cerrado; SAAS-C1.1 implementado, cierre Git pendiente | Migracion 023 agrega la estructura financiera y 024 corrige idempotencia global/tenant y snapshot del plan actual; no hay rutas, archivos ni pagos aplicados. |
+| Pagos manuales de suscripcion | SAAS-C1/C1.1 cerrados; SAAS-C2 implementado, cierre tecnico pendiente | C2 agrega cotizacion, solicitudes tenant, tasa manual y metodos configurables sobre 024; no hay archivos, revision, aplicacion ni frontend. |
 | Staging y produccion | Pendiente | No se ha desplegado este estado. |
 
 ## 4. Funcionalidades implementadas
@@ -488,12 +488,11 @@ No mostrar estas variables en logs ni respuestas. Nunca versionar `.env`, `.env.
   autorizado para invocar el comprobador o los endpoints y un almacenamiento fuera del host.
 - No hay staging configurado ni despliegue de este estado.
 - SAAS-A incorpora registro publico pendiente, verificacion, recuperacion de contrasena y onboarding mediante adaptador local en memoria. Aun no hay proveedor real de correo, invitaciones ni login social.
-- SAAS-C1 define la estructura persistente de pagos manuales. No existen rutas,
-  carga fisica, revision operativa ni aplicacion de pagos; tampoco hay pasarela,
-  cotizacion automatica o cobro automatico.
-- SAAS-C1.1 agrega exclusivamente la migracion 024: separa idempotencia global
-  y tenant, tipa resultados de tasa/metodo y congela codigo/nombre del plan
-  actual. SAAS-C2 no se ha iniciado.
+- SAAS-C2 agrega rutas backend para planes y metodos publicos, cotizacion sin
+  persistencia, creacion/listado/detalle/cancelacion tenant de solicitudes y
+  configuracion minima de tasa/metodos por superadmin. Usa 72 horas, una sola
+  solicitud abierta e idempotencia hash-only; no carga archivos, revisa,
+  aplica pagos, modifica suscripciones ni agrega frontend.
 - SAAS-B esta completo sobre la migracion 022: ciclo de vida, gracia,
   suspension, reactivacion, renovacion tecnica, acceso por estado, cambio de
   plan, limites y administracion global para superadmin. No hay pagos ni jobs.
@@ -675,6 +674,7 @@ compatibilidad con SAAS-A. **SAAS-C0 esta cerrado** con la auditoria y el diseno
 de pagos manuales en `docs/SAAS_C_DISENO_PAGOS.md`. La auditoria previa de
 planes, limites y funcionalidades esta en
 `docs/AUDITORIA_PLANES_FUNCIONALIDADES.md`. **SAAS-C1 implementa la migracion
-023 y SAAS-C1.1 corrige su contrato mediante 024**; la siguiente etapa es
-SAAS-C2 para cotizacion y solicitud del propietario. Todavia no existen pagos aplicados, archivos,
-pasarela automatica ni jobs.
+023 y SAAS-C1.1 corrige su contrato mediante 024**. SAAS-C2 implementa el
+backend de cotizacion y solicitud; su cierre tecnico queda pendiente y la
+siguiente fase es SAAS-C3. Todavia no existen pagos aplicados, archivos,
+revision administrativa, interfaz de pagos, pasarela automatica ni jobs.
