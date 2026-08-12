@@ -8,6 +8,10 @@ const { addLocalDays, formatLocalDateTime, getLocalNow } = require('../utils/loc
 
 const OPERATION_TTL_DAYS = 2;
 const DECISION_TO_SCHEMA = Object.freeze({ observada: 'observar', rechazada: 'rechazar' });
+const REVIEW_TRANSITIONS = Object.freeze({
+  pendiente_revision: Object.freeze(['observada', 'rechazada']),
+  observada: Object.freeze(['rechazada'])
+});
 
 function reviewError(status, message, code) {
   const error = new Error(message);
@@ -251,12 +255,12 @@ function createSaasCPaymentReviewService({
         payload: { referencia: input.reference, decision: input.decision, ...input.body }
       }, now);
       if (operation.replayed) return Object.freeze({ estado: request.estado, replayed: true });
-      if (!REVIEW_STATES.includes(request.estado)) {
-        throw reviewError(409, 'La transicion de revision no esta permitida.', 'PAYMENT_REVIEW_TRANSITION_NOT_ALLOWED');
-      }
       const target = input.decision;
       const schemaDecision = DECISION_TO_SCHEMA[target];
       if (!schemaDecision) throw reviewError(400, 'La decision no es valida.', 'INVALID_PAYMENT_REVIEW_INPUT');
+      if (!REVIEW_TRANSITIONS[request.estado]?.includes(target)) {
+        throw reviewError(409, 'La transicion de revision no esta permitida.', 'PAYMENT_REVIEW_TRANSITION_NOT_ALLOWED');
+      }
       const stamp = formatLocalDateTime(now);
       await connection.query(
         `INSERT INTO revisionPagoSuscripcion

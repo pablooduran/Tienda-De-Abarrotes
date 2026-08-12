@@ -293,6 +293,30 @@ async function main() {
       now
     });
     assert.strictEqual(observedReplay.replayed, true);
+    await assert.rejects(() => reviewService.transition({
+      idAdministrador: fixture.idSecondSuperadmin,
+      reference: reviewReference,
+      decision: 'observada',
+      body: { motivo: 'datos_incompletos', observacion: 'Segunda observacion no permitida.' },
+      idempotencyKey: `c5:${marker}:observed-duplicate`,
+      now
+    }), (error) => error.code === 'PAYMENT_REVIEW_TRANSITION_NOT_ALLOWED');
+    const [[observationEffects]] = await pool.query(
+      `SELECT
+        (SELECT COUNT(*) FROM revisionPagoSuscripcion
+         WHERE idTienda=? AND decision='observar') revisiones,
+        (SELECT COUNT(*) FROM historialSolicitudPagoSuscripcion
+         WHERE idTienda=? AND evento='observada') historial,
+        (SELECT COUNT(*) FROM eventoAuditoriaAdministrativa
+         WHERE idTienda=? AND accion='revision_solicitud_pago_suscripcion'
+           AND codigoResultado='PAYMENT_REQUEST_OBSERVED') auditorias`,
+      [review.idTienda, review.idTienda, review.idTienda]
+    );
+    assert.deepStrictEqual({
+      revisiones: Number(observationEffects.revisiones),
+      historial: Number(observationEffects.historial),
+      auditorias: Number(observationEffects.auditorias)
+    }, { revisiones: 1, historial: 1, auditorias: 1 });
     const rejected = await reviewService.transition({
       idAdministrador: fixture.idSuperadmin,
       reference: reviewReference,

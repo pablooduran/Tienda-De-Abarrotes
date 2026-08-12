@@ -507,6 +507,9 @@ No mostrar estas variables en logs ni respuestas. Nunca versionar `.env`, `.env.
 - SAAS-C6 agrega la interfaz de propietario en `subscription.html` y el bloque de
   superadmin en `admin.html`. Solo consume APIs C2-C5: no calcula montos, no
   recibe IDs internos ni crea flujos financieros nuevos.
+- SAAS-C7 valida integralmente C2-C6 y endurece la matriz de revision: una
+  solicitud `observada` solo puede pasar a `rechazada`; repetir la observacion
+  con una clave nueva se rechaza sin duplicar revision, historial ni auditoria.
 - SAAS-B esta completo sobre la migracion 022: ciclo de vida, gracia,
   suspension, reactivacion, renovacion tecnica, acceso por estado, cambio de
   plan, limites y administracion global para superadmin. No hay pagos ni jobs.
@@ -690,6 +693,7 @@ planes, limites y funcionalidades esta en
 `docs/AUDITORIA_PLANES_FUNCIONALIDADES.md`. **SAAS-C1 implementa la migracion
 023 y SAAS-C1.1 corrige su contrato mediante 024**. SAAS-C2, C3 y C4 estan
 cerrados. SAAS-C5 implementa la aplicacion atomica del pago, sin migracion
-nueva. SAAS-C6 integra las APIs existentes en el frontend protegido; la siguiente
-fase es SAAS-C7. Todavia no existe pasarela automatica, movimiento contable
-general ni jobs.
+nueva. SAAS-C6 integra las APIs existentes en el frontend protegido y SAAS-C7
+completa la regresion integral y el endurecimiento de seguridad. La siguiente
+fase es SAAS-C8, aun no iniciada. Todavia no existe pasarela automatica,
+movimiento contable general ni jobs.
