@@ -50,6 +50,7 @@ autorizacion expresa.
 | Frontend estatico | `public/js/`, `public/css/`, `public/app.html` | `node --check` de JS tocado | Prueba frontend especifica del modulo; `npm.cmd run check:web-security` | Browser del modulo afectado | No requiere servidor salvo que el arnes lo inicie | Revisar foco, errores y no enviar `idTienda` |
 | Pruebas browser | `scripts/test-*-browser.js`, UI y rutas usadas | `node --check` del arnes | Browser especifico del modulo | Solo cuando cambia UX, contrato visual o se cierra bloque | Edge/servidor temporal segun arnes | Timeout explicito, `finally`, consola limpia; no cerrar Edge del usuario |
 | Migraciones y esquema | `database/migrations/`, `database/tienda_abarrotes.sql`, `scripts/migrate-db.js` | `node --check`; revision SQL; `git diff --check` | Comprobador del dominio y huella de solo lectura | Regresion afectada; readiness despues de aplicacion autorizada | Probar primero en base temporal | Detener ante migracion parcial o cambio comercial inesperado; no aplicar principal sin autorizacion |
+| Revision administrativa de pagos | `routes/admin-payment-reviews.js`, `services/saas-c-payment-review-service.js`, contratos C3/C4 | `node --check`; `npm.cmd run test:saas-c-payment-reviews`; `npm.cmd run test:saas-c-payment-review-security` | C3, C2, tenant, auditoria y seguridad web | Validar superadmin, tenant explicito, comprobante privado, transiciones e idempotencia | Sin aplicar pagos; limpiar fixtures, revisiones y archivos privados atribuibles |
 
 ## Scripts auxiliares no expuestos como comandos npm
 

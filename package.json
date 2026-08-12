@@ -97,6 +97,8 @@
     "test:saas-c-payment-request-security": "node scripts/test-saas-c-payment-request-security.js",
     "test:saas-c-payment-receipt-security": "node scripts/test-saas-c-payment-receipt-security.js",
     "test:saas-c-payment-receipts": "node scripts/test-saas-c-payment-receipts.js",
+    "test:saas-c-payment-reviews": "node scripts/test-saas-c-payment-reviews.js",
+    "test:saas-c-payment-review-security": "node scripts/test-saas-c-payment-review-security.js",
     "check:operational-health": "node scripts/check-operational-health.js",
     "check:web-security": "node scripts/check-web-security.js",
     "codex:status": "node scripts/codex-project-status.js",

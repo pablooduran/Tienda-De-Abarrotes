@@ -1,0 +1,13 @@
+const fs = require('fs');
+const assert = require('assert');
+const contract = require('../config/saas-c-payment-review-contract');
+const route = fs.readFileSync(require.resolve('../routes/admin-payment-reviews'), 'utf8');
+const service = fs.readFileSync(require.resolve('../services/saas-c-payment-review-service'), 'utf8');
+assert.deepStrictEqual(contract.REVIEW_STATES, ['pendiente_revision', 'observada']);
+assert.deepStrictEqual(contract.REVIEW_DECISIONS, ['observada', 'rechazada']);
+assert.throws(() => contract.reviewBody({ motivo: 'x', observacion: 'texto valido' }));
+assert.throws(() => contract.reviewBody({ motivo: 'otro_controlado', observacion: '<script>' }));
+assert.throws(() => contract.reviewQuery({ estado: 'aplicada' }));
+assert(route.includes('Cache-Control'));
+assert(service.includes('idTienda=?') && service.includes('FOR UPDATE') && service.includes('claveHash'));
+console.log('SAAS-C4 security contract checks: PASS');

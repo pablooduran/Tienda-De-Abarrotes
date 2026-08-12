@@ -55,6 +55,7 @@ const {
 const adminCatalogRoutes = require('./routes/admin-catalog');
 const adminRoutes = require('./routes/admin');
 const { createAdminPaymentSubscriptionsRouter } = require('./routes/admin-payment-subscriptions');
+const { createAdminPaymentReviewsRouter } = require('./routes/admin-payment-reviews');
 const { createAdminSubscriptionsRouter } = require('./routes/admin-subscriptions');
 const { createAuditRouter } = require('./routes/audit');
 const apiRoutes = require('./routes/api');
@@ -205,6 +206,12 @@ app.use(
   requireAuth,
   requireRole('superadmin'),
   createAdminPaymentSubscriptionsRouter()
+);
+app.use(
+  '/api/admin/pagos-suscripcion/revision',
+  requireAuth,
+  requireRole('superadmin'),
+  createAdminPaymentReviewsRouter()
 );
 app.use('/api/admin/suscripciones', requireAuth, requireRole('superadmin'), createAdminSubscriptionsRouter());
 app.use('/api/admin', requireAuth, requireRole('superadmin'), adminRoutes);
