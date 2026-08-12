@@ -123,7 +123,7 @@ El contexto de tienda proviene de la sesion validada. El navegador no debe envia
 | Optimizacion de Codex, etapas 1-10 | Terminado | Indice, mapas compactos, comprobadores, seis skills versionables y validacion segura. Ver `AGENTS.md` y `docs/GUIA_CODEX_SKILLS.md`. |
 | Fase 11 - acceso publico | SAAS-A1-SAAS-A5 terminados | Registro publico transaccional, verificacion y reenvio local, recuperacion de contrasena, configuracion base, onboarding inicial y regresion integral E2E. |
 | Suscripciones SaaS | SAAS-B terminado | Ciclo de vida, acceso, planes, limites y administracion global sobre 022. |
-| Pagos manuales de suscripcion | SAAS-C1-C6 implementados | C2-C5 entregan el backend manual y C6 integra sus APIs en las vistas protegidas de propietario y superadmin; no hay pagos automaticos. |
+| Pagos manuales de suscripcion | SAAS-C terminado | C0-C8 cubren diseno, estructura, backend, almacenamiento privado, revision, aplicacion atomica, frontend, seguridad y regresion integral. El flujo actual es manual; no hay pagos automaticos. |
 | Staging y produccion | Pendiente | No se ha desplegado este estado. |
 
 ## 4. Funcionalidades implementadas
@@ -512,7 +512,8 @@ No mostrar estas variables en logs ni respuestas. Nunca versionar `.env`, `.env.
   con una clave nueva se rechaza sin duplicar revision, historial ni auditoria.
 - SAAS-B esta completo sobre la migracion 022: ciclo de vida, gracia,
   suspension, reactivacion, renovacion tecnica, acceso por estado, cambio de
-  plan, limites y administracion global para superadmin. No hay pagos ni jobs.
+  plan, limites y administracion global para superadmin. SAAS-C agrega pagos
+  manuales sobre 023-024; no hay cobro automatico ni jobs.
 - WhatsApp solo prepara texto/enlace; no envia mensajes automaticamente.
 - No hay PDF general, portal del cliente ni facturacion fiscal.
 - Los comprobantes de cobro no son facturas y algunos cobros legados tienen datos parciales.
@@ -526,10 +527,10 @@ No mostrar estas variables en logs ni respuestas. Nunca versionar `.env`, `.env.
 
 No alterar este orden sin una decision explicita:
 
-1. Fase 11: acceso publico.
-3. SAAS-C: pagos manuales de suscripciones.
-4. Staging.
-5. Produccion.
+1. Seguridad publica final.
+2. CI y GitHub Actions.
+3. Staging y produccion de prueba con datos sinteticos.
+4. Revision integral del propietario antes de decidir una beta.
 
 Cada bloque debe cerrar con pruebas, comprobadores, documentacion y un commit local independiente. No mezclar cambios de bloques distintos.
 
@@ -684,16 +685,18 @@ Estos resultados corresponden al ultimo estado conocido. Antes de iniciar el sig
 
 ## 17. Siguiente macrofase
 
-**SAAS-B esta cerrado**. B1-B5 implementan el modelo,
-motor, acceso por estado, cambios de plan, limites y administracion SaaS global;
-B6 valida integralmente seguridad, concurrencia, multitienda, browser y
-compatibilidad con SAAS-A. **SAAS-C0 esta cerrado** con la auditoria y el diseno
-de pagos manuales en `docs/SAAS_C_DISENO_PAGOS.md`. La auditoria previa de
-planes, limites y funcionalidades esta en
-`docs/AUDITORIA_PLANES_FUNCIONALIDADES.md`. **SAAS-C1 implementa la migracion
-023 y SAAS-C1.1 corrige su contrato mediante 024**. SAAS-C2, C3 y C4 estan
-cerrados. SAAS-C5 implementa la aplicacion atomica del pago, sin migracion
-nueva. SAAS-C6 integra las APIs existentes en el frontend protegido y SAAS-C7
-completa la regresion integral y el endurecimiento de seguridad. La siguiente
-fase es SAAS-C8, aun no iniciada. Todavia no existe pasarela automatica,
-movimiento contable general ni jobs.
+**SAAS-B esta cerrado**. B1-B5 implementan el modelo, motor, acceso por estado,
+cambios de plan, limites y administracion SaaS global; B6 valida integralmente
+seguridad, concurrencia, multitienda, browser y compatibilidad con SAAS-A.
+
+**SAAS-C esta cerrado**. C0 define el diseno; C1 y C1.1 incorporan las
+migraciones 023 y 024; C2-C6 implementan cotizacion, solicitud, comprobantes,
+revision, aplicacion atomica y frontend; C7 endurece seguridad y transiciones;
+C8 valida el flujo completo, browser, tenant, idempotencia, concurrencia y
+limpieza. Los pagos actuales son manuales. Siguen pendientes QR dinamico,
+tarjetas, conciliacion, webhooks, cobro recurrente y automatizaciones; tampoco
+existe facturacion fiscal ni se inicia una beta.
+
+La siguiente macrofase es **seguridad publica final**. No iniciar staging,
+produccion ni incorporar tiendas reales antes de cerrarla y completar la
+revision del propietario.

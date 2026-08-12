@@ -11,13 +11,15 @@ el documento. Tampoco representa una promesa de lanzamiento. Cada pendiente
 debe actualizarse al cerrar una fase y revisarse antes de una beta y antes del
 lanzamiento oficial.
 
-Estado de referencia al crear este documento:
+Estado de referencia actualizado al cierre de SAAS-C:
 
 - Rama: `mejora-multitienda`.
-- HEAD: `7c73562`.
-- SAAS-A, SAAS-B, SAAS-C0 y SAAS-C1 cerrados y publicados.
-- SAAS-C2, SAAS-C3 y SAAS-C4 cerradas; SAAS-C5 implementada con cierre tecnico pendiente.
-- Base local validada en migracion 024; SAAS-C6 no iniciada.
+- Base del cierre: HEAD `daf4677`.
+- SAAS-A, SAAS-B y SAAS-C0-C7 cerrados y publicados.
+- SAAS-C8 corresponde a este cierre integral de pagos manuales, sin nueva
+  migracion.
+- Base local validada en migracion 024; la siguiente macrofase es seguridad
+  publica final.
 - Este documento no implementa funcionalidad ni modifica la base.
 
 ## 2. Estados y prioridades
@@ -50,8 +52,8 @@ Las migraciones son posibilidades; ninguna se crea por estar mencionada aqui.
 | TECH-001 | SAAS-C2 cotizacion y solicitud | C1 dejo estructura persistente y C1.1 corrigio idempotencia/snapshot | alta | precio, tasa valida, metodo configurado; introduce flujo financiero | 024 resolvio la brecha previa | Implementado y cerrado | SAAS-C2 |
 | TECH-002 | SAAS-C3 comprobantes y storage privado | C1 conserva solo metadata, sin binario ni rutas publicas | alta | almacenamiento privado, MIME, hash, retencion y restauracion | No determinada | Implementado; retencion operativa requiere decision | SAAS-C3 |
 | TECH-003 | SAAS-C4 revision administrativa | C1 creo tablas, pero no cola ni decisiones operativas | alta | superadmin, auditoria, permisos y concurrencia | No determinada | Implementado y cerrado | SAAS-C4 |
-| TECH-004 | SAAS-C5 aplicacion a suscripcion | C1 prepara el enlace unico, sin efecto B2/B4 | critica antes de pruebas finales | transaccion unica, idempotencia, historial y rollback | No determinada | Implementado; cierre tecnico pendiente | SAAS-C5 |
-| TECH-005 | SAAS-C6 regresion y cierre | C1 solo valido esquema y compatibilidad | alta | C2-C5, tenant, seguridad, browser y backup | No determinada | Pendiente | SAAS-C6 |
+| TECH-004 | SAAS-C5 aplicacion a suscripcion | C1 prepara el enlace unico, sin efecto B2/B4 | critica antes de pruebas finales | transaccion unica, idempotencia, historial y rollback | No determinada | Implementado y cerrado | SAAS-C5 |
+| TECH-005 | SAAS-C6-C8 frontend, regresion y cierre | C1 solo valido esquema y compatibilidad | alta | C2-C5, tenant, seguridad, browser y backup | No determinada | Implementado y cerrado | SAAS-C6-C8 |
 | TECH-006 | Seguridad publica final | Las fases A validaron el flujo local; correo real y despliegue quedan fuera | alta antes de beta | proveedor de correo, rate limits, monitoreo y secretos | No determinada | En analisis | Pre-beta |
 | TECH-007 | CI y GitHub Actions | No hay pipeline remoto configurado | alta antes de beta | secretos de CI, MySQL temporal, checks y artefactos | No | Pendiente | Pre-beta |
 | TECH-008 | Staging y produccion de prueba | El proyecto no tiene despliegue de este estado | alta antes de beta | dominio, HTTPS, TLS, backup y datos sinteticos | No | Pendiente; no usar tiendas reales todavia | Pre-beta |
@@ -78,7 +80,7 @@ Las migraciones son posibilidades; ninguna se crea por estar mencionada aqui.
 Quedan registrados como trabajo de plataforma, con evidencia en continuidad,
 mapa de pruebas y estado de despliegue:
 
-- finalizar SAAS-C2 a C6;
+- SAAS-C esta cerrado; conservar su regresion al tocar pagos o suscripciones;
 - endurecimiento y revision publica final antes de beta;
 - CI y GitHub Actions con bases temporales protegidas;
 - staging y produccion de prueba en localhost controlado primero;
@@ -308,8 +310,8 @@ explicita y una nueva evaluacion de seguridad, datos y alcance.
 
 ## 18. Roadmap futuro sugerido
 
-1. Completar SAAS-C2 a C6 y su regresion.
-2. Ejecutar seguridad publica final, CI y GitHub Actions.
+1. Ejecutar seguridad publica final.
+2. Incorporar CI y GitHub Actions.
 3. Preparar staging, restauracion, monitoreo y produccion de prueba.
 4. Cerrar documentacion operativa, terminos, privacidad y soporte.
 5. Ejecutar `PRODUCTO-0`, UX, `WELCOME` y `HELP`.
@@ -324,6 +326,7 @@ explicita y una nueva evaluacion de seguridad, datos y alcance.
 | Fecha | Fase | Cambio | Autor | Referencia |
 | --- | --- | --- | --- | --- |
 | 2026-08-01 | SAAS-C1 / continuidad | Creacion del documento maestro de pendientes despues de publicar C1 | Codex | HEAD `7c73562` |
+| 2026-08-12 | SAAS-C8 | Pagos manuales C0-C8 cerrados; automatizaciones y beta permanecen pendientes | Codex | Base `daf4677` |
 
 ## 20. Regla permanente
 

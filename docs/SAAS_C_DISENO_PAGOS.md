@@ -510,40 +510,48 @@ revisiones, comprobantes, aplicaciones, operaciones ni eventos retroactivos.
 Rollback conceptual: solo sobre base temporal sin datos C; en una base usada,
 preservar historicos y revertir mediante migracion posterior, no `DROP` manual.
 
-## Mapa de pruebas futuro
+## Mapa de pruebas vigente
 
 | Nivel | Scripts sugeridos | Cobertura y recursos |
 | --- | --- | --- |
 | Esquema | `test:saas-c-schema`, `test:saas-c-idempotency-schema`, `db:check-saas-c` | 001-024, 023-024, FKs, CHECKs, snapshots, ambitos de idempotencia y limpieza temporal |
-| Dominio | `test:saas-c-payment-requests` | precios backend, tasa/metodo, estados, vencimiento, duplicados, tenant |
-| Comprobantes | `test:saas-c-payment-receipts` | carga, reemplazo, version activa, descarga, estado, idempotencia y tenant |
-| Archivos | `test:saas-c-payment-receipt-security` | PDF/JPEG/PNG, 5 MiB, MIME/extension, corrupcion, traversal y almacenamiento privado |
-| Archivos | `test:subscription-payment-receipts` | MIME real, tamano, hash, versiones, traversal, huerfanos |
-| Revision | `test:subscription-payment-review` | observar, rechazar, aprobar, idempotencia, rollback |
-| Aplicacion | `test:subscription-payment-application` | B2/B4, periodos, upgrade, downgrade, cancelada, concurrencia |
-| Seguridad | `test:saas-c-payment-request-security` | auth, tenant, superadmin, CSRF, no-store, campos y referencias opacas |
-| Browser | `test:saas-c-payment-browser` | propietario/admin, tres viewports, teclado, doble clic, errores |
-| Cierre | `test:saas-c-e2e` | flujo integral, dos tiendas, limpieza y compatibilidad A/B |
+| Dominio | `test:saas-c-payment-requests`, `test:saas-c-payment-request-security` | precios backend, tasa/metodo, estados, vencimiento, duplicados, tenant y controles HTTP |
+| Comprobantes | `test:saas-c-payment-receipts`, `test:saas-c-payment-receipt-security` | PDF/JPEG/PNG, 5 MiB, MIME, reemplazo, version activa, descarga y almacenamiento privado |
+| Revision | `test:saas-c-payment-reviews`, `test:saas-c-payment-review-security` | observar, rechazar, estados validos, idempotencia, concurrencia y auditoria |
+| Aplicacion | `test:saas-c-payment-applications`, `test:saas-c-payment-application-security` | B2/B4, renovacion, reactivacion, upgrade, aplicacion unica, rollback y permisos |
+| Browser | `test:saas-c-payment-browser`, `test:subscription-plan-browser` | propietario/admin, tres viewports, teclado, doble clic, estados y errores |
+| Cierre | suite serial anterior mas B2, B4, limites, tenant, auditoria y seguridad web | flujo integral, dos tiendas, concurrencia, limpieza y compatibilidad A/B |
 
-Cada nombre debe agregarse a `package.json` y `MAPA_PRUEBAS.md` solo cuando el
-arnes exista. Los arneses deben usar fixtures sinteticos, almacenamiento temporal
-atribuible y limpieza en `finally` de DB, objetos, browser, procesos y puertos.
+Los nombres anteriores corresponden a scripts reales de `package.json`. Los
+arneses usan fixtures sinteticos, almacenamiento temporal atribuible y limpieza
+en `finally` de DB, objetos, browser, procesos y puertos.
 
 ## Fases recomendadas
 
 | Fase | Objetivo | Condicion de cierre |
 | --- | --- | --- |
-| C0 | Auditoria y este diseno | documentacion validada; cero codigo/base |
-| C1 | Contratos, precios y migracion 023 | ensayo temporal, backup/restore y principal local validada |
-| C2 | Solicitud/cotizacion del propietario | Backend cerrado; sin archivos, revision, aplicacion ni UI en esa fase |
-| C3 | Comprobantes y storage privado | upload/descarga, versiones, MIME/hash, huerfanos, backup |
-| C4 | Cola y revision superadmin | filtros, detalle, observar/rechazar/cancelar, auditoria |
-| C5 | Aprobacion y aplicacion atomica | Implementado; B2/B4 en una transaccion, concurrencia y rollback |
-| C6 | Frontend propietario y superadmin | Implementado sobre APIs C2-C5: cotización, solicitud, comprobante, revisión, aplicación, tasa y métodos; responsive, accesible, sin doble envío ni IDs internos |
-| C7 | Seguridad y regresion integral | dos tenants, archivos, carreras, browser y compatibilidad A/B |
-| C8 | Cierre documental y Git | huella intacta, cero residuos y macrofase cerrada |
+| C0 | Auditoria y este diseno | Cerrado: documentacion validada; cero codigo/base |
+| C1 | Contratos, precios y migraciones 023-024 | Cerrado: ensayo temporal, backup/restore y principal local validada |
+| C2 | Solicitud/cotizacion del propietario | Cerrado: backend sin archivos, revision, aplicacion ni UI en esa fase |
+| C3 | Comprobantes y storage privado | Cerrado: upload/descarga, versiones, MIME/hash, huerfanos y backup |
+| C4 | Cola y revision superadmin | Cerrado: filtros, detalle, observar/rechazar y auditoria |
+| C5 | Aprobacion y aplicacion atomica | Cerrado: B2/B4 en una transaccion, concurrencia y rollback |
+| C6 | Frontend propietario y superadmin | Cerrado sobre APIs C2-C5: cotización, solicitud, comprobante, revisión, aplicación, tasa y métodos; responsive, accesible, sin doble envío ni IDs internos |
+| C7 | Seguridad y regresion integral | Cerrado: dos tenants, archivos, carreras, browser y compatibilidad A/B |
+| C8 | Cierre integral | Cerrado: huella intacta, cero residuos y macrofase validada |
 
-## Decisiones pendientes para operacion y C3
+## Estado final de SAAS-C
+
+SAAS-C esta completo. El flujo vigente es manual: el superadmin registra la
+tasa USD/BOB y configura metodos; el propietario cotiza, crea la solicitud y
+carga el comprobante; el superadmin revisa y aplica una unica operacion B2/B4.
+El backend conserva la autoridad financiera y el snapshot de cada solicitud.
+
+Siguen pendientes QR dinamico, tarjetas, conciliacion bancaria, webhooks, cobro
+recurrente y automatizaciones. No existe facturacion fiscal y no se inicia una
+beta con este cierre. El siguiente bloque del roadmap es seguridad publica final.
+
+## Decisiones pendientes para operacion posterior al cierre
 
 1. Fuente operativa y vigencia que usara el superadmin al registrar manualmente
    el tipo de cambio USD/BOB.
@@ -552,5 +560,5 @@ atribuible y limpieza en `finally` de DB, objetos, browser, procesos y puertos.
 3. Politica definitiva de observacion, retencion de comprobantes y destruccion;
    el limite tecnico inicial de archivo queda en 5 MiB.
 
-No bloquean el esquema. C2 no debe crear una solicitud cobrable mientras no
-existan tasa activa y metodo propietario configurado.
+No bloquean el esquema cerrado. El flujo no crea una solicitud cobrable mientras
+no existan una tasa activa y un metodo de propietario configurado.
