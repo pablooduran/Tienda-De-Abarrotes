@@ -77,9 +77,30 @@ Las migraciones son posibilidades; ninguna se crea por estar mencionada aqui.
 | UX-002 | Lenguaje del ciclo comercial | "Compensaciones", "Eliminar" y los historiales usan terminos tecnicos o ambiguos para un propietario nuevo | alta antes de beta | copy, confirmaciones, trazabilidad y pruebas de interfaz | No | Aprobado para fase futura; lenguaje de acciones definido | PRODUCTO-1 P2/P4 |
 | UX-003 | Centro de configuracion de tienda | Ajustes base, credito e inventario estan repartidos entre onboarding y modulos | media antes de beta | navegacion, permisos y copy; no crea configuracion nueva | No | Aprobado para fase futura; alcance tecnico por definir | PRODUCTO-1 P5 |
 | UX-004 | Busqueda escalable de clientes en POS | El selector actual conserva un limite operativo de 500 clientes; la busqueda remota paginada esta diferida | media antes de beta | POS, rendimiento, tenant y experiencia de venta fiada | No determinada | Aprobado para fase futura; priorizacion tecnica pendiente | PRODUCTO-1 P4 |
-| SECURITY-2 | Evolucion de seguridad de cuenta | PRODUCTO-0B requiere una auditoria previa antes de cambiar autenticacion o abrir nuevas superficies | alta antes de beta | sesiones, cookies, MFA, recuperacion, rate limits, logging y futuras superficies COMMERCE | No determinada | Pendiente; no iniciar sin auditoria y autorizacion separada | SECURITY-2 |
+| SECURITY-FINAL | Auditoria y endurecimiento integral previo a lanzamiento; sustituye el pendiente conceptual SECURITY-2 | PRODUCTO-0B dejo la auditoria de seguridad para despues de PRODUCTO-1, WELCOME, HELP y COMMERCE | critica antes del lanzamiento | autenticacion, sesiones, tenant, web, datos, negocio, dependencias, repositorio, CI y pruebas ofensivas controladas | No determinada | Pendiente; no iniciar sin autorizacion separada | SECURITY-FINAL |
 
 ## 4. Desarrollo tecnico pendiente
+
+### SECURITY-FINAL
+
+Pendiente de ejecucion antes de pruebas finales y de cualquier beta. Debe
+cubrir autenticacion y login (fuerza bruta, credential stuffing, password
+spraying, throttling, bloqueos temporales, recuperacion, enumeracion,
+verificacion, politica de contrasenas, contrasenas comprometidas, MFA/TOTP,
+passkeys, codigos de recuperacion y superadmin), sesiones y cookies,
+autorizacion y aislamiento tenant, seguridad web, uploads, datos, backups,
+logica de negocio, dependencias y cadena de suministro, GitHub y CI.
+
+Los umbrales de rate limit y bloqueo se decidiran y probaran en SECURITY-FINAL;
+no se asume bloqueo permanente tras tres intentos. Las pruebas ofensivas seran
+controladas, con local, bases temporales, datos sinteticos y storage de prueba.
+Cada hallazgo debe incluir evidencia, reproduccion, impacto, correccion,
+regresion y estado final, clasificado como critico, alto, medio o bajo.
+
+La salida requiere cero criticos abiertos, altas corregidas o bloqueo explicito
+del lanzamiento, validacion de autenticacion, tenant, datos, codigo,
+repositorio y CI, y una regresion final de seguridad. SECURITY-FINAL no esta
+implementado ni iniciado.
 
 Quedan registrados como trabajo de plataforma, con evidencia en continuidad,
 mapa de pruebas y estado de despliegue:
@@ -341,7 +362,7 @@ explicita y una nueva evaluacion de seguridad, datos y alcance.
 9. Decidir beta privada, beta publica y lanzamiento oficial.
 
 Secuencia aprobada: PRODUCTO-1 P1-P8 -> WELCOME -> HELP -> COMMERCE ->
-SECURITY-2 -> pruebas completas finales -> revision final del propietario ->
+SECURITY-FINAL -> pruebas completas finales -> revision final del propietario ->
 STAGING-2B -> pruebas reales -> decision de beta/lanzamiento. Esta secuencia no
 autoriza por si sola el inicio de ninguna fase.
 
@@ -354,7 +375,7 @@ autoriza por si sola el inicio de ninguna fase.
 | 2026-08-13 | STAGING-1 / PREPROD-1 | Configuracion, proxy, runbook, backup, rollback y recuperacion local cerrados sin despliegue | Codex | HEAD `16fa54f` |
 | 2026-08-13 | REGRESION GENERAL | Regresion integral cerrada; correccion de devolucion vendible al lote original | Codex | HEAD `eb53214` |
 | 2026-08-13 | DOCS-OPS / PRODUCTO-0A | Documentacion operativa cerrada y auditoria funcional/UX iniciada sin cambios de producto | Codex | HEAD `059b086` |
-| 2026-08-13 | PRODUCTO-0B | Decisiones de navegacion, lenguaje, configuracion, filtros, carga y SECURITY-2 registradas sin implementacion | Codex | HEAD `d6902c5` |
+| 2026-08-13 | PRODUCTO-0B | Decisiones de navegacion, lenguaje, configuracion, filtros, carga y SECURITY-FINAL registradas sin implementacion | Codex | HEAD `d6902c5` |
 
 ## 20. Regla permanente
 

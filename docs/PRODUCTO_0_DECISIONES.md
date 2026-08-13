@@ -62,13 +62,50 @@ El superadmin conserva una navegacion distinta: tiendas, suscripciones SaaS, pag
 
 WELCOME debe ofrecer onboarding contextual corto, pasos ordenados, siguiente accion evidente y posibilidad de omitir o retomar. HELP debe aportar ayuda contextual y centro de soporte sin saturar el primer uso. Ambos dependen de la navegacion aprobada y no se inician aqui.
 
-## SECURITY-2 futuro
+## SECURITY-FINAL - auditoria y endurecimiento integral previo a lanzamiento
 
-Antes de cambiar experiencia de seguridad o abrir nuevas superficies, SECURITY-2 auditara autenticacion, sesiones, regeneracion/rotacion, logout e invalidacion, cookies, rate limits, politica y hashing de contrasenas, recuperacion, verificacion de correo, superadmin, operaciones sensibles y logging de autenticacion.
+SECURITY-FINAL sustituye el pendiente conceptual SECURITY-2. Se ejecutara
+despues de PRODUCTO-1, WELCOME, HELP y COMMERCE, antes de las pruebas finales y
+de cualquier beta. Esta fase sigue pendiente y no se inicia con PRODUCTO-0B.
 
-Luego evaluara estado de seguridad de cuenta, sesiones activas/revocacion, reautenticacion, MFA, TOTP/passkeys, codigos de recuperacion, blocklist de contrasenas con privacidad, fortalecimiento de rate limits, politica moderna, evolucion segura de hashing, resistencia a enumeracion y auditoria de eventos. No se asume email OTP como MFA principal, no se agregan JWT sin necesidad demostrada y no se guardan tokens en `localStorage`.
+La auditoria cubrira autenticacion y login (fuerza bruta, credential stuffing,
+password spraying, rate limits, throttling progresivo, bloqueos temporales,
+proteccion de cuenta y origen, recuperacion, enumeracion, verificacion de
+correo, politica de contrasenas, contrasenas comprometidas y superadmin). Los
+umbrales exactos se decidiran y probaran en SECURITY-FINAL; no se asumira un
+bloqueo permanente despues de tres intentos. Tambien evaluara MFA/TOTP,
+passkeys y codigos de recuperacion como opciones futuras, sin introducirlos
+ahora.
 
-COMMERCE sigue separado. SECURITY-2 revisara toda superficie de autenticacion que COMMERCE agregue antes de pruebas finales.
+Revisara sesiones y cookies: regeneracion al autenticar o cambiar privilegios,
+expiracion, revocacion, logout, fijacion o secuestro, sesiones concurrentes y
+reautenticacion para operaciones sensibles. No se agregaran JWT sin necesidad
+demostrada.
+
+La cobertura incluira autorizacion y tenant (IDOR, bypass entre tiendas,
+escalamiento horizontal o vertical, manipulacion de IDs y limites de plan),
+seguridad web (SQLi, XSS, CSRF, traversal, uploads, SSRF cuando aplique,
+redirects, headers, CSP, CORS, origen y errores seguros), datos (stores,
+clientes, usuarios, comprobantes, sesiones, backups, logs, secretos,
+transporte, restauracion y aislamiento), y logica de negocio (ventas,
+inventario, devoluciones, pagos, suscripciones, concurrencia, replay,
+idempotencia y doble submit).
+
+Tambien se revisaran dependencias directas y transitivas, `npm audit`,
+ExcelJS/uuid, scripts, configuracion, secretos embebidos, archivos sensibles,
+permisos del repositorio, ramas, protecciones, GitHub Actions, artefactos,
+caches, variables y ejecuciones no confiables. Las pruebas ofensivas seran
+controladas y solo usaran local, bases temporales, datos sinteticos y storage
+de prueba; nunca terceros ni datos reales.
+
+Cada hallazgo registrara evidencia, reproduccion, impacto, correccion, prueba
+de regresion y estado final, con severidad critica, alta, media o baja. La
+salida exigira cero criticos abiertos, altas corregidas o bloqueo explicito del
+lanzamiento, validacion de autenticacion, tenant, datos, codigo, repositorio y
+CI, y una regresion final de seguridad.
+
+COMMERCE sigue separado, pero toda superficie de autenticacion que agregue
+debera quedar incluida en esta auditoria antes de las pruebas finales.
 
 ## Bloques propuestos para PRODUCTO-1
 
@@ -83,7 +120,7 @@ COMMERCE sigue separado. SECURITY-2 revisara toda superficie de autenticacion qu
 | P7 - Responsive, accesibilidad y branding | Validacion transversal, favicon e identidad minima | Marca completa |
 | P8 - Regresion de producto | Browser, accesibilidad, tenant, seguridad y limpieza | Funcionalidades nuevas |
 
-Cada bloque declarara archivos, contratos, pruebas, fixtures, procesos y limpieza. Ninguno inicia WELCOME, HELP, COMMERCE o SECURITY-2 sin autorizacion separada.
+Cada bloque declarara archivos, contratos, pruebas, fixtures, procesos y limpieza. Ninguno inicia WELCOME, HELP, COMMERCE o SECURITY-FINAL sin autorizacion separada.
 
 ## Decisiones aun pendientes
 
@@ -91,12 +128,12 @@ Cada bloque declarara archivos, contratos, pruebas, fixtures, procesos y limpiez
 - Alcance exacto del centro de Configuracion y su orden de migracion visual.
 - Momento de implementar la busqueda escalable de clientes en POS.
 - Capacidades bloqueadas que aportan valor al mostrarse contextualmente.
-- Secuencia entre PRODUCTO-1, WELCOME, HELP y SECURITY-2.
+- Secuencia entre PRODUCTO-1, WELCOME, HELP, COMMERCE y SECURITY-FINAL.
 - STAGING-2B, proveedor, topologia y gasto externo siguen diferidos.
 
 ## Secuencia aprobada de fases futuras
 
-PRODUCTO-1 P1-P8 -> WELCOME -> HELP -> COMMERCE -> SECURITY-2 -> pruebas
+PRODUCTO-1 P1-P8 -> WELCOME -> HELP -> COMMERCE -> SECURITY-FINAL -> pruebas
 completas finales -> revision final del propietario -> STAGING-2B -> pruebas
 reales -> decision de beta/lanzamiento.
 
