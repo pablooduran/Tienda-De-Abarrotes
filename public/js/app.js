@@ -33,10 +33,20 @@ const sections = [
   ['pagos', 'Cobranza', 'Deudas, pagos, promesas y recordatorios'],
   ['gastos', 'Gastos', 'Egresos operativos y categorias'],
   ['finanzas', 'Finanzas', 'Ventas, cobros, costos y ganancias'],
-  ['compensaciones', 'Compensaciones', 'Anulaciones, devoluciones y ajustes trazables'],
+  ['compensaciones', 'Devoluciones y anulaciones', 'Anulaciones, devoluciones y ajustes trazables'],
   ['auditoria', 'Auditoria', 'Acciones administrativas y resultados'],
   ['cierreCaja', 'Cierre de caja', 'Control de efectivo por periodo'],
   ['reportes', 'Reportes', 'Consultas, filtros y ganancias']
+];
+
+const navigationFamilies = [
+  { id: 'inicio', label: 'Inicio', sections: ['inicio'] },
+  { id: 'ventas', label: 'Ventas', sections: ['ventas', 'historialVentas', 'pagos', 'compensaciones'] },
+  { id: 'inventario', label: 'Inventario', sections: ['productos', 'movimientosStock', 'compras', 'proveedores', 'inventarioInteligente', 'inventarioOperativo', 'lotesVencimientos'] },
+  { id: 'clientes', label: 'Clientes', sections: ['clientes'] },
+  { id: 'reportes', label: 'Reportes', sections: ['reportes', 'finanzas', 'gastos', 'cierreCaja'] },
+  { id: 'administracion', label: 'Administracion y configuracion', sections: ['auditoria'] },
+  { id: 'plan', label: 'Mi plan', links: [{ href: '/suscripcion.html', label: 'Suscripcion, planes y pagos' }] }
 ];
 
 function money(value) { return Number(value || 0).toFixed(2); }
@@ -398,14 +408,54 @@ function sectionAllowed(id) {
   return true;
 }
 
-function renderMenu() {
+function sectionById(id) {
+  return sections.find((section) => section[0] === id);
+}
+
+function familyForSection(id) {
+  return navigationFamilies.find((family) => family.sections?.includes(id))?.id || null;
+}
+
+function renderMenu(activeView = 'inicio') {
   menu.innerHTML = '';
-  sections.filter(([id]) => sectionAllowed(id)).forEach(([id, label]) => {
-    const btn = document.createElement('button');
-    btn.textContent = label;
-    btn.dataset.view = id;
-    btn.addEventListener('click', () => loadView(id));
-    menu.appendChild(btn);
+  const activeFamily = familyForSection(activeView);
+  navigationFamilies.forEach((family) => {
+    const destinations = (family.sections || [])
+      .map((id) => sectionById(id))
+      .filter((section) => section && sectionAllowed(section[0]));
+    if (!destinations.length && !family.links?.length) return;
+
+    const group = document.createElement('details');
+    group.className = 'nav-family';
+    group.dataset.navigationFamily = family.id;
+    group.open = family.id === activeFamily;
+
+    const summary = document.createElement('summary');
+    summary.textContent = family.label;
+    if (family.id === activeFamily) summary.classList.add('active');
+    group.appendChild(summary);
+
+    const items = document.createElement('div');
+    items.className = 'nav-family-items';
+    destinations.forEach(([id, label]) => {
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.textContent = label;
+      button.dataset.view = id;
+      button.className = 'nav-destination';
+      button.classList.toggle('active', id === activeView);
+      button.addEventListener('click', () => loadView(id));
+      items.appendChild(button);
+    });
+    (family.links || []).forEach((link) => {
+      const anchor = document.createElement('a');
+      anchor.href = link.href;
+      anchor.textContent = link.label;
+      anchor.className = 'nav-destination nav-link';
+      items.appendChild(anchor);
+    });
+    group.appendChild(items);
+    menu.appendChild(group);
   });
 }
 
@@ -436,13 +486,17 @@ function categoryOptions(value = '') {
 
 async function loadView(id) {
   showMessage('');
-  document.querySelectorAll('#menu button').forEach((btn) => btn.classList.toggle('active', btn.dataset.view === id));
-  const section = sections.find((item) => item[0] === id);
+  const section = sectionById(id);
+  if (!section || !sectionAllowed(id)) {
+    if (id !== 'inicio') return loadView('inicio');
+    return;
+  }
+  renderMenu(id);
   title.textContent = section[1];
   subtitle.textContent = section[2];
   await refreshCatalogs();
   const handlers = { inicio, productos, movimientosStock, inventarioInteligente, inventarioOperativo, lotesVencimientos, clientes, proveedores, ventas, compras, historialVentas, pagos, gastos, finanzas, compensaciones, auditoria, cierreCaja, reportes };
-  if (!handlers[id] || !sectionAllowed(id)) return loadView('inicio');
+  if (!handlers[id]) return loadView('inicio');
   await handlers[id]();
   applyReadOnlyUi();
 }

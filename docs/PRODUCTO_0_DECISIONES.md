@@ -122,6 +122,15 @@ debera quedar incluida en esta auditoria antes de las pruebas finales.
 
 Cada bloque declarara archivos, contratos, pruebas, fixtures, procesos y limpieza. Ninguno inicia WELCOME, HELP, COMMERCE o SECURITY-FINAL sin autorizacion separada.
 
+### Estado de P1
+
+P1 implementa la navegacion agrupada del propietario con las familias Inicio,
+Ventas, Inventario, Clientes, Reportes, Administracion y configuracion, y Mi
+plan. Conserva los destinos, guards de funcionalidades y rutas existentes; la
+etiqueta visible de `compensaciones` pasa a `Devoluciones y anulaciones`. El
+superadmin conserva `admin.html` y su navegacion global separada. P1 esta
+implementado y pendiente de validacion/cierre; P2 no esta iniciado.
+
 ## Decisiones aun pendientes
 
 - Detalle visual de familias, iconografia, colores y marca.
