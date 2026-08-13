@@ -1,6 +1,7 @@
 const assert = require('assert');
 const {
   EXIT_CODES,
+  expandStatusEntries,
   inspectPrecommit,
   writeReport
 } = require('./codex-precommit');
@@ -33,6 +34,14 @@ function entry(file, options = {}) {
 function main() {
   const clean = inspect([], {});
   assert.equal(clean.exitCode, EXIT_CODES.pass);
+
+  const expandedDirectory = expandStatusEntries('?? .github/\n', (args) => {
+    assert.deepStrictEqual(args, ['ls-files', '--others', '--exclude-standard', '--', '.github/']);
+    return { ok: true, output: '.github/workflows/ci.yml' };
+  });
+  assert.deepStrictEqual(expandedDirectory, [{
+    staged: false, unstaged: true, untracked: true, file: '.github/workflows/ci.yml'
+  }]);
 
   const validJs = inspect([entry('scripts/valid.js', { staged: true })], { 'scripts/valid.js': 'module.exports = {};\n' });
   assert.equal(validJs.exitCode, EXIT_CODES.pass);

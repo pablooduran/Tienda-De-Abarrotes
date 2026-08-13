@@ -70,3 +70,16 @@ Para un cambio pequeno, empezar por Nivel 1 y agregar Nivel 2 solo cuando el
 alcance afecte datos, rutas o contratos. Reservar Nivel 3 para cierres,
 frontend visual o cambios transversales. Un fallo de integridad, tenant,
 seguridad, migracion o limpieza obliga a detenerse antes de continuar.
+
+## CI GitHub Actions
+
+El workflow `.github/workflows/ci.yml` usa Node 20 y un servicio MySQL 8
+efimero. Con `APP_ENV=local`, `DB_HOST=localhost` y credenciales sinteticas
+ejecuta `db:init`, `db:migrate`, el ensayo estructural 001-024 y los
+comprobadores de SAAS-C, multitienda, auditoria, seguridad web, suscripciones y
+pagos manuales. Las suites que comparten fixtures se ejecutan en serie y el
+servidor HTTP se cierra incluso ante fallo.
+
+CI no despliega, no lee archivos `.env`, no usa backups ni datos reales y no
+ejecuta arneses browser que requieren Edge local. Antes de staging debe
+ejecutarse la validacion browser aplicable desde un entorno local controlado.

@@ -492,6 +492,9 @@ No mostrar estas variables en logs ni respuestas. Nunca versionar `.env`, `.env.
   alertas; el estado, la cache y los limites siguen siendo por instancia.
 - Un proceso caido no puede emitir su propia recuperacion o alerta. Hace falta un monitor externo
   autorizado para invocar el comprobador o los endpoints y un almacenamiento fuera del host.
+- CI GitHub Actions usa Node 20, MySQL 8 efimero, migraciones 001-024 y una
+  regresion server-side serializada. No usa secretos, backups ni datos reales y
+  no despliega. Los arneses browser siguen en la validacion local controlada.
 - No hay staging configurado ni despliegue de este estado.
 - SAAS-A incorpora registro publico pendiente, verificacion, recuperacion de contrasena y onboarding mediante adaptador local en memoria. Aun no hay proveedor real de correo, invitaciones ni login social.
 - SAAS-C2 agrega rutas backend para planes y metodos publicos, cotizacion sin
@@ -534,7 +537,7 @@ No mostrar estas variables en logs ni respuestas. Nunca versionar `.env`, `.env.
 No alterar este orden sin una decision explicita:
 
 1. Cerrar y publicar seguridad publica final.
-2. CI y GitHub Actions.
+2. Cerrar y publicar CI y GitHub Actions.
 3. Staging y produccion de prueba con datos sinteticos.
 4. Revision integral del propietario antes de decidir una beta.
 
@@ -703,6 +706,7 @@ limpieza. Los pagos actuales son manuales. Siguen pendientes QR dinamico,
 tarjetas, conciliacion, webhooks, cobro recurrente y automatizaciones; tampoco
 existe facturacion fiscal ni se inicia una beta.
 
-La macrofase de **seguridad publica final** esta implementada y pendiente de su
-cierre Git. Despues corresponde CI y GitHub Actions. No iniciar CI, staging,
-produccion ni incorporar tiendas reales desde este bloque.
+La macrofase de **seguridad publica final** esta cerrada y publicada. La
+macrofase de **CI y GitHub Actions** agrega validacion reproducible sin
+despliegue sobre MySQL efimero; staging sigue siendo el siguiente bloque y no
+debe iniciarse desde esta etapa.

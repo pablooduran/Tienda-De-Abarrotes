@@ -1,0 +1,118 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    name: Node 20 / MySQL 8
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    permissions:
+      contents: read
+    env:
+      APP_ENV: local
+      NODE_ENV: test
+      DB_HOST: localhost
+      DB_PORT: '3306'
+      DB_NAME: tienda_abarrotes_pruebas
+      DB_USER: root
+      DB_PASSWORD: ci_local_mysql_root_2026_only
+      DB_SSL_ENABLED: 'false'
+      BACKUP_RESTORE_USER: root
+      BACKUP_RESTORE_PASSWORD: ci_local_mysql_root_2026_only
+      SESSION_SECRET: ci_local_session_secret_2026_only_long_enough
+      PORT: '3000'
+      TRUSTED_ORIGINS: http://localhost:3000
+      PAYMENT_RECEIPT_STORAGE_DIR: /tmp/tienda-saas-c3-http-ci
+      TEST_BASE_URL: http://localhost:3000
+    services:
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_DATABASE: tienda_abarrotes_pruebas
+          MYSQL_ROOT_PASSWORD: ci_local_mysql_root_2026_only
+          MYSQL_ROOT_HOST: '%'
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h localhost -uroot -p$MYSQL_ROOT_PASSWORD"
+          --health-interval=10s --health-timeout=5s --health-retries=12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20.x
+          cache: npm
+      - name: Install locked dependencies
+        run: npm ci
+      - name: Check CI isolation contract
+        run: npm run check:ci-environment
+      - name: Check workflow contract
+        run: npm run check:ci-workflow
+      - name: Validate JavaScript syntax
+        run: |
+          node --check server.js
+          find config middleware routes services scripts utils -name '*.js' -print0 | xargs -0 -n 1 node --check
+      - name: Static security checks
+        run: |
+          npm run check:web-security
+          npm run test:web-security
+          git diff --check
+          npm run codex:precommit -- --allow .github/workflows/ci.yml package.json scripts/check-ci-environment.js scripts/check-ci-workflow.js scripts/codex-precommit.js scripts/test-codex-precommit.js docs/MAPA_PRUEBAS.md docs/CONTINUIDAD_PROYECTO.md docs/PENDIENTES_Y_MEJORAS_FUTURAS.md README.md
+      - name: Prepare ephemeral schema 001-024
+        run: |
+          npm run db:init
+          npm run db:migrate
+          npm run test:saas-c-schema
+          npm run db:check-saas-c
+      - name: Start isolated HTTP test server
+        shell: bash
+        run: |
+          npm run start:local > "$RUNNER_TEMP/tienda-ci-server.log" 2>&1 &
+          echo "$!" > "$RUNNER_TEMP/tienda-ci-server.pid"
+          for attempt in {1..30}; do
+            if curl --fail --silent --show-error http://localhost:3000/health/ready; then exit 0; fi
+            sleep 1
+          done
+          cat "$RUNNER_TEMP/tienda-ci-server.log"
+          exit 1
+      - name: Run isolated integration suite
+        run: |
+          npm run test:public-registration
+          npm run test:email-verification
+          npm run test:password-recovery
+          npm run test:session-revocation
+          npm run test:subscriptions
+          npm run test:subscription-lifecycle-engine
+          npm run test:subscription-plan-changes
+          npm run test:subscription-limits
+          npm run test:tenant-isolation
+          npm run db:check-multitenant
+          npm run test:administrative-audit
+          npm run db:check-administrative-audit
+          npm run test:saas-c-payment-request-security
+          npm run test:saas-c-payment-requests
+          npm run test:saas-c-payment-receipt-security
+          npm run test:saas-c-payment-receipts
+          npm run test:saas-c-payment-reviews
+          npm run test:saas-c-payment-review-security
+          npm run test:saas-c-payment-applications
+          npm run test:saas-c-payment-application-security
+      - name: Stop isolated HTTP test server
+        if: always()
+        shell: bash
+        run: |
+          if [ -f "$RUNNER_TEMP/tienda-ci-server.pid" ]; then
+            kill "$(cat "$RUNNER_TEMP/tienda-ci-server.pid")" 2>/dev/null || true
+            wait "$(cat "$RUNNER_TEMP/tienda-ci-server.pid")" 2>/dev/null || true
+          fi
+          rm -rf "$PAYMENT_RECEIPT_STORAGE_DIR"

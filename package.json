@@ -102,6 +102,8 @@
     "test:saas-c-payment-applications": "node scripts/test-saas-c-payment-applications.js",
     "test:saas-c-payment-application-security": "node scripts/test-saas-c-payment-application-security.js",
     "test:saas-c-payment-browser": "node scripts/test-saas-c-payment-browser.js",
+    "check:ci-environment": "node scripts/check-ci-environment.js",
+    "check:ci-workflow": "node scripts/check-ci-workflow.js",
     "check:operational-health": "node scripts/check-operational-health.js",
     "check:web-security": "node scripts/check-web-security.js",
     "codex:status": "node scripts/codex-project-status.js",

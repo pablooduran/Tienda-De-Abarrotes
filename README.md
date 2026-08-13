@@ -40,6 +40,20 @@ Variables obligatorias para iniciar la aplicacion:
 
 `SESSION_SECRET` debe tener al menos 32 caracteres. En local, `DB_SSL_ENABLED=false` mantiene la conexion sin TLS y no intenta leer certificados. La aplicacion se detiene con un mensaje claro si falta una variable obligatoria y nunca imprime contrasenas, hashes ni certificados.
 
+## Integracion continua
+
+El workflow [`.github/workflows/ci.yml`](.github/workflows/ci.yml) se ejecuta en
+pushes a `mejora-multitienda` y pull requests. Instala dependencias bloqueadas
+con `npm ci`, valida sintaxis y seguridad web, crea una instancia MySQL 8
+efimera y aplica el esquema 001-024 antes de ejecutar las pruebas server-side
+de autenticacion, suscripciones, multitienda, auditoria y pagos manuales.
+
+CI usa valores sinteticos y exige `APP_ENV=local`, `DB_HOST=localhost` y la base
+efimera `tienda_abarrotes_pruebas`; falla antes de conectar si el contrato no se
+cumple. No lee `.env.local`, no usa secretos ni backups reales, no despliega y
+no ejecuta pruebas browser dependientes de Edge local. Esas pruebas siguen
+siendo obligatorias en la validacion controlada previa a staging.
+
 ## TLS de MySQL
 
 La configuracion MySQL se construye en `config/database-options.js` y es compartida por el servidor, el almacen de sesiones, el migrador, los comprobadores y las pruebas. No existe deteccion automatica por dominio ni degradacion silenciosa.

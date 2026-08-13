@@ -34,15 +34,29 @@ function runGit(args, execFile = childProcess.execFileSync) {
   }
 }
 
+function expandStatusEntries(statusOutput, result) {
+  return String(statusOutput || '').split(/\r?\n/).filter(Boolean).flatMap((line) => {
+    const entry = {
+      staged: line[0] !== ' ' && line[0] !== '?',
+      unstaged: line[1] !== ' ',
+      untracked: line.startsWith('??'),
+      file: normalizeFile(line.slice(3))
+    };
+    if (!entry.untracked || !entry.file.endsWith('/')) return [entry];
+    const nested = result(['ls-files', '--others', '--exclude-standard', '--', entry.file]).output
+      .split(/\r?\n/)
+      .filter(Boolean)
+      .map(normalizeFile);
+    return nested.length
+      ? nested.map((file) => ({ ...entry, file }))
+      : [entry];
+  });
+}
+
 function gitSnapshot(execFile = childProcess.execFileSync) {
   const result = (args) => runGit(args, execFile);
   const status = result(['status', '--porcelain=v1']);
-  const files = status.output.split(/\r?\n/).filter(Boolean).map((line) => ({
-    staged: line[0] !== ' ' && line[0] !== '?',
-    unstaged: line[1] !== ' ',
-    untracked: line.startsWith('??'),
-    file: normalizeFile(line.slice(3))
-  }));
+  const files = expandStatusEntries(status.output, result);
   return {
     branch: result(['branch', '--show-current']).output || 'unknown',
     head: result(['rev-parse', '--short', 'HEAD']).output || 'unknown',
@@ -188,6 +202,7 @@ module.exports = {
   FORBIDDEN_PATHS,
   SECRET_PATTERNS,
   classify,
+  expandStatusEntries,
   inspectPrecommit,
   migrationFindings,
   parseArguments,
