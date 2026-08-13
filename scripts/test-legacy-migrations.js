@@ -2,6 +2,7 @@ const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
 const mysql = require('mysql2/promise');
+require('../config/env');
 const {
   buildDatabaseOptions,
   isProductionEnvironment,
@@ -17,7 +18,7 @@ const {
   normalizedObjectKey
 } = require('./migration-state/legacy-migrations');
 
-const TEMP_PREFIX = 'tmp_tienda_legacy_';
+const TEMP_PREFIX = 'tmp_tienda_restore_';
 const PROTECTED_DATABASES = new Set([
   'tienda_abarrotes',
   'tienda_abarrotes_pruebas',
@@ -57,7 +58,19 @@ async function createServerConnection() {
   if (!['localhost', '127.0.0.1', '::1'].includes(host)) {
     throw new Error('test:legacy-migrations solo se permite contra MySQL local.');
   }
-  const options = buildDatabaseOptions(process.env);
+  const restoreUser = String(process.env.BACKUP_RESTORE_USER || '').trim();
+  const restorePassword = String(process.env.BACKUP_RESTORE_PASSWORD || '');
+  if (!restoreUser || !restorePassword) {
+    throw new Error(
+      'Configure BACKUP_RESTORE_USER y BACKUP_RESTORE_PASSWORD con permisos limitados '
+      + 'a tmp_tienda_restore_%.* para ejecutar test:legacy-migrations.'
+    );
+  }
+  const options = buildDatabaseOptions({
+    ...process.env,
+    DB_USER: restoreUser,
+    DB_PASSWORD: restorePassword
+  });
   delete options.database;
   return setBusinessSessionTimeZone(await mysql.createConnection(options));
 }
@@ -75,6 +88,8 @@ async function dropTemporaryDatabase(server, name) {
 async function connectTemporaryDatabase(name) {
   const options = buildDatabaseOptions({
     ...process.env,
+    DB_USER: String(process.env.BACKUP_RESTORE_USER || '').trim(),
+    DB_PASSWORD: String(process.env.BACKUP_RESTORE_PASSWORD || ''),
     DB_NAME: assertTemporaryDatabase(name)
   });
   return setBusinessSessionTimeZone(await mysql.createConnection(options));

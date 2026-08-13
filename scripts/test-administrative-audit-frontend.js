@@ -78,7 +78,7 @@ check('Solicitudes obsoletas no reemplazan resultados actuales',
   && ui.includes('if (request !== state.request) return;'));
 check('Consulta protegida sin cache',
   routes.includes("res.set('Cache-Control', 'no-store')")
-  && server.includes("app.use('/api/auditoria', rateLimiters.admin"));
+  && /app\.use\(\s*['"]\/api\/auditoria['"]\s*,\s*rateLimiters\.admin/.test(server));
 
 const failures = checks.filter((item) => !item.ok);
 checks.forEach((item) => console.log(`${item.ok ? 'OK' : 'FALLO'}: ${item.name}`));

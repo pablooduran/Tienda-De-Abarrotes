@@ -120,6 +120,10 @@ async function cleanupStore(connection, idTienda) {
   await connection.query('DELETE FROM plantillaCobranzaTienda WHERE idTienda=?', [idTienda]);
   await connection.query('DELETE FROM configuracionCreditoTienda WHERE idTienda=?', [idTienda]);
   await connection.query('DELETE FROM configuracionInventarioTienda WHERE idTienda=?', [idTienda]);
+  await connection.query('DELETE FROM configuracionTienda WHERE idTienda=?', [idTienda]);
+  await connection.query('DELETE FROM operacionSuscripcionTienda WHERE idTienda=?', [idTienda]);
+  await connection.query('DELETE FROM historialSuscripcionTienda WHERE idTienda=?', [idTienda]);
+  await connection.query('DELETE FROM suscripcionFuncionalidadSnapshot WHERE idTienda=?', [idTienda]);
   await connection.query('DELETE FROM suscripcionTienda WHERE idTienda=?', [idTienda]);
   await connection.query('DELETE FROM administrador WHERE idTienda=?', [idTienda]);
   await connection.query('DELETE FROM tienda WHERE idTienda=?', [idTienda]);

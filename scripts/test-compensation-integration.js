@@ -212,6 +212,7 @@ async function primaryFingerprint(environment = process.env) {
 }
 
 async function createFixture(connection, planCode) {
+  const { createSubscription } = require('../services/subscription-service');
   const suffix = crypto.randomBytes(4).toString('hex');
   const now = '2026-07-25 09:00:00';
   const password = `Local-${crypto.randomBytes(12).toString('hex')}!`;
@@ -234,14 +235,16 @@ async function createFixture(connection, planCode) {
     'SELECT idPlan FROM plan WHERE codigo=?',
     [planCode]
   );
-  await connection.query(
-    `INSERT INTO suscripcionTienda
-     (idTienda, idPlan, tipo, estado, fechaInicio, fechaFin,
-      renovacionAutomatica, observacion, creadoPor, creadoEn, actualizadoEn)
-     VALUES (?, ?, 'cortesia', 'activa', '2026-01-01 00:00:00',
-             '2027-12-31 23:59:59', 0, 'Fixture C4A', ?, ?, ?)`,
-    [idTienda, plan.idPlan, idAdministrador, now, now]
-  );
+  await createSubscription(connection, {
+    idTienda,
+    planCodigo: planCode,
+    tipo: 'cortesia',
+    fechaInicio: '2026-01-01 00:00:00',
+    fechaFin: '2027-12-31 23:59:59',
+    observacion: 'Fixture C4A',
+    creadoPor: idAdministrador,
+    actorTipo: 'administrador'
+  });
   const [client] = await connection.query(
     `INSERT INTO cliente
      (idTienda, nombre, telefono, telefonoNormalizado, documentoIdentidad,

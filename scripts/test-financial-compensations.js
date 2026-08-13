@@ -215,6 +215,7 @@ async function primaryFingerprint(environment = process.env) {
 }
 
 async function createFixture(connection, planCode) {
+  const { createSubscription } = require('../services/subscription-service');
   const suffix = crypto.randomBytes(4).toString('hex');
   const now = '2026-07-24 10:00:00';
   const password = `Local-${crypto.randomBytes(12).toString('hex')}!`;
@@ -233,14 +234,16 @@ async function createFixture(connection, planCode) {
   );
   const idAdministrador = Number(admin.insertId);
   const plan = await row(connection, 'SELECT idPlan FROM plan WHERE codigo=?', [planCode]);
-  await connection.query(
-    `INSERT INTO suscripcionTienda
-     (idTienda, idPlan, tipo, estado, fechaInicio, fechaFin,
-      renovacionAutomatica, observacion, creadoPor, creadoEn, actualizadoEn)
-     VALUES (?, ?, 'cortesia', 'activa', '2026-01-01 00:00:00',
-             '2027-12-31 23:59:59', 0, 'Fixture C3', ?, ?, ?)`,
-    [idTienda, plan.idPlan, idAdministrador, now, now]
-  );
+  await createSubscription(connection, {
+    idTienda,
+    planCodigo: planCode,
+    tipo: 'cortesia',
+    fechaInicio: '2026-01-01 00:00:00',
+    fechaFin: '2027-12-31 23:59:59',
+    observacion: 'Fixture C3',
+    creadoPor: idAdministrador,
+    actorTipo: 'administrador'
+  });
   const [client] = await connection.query(
     `INSERT INTO cliente
      (idTienda, nombre, telefono, telefonoNormalizado, documentoIdentidad,
@@ -888,11 +891,9 @@ async function main() {
     'Los identificadores manipulados no cruzan tiendas.');
 
     await connection.query(
-      `UPDATE planFuncionalidad pf
-       JOIN plan p ON p.idPlan=pf.idPlan
-       JOIN funcionalidad f ON f.idFuncionalidad=pf.idFuncionalidad
-       SET pf.habilitada=0
-       WHERE p.codigo='basico' AND f.codigo='anulaciones_operativas'`
+      `DELETE FROM suscripcionFuncionalidadSnapshot
+       WHERE idTienda=? AND codigoFuncionalidad='anulaciones_operativas'`,
+      [basic.idTienda]
     );
     temporaryServer = await startServer(temporaryDatabase);
     const advancedSession = new HttpSession(temporaryServer.baseUrl);

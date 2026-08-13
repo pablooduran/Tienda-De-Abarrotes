@@ -128,6 +128,10 @@ async function cleanupStore(connection, idTienda) {
   await connection.query('DELETE FROM plantillaCobranzaTienda WHERE idTienda=?', [idTienda]);
   await connection.query('DELETE FROM configuracionCreditoTienda WHERE idTienda=?', [idTienda]);
   await connection.query('DELETE FROM configuracionInventarioTienda WHERE idTienda=?', [idTienda]);
+  await connection.query('DELETE FROM configuracionTienda WHERE idTienda=?', [idTienda]);
+  await connection.query('DELETE FROM operacionSuscripcionTienda WHERE idTienda=?', [idTienda]);
+  await connection.query('DELETE FROM historialSuscripcionTienda WHERE idTienda=?', [idTienda]);
+  await connection.query('DELETE FROM suscripcionFuncionalidadSnapshot WHERE idTienda=?', [idTienda]);
   await connection.query('DELETE FROM suscripcionTienda WHERE idTienda=?', [idTienda]);
   await connection.query('DELETE FROM administrador WHERE idTienda=?', [idTienda]);
   await connection.query('DELETE FROM tienda WHERE idTienda=?', [idTienda]);
@@ -138,6 +142,7 @@ async function cleanup(connection, fixture) {
   const [stores] = await connection.query('SELECT idTienda FROM tienda WHERE slug LIKE ?', [`tienda-stock-%-${fixture.marker}`]);
   for (const store of stores) await cleanupStore(connection, store.idTienda);
   if (fixture.masterId) await connection.query('DELETE FROM productoMaestro WHERE idProductoMaestro=?', [fixture.masterId]);
+  else await connection.query('DELETE FROM productoMaestro WHERE nombre LIKE ?', [`%${fixture.marker}%`]);
   if (fixture.superUser) {
     await connection.query(
       `DELETE ea FROM eventoAuditoriaAdministrativa ea
@@ -156,6 +161,16 @@ async function cleanup(connection, fixture) {
   }
 }
 
+async function cleanupStaleFixtures(connection) {
+  const [stores] = await connection.query("SELECT slug FROM tienda WHERE slug LIKE 'tienda-stock-%'");
+  const markers = new Set(stores.map(({ slug }) => (
+    /^tienda-stock-[ab]-([0-9a-f]{12})$/.exec(String(slug || ''))?.[1]
+  )).filter(Boolean));
+  for (const marker of markers) {
+    await cleanup(connection, { marker, superUser: `super_stock_${marker}` });
+  }
+}
+
 async function main() {
   const config = { ...requireLocalhostDatabase('La prueba de movimientos de stock'), decimalNumbers: true };
   if (!/(prueba|test)/i.test(config.database)) {
@@ -170,6 +185,7 @@ async function main() {
 
   try {
     connection = await createDatabaseConnection(config);
+    await cleanupStaleFixtures(connection);
     const [[auditStart]] = await connection.query(
       'SELECT COALESCE(MAX(idEventoAuditoria),0) id FROM eventoAuditoriaAdministrativa'
     );

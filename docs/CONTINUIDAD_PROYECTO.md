@@ -341,7 +341,7 @@ Estas pruebas pueden crear y limpiar datos temporales en la base local de prueba
 - `test:web-security`: password compatible con bcrypt, secreto de sesion de
   produccion, rate limits generales y dedicados, origen, CSP, cabeceras,
   alias de vistas protegidas y errores seguros.
-- `test:legacy-migrations`: crea y elimina exclusivamente bases `tmp_tienda_legacy_*`.
+- `test:legacy-migrations`: usa el usuario auxiliar local y crea y elimina exclusivamente bases `tmp_tienda_restore_*`.
 - `test:compensation-foundation`: prueba 001→014, 013→014, esquema inicial e invariantes exclusivamente en bases `tmp_tienda_restore_*`.
 - `test:sales-compensations`: aplica 015 solo en una base `tmp_tienda_restore_*`, prueba anulaciones, devoluciones, stock, lotes, finanzas pendientes, concurrencia, rollback, tenant, plan y CSRF, y limpia en `finally`.
 - `test:financial-compensations`: aplica 016 con el migrador real solo en `tmp_tienda_restore_*`, prueba liquidaciones, reembolsos pendientes, deuda, cobros, metodos, concurrencia, rollback, tenant, plan y CSRF, compara la huella principal y limpia en `finally`.
@@ -436,7 +436,7 @@ No mostrar estas variables en logs ni respuestas. Nunca versionar `.env`, `.env.
 - Base local esperada para pruebas integrales: `tienda_abarrotes_pruebas`.
 - Una instalacion local puede usar otro `DB_NAME`, pero los scripts destructivos deben rechazar nombres no autorizados.
 - Bases de restauracion: unicamente `tmp_tienda_restore_*`.
-- Bases de pruebas de migraciones historicas: unicamente `tmp_tienda_legacy_*`.
+- Las pruebas de migraciones historicas reutilizan exclusivamente bases `tmp_tienda_restore_*` y el usuario auxiliar local.
 - Usuario normal: el definido por `DB_USER`, con permisos limitados a la base de aplicacion; no debe tener permisos globales de creacion o eliminacion de bases.
 - Usuario auxiliar local: `tienda_backup_test` en `localhost`, limitado exclusivamente a `tmp_tienda_restore_%.*`.
 - No ejecutar `GRANT` automaticamente. La preparacion del usuario auxiliar es manual y local.
@@ -659,7 +659,7 @@ En ambos casos, conservar el repositorio o base anterior hasta completar smoke t
 
 - Base de pruebas esperada: `tienda_abarrotes_pruebas`.
 - Migraciones registradas en la base principal conocida: 001 a 022.
-- No deberian existir bases `tmp_tienda_restore_*`, `tmp_tienda_legacy_*` ni
+- No deberian existir bases `tmp_tienda_restore_*` ni
   fixtures de ciclo de vida despues de las pruebas.
 
 ### Ultimo estado conocido de pruebas

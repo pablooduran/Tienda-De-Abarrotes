@@ -2128,7 +2128,13 @@ async function requirementsSatisfied(connection, file) {
          AND ((p.codigo IN ('basico','avanzado') AND f.codigo IN ('gastos','reportes_financieros','exportacion_reportes','dashboard_financiero'))
            OR (p.codigo='avanzado' AND f.codigo IN ('rentabilidad_producto','cierre_caja')))`
     );
-    if (Number(planAccess.total) !== 10) return false;
+    const [[paymentCatalog]] = await connection.query(
+      `SELECT COUNT(DISTINCT LOWER(COLUMN_NAME)) total
+       FROM information_schema.COLUMNS
+       WHERE TABLE_SCHEMA=DATABASE() AND LOWER(TABLE_NAME)='plan'
+         AND LOWER(COLUMN_NAME) IN ('visiblepublicamente','eslegado','ordencomercial')`
+    );
+    if (Number(planAccess.total) !== (Number(paymentCatalog.total) === 3 ? 9 : 10)) return false;
     const [[storesWithoutCategories]] = await connection.query(
       `SELECT COUNT(*) total FROM tienda t
        WHERE NOT EXISTS (SELECT 1 FROM categoriaGasto cg WHERE cg.idTienda=t.idTienda)`

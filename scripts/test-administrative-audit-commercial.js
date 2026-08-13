@@ -228,8 +228,8 @@ function testSecurityAndRoutes() {
   );
   check(!/router\.(post|put|patch|delete)\s*\(/i.test(route),
     'La auditoria expone exclusivamente rutas GET.');
-  check(server.includes("app.use('/api/auditoria', rateLimiters.admin, requireAuth, requireTenant")
-    && server.includes("app.use('/api/admin/auditoria', requireAuth, requireRole('superadmin')"),
+  check(/app\.use\(\s*['"]\/api\/auditoria['"]\s*,[\s\S]*?requireAuth\s*,\s*requireTenant\s*,[\s\S]*?tenantAuditRoutes\s*\)/.test(server)
+    && /app\.use\(\s*['"]\/api\/admin\/auditoria['"]\s*,\s*requireAuth\s*,\s*requireRole\(['"]superadmin['"]\)/.test(server),
   'Dueno y superadmin tienen cadenas de autorizacion separadas.');
   check(server.indexOf("app.use('/api', commercialAuditMiddleware)")
     < server.indexOf('app.use(mutationProtection'),

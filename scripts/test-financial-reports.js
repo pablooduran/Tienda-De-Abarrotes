@@ -108,6 +108,13 @@ async function scalar(connection, sql, params = []) {
 }
 
 async function cleanupStore(connection, idTienda) {
+  await connection.query(
+    `DELETE ea FROM eventoAuditoriaAdministrativa ea
+     JOIN administrador a ON a.idAdministrador=ea.idAdministradorActor
+     WHERE a.idTienda=?`,
+    [idTienda]
+  );
+  await connection.query('DELETE FROM eventoAuditoriaAdministrativa WHERE idTienda=?', [idTienda]);
   await connection.query('DELETE FROM cierreCaja WHERE idTienda=?', [idTienda]);
   await connection.query('DELETE FROM gasto WHERE idTienda=?', [idTienda]);
   await connection.query('DELETE FROM categoriaGasto WHERE idTienda=?', [idTienda]);
@@ -128,6 +135,10 @@ async function cleanupStore(connection, idTienda) {
   await connection.query('DELETE FROM plantillaCobranzaTienda WHERE idTienda=?', [idTienda]);
   await connection.query('DELETE FROM configuracionCreditoTienda WHERE idTienda=?', [idTienda]);
   await connection.query('DELETE FROM configuracionInventarioTienda WHERE idTienda=?', [idTienda]);
+  await connection.query('DELETE FROM configuracionTienda WHERE idTienda=?', [idTienda]);
+  await connection.query('DELETE FROM operacionSuscripcionTienda WHERE idTienda=?', [idTienda]);
+  await connection.query('DELETE FROM historialSuscripcionTienda WHERE idTienda=?', [idTienda]);
+  await connection.query('DELETE FROM suscripcionFuncionalidadSnapshot WHERE idTienda=?', [idTienda]);
   await connection.query('DELETE FROM suscripcionTienda WHERE idTienda=?', [idTienda]);
   await connection.query('DELETE FROM administrador WHERE idTienda=?', [idTienda]);
   await connection.query('DELETE FROM tienda WHERE idTienda=?', [idTienda]);
@@ -140,7 +151,25 @@ async function cleanup(connection, fixture) {
   for (const idTienda of storeIds) {
     await cleanupStore(connection, idTienda);
   }
-  if (fixture.superUser) await connection.query('DELETE FROM administrador WHERE usuario=?', [fixture.superUser]);
+  if (fixture.superUser) {
+    await connection.query(
+      `DELETE ea FROM eventoAuditoriaAdministrativa ea
+       JOIN administrador a ON a.idAdministrador=ea.idAdministradorActor
+       WHERE a.usuario=?`,
+      [fixture.superUser]
+    );
+    await connection.query('DELETE FROM administrador WHERE usuario=?', [fixture.superUser]);
+  }
+}
+
+async function cleanupStaleFixtures(connection) {
+  const [stores] = await connection.query("SELECT slug FROM tienda WHERE slug LIKE 'tienda-finanzas-%'");
+  const markers = new Set(stores.map(({ slug }) => (
+    /^tienda-finanzas-(?:avanzado|basico)-([0-9a-f]{12})$/.exec(String(slug || ''))?.[1]
+  )).filter(Boolean));
+  for (const marker of markers) {
+    await cleanup(connection, { marker, superUser: `super_fin_${marker}` });
+  }
 }
 
 async function main() {
@@ -158,6 +187,7 @@ async function main() {
 
   try {
     connection = await createDatabaseConnection(config);
+    await cleanupStaleFixtures(connection);
     assert(await scalar(connection, "SELECT COUNT(*) total FROM schema_migrations WHERE nombre='009_finanzas_reportes_caja.sql'") === 1,
       'La migracion 009 debe estar aplicada.');
     const hash = await bcrypt.hash(superPassword, 12);

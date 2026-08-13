@@ -143,6 +143,8 @@ async function cleanupStore(connection, idTienda) {
     'movimientoStock', 'pagoVenta', 'pagoFiado', 'cobroFiado', 'detalleFiado', 'detalleVenta',
     'detalleCompra', 'fiado', 'venta', 'compra', 'producto', 'cliente', 'proveedor',
     'plantillaCobranzaTienda', 'configuracionCreditoTienda', 'configuracionInventarioTienda',
+    'configuracionTienda', 'operacionSuscripcionTienda', 'historialSuscripcionTienda',
+    'suscripcionFuncionalidadSnapshot',
     'suscripcionTienda', 'administrador', 'tienda'
   ];
   for (const table of tables) await connection.query(`DELETE FROM ${table} WHERE idTienda=?`, [idTienda]);
@@ -779,8 +781,14 @@ async function main() {
     check(unauthenticated.status === 401, 'Una solicitud sin sesion conserva el contrato 401.');
     await anonymousContext.close();
 
+    const oldStart = formatLocalDateTime(addLocalDays(getLocalNow(), -30));
     const oldEnd = formatLocalDateTime(addLocalDays(getLocalNow(), -1));
-    await connection.query('UPDATE suscripcionTienda SET fechaFin=?, actualizadoEn=? WHERE idSuscripcion=?', [oldEnd, formatLocalDateTime(), basicStore.idSuscripcion]);
+    await connection.query(
+      `UPDATE suscripcionTienda
+       SET fechaInicio=?, fechaFin=?, fechaFinGracia=NULL, actualizadoEn=?
+       WHERE idSuscripcion=?`,
+      [oldStart, oldEnd, formatLocalDateTime(), basicStore.idSuscripcion]
+    );
     await basicPage.reload();
     await basicPage.locator('#menu').waitFor();
     await openMenu(basicPage, 'Clientes', '#customerFilters');

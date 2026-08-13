@@ -113,6 +113,10 @@ async function cleanupStore(connection, idTienda) {
   await connection.query('DELETE FROM plantillaCobranzaTienda WHERE idTienda=?', [idTienda]);
   await connection.query('DELETE FROM configuracionCreditoTienda WHERE idTienda=?', [idTienda]);
   await connection.query('DELETE FROM configuracionInventarioTienda WHERE idTienda=?', [idTienda]);
+  await connection.query('DELETE FROM configuracionTienda WHERE idTienda=?', [idTienda]);
+  await connection.query('DELETE FROM operacionSuscripcionTienda WHERE idTienda=?', [idTienda]);
+  await connection.query('DELETE FROM historialSuscripcionTienda WHERE idTienda=?', [idTienda]);
+  await connection.query('DELETE FROM suscripcionFuncionalidadSnapshot WHERE idTienda=?', [idTienda]);
   await connection.query('DELETE FROM suscripcionTienda WHERE idTienda=?', [idTienda]);
   await connection.query('DELETE FROM administrador WHERE idTienda=?', [idTienda]);
   await connection.query('DELETE FROM tienda WHERE idTienda=?', [idTienda]);
@@ -394,7 +398,7 @@ async function main() {
       [formatLocalDateTime(addLocalDays(expirationReference, -2)),
         formatLocalDateTime(addLocalDays(expirationReference, -1)), fixture.subscriptionA]
     );
-    await expect(ownerA, `/api/ventas/${cashSale.idVenta}/comprobante`, {}, 200, 'Comprobante disponible con suscripcion vencida');
+    await expect(ownerA, `/api/ventas/${cashSale.idVenta}/comprobante`, {}, 403, 'Comprobante bloqueado con suscripcion vencida');
     await expect(ownerA, '/api/pos/ventas', { method: 'POST', body: {
       claveOperacion: `expired-${marker}`, items: [{ idProducto: productA.idProducto, cantidad: 1, presentacion: 'unidad' }], pagos: [{ metodoPago: 'efectivo', monto: 10 }]
     } }, 403, 'Venta bloqueada con suscripcion vencida');

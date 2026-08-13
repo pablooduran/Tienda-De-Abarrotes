@@ -424,7 +424,7 @@ async function lotSources(connection, idTienda, requestedDetails, stockMovements
     `SELECT ml.idMovimientoLote, ml.idMovimientoStock, ml.idProducto, ml.idLoteProducto,
             ml.cantidad, lp.idProveedor, lp.codigoLote, lp.origen, lp.fechaIngreso,
             lp.fechaVencimiento, lp.cantidadInicial, lp.cantidadRestante,
-            lp.costoUnitarioBase, lp.estadoOperativo
+            lp.costoUnitarioBase, lp.estadoOperativo, lp.clasificacionInventario
      FROM movimientoLote ml
      JOIN loteProducto lp
        ON lp.idTienda=ml.idTienda

@@ -65,6 +65,14 @@ async function main() {
     const migracionRegistrada = schemaMigrations
       ? await count(connection, 'SELECT COUNT(*) total FROM schema_migrations WHERE nombre=?', [MIGRATION]) === 1
       : false;
+    const catalogoPagosRegistrado = schemaMigrations
+      ? await count(connection, "SELECT COUNT(*) total FROM schema_migrations WHERE nombre='023_estructura_pagos_suscripcion.sql'") === 1
+      : false;
+    const catalogoPagosEstructurado = await hasColumns(
+      connection,
+      'plan',
+      ['visiblePublicamente', 'esLegado', 'ordenComercial']
+    );
     const tablas = {};
     const columnas = {};
     for (const [table, columns] of Object.entries(REQUIRED_COLUMNS)) {
@@ -185,8 +193,10 @@ async function main() {
          FROM planFuncionalidad pf JOIN plan p ON p.idPlan=pf.idPlan
          JOIN funcionalidad f ON f.idFuncionalidad=pf.idFuncionalidad
          WHERE pf.habilitada=1 AND p.activo=1 AND f.activo=1
-           AND ((p.codigo IN ('basico','avanzado') AND f.codigo IN ('gastos','reportes_financieros','exportacion_reportes','dashboard_financiero'))
-             OR (p.codigo='avanzado' AND f.codigo IN ('rentabilidad_producto','cierre_caja')))`);
+           AND ((p.codigo='basico' AND f.codigo IN (${catalogoPagosEstructurado
+    ? "'gastos','reportes_financieros','dashboard_financiero'"
+    : "'gastos','reportes_financieros','exportacion_reportes','dashboard_financiero'"}))
+             OR (p.codigo='avanzado' AND f.codigo IN ('gastos','reportes_financieros','exportacion_reportes','dashboard_financiero','rentabilidad_producto','cierre_caja')))`);
       datos.diferenciaPagosPorMetodo = await count(connection,
         `SELECT COUNT(*) total FROM (
            SELECT idTienda, ABS(SUM(monto)-(
@@ -217,7 +227,7 @@ async function main() {
         .filter(([key]) => !['conteos', 'funcionalidadesActivas', 'accesosPlanCorrectos'].includes(key))
         .every(([, value]) => value === 0)
       && datos.funcionalidadesActivas === 6
-      && datos.accesosPlanCorrectos === 10;
+      && datos.accesosPlanCorrectos === (catalogoPagosEstructurado ? 9 : 10);
     const estadoMigracion = migracionRegistrada && estructuraCompleta && datosValidos
       ? 'post-migracion'
       : (!migracionRegistrada && !tablas.categoriaGasto && !tablas.gasto && !tablas.cierreCaja && !columnas.detalleVenta)
@@ -227,6 +237,8 @@ async function main() {
     console.log(JSON.stringify({
       estadoMigracion,
       migracionRegistrada,
+      catalogoPagosRegistrado,
+      catalogoPagosEstructurado,
       tablas,
       columnas,
       indices,

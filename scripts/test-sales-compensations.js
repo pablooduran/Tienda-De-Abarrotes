@@ -372,6 +372,7 @@ function operationKey(prefix) {
 }
 
 async function createStoreFixture(connection, suffix, planCode) {
+  const { createSubscription } = require('../services/subscription-service');
   const now = '2026-07-24 10:00:00';
   const password = `Local-${crypto.randomBytes(12).toString('hex')}!`;
   const hash = await bcrypt.hash(password, 4);
@@ -391,14 +392,16 @@ async function createStoreFixture(connection, suffix, planCode) {
   const idAdministrador = Number(administrator.insertId);
   const plan = await row(connection, 'SELECT idPlan FROM plan WHERE codigo=?', [planCode]);
   assert(plan, `Existe el plan ${planCode} para la fixture C2.`);
-  await connection.query(
-    `INSERT INTO suscripcionTienda
-       (idTienda, idPlan, tipo, estado, fechaInicio, fechaFin,
-        renovacionAutomatica, observacion, creadoPor, creadoEn, actualizadoEn)
-     VALUES (?, ?, 'cortesia', 'activa', '2026-01-01 00:00:00',
-             '2027-12-31 23:59:59', 0, 'Fixture C2', ?, ?, ?)`,
-    [idTienda, plan.idPlan, idAdministrador, now, now]
-  );
+  await createSubscription(connection, {
+    idTienda,
+    planCodigo: planCode,
+    tipo: 'cortesia',
+    fechaInicio: '2026-01-01 00:00:00',
+    fechaFin: '2027-12-31 23:59:59',
+    observacion: 'Fixture C2',
+    creadoPor: idAdministrador,
+    actorTipo: 'administrador'
+  });
   await connection.query(
     `INSERT INTO configuracionCreditoTienda
        (idTienda, limiteCreditoDefault, diasCreditoDefault, diasAvisoVencimiento,
@@ -879,11 +882,12 @@ async function main() {
       idVenta: lotSale.sale.idVenta,
       body: partialBody(lotSale.details[0], 2, 'reintegrar_vendible')
     });
+    const originalLotBalance = await scalar(temporaryConnection,
+      'SELECT cantidadRestante total FROM loteProducto WHERE idLoteProducto=?',
+      [originalLot]);
     assert(lotReturn.detalles[0].resultadoInventario === 'reintegrado_lote_original'
-      && await scalar(temporaryConnection,
-        'SELECT cantidadRestante total FROM loteProducto WHERE idLoteProducto=?',
-        [originalLot]) === 4,
-    'Una devolucion vendible vuelve al lote original vigente.');
+      && originalLotBalance === 4,
+    `Una devolucion vendible vuelve al lote original vigente: resultado=${lotReturn.detalles[0].resultadoInventario}, saldo=${originalLotBalance}.`);
     const originalLotExitAfter = await row(temporaryConnection,
       'SELECT * FROM movimientoLote WHERE idMovimientoLote=?',
       [originalLotExit.idMovimientoLote]);
@@ -1126,11 +1130,9 @@ async function main() {
       404, 'Una tienda no compensa ventas de otra');
 
     await temporaryConnection.query(
-      `UPDATE planFuncionalidad pf
-       JOIN plan p ON p.idPlan=pf.idPlan
-       JOIN funcionalidad f ON f.idFuncionalidad=pf.idFuncionalidad
-       SET pf.habilitada=0
-       WHERE p.codigo='basico' AND f.codigo='anulaciones_operativas'`
+      `DELETE FROM suscripcionFuncionalidadSnapshot
+       WHERE idTienda=? AND codigoFuncionalidad='anulaciones_operativas'`,
+      [fixtureB.idTienda]
     );
     await expectHttp(sessionB,
       `/api/ventas/${apiSaleB.sale.idVenta}/compensaciones`,
