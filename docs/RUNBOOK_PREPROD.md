@@ -1,0 +1,121 @@
+# Runbook local previo a despliegues
+
+## Proposito y alcance
+
+Este runbook prepara la operacion para una futura infraestructura aislada. Se
+ejecuta localmente con `APP_ENV=local` y no autoriza desplegar, crear recursos,
+usar secretos reales ni conectarse a bases remotas. STAGING-2B permanece
+diferido hasta la revision final del producto, la eleccion de proveedor y la
+autorizacion de gasto.
+
+Las fuentes de configuracion son [CONFIGURACION_STAGING.md](CONFIGURACION_STAGING.md),
+`config/deployment.js` y `config/database-options.js`. La base local autorizada
+es `localhost / tienda_abarrotes_pruebas`.
+
+## Contrato de produccion y fail-fast
+
+Antes de un despliegue futuro, el operador debe configurar en el gestor de
+secretos del entorno, nunca en Git:
+
+- `APP_ENV=production`, `NODE_ENV=production` y `DB_ENVIRONMENT=production`;
+- host, puerto, nombre, usuario y password de una base exclusiva de produccion;
+- `DB_SSL_ENABLED=true` y la CA TLS mediante `DB_SSL_CA`;
+- `SESSION_SECRET` robusto, unico y no reutilizado;
+- `APP_BASE_URL`, `TRUSTED_ORIGINS` y los CIDR directos del proxy;
+- Redis TLS, prefijo exclusivo y almacenamiento privado absoluto fuera del
+  repositorio;
+- `EMAIL_DELIVERY_MODE=disabled` hasta disponer de un adaptador externo
+  aprobado.
+
+El arranque debe fallar si falta una variable, se usa un placeholder, la base
+no identifica el entorno, falta TLS, Redis no usa `rediss://`, el storage no es
+privado o los CIDR del proxy son ambiguos. Local y CI solo admiten
+`DB_HOST=localhost`; no pueden degradar hacia produccion. Los secretos, CA,
+URLs con credenciales y rutas fisicas no se registran en logs.
+
+## Checklist previo al despliegue autorizado
+
+1. Confirmar commit publicado, CI del mismo SHA en PASS y revision aprobada.
+2. Verificar proveedor, dominio HTTPS, red privada y CIDR reales del proxy.
+3. Crear secretos unicos en el gestor del proveedor; no copiar `.env.local`.
+4. Confirmar que MySQL usa TLS, Redis usa TLS y el almacenamiento es privado,
+   persistente y respaldado.
+5. Crear un backup externo verificable de la base objetivo y una copia
+   consistente del almacenamiento privado; ensayar restauracion en un destino
+   aislado.
+6. Confirmar que la estrategia de correo sigue deshabilitada o que su adaptador
+   externo fue aprobado y probado por separado.
+7. Preparar el artefacto versionado y conservar disponible el artefacto previo.
+8. Registrar responsable, ventana, SHA, version, hash del backup y criterio de
+   abortar. No usar datos ni cuentas reales en staging.
+
+## Migraciones 001-024
+
+Las migraciones son solo hacia adelante. En una base nueva y autorizada, el
+operador debe usar los scripts publicados `db:init` y `db:migrate` para llegar
+a `001-024`; no ejecutar SQL manual alternativo. En una base existente se debe
+leer primero `schema_migrations`, hacer backup y ensayar la misma secuencia en
+una copia aislada.
+
+No existe rollback automatico de esquema. Si falla una migracion, detener el
+despliegue, conservar evidencia sanitizada y restaurar o redirigir hacia la
+base anterior solo mediante un procedimiento aprobado. Nunca aplicar una
+migracion 025 inexistente ni editar una migracion aplicada.
+
+## Health, logging y comprobaciones posteriores
+
+`GET|HEAD /health/live` confirma que Express responde sin tocar MySQL.
+`GET|HEAD /health/ready` comprueba MySQL, las migraciones esperadas, Redis y el
+storage privado cuando el entorno es hospedado. Las respuestas son `no-store` y
+no muestran host, puertos, SQL, secretos ni rutas.
+
+Despues de un despliegue autorizado, validar en este orden:
+
+1. liveness 200 y readiness saludable;
+2. migraciones `001-024` y ausencia de `025`;
+3. cookie segura, origen permitido y rate limits desde el proxy real;
+4. login y una operacion sintetica aislada por tenant;
+5. carga y descarga autenticada de un comprobante sintetico;
+6. backup nuevo, manifiesto, checksum y restauracion aislada;
+7. limpieza de fixtures, archivos privados, procesos y puertos propios.
+
+Los logs deben usar requestId y eventos sanitizados. No deben contener cuerpos
+completos, tokens, passwords, sesiones, hashes, SQL, datos bancarios, rutas
+fisicas ni datos de otro tenant. El diagnostico detallado corresponde al
+superadmin y no a endpoints publicos.
+
+## Rollback de aplicacion y recuperacion de datos
+
+Un rollback de aplicacion consiste en detener el artefacto nuevo de forma
+ordenada y activar el artefacto previo compatible, sin reescribir historiales.
+Solo se permite si las migraciones aplicadas siguen siendo compatibles con la
+version anterior; de lo contrario se detiene y se usa recuperacion de datos.
+
+Ante una falla operativa:
+
+1. detener escrituras y preservar logs sanitizados, version y hora;
+2. mantener la base y los comprobantes afectados sin alterarlos;
+3. verificar el backup y su SHA-256;
+4. restaurar primero sobre una base nueva y aislada;
+5. ejecutar comprobadores de migracion, tenant, sesiones y conteos relevantes;
+6. hacer smoke test con escrituras aun bloqueadas;
+7. cambiar la conexion mediante configuracion controlada, rotar el secreto de
+   sesion y conservar la base previa como rollback;
+8. reabrir solo despues de la aprobacion del responsable y documentar el
+   incidente.
+
+Los scripts locales `db:backup`, `db:verify-backup`, `db:test-restore` y
+`test:backup-restore` no se ejecutan contra infraestructura hospedada: son la
+referencia de validacion local y de restauracion temporal.
+
+## Versionado, release y decisiones pendientes
+
+Un release futuro debe identificar SHA, version semantica, fecha, responsable,
+artefacto y resultado de CI. La promocion no se hace desde una rama con cambios
+sin publicar. La etiqueta `v1.0.0` y una beta requieren una revision integral
+del propietario.
+
+STAGING-2B no puede comenzar hasta decidir proveedor/topologia, dominio,
+CIDR, MySQL/Redis, storage compartido, correo externo, backup remoto y la
+aceptacion o correccion del aviso transitivo ExcelJS/`uuid`. Tambien requiere
+smoke tests reales detras de proxy y HTTPS.

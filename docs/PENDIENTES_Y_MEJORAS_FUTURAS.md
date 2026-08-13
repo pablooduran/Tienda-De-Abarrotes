@@ -56,7 +56,7 @@ Las migraciones son posibilidades; ninguna se crea por estar mencionada aqui.
 | TECH-005 | SAAS-C6-C8 frontend, regresion y cierre | C1 solo valido esquema y compatibilidad | alta | C2-C5, tenant, seguridad, browser y backup | No determinada | Implementado y cerrado | SAAS-C6-C8 |
 | TECH-006 | Seguridad publica final | Las fases A-C validaron el flujo local; correo real y despliegue quedan fuera | alta antes de beta | autenticacion, tenant, archivos privados, rate limits y secretos | No determinada | Implementado y cerrado | Pre-beta |
 | TECH-007 | CI y GitHub Actions | Workflow reproducible con MySQL efimero, migraciones 001-024 y regresion server-side | alta antes de beta | staging, artefactos no sensibles y store de rate limit para ejecucion distribuida | No | Implementado | Pre-beta |
-| TECH-008 | Staging y produccion de prueba | STAGING-1 prepara configuracion, pero no existe infraestructura ni despliegue | alta antes de beta | proveedor, dominio, HTTPS, MySQL/Redis, storage, backup, datos sinteticos, CIDR reales del proxy y reevaluacion del aviso moderado `uuid`/ExcelJS | No | En analisis; preparacion tecnica implementada, provisionamiento pendiente | STAGING-2 / Pre-beta |
+| TECH-008 | Staging y produccion de prueba | STAGING-1 y PREPROD-1 preparan contrato y runbook local, pero no existe infraestructura ni despliegue | alta antes de beta | proveedor/topologia, dominio, HTTPS, MySQL staging, Redis, storage privado compartido, correo externo, backup remoto, datos sinteticos, CIDR reales del proxy, smoke tests reales, proxy/HTTPS reales y reevaluacion del aviso moderado `uuid`/ExcelJS | No | Diferido hasta la revision final del producto y la autorizacion de gasto externo; no implementado | STAGING-2B / Pre-beta |
 | TECH-009 | Backups externos y restauracion operativa | Los backups actuales son locales y manuales | alta antes de beta | cifrado/almacenamiento seguro, retencion, rollback y prueba periodica | No determinada | En analisis | Pre-beta |
 | TECH-010 | Monitoreo, alertas y logging seguro | Health local existe; no hay proveedor externo ni metricas persistentes | alta antes de beta | privacidad, alertas, on-call y costos | No | Pendiente | Pre-beta |
 | TECH-011 | Roles internos | Solo existen `superadmin` y `dueno_tienda` | alta antes de beta | permisos, invitaciones, sesiones, limites y auditoria | Probable nueva estructura de roles | Requiere decision del propietario; pendiente | SAAS futuro |
@@ -82,8 +82,8 @@ mapa de pruebas y estado de despliegue:
 
 - SAAS-C esta cerrado; conservar su regresion al tocar pagos o suscripciones;
 - seguridad publica final y CI permanecen cerrados y publicados;
-- cierre Git de STAGING-1 antes de provisionar infraestructura;
-- STAGING-2 y produccion de prueba con datos sinteticos;
+- STAGING-2B y produccion de prueba con datos sinteticos, diferidos hasta la
+  revision final del producto y la autorizacion de gasto;
 - backups externos, almacenamiento cifrado, restauracion y rollback ensayados;
 - monitoreo, alertas, metricas persistentes y logging seguro;
 - runbooks de despliegue, migracion, restauracion y respuesta a incidentes;
@@ -91,6 +91,19 @@ mapa de pruebas y estado de despliegue:
 
 No se deben introducir jobs, proveedores externos ni produccion mientras no
 exista un procedimiento aprobado y una decision del propietario.
+
+### STAGING-2 diferido
+
+STAGING-2 queda diferido hasta que el propietario revise el producto completo y
+autorice infraestructura externa y gasto. Antes de retomar STAGING-2B debe
+decidirse, sin crear recursos desde este documento:
+
+- proveedor y topologia; dominio y HTTPS;
+- CIDR reales del reverse proxy;
+- MySQL exclusivo de staging, Redis TLS y storage privado compartido;
+- correo externo, backup remoto y procedimiento de restauracion;
+- resolucion o aceptacion documentada del aviso ExcelJS/`uuid`;
+- smoke tests con datos sinteticos y pruebas detras del proxy/HTTPS reales.
 
 ## 5. UX, rediseño y accesibilidad
 
@@ -310,15 +323,16 @@ explicita y una nueva evaluacion de seguridad, datos y alcance.
 
 ## 18. Roadmap futuro sugerido
 
-1. Cerrar y publicar STAGING-1.
-2. Provisionar STAGING-2, restauracion, monitoreo y produccion de prueba usando el contrato seguro de STAGING-1.
-3. Validar el workflow CI antes de cada promocion.
-4. Cerrar documentacion operativa, terminos, privacidad y soporte.
-5. Ejecutar `PRODUCTO-0`, UX, `WELCOME` y `HELP`.
-6. Resolver roles internos y mejoras funcionales priorizadas.
-7. Definir y construir `COMMERCE-0` y `COMMERCE-MVP` si se aprueba.
-8. Ejecutar pruebas completas de volumen, usabilidad, seguridad y recuperacion.
-9. Realizar revision integral del propietario.
+1. Cerrar PREPROD-1 y revisar el producto completo con el propietario.
+2. Autorizar gasto, proveedor y topologia para STAGING-2B.
+3. Provisionar STAGING-2B, restauracion, monitoreo y produccion de prueba con
+   datos sinteticos usando el contrato seguro de STAGING-1.
+4. Validar el workflow CI antes de cada promocion.
+5. Cerrar documentacion operativa, terminos, privacidad y soporte.
+6. Ejecutar `PRODUCTO-0`, UX, `WELCOME` y `HELP`.
+7. Resolver roles internos y mejoras funcionales priorizadas.
+8. Definir y construir `COMMERCE-0` y `COMMERCE-MVP` si se aprueba.
+9. Ejecutar pruebas completas de volumen, usabilidad, seguridad y recuperacion.
 10. Decidir beta privada, beta publica y lanzamiento oficial.
 
 ## 19. Registro de cambios

@@ -98,6 +98,10 @@ compartido, retencion, backup y restauracion.
 
 ## Checklist previo a STAGING-2
 
+El procedimiento operativo, rollback y recuperacion local se concentra en
+[RUNBOOK_PREPROD.md](RUNBOOK_PREPROD.md). Esta lista no autoriza provisionar ni
+desplegar recursos externos.
+
 1. Elegir proveedor y topologia de red sin crear recursos desde este bloque.
 2. Confirmar dominio HTTPS y CIDR directos del reverse proxy.
 3. Provisionar MySQL y Redis exclusivos de staging, sin datos reales.

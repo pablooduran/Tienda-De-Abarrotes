@@ -543,9 +543,11 @@ No mostrar estas variables en logs ni respuestas. Nunca versionar `.env`, `.env.
 No alterar este orden sin una decision explicita:
 
 1. Cerrar y publicar STAGING-1.
-2. Autorizar y provisionar STAGING-2 con datos sinteticos.
-3. Validar restauracion, monitoreo y rollback del entorno aislado.
-4. Revision integral del propietario antes de decidir una beta.
+2. Cerrar PREPROD-1: contrato, runbook y validacion local sin infraestructura.
+3. Realizar la revision integral del propietario y autorizar el gasto externo.
+4. Autorizar y provisionar STAGING-2B con datos sinteticos.
+5. Validar restauracion, monitoreo y rollback del entorno aislado antes de
+   decidir una beta.
 
 Cada bloque debe cerrar con pruebas, comprobadores, documentacion y un commit local independiente. No mezclar cambios de bloques distintos.
 
@@ -714,5 +716,8 @@ existe facturacion fiscal ni se inicia una beta.
 
 Las macrofases de **seguridad publica final** y **CI / GitHub Actions** estan
 cerradas y publicadas. **STAGING-1** prepara el contrato de entorno, proxy,
-Redis, fail-fast y readiness sin crear infraestructura. STAGING-2 y cualquier
-despliegue requieren autorizacion separada.
+Redis, fail-fast y readiness sin crear infraestructura. **PREPROD-1** concentra
+el runbook local de migracion, backup, rollback y recuperacion. STAGING-2B
+queda diferido hasta la revision final del propietario, una decision de
+proveedor/topologia y autorizacion expresa de gasto; cualquier despliegue sigue
+requiriendo autorizacion separada.

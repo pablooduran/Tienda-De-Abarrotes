@@ -61,7 +61,11 @@ documentado en [docs/CONFIGURACION_STAGING.md](docs/CONFIGURACION_STAGING.md).
 Esta preparacion no crea ni despliega staging. Los entornos hospedados exigen
 MySQL con TLS, HTTPS, CIDR explicitos del proxy, Redis con TLS para rate limits
 y almacenamiento privado fuera del repositorio. La seleccion de proveedor,
-dominio, redes y secretos sigue pendiente.
+dominio, redes y secretos sigue pendiente. El procedimiento local previo a
+cualquier despliegue, incluidas las reglas de migracion, backup, rollback y
+recuperacion, se documenta en
+[docs/RUNBOOK_PREPROD.md](docs/RUNBOOK_PREPROD.md). No autoriza crear staging o
+produccion.
 
 ## TLS de MySQL
 
