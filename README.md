@@ -2,6 +2,22 @@
 
 Sistema con Node.js, Express, MySQL y frontend en HTML, CSS y JavaScript. Administra productos, clientes, proveedores, compras, ventas pagadas o fiadas, pagos parciales, stock, historiales, dashboard y reportes.
 
+## Estado operativo actual
+
+El estado local estable usa las migraciones `001-024`; no existe migracion
+`025`. SAAS-A, SAAS-B y SAAS-C estan cerrados: las suscripciones y los pagos
+de suscripcion actuales son manuales, con comprobantes privados y revision
+administrativa. No hay pagos automaticos, tarjetas, QR dinamico, webhooks,
+conciliacion, facturacion fiscal ni correo externo habilitado.
+
+La operacion local autorizada usa `APP_ENV=local`, `localhost` y la base
+`tienda_abarrotes_pruebas`. Antes de modificar o desplegar, consultar el
+[runbook previo a despliegues](docs/RUNBOOK_PREPROD.md), el
+[contrato de configuracion](docs/CONFIGURACION_STAGING.md), la
+[continuidad del proyecto](docs/CONTINUIDAD_PROYECTO.md) y los
+[pendientes futuros](docs/PENDIENTES_Y_MEJORAS_FUTURAS.md). STAGING-2B sigue
+diferido: este repositorio no autoriza desplegar ni crear infraestructura.
+
 ## Estructura principal
 
 - `server.js`: servidor Express, sesiones y rutas principales.

@@ -6,13 +6,13 @@ Documento de relevo tecnico para continuar el proyecto sin depender del historia
 
 - Repositorio obligatorio: `pablooduran/Tienda-De-Abarrotes`
 - Rama de trabajo obligatoria: `mejora-multitienda`
-- Punto de partida de INV-A: `89cc85a feat: completar auditoria administrativa`
+- Ultimo punto estable publicado: `eb53214 test: cerrar regresion general`.
 - No trabajar directamente en `main`.
 - El HEAD indicado es una referencia local conocida. Confirmar si tambien existe en el remoto antes de depender de el para una recuperacion.
-- La base principal local esta en 022. INV-A e INV-B permanecen cerrados.
-- La optimizacion operativa de Codex queda cerrada en las etapas 1 a 10. El
-  HEAD esperado despues de este cierre es el commit `docs: cerrar optimizacion
-  operativa de Codex` posterior a `2959093`; confirmar el hash real con Git.
+- La base principal local esta en 024; no existe migracion 025. INV-A e INV-B
+  permanecen cerrados.
+- La optimizacion operativa de Codex, PREPROD-1 y REGRESION GENERAL estan
+  cerrados. Confirmar el hash real con Git y el CI remoto antes de continuar.
 
 Comprobacion inicial obligatoria:
 
@@ -29,7 +29,7 @@ Si la rama, el HEAD o el estado difieren, detenerse y entender los cambios exist
 
 ### Tecnologias
 
-- Backend: Node.js 18 o superior, Express 4 y JavaScript CommonJS.
+- Backend: Node.js 20 o superior, Express 4 y JavaScript CommonJS.
 - Base de datos: MySQL 8 mediante `mysql2`.
 - Frontend: HTML, CSS y JavaScript sin framework SPA.
 - Sesiones: `express-session` con `express-mysql-session`.
@@ -49,7 +49,7 @@ Si la rama, el HEAD o el estado difieren, detenerse y entender los cambios exist
 | `routes/` | Contratos HTTP de autenticacion, administracion y modulos comerciales. |
 | `services/` | Reglas de negocio, transacciones, reportes, POS, stock, clientes y cobranza. |
 | `public/` | Aplicacion web, administracion, login, estilos y JavaScript del navegador. |
-| `database/migrations/` | Migraciones historicas y modernas, numeradas de 001 a 022; la base principal local validada esta en 022. |
+| `database/migrations/` | Migraciones historicas y modernas, numeradas de 001 a 024; la base principal local validada esta en 024 y no existe 025. |
 | `database/tienda_abarrotes.sql` | Esquema inicial equivalente al estado final esperado. |
 | `scripts/` | Migrador, comprobadores, pruebas, administracion local y backups. |
 | `utils/` | Utilidades compartidas, incluidas fechas locales y errores. |
@@ -126,8 +126,8 @@ El contexto de tienda proviene de la sesion validada. El navegador no debe envia
 | Pagos manuales de suscripcion | SAAS-C terminado | C0-C8 cubren diseno, estructura, backend, almacenamiento privado, revision, aplicacion atomica, frontend, seguridad y regresion integral. El flujo actual es manual; no hay pagos automaticos. |
 | Seguridad publica final | Cerrada y publicada | Alias fisico de suscripcion protegido, password acotado a 72 bytes UTF-8, secreto de sesion de produccion endurecido y rate limits dedicados para pagos y comprobantes. Regresion local, tenant, auditoria y browser aprobados. |
 | CI / GitHub Actions | Cerrada y publicada | Node 20, MySQL 8 efimero, migraciones 001-024 y regresion server-side sin despliegue ni secretos reales. |
-| Preparacion de staging | STAGING-1 implementado; cierre pendiente | Contrato local/CI/staging/production, proxy por CIDR, Redis obligatorio en hosted, fail-fast y readiness de dependencias. No existe despliegue. |
-| Staging y produccion | Pendiente | No se ha provisionado ni desplegado este estado. |
+| Preparacion de staging y preproduccion | STAGING-1 y PREPROD-1 cerrados y publicados | Contrato local/CI/staging/production, proxy por CIDR, Redis obligatorio en hosted, fail-fast, readiness, backup, rollback y recuperacion documentados. No existe despliegue. |
+| Staging y produccion | STAGING-2B diferido | No se ha provisionado ni desplegado infraestructura; requiere revision final, proveedor/topologia y autorizacion de gasto. |
 
 ## 4. Funcionalidades implementadas
 
@@ -218,7 +218,7 @@ Un downgrade no borra ni oculta deuda existente. Se mantiene la consulta histori
 ## 5. Migraciones
 
 No renumerar, editar ni reemplazar migraciones aplicadas. La base local principal
-conocida `tienda_abarrotes_pruebas` esta validada en 021.
+conocida `tienda_abarrotes_pruebas` esta validada en 024; no existe 025.
 
 | Migracion | Objetivo principal |
 | --- | --- |
@@ -244,6 +244,8 @@ conocida `tienda_abarrotes_pruebas` esta validada en 021.
 | `020_registro_publico_onboarding.sql` | Registro publico idempotente, correo normalizado, estado de acceso/onboarding y tokens futuros. |
 | `021_configuracion_base_tienda.sql` | Configuracion base uno a uno de nombre mostrado, moneda, zona horaria y datos opcionales. |
 | `022_ciclo_vida_suscripciones.sql` | Contrato de gracia, snapshot por periodo, historial append-only e idempotencia futura de suscripciones. |
+| `023_estructura_pagos_suscripcion.sql` | Catalogo Basic/Standard/Pro, precios USD versionados, tasa manual USD/BOB y estructura de pagos manuales. |
+| `024_corregir_idempotencia_y_snapshot_pagos.sql` | Idempotencia global/tenant, resultados tipados y snapshot textual del plan actual. |
 
 Reglas:
 
@@ -252,7 +254,7 @@ Reglas:
 - Las modernas usan inspeccion pre/parcial/post y registro tardio.
 - Una migracion registrada pero fisicamente incompleta debe bloquear el proceso.
 - Una estructura completa no registrada solo puede adoptarse despues de validarla.
-- `database/tienda_abarrotes.sql` debe conservar equivalencia con el estado post-022 para instalaciones nuevas.
+- `database/tienda_abarrotes.sql` debe conservar equivalencia con el estado post-024 para instalaciones nuevas.
 - Antes de cualquier futura migracion: backup verificado, ensayo sobre copia, revision del SQL y comprobacion posterior.
 
 ## 6. Scripts npm y nivel de seguridad
@@ -292,7 +294,7 @@ Todos requieren credenciales MySQL y deben apuntar a la base local correcta. No 
 - `db:check-multitenant`: estructura y aislamiento multitienda.
 - `db:check-subscriptions`: planes, funcionalidades y suscripciones.
 - `db:check-subscription-lifecycle`: snapshot, historial, idempotencia y
-  coherencia temporal post-022.
+  coherencia temporal de 022 compatible con el esquema final 024.
 - `db:check-master-catalog`: catalogo maestro y enlaces locales.
 - `db:check-stock-movements`: movimientos y conciliacion de stock.
 - `db:check-pos-payments`: estructura de POS y pagos.
@@ -542,10 +544,13 @@ No mostrar estas variables en logs ni respuestas. Nunca versionar `.env`, `.env.
 
 No alterar este orden sin una decision explicita:
 
-1. Cerrar y publicar STAGING-1.
-2. Cerrar PREPROD-1: contrato, runbook y validacion local sin infraestructura.
-3. Realizar la revision integral del propietario y autorizar el gasto externo.
-4. Autorizar y provisionar STAGING-2B con datos sinteticos.
+1. Cerrar DOCS-OPS con la documentacion operativa actual y su validacion.
+2. Iniciar PRODUCTO-0 solo despues del cierre de DOCS-OPS; no iniciar staging
+   ni infraestructura durante esa fase.
+3. Realizar la revision integral del propietario tras PRODUCTO-0 y decidir si
+   autoriza gasto externo, proveedor y topologia.
+4. Autorizar y provisionar STAGING-2B con datos sinteticos cuando esas
+   decisiones existan.
 5. Validar restauracion, monitoreo y rollback del entorno aislado antes de
    decidir una beta.
 
@@ -646,6 +651,8 @@ En ambos casos, conservar el repositorio o base anterior hasta completar smoke t
 ### Git
 
 - Rama local: `mejora-multitienda`.
+- HEAD estable publicado: `eb53214` (`test: cerrar regresion general`).
+- CI remoto de `eb53214`: PASS, workflow `CI`, run `31724513930`.
 - INV-A e INV-B estan cerrados sobre la rama `mejora-multitienda`.
 - La optimizacion de Codex esta cerrada: `AGENTS.md`, `docs/MAPA_PRUEBAS.md`,
   `docs/ARQUITECTURA_RESUMIDA.md`, `docs/SEGURIDAD_Y_MULTITIENDA.md`,
@@ -658,7 +665,10 @@ En ambos casos, conservar el repositorio o base anterior hasta completar smoke t
 ### Base local
 
 - Base de pruebas esperada: `tienda_abarrotes_pruebas`.
-- Migraciones registradas en la base principal conocida: 001 a 022.
+- Migraciones registradas en la base principal conocida: 001 a 024; no existe
+  migracion 025.
+- El estado operativo local es `APP_ENV=local`, `localhost /
+  tienda_abarrotes_pruebas` y `BACKUP_OK`.
 - No deberian existir bases `tmp_tienda_restore_*` ni
   fixtures de ciclo de vida despues de las pruebas.
 
@@ -677,7 +687,8 @@ Han sido validadas en bloques anteriores:
 - Compensaciones C2: `test:sales-compensations` valido 015 en base temporal,
   anulacion total, devolucion parcial/acumulada, idempotencia, concurrencia,
   rollback, stock simple, lotes vigentes/vencidos, liquidaciones pendientes,
-  tenant, plan y CSRF; la base principal actualmente validada esta en 017.
+  tenant, plan y CSRF; el escenario temporal evoluciona de forma compatible
+  hasta 017 sin modificar la base principal.
 - Compensaciones C3: `test:financial-compensations` valida 016 con el migrador
   real solo en base temporal, deuda, reembolsos pendientes, cobros, metodos,
   concurrencia, rollback, tenant, plan y CSRF.
@@ -697,6 +708,11 @@ Han sido validadas en bloques anteriores:
   confirma compatibilidad SAAS-A sobre base temporal y huella principal intacta.
 - Durante la restauracion se ejecutaron `db:check-legacy-migrations`, `db:check-session-security`, `db:check-timezone-tls` y `db:check-customers-credit` contra la base temporal.
 - La validacion final de backup elimino los archivos generados y la base temporal; no dejo procesos auxiliares activos.
+- REGRESION GENERAL: autenticacion, tenant, catalogo, inventario, compras,
+  ventas, reportes, compensaciones, suscripciones, pagos manuales, seguridad,
+  CI y browser de propietario/superadmin validados. La correccion publicada
+  conserva `clasificacionInventario` al devolver unidades vendibles al lote
+  original.
 
 Estos resultados corresponden al ultimo estado conocido. Antes de iniciar el siguiente bloque, repetir las comprobaciones relevantes en localhost y registrar resultados exactos.
 
@@ -714,10 +730,10 @@ limpieza. Los pagos actuales son manuales. Siguen pendientes QR dinamico,
 tarjetas, conciliacion, webhooks, cobro recurrente y automatizaciones; tampoco
 existe facturacion fiscal ni se inicia una beta.
 
-Las macrofases de **seguridad publica final** y **CI / GitHub Actions** estan
-cerradas y publicadas. **STAGING-1** prepara el contrato de entorno, proxy,
-Redis, fail-fast y readiness sin crear infraestructura. **PREPROD-1** concentra
-el runbook local de migracion, backup, rollback y recuperacion. STAGING-2B
+Las macrofases de **seguridad publica final**, **CI / GitHub Actions**,
+**STAGING-1**, **PREPROD-1** y **REGRESION GENERAL** estan cerradas y
+publicadas. DOCS-OPS es el cierre documental actual. La siguiente fase sera
+**PRODUCTO-0** solo despues de cerrar DOCS-OPS; no esta iniciada. STAGING-2B
 queda diferido hasta la revision final del propietario, una decision de
 proveedor/topologia y autorizacion expresa de gasto; cualquier despliegue sigue
 requiriendo autorizacion separada.

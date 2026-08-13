@@ -11,15 +11,15 @@ el documento. Tampoco representa una promesa de lanzamiento. Cada pendiente
 debe actualizarse al cerrar una fase y revisarse antes de una beta y antes del
 lanzamiento oficial.
 
-Estado de referencia actualizado al cierre de SAAS-C:
+Estado de referencia actualizado despues de PREPROD-1 y REGRESION GENERAL:
 
 - Rama: `mejora-multitienda`.
-- Base del cierre: HEAD `daf4677`.
-- SAAS-A, SAAS-B y SAAS-C0-C7 cerrados y publicados.
-- SAAS-C8 corresponde a este cierre integral de pagos manuales, sin nueva
-  migracion.
-- Base local validada en migracion 024; la siguiente macrofase es seguridad
-  publica final.
+- Base estable publicada: HEAD `eb53214`; CI remoto PASS.
+- SAAS-A, SAAS-B y SAAS-C0-C8 estan cerrados y publicados.
+- Seguridad publica final, CI, STAGING-1, PREPROD-1 y REGRESION GENERAL estan
+  cerrados; la base local esta en migracion 024 y no existe 025.
+- DOCS-OPS debe cerrarse antes de PRODUCTO-0. STAGING-2B permanece diferido y
+  no autoriza infraestructura ni gasto.
 - Este documento no implementa funcionalidad ni modifica la base.
 
 ## 2. Estados y prioridades
@@ -323,17 +323,18 @@ explicita y una nueva evaluacion de seguridad, datos y alcance.
 
 ## 18. Roadmap futuro sugerido
 
-1. Cerrar PREPROD-1 y revisar el producto completo con el propietario.
-2. Autorizar gasto, proveedor y topologia para STAGING-2B.
-3. Provisionar STAGING-2B, restauracion, monitoreo y produccion de prueba con
+1. Cerrar DOCS-OPS y revisar el producto completo con el propietario.
+2. Ejecutar `PRODUCTO-0`, UX, `WELCOME` y `HELP`; no iniciar infraestructura
+   externa durante esas fases.
+3. Resolver roles internos y mejoras funcionales priorizadas.
+4. Decidir proveedor, gasto y topologia para STAGING-2B despues de la revision
+   final del producto.
+5. Provisionar STAGING-2B, restauracion, monitoreo y produccion de prueba con
    datos sinteticos usando el contrato seguro de STAGING-1.
-4. Validar el workflow CI antes de cada promocion.
-5. Cerrar documentacion operativa, terminos, privacidad y soporte.
-6. Ejecutar `PRODUCTO-0`, UX, `WELCOME` y `HELP`.
-7. Resolver roles internos y mejoras funcionales priorizadas.
-8. Definir y construir `COMMERCE-0` y `COMMERCE-MVP` si se aprueba.
-9. Ejecutar pruebas completas de volumen, usabilidad, seguridad y recuperacion.
-10. Decidir beta privada, beta publica y lanzamiento oficial.
+6. Validar el workflow CI antes de cada promocion.
+7. Definir y construir `COMMERCE-0` y `COMMERCE-MVP` si se aprueba.
+8. Ejecutar pruebas completas de volumen, usabilidad, seguridad y recuperacion.
+9. Decidir beta privada, beta publica y lanzamiento oficial.
 
 ## 19. Registro de cambios
 
@@ -341,7 +342,8 @@ explicita y una nueva evaluacion de seguridad, datos y alcance.
 | --- | --- | --- | --- | --- |
 | 2026-08-01 | SAAS-C1 / continuidad | Creacion del documento maestro de pendientes despues de publicar C1 | Codex | HEAD `7c73562` |
 | 2026-08-12 | SAAS-C8 | Pagos manuales C0-C8 cerrados; automatizaciones y beta permanecen pendientes | Codex | Base `daf4677` |
-| 2026-08-13 | STAGING-1 | Preparacion local/CI/hosted, proxy por CIDR y rate limits distribuidos sin despliegue | Codex | Cierre pendiente |
+| 2026-08-13 | STAGING-1 / PREPROD-1 | Configuracion, proxy, runbook, backup, rollback y recuperacion local cerrados sin despliegue | Codex | HEAD `16fa54f` |
+| 2026-08-13 | REGRESION GENERAL | Regresion integral cerrada; correccion de devolucion vendible al lote original | Codex | HEAD `eb53214` |
 
 ## 20. Regla permanente
 
