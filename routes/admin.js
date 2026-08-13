@@ -1,6 +1,7 @@
 const express = require('express');
 const bcrypt = require('bcryptjs');
 const pool = require('../config/db');
+const { PASSWORD_MIN_LENGTH, validPasswordLength } = require('../config/password-policy');
 const {
   createSubscription,
   enforcePlanLimit
@@ -15,7 +16,6 @@ const { formatLocalDateTime } = require('../utils/local-datetime');
 
 const router = express.Router();
 const STORE_STATES = new Set(['activa', 'suspendida', 'inactiva']);
-const PASSWORD_MIN_LENGTH = 12;
 
 function httpError(status, message) {
   const error = new Error(message);
@@ -64,8 +64,8 @@ function validateUsername(value) {
 }
 
 function validatePassword(password, confirmation) {
-  if (typeof password !== 'string' || password.length < PASSWORD_MIN_LENGTH) {
-    throw httpError(400, `La contrasena debe tener al menos ${PASSWORD_MIN_LENGTH} caracteres.`);
+  if (!validPasswordLength(password)) {
+    throw httpError(400, `La contrasena debe tener al menos ${PASSWORD_MIN_LENGTH} caracteres y una longitud segura.`);
   }
   if (confirmation !== undefined && password !== confirmation) {
     throw httpError(400, 'La confirmacion de contrasena no coincide.');

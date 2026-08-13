@@ -3,6 +3,7 @@ const {
   registrationError,
   sha256
 } = require('./public-registration-contract');
+const { validPasswordLength } = require('./password-policy');
 const {
   createVerificationToken,
   expirationFrom,
@@ -48,8 +49,8 @@ function validatePasswordReset(body) {
     throw recoveryError(400, 'PASSWORD_RESET_INPUT_INVALID');
   }
   const token = validateVerificationToken(body.token);
-  if (typeof body.nuevaPassword !== 'string' || body.nuevaPassword.length < 12
-    || body.nuevaPassword.length > 255 || body.nuevaPassword !== body.confirmacionPassword) {
+  if (!validPasswordLength(body.nuevaPassword)
+    || body.nuevaPassword !== body.confirmacionPassword) {
     throw recoveryError(400, 'PASSWORD_RESET_INPUT_INVALID', 'La contrasena no cumple los requisitos.');
   }
   return Object.freeze({ token, nuevaPassword: body.nuevaPassword });

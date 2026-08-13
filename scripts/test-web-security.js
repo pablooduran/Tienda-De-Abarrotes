@@ -2,6 +2,8 @@ const assert = require('assert/strict');
 const express = require('express');
 const fs = require('fs');
 const path = require('path');
+const { sessionSecret } = require('../config/env');
+const { validPasswordLength } = require('../config/password-policy');
 const { webSecurityConfig } = require('../config/web-security');
 const { createErrorHandler, notFoundHandler } = require('../middleware/error-handler');
 const { createRateLimiters } = require('../middleware/rate-limiters');
@@ -35,6 +37,9 @@ function rateConfig(overrides = {}) {
     passwordRecoveryConfirmTokenMax: 100,
     authMax: 100,
     adminMax: 100,
+    paymentMax: 100,
+    paymentAdminMax: 100,
+    receiptUploadMax: 100,
     exportMax: 100,
     whatsappMax: 100,
     healthMax: 100,
@@ -76,6 +81,9 @@ async function startFixture({ production = false, limits = {}, trustProxy = fals
     rateLimiters.passwordRecoveryConfirmToken, (req, res) => res.json({ ok: true }));
   app.use('/api/exportaciones', rateLimiters.export);
   app.use('/api/cobranza/mensaje-whatsapp/preparar', rateLimiters.whatsapp);
+  app.post('/api/pagos-suscripcion/solicitudes/test/comprobantes', rateLimiters.receiptUpload);
+  app.use('/api/admin/pagos-suscripcion', rateLimiters.paymentAdmin);
+  app.use('/api/pagos-suscripcion', rateLimiters.payment);
   app.use('/api', rateLimiters.api);
   app.get('/api/read', (req, res) => res.json({ ok: true }));
   app.post('/api/write', (req, res) => res.json({ ok: true }));
@@ -83,6 +91,9 @@ async function startFixture({ production = false, limits = {}, trustProxy = fals
   app.get('/api/error', (req, res, next) => next(new Error('ER_PARSE_ERROR SELECT secreto FROM /ruta/privada')));
   app.get('/api/exportaciones/demo.xlsx', (req, res) => res.json({ ok: true }));
   app.post('/api/cobranza/mensaje-whatsapp/preparar', (req, res) => res.json({ ok: true }));
+  app.get('/api/pagos-suscripcion/planes', (req, res) => res.json({ ok: true }));
+  app.post('/api/pagos-suscripcion/solicitudes/test/comprobantes', (req, res) => res.json({ ok: true }));
+  app.post('/api/admin/pagos-suscripcion/metodos/test', (req, res) => res.json({ ok: true }));
   app.use(notFoundHandler);
   app.use(createErrorHandler({ logger, production }));
 
@@ -130,6 +141,9 @@ async function withFixture(options, callback) {
 }
 
 async function testConfiguration() {
+  check('Password de 72 bytes es aceptado', validPasswordLength('a'.repeat(72)));
+  check('Password mayor a 72 bytes es rechazado', !validPasswordLength('a'.repeat(73)));
+  check('Limite de password cuenta bytes UTF-8', !validPasswordLength('a'.repeat(70) + '\u00f1\u00f1'));
   const local = webSecurityConfig({ APP_ENV: 'local', PORT: '3000', RATE_LIMIT_ENABLED: 'false' });
   check('Configuracion local acepta limites desactivados', local.rateLimit.enabled === false);
   check('Origen local predeterminado es explicito', local.trustedOrigins.includes('http://localhost:3000'));
@@ -152,11 +166,26 @@ async function testConfiguration() {
     /comodin/
   );
   checks.push('No se acepta comodin de origen');
+  assert.throws(
+    () => sessionSecret({ APP_ENV: 'production', SESSION_SECRET: 'reemplazar-esta-clave-en-produccion-por-favor-1234567890' }),
+    /aleatorio/
+  );
+  checks.push('Produccion rechaza secretos de sesion de ejemplo');
+  assert.throws(
+    () => sessionSecret({ APP_ENV: 'production', SESSION_SECRET: 'a'.repeat(64) }),
+    /aleatorio/
+  );
+  checks.push('Produccion rechaza secretos de sesion sin diversidad');
+  const strongSecret = 'Tienda-Prod_2026!Sesion#Privada$9xQ7mL2vR8kN5pZ4';
+  check('Produccion acepta secreto de sesion robusto',
+    sessionSecret({ APP_ENV: 'production', SESSION_SECRET: strongSecret }) === strongSecret);
   const serverSource = fs.readFileSync(path.resolve(__dirname, '..', 'server.js'), 'utf8');
   check('Cookie conserva SameSite Lax', /sameSite:\s*['"]lax['"]/.test(serverSource));
   check('Proteccion global precede rutas autenticadas',
     serverSource.indexOf('mutationProtection(appSecurityConfig.trustedOrigins)')
       < serverSource.indexOf("app.use('/auth', authRoutes)"));
+  check('Alias fisico de suscripcion tambien exige autenticacion',
+    serverSource.includes("app.get('/subscription.html', requireAuth"));
 }
 
 async function testHeadersCsrfErrorsAndIdentityLimit() {
@@ -284,6 +313,29 @@ async function testIpAndSpecificLimits() {
     check('WhatsApp preparado tiene limite especifico', first.status === 200 && second.status === 429);
   });
 
+  await withFixture({ limits: { paymentMax: 1 } }, async (fixture) => {
+    const first = await request(fixture, '/api/pagos-suscripcion/planes');
+    const second = await request(fixture, '/api/pagos-suscripcion/planes');
+    check('Pagos de propietario tienen limite dedicado', first.status === 200 && second.status === 429
+      && second.body.code === 'PAYMENT_RATE_LIMIT_EXCEEDED');
+  });
+
+  await withFixture({ limits: { paymentAdminMax: 1 } }, async (fixture) => {
+    const options = { method: 'POST', body: {} };
+    const first = await request(fixture, '/api/admin/pagos-suscripcion/metodos/test', options);
+    const second = await request(fixture, '/api/admin/pagos-suscripcion/metodos/test', options);
+    check('Administracion de pagos tiene limite dedicado', first.status === 200 && second.status === 429
+      && second.body.code === 'PAYMENT_ADMIN_RATE_LIMIT_EXCEEDED');
+  });
+
+  await withFixture({ limits: { receiptUploadMax: 1 } }, async (fixture) => {
+    const options = { method: 'POST', body: {} };
+    const first = await request(fixture, '/api/pagos-suscripcion/solicitudes/test/comprobantes', options);
+    const second = await request(fixture, '/api/pagos-suscripcion/solicitudes/test/comprobantes', options);
+    check('Carga de comprobantes tiene limite dedicado', first.status === 200 && second.status === 429
+      && second.body.code === 'RECEIPT_UPLOAD_RATE_LIMIT_EXCEEDED');
+  });
+
   await withFixture({ limits: { publicRegistrationMax: 1 } }, async (fixture) => {
     const body = { correo: 'registro@example.test' };
     const first = await request(fixture, '/auth/registro', { method: 'POST', body });
@@ -347,7 +399,7 @@ async function main() {
   await testHeadersCsrfErrorsAndIdentityLimit();
   await testIpAndSpecificLimits();
   await testProductionHeadersAndRedaction();
-  check('Cobertura minima de seguridad web', checks.length >= 40, `Solo se ejecutaron ${checks.length} comprobaciones.`);
+  check('Cobertura minima de seguridad web', checks.length >= 50, `Solo se ejecutaron ${checks.length} comprobaciones.`);
   console.log(`Prueba de seguridad web completada correctamente (${checks.length} comprobaciones).`);
 }
 

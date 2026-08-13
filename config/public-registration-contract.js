@@ -1,4 +1,5 @@
 const crypto = require('crypto');
+const { validPasswordLength } = require('./password-policy');
 
 const INITIAL_PLAN_CODE = 'basico';
 const INITIAL_SUBSCRIPTION_TYPE = 'prueba';
@@ -47,7 +48,7 @@ function normalizeUsername(value) {
 }
 
 function validatePassword(value) {
-  if (typeof value !== 'string' || value.length < 12 || value.length > 255) {
+  if (!validPasswordLength(value)) {
     throw registrationError(400, 'REGISTRATION_INPUT_INVALID');
   }
   return value;

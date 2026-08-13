@@ -14,13 +14,11 @@ const files = {
   requestContext: read('middleware/request-context.js'),
   errorHandler: read('middleware/error-handler.js'),
   logger: read('utils/security-logger.js'),
+  env: read('config/env.js'),
   webConfig: read('config/web-security.js'),
   emailVerificationContract: read('config/email-verification-contract.js'),
   passwordRecoveryContract: read('config/password-recovery-contract.js'),
   httpSecurity: read('public/js/http-security.js'),
-  appHtml: read('public/app.html'),
-  adminHtml: read('public/admin.html'),
-  loginHtml: read('public/login.html')
 };
 
 const checks = {};
@@ -30,7 +28,9 @@ function check(name, condition, detail = '') {
   if (detail) details[name] = detail;
 }
 
-const allHtml = `${files.appHtml}\n${files.adminHtml}\n${files.loginHtml}`;
+const htmlFiles = fs.readdirSync(path.join(root, 'public')).filter((file) => file.endsWith('.html'));
+const allHtmlSources = htmlFiles.map((file) => read(path.join('public', file)));
+const allHtml = allHtmlSources.join('\n');
 const allFrontend = fs.readdirSync(path.join(root, 'public', 'js'))
   .filter((file) => file.endsWith('.js'))
   .map((file) => read(path.join('public', 'js', file)))
@@ -123,6 +123,13 @@ check('rateLimitRecuperacionPassword', files.server.includes("app.use('/auth/sol
   && files.passwordRecoveryContract.includes('PASSWORD_RECOVERY_TTL_MINUTES'));
 check('rateLimitExportacion', files.server.includes('rateLimiters.export'));
 check('rateLimitWhatsapp', files.server.includes('rateLimiters.whatsapp'));
+check('rateLimitPagosDedicado', files.server.includes("app.use('/api/pagos-suscripcion', rateLimiters.payment)")
+  && files.server.includes("app.use('/api/admin/pagos-suscripcion', rateLimiters.paymentAdmin)")
+  && files.rateLimits.includes("identifier: 'payment-owner'")
+  && files.rateLimits.includes("identifier: 'payment-admin'"));
+check('rateLimitComprobantesDedicado', files.server.includes('rateLimiters.receiptUpload')
+  && files.rateLimits.includes("identifier: 'payment-receipt-upload'")
+  && files.webConfig.includes('RECEIPT_UPLOAD_RATE_LIMIT_MAX'));
 check('rateLimitHealth', files.server.includes("app.use('/health', rateLimiters.health"));
 check('healthInternoProtegido', files.server.includes(
   "app.use('/api/admin/health', requireAuth, requireRole('superadmin'), adminHealthRoutes)"
@@ -142,6 +149,8 @@ check('trustedOriginsObligatorioProduccion', files.webConfig.includes('En produc
 check('sameSiteLax', /sameSite:\s*['"]lax['"]/.test(files.server));
 check('cookieHttpOnly', /httpOnly:\s*true/.test(files.server));
 check('cookieSecureProduccion', /secure:\s*appSecurityConfig\.production/.test(files.server));
+check('secretoSesionProduccionEndurecido', files.env.includes('SESSION_SECRET de produccion debe ser largo, aleatorio')
+  && files.env.includes('value.length < 48'));
 check('trustProxyCondicional', files.server.includes("app.set('trust proxy', appSecurityConfig.production ? 1 : false)"));
 check('corsGlobalAusente', !/require\(['"]cors['"]\)|Access-Control-Allow-Origin|app\.use\(cors/i.test(files.server + routeSource));
 check('cacheNoStore', files.server.includes('noStoreSensitiveResponses')
@@ -157,8 +166,10 @@ check('loggerRedactaSecretos', /password\|contrasena/.test(files.logger)
   && /authorization\|cookie/.test(files.logger)
   && /db_ssl_ca/.test(files.logger));
 check('loggerNoRegistraBody', /\|body\)/.test(files.logger));
-check('frontendSeguroCargado', [files.appHtml, files.adminHtml, files.loginHtml]
-  .every((html) => html.includes('/js/http-security.js')));
+check('frontendSeguroCargado', allHtmlSources.every((html) => html.includes('/js/http-security.js')),
+  `HTML revisados: ${htmlFiles.length}`);
+check('aliasSuscripcionProtegido', files.server.includes("app.get('/subscription.html', requireAuth")
+  && files.requestSecurity.includes("'/subscription.html'"));
 check('frontendEncabezadoCsrf', files.httpSecurity.includes("headers.set('X-Requested-With', 'XMLHttpRequest')"));
 check('frontendManeja429', files.httpSecurity.includes('response.status === 429'));
 check('frontendManejaSesionRevocada', files.httpSecurity.includes("body.code === 'SESSION_REVOKED'"));

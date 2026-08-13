@@ -17,7 +17,8 @@ const {
   PASSWORD_RECOVERY_TTL_MINUTES,
   PASSWORD_RECOVERY_TYPE,
   passwordRecoveryTtlMinutes,
-  sha256
+  sha256,
+  validatePasswordReset
 } = require('../config/password-recovery-contract');
 const { validateSession } = require('../services/session-validation-service');
 
@@ -97,6 +98,13 @@ async function main() {
   if (!/(prueba|test)/i.test(primary.database)) throw new Error('La prueba requiere una base local de pruebas.');
   assert.strictEqual(passwordRecoveryTtlMinutes({}), PASSWORD_RECOVERY_TTL_MINUTES);
   assert.throws(() => passwordRecoveryTtlMinutes({ PASSWORD_RECOVERY_TOKEN_TTL_MINUTES: '2' }));
+  const policyToken = createEmailVerificationToken();
+  assert.doesNotThrow(() => validatePasswordReset({
+    token: policyToken, nuevaPassword: 'a'.repeat(72), confirmacionPassword: 'a'.repeat(72)
+  }));
+  assert.throws(() => validatePasswordReset({
+    token: policyToken, nuevaPassword: 'a'.repeat(73), confirmacionPassword: 'a'.repeat(73)
+  }), /requisitos/);
   const marker = crypto.randomBytes(6).toString('hex');
   const database = `${TEMP_PREFIX}${marker}`;
   const serverOptions = await credentials();

@@ -54,9 +54,9 @@ Las migraciones son posibilidades; ninguna se crea por estar mencionada aqui.
 | TECH-003 | SAAS-C4 revision administrativa | C1 creo tablas, pero no cola ni decisiones operativas | alta | superadmin, auditoria, permisos y concurrencia | No determinada | Implementado y cerrado | SAAS-C4 |
 | TECH-004 | SAAS-C5 aplicacion a suscripcion | C1 prepara el enlace unico, sin efecto B2/B4 | critica antes de pruebas finales | transaccion unica, idempotencia, historial y rollback | No determinada | Implementado y cerrado | SAAS-C5 |
 | TECH-005 | SAAS-C6-C8 frontend, regresion y cierre | C1 solo valido esquema y compatibilidad | alta | C2-C5, tenant, seguridad, browser y backup | No determinada | Implementado y cerrado | SAAS-C6-C8 |
-| TECH-006 | Seguridad publica final | Las fases A validaron el flujo local; correo real y despliegue quedan fuera | alta antes de beta | proveedor de correo, rate limits, monitoreo y secretos | No determinada | En analisis | Pre-beta |
-| TECH-007 | CI y GitHub Actions | No hay pipeline remoto configurado | alta antes de beta | secretos de CI, MySQL temporal, checks y artefactos | No | Pendiente | Pre-beta |
-| TECH-008 | Staging y produccion de prueba | El proyecto no tiene despliegue de este estado | alta antes de beta | dominio, HTTPS, TLS, backup y datos sinteticos | No | Pendiente; no usar tiendas reales todavia | Pre-beta |
+| TECH-006 | Seguridad publica final | Las fases A-C validaron el flujo local; correo real y despliegue quedan fuera | alta antes de beta | autenticacion, tenant, archivos privados, rate limits y secretos | No determinada | Implementado; pendiente cierre Git | Pre-beta |
+| TECH-007 | CI y GitHub Actions | No hay pipeline remoto configurado | alta antes de beta | secretos de CI, MySQL temporal, checks, artefactos y store de rate limit para ejecucion distribuida | No | Pendiente | Pre-beta |
+| TECH-008 | Staging y produccion de prueba | El proyecto no tiene despliegue de este estado | alta antes de beta | dominio, HTTPS, TLS, backup, datos sinteticos y topologia explicita de proxy | No | Pendiente; no usar tiendas reales todavia | Pre-beta |
 | TECH-009 | Backups externos y restauracion operativa | Los backups actuales son locales y manuales | alta antes de beta | cifrado/almacenamiento seguro, retencion, rollback y prueba periodica | No determinada | En analisis | Pre-beta |
 | TECH-010 | Monitoreo, alertas y logging seguro | Health local existe; no hay proveedor externo ni metricas persistentes | alta antes de beta | privacidad, alertas, on-call y costos | No | Pendiente | Pre-beta |
 | TECH-011 | Roles internos | Solo existen `superadmin` y `dueno_tienda` | alta antes de beta | permisos, invitaciones, sesiones, limites y auditoria | Probable nueva estructura de roles | Requiere decision del propietario; pendiente | SAAS futuro |
@@ -81,7 +81,7 @@ Quedan registrados como trabajo de plataforma, con evidencia en continuidad,
 mapa de pruebas y estado de despliegue:
 
 - SAAS-C esta cerrado; conservar su regresion al tocar pagos o suscripciones;
-- endurecimiento y revision publica final antes de beta;
+- cierre Git de la seguridad publica final antes de iniciar CI;
 - CI y GitHub Actions con bases temporales protegidas;
 - staging y produccion de prueba en localhost controlado primero;
 - backups externos, almacenamiento cifrado, restauracion y rollback ensayados;
@@ -310,7 +310,7 @@ explicita y una nueva evaluacion de seguridad, datos y alcance.
 
 ## 18. Roadmap futuro sugerido
 
-1. Ejecutar seguridad publica final.
+1. Cerrar y publicar seguridad publica final.
 2. Incorporar CI y GitHub Actions.
 3. Preparar staging, restauracion, monitoreo y produccion de prueba.
 4. Cerrar documentacion operativa, terminos, privacidad y soporte.

@@ -87,6 +87,18 @@ function createRateLimiters(config, { onLoginLimited = null } = {}) {
       identifier: 'admin-sensitive', limit: config.adminMax,
       code: 'ADMIN_RATE_LIMIT_EXCEEDED', message: commonMessage
     }),
+    payment: limiter(config, {
+      identifier: 'payment-owner', limit: config.paymentMax,
+      code: 'PAYMENT_RATE_LIMIT_EXCEEDED', message: commonMessage
+    }),
+    paymentAdmin: limiter(config, {
+      identifier: 'payment-admin', limit: config.paymentAdminMax,
+      code: 'PAYMENT_ADMIN_RATE_LIMIT_EXCEEDED', message: commonMessage
+    }),
+    receiptUpload: limiter(config, {
+      identifier: 'payment-receipt-upload', limit: config.receiptUploadMax,
+      code: 'RECEIPT_UPLOAD_RATE_LIMIT_EXCEEDED', message: commonMessage
+    }),
     export: limiter(config, {
       identifier: 'exports', limit: config.exportMax,
       code: 'EXPORT_RATE_LIMIT_EXCEEDED', message: commonMessage

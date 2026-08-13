@@ -115,6 +115,9 @@ function webSecurityConfig(environment = process.env) {
       passwordRecoveryConfirmTokenMax: integerSetting(environment, 'PASSWORD_RECOVERY_CONFIRM_TOKEN_RATE_LIMIT_MAX', 10, 1, 1000),
       authMax: integerSetting(environment, 'AUTH_RATE_LIMIT_MAX', 120, 5, 10000),
       adminMax: integerSetting(environment, 'ADMIN_RATE_LIMIT_MAX', 600, 10, 10000),
+      paymentMax: integerSetting(environment, 'PAYMENT_RATE_LIMIT_MAX', 240, 10, 5000),
+      paymentAdminMax: integerSetting(environment, 'PAYMENT_ADMIN_RATE_LIMIT_MAX', 120, 5, 2000),
+      receiptUploadMax: integerSetting(environment, 'RECEIPT_UPLOAD_RATE_LIMIT_MAX', 20, 1, 500),
       exportMax: integerSetting(environment, 'EXPORT_RATE_LIMIT_MAX', 30, 1, 1000),
       whatsappMax: integerSetting(environment, 'WHATSAPP_RATE_LIMIT_MAX', 60, 1, 1000),
       healthMax: integerSetting(environment, 'HEALTH_RATE_LIMIT_MAX', 900, 10, 100000)

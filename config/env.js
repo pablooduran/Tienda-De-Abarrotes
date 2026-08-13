@@ -1,6 +1,6 @@
 const path = require('path');
 const dotenv = require('dotenv');
-const { buildDatabaseOptions } = require('./database-options');
+const { buildDatabaseOptions, isProductionEnvironment } = require('./database-options');
 const {
   missingEnvironmentWarning,
   normalizeAppEnvironment,
@@ -16,8 +16,8 @@ if (environmentWarning) console.warn(environmentWarning);
 
 dotenv.config({ path: path.join(__dirname, '..', environmentFile) });
 
-function requireEnvironment(names) {
-  const missing = names.filter((name) => !String(process.env[name] || '').trim());
+function requireEnvironment(names, environment = process.env) {
+  const missing = names.filter((name) => !String(environment[name] || '').trim());
   if (missing.length) {
     throw new Error(`Faltan variables de entorno obligatorias: ${missing.join(', ')}.`);
   }
@@ -27,12 +27,20 @@ function databaseConfig(extra = {}) {
   return buildDatabaseOptions(process.env, extra);
 }
 
-function sessionSecret() {
-  requireEnvironment(['SESSION_SECRET']);
-  if (process.env.SESSION_SECRET.length < 32) {
+function sessionSecret(environment = process.env) {
+  requireEnvironment(['SESSION_SECRET'], environment);
+  const value = String(environment.SESSION_SECRET);
+  if (value.length < 32) {
     throw new Error('SESSION_SECRET debe tener al menos 32 caracteres.');
   }
-  return process.env.SESSION_SECRET;
+  if (isProductionEnvironment(environment)) {
+    const placeholder = /(reemplazar|replace[-_ ]?me|change[-_ ]?me|placeholder)/i.test(value);
+    const diversity = new Set(value).size;
+    if (value.length < 48 || diversity < 10 || placeholder) {
+      throw new Error('SESSION_SECRET de produccion debe ser largo, aleatorio y no puede usar valores de ejemplo.');
+    }
+  }
+  return value;
 }
 
 function databaseTarget(config = databaseConfig()) {

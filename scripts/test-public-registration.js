@@ -159,6 +159,15 @@ async function main() {
   try {
     assert.strictEqual(normalizeSlug(' Tienda Nino & Mas '), 'tienda-nino-mas');
     assert.throws(() => normalizeRegistration({ usuario: 'abc' }), /No se pudo completar/);
+    assert.doesNotThrow(() => normalizeRegistration(request(`${marker}p`, { password: 'a'.repeat(72) })));
+    assert.throws(
+      () => normalizeRegistration(request(`${marker}q`, { password: 'a'.repeat(73) })),
+      /No se pudo completar/
+    );
+    assert.throws(
+      () => normalizeRegistration(request(`${marker}r`, { password: 'a'.repeat(70) + '\u00f1\u00f1' })),
+      /No se pudo completar/
+    );
     server = await connect(serverOptions);
     await server.query(`CREATE DATABASE ${quoteIdentifier(database)} CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci`);
     connection = await connect(await temporaryCredentials(database));

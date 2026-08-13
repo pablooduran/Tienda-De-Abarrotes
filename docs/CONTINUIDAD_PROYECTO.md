@@ -124,6 +124,7 @@ El contexto de tienda proviene de la sesion validada. El navegador no debe envia
 | Fase 11 - acceso publico | SAAS-A1-SAAS-A5 terminados | Registro publico transaccional, verificacion y reenvio local, recuperacion de contrasena, configuracion base, onboarding inicial y regresion integral E2E. |
 | Suscripciones SaaS | SAAS-B terminado | Ciclo de vida, acceso, planes, limites y administracion global sobre 022. |
 | Pagos manuales de suscripcion | SAAS-C terminado | C0-C8 cubren diseno, estructura, backend, almacenamiento privado, revision, aplicacion atomica, frontend, seguridad y regresion integral. El flujo actual es manual; no hay pagos automaticos. |
+| Seguridad publica final | Implementada; cierre Git pendiente | Alias fisico de suscripcion protegido, password acotado a 72 bytes UTF-8, secreto de sesion de produccion endurecido y rate limits dedicados para pagos y comprobantes. Regresion local, tenant, auditoria y browser aprobados. |
 | Staging y produccion | Pendiente | No se ha desplegado este estado. |
 
 ## 4. Funcionalidades implementadas
@@ -333,7 +334,9 @@ Estas pruebas pueden crear y limpiar datos temporales en la base local de prueba
 - `test:customers-credit-browser`: flujos reales de navegador; inicia y cierra sus propios procesos locales.
 - `test:session-revocation`: revalidacion e invalidacion de sesiones.
 - `test:timezone-tls`: configuracion TLS y fechas locales.
-- `test:web-security`: rate limits, origen, CSP, cabeceras y errores.
+- `test:web-security`: password compatible con bcrypt, secreto de sesion de
+  produccion, rate limits generales y dedicados, origen, CSP, cabeceras,
+  alias de vistas protegidas y errores seguros.
 - `test:legacy-migrations`: crea y elimina exclusivamente bases `tmp_tienda_legacy_*`.
 - `test:compensation-foundation`: prueba 001→014, 013→014, esquema inicial e invariantes exclusivamente en bases `tmp_tienda_restore_*`.
 - `test:sales-compensations`: aplica 015 solo en una base `tmp_tienda_restore_*`, prueba anulaciones, devoluciones, stock, lotes, finanzas pendientes, concurrencia, rollback, tenant, plan y CSRF, y limpia en `finally`.
@@ -481,6 +484,9 @@ No mostrar estas variables en logs ni respuestas. Nunca versionar `.env`, `.env.
 - Los backups son locales. No hay almacenamiento remoto, cifrado propio, programacion automatica, rotacion distribuida ni monitoreo externo.
 - Los backups contienen datos sensibles y deben residir en disco cifrado o almacenamiento seguro. No enviarlos por correo o WhatsApp.
 - El rate limiting actual en memoria aplica por instancia; para escala horizontal debe migrar a almacenamiento distribuido.
+- Antes de staging se debe validar la topologia real de proxy y configurar
+  `trust proxy` con el numero o funcion exactos; no asumir un unico salto sin
+  documentar el balanceador y sus encabezados.
 - B1-B3 aportan liveness/readiness, cierre ordenado, diagnostico superadmin, backup read-only,
   transiciones, anti-spam y comprobador local. No existen metricas persistentes ni proveedor de
   alertas; el estado, la cache y los limites siguen siendo por instancia.
@@ -527,7 +533,7 @@ No mostrar estas variables en logs ni respuestas. Nunca versionar `.env`, `.env.
 
 No alterar este orden sin una decision explicita:
 
-1. Seguridad publica final.
+1. Cerrar y publicar seguridad publica final.
 2. CI y GitHub Actions.
 3. Staging y produccion de prueba con datos sinteticos.
 4. Revision integral del propietario antes de decidir una beta.
@@ -697,6 +703,6 @@ limpieza. Los pagos actuales son manuales. Siguen pendientes QR dinamico,
 tarjetas, conciliacion, webhooks, cobro recurrente y automatizaciones; tampoco
 existe facturacion fiscal ni se inicia una beta.
 
-La siguiente macrofase es **seguridad publica final**. No iniciar staging,
-produccion ni incorporar tiendas reales antes de cerrarla y completar la
-revision del propietario.
+La macrofase de **seguridad publica final** esta implementada y pendiente de su
+cierre Git. Despues corresponde CI y GitHub Actions. No iniciar CI, staging,
+produccion ni incorporar tiendas reales desde este bloque.

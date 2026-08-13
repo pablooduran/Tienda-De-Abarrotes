@@ -16,6 +16,7 @@ const { publicRegistrationService } = require('../services/public-registration-s
 const { emailVerificationService } = require('../services/email-verification-service');
 const { passwordRecoveryService } = require('../services/password-recovery-service');
 const { ownerDestination, resolveSubscriptionAccess } = require('../services/subscription-access-service');
+const { validPasswordLength } = require('../config/password-policy');
 
 const router = express.Router();
 const dummyPasswordHash = bcrypt.hash(crypto.randomBytes(32).toString('hex'), 12);
@@ -52,8 +53,8 @@ function publicAdmin(admin) {
 }
 
 function validateNewPassword(password, confirmation) {
-  if (typeof password !== 'string' || password.length < 12) {
-    const error = new Error('La nueva contrasena debe tener al menos 12 caracteres.');
+  if (!validPasswordLength(password)) {
+    const error = new Error('La nueva contrasena no cumple los requisitos de longitud.');
     error.status = 400;
     throw error;
   }

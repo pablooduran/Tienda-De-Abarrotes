@@ -22,7 +22,8 @@ contrato:
    protege mutaciones con origen confiable y `X-Requested-With`.
 6. **Rate limiting:** [middleware/rate-limiters.js](../middleware/rate-limiters.js)
    aplica limites separados para API, auth, administracion, exportacion, health
-   y preparacion de WhatsApp.
+   y preparacion de WhatsApp. Pagos de propietario, administracion de pagos y
+   carga de comprobantes tienen limites adicionales dedicados.
 
 Las rutas de superadmin usan `requireAuth` y `requireRole('superadmin')` antes
 de su router. El superadmin no recibe un tenant comercial automaticamente.
@@ -56,15 +57,24 @@ de su router. El superadmin no recibe un tenant comercial automaticamente.
 ## Seguridad web y respuestas
 
 - Sesiones en cookie HTTP-only con politica `sameSite`; la configuracion vive
-  fuera de archivos rastreados. Ver [server.js](../server.js).
+  fuera de archivos rastreados. En produccion, `SESSION_SECRET` exige al menos
+  48 caracteres, diversidad suficiente y no acepta valores de ejemplo. Ver
+  [server.js](../server.js) y [config/env.js](../config/env.js).
+- Las contrasenas nuevas usan una politica central de 12 caracteres como minimo
+  y 72 bytes UTF-8 como maximo para no aceptar sufijos que bcrypt descartaria.
 - Cabeceras de seguridad, politica de permisos y no-cache se montan antes de
-  rutas. APIs, auth, health y vistas sensibles usan `Cache-Control: no-store`.
+  rutas. APIs, auth, health y vistas sensibles usan `Cache-Control: no-store`;
+  tanto `/suscripcion.html` como el nombre fisico `/subscription.html` pasan
+  por autenticacion y resolucion del tenant antes de servir contenido.
 - La entrada se valida por contrato y las consultas usan parametros; no crear
   SQL con valores de usuario.
 - Frontend trata contenido dinamico como texto. Exportaciones neutralizan
   formulas en CSV/XLSX y no incluyen campos internos innecesarios.
 - Los manejadores de errores devuelven codigos estables y requestId; no devuelven
   SQL, `sqlMessage`, stack ni detalles de infraestructura.
+- Los comprobantes de pago se validan por contenido y tamano, se almacenan con
+  clave opaca fuera del directorio publico y solo se descargan por una ruta
+  autenticada que deriva la tienda desde la sesion.
 
 ## Datos prohibidos
 

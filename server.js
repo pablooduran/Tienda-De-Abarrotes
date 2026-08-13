@@ -194,6 +194,12 @@ app.use('/api/fiados/exportacion.xlsx', rateLimiters.export);
 app.use(/^\/api\/clientes\/\d+\/estado-cuenta\/exportacion\.xlsx\/?$/, rateLimiters.export);
 app.use('/api/compensaciones/exportaciones', rateLimiters.export);
 app.use('/api/cobranza/mensaje-whatsapp/preparar', rateLimiters.whatsapp);
+app.post(
+  /^\/api\/pagos-suscripcion\/solicitudes\/[A-Za-z0-9_-]{32,64}\/comprobantes\/?$/,
+  rateLimiters.receiptUpload
+);
+app.use('/api/admin/pagos-suscripcion', rateLimiters.paymentAdmin);
+app.use('/api/pagos-suscripcion', rateLimiters.payment);
 app.use('/api/admin', rateLimiters.admin);
 app.use('/api', rateLimiters.api);
 
@@ -284,9 +290,12 @@ app.get('/onboarding.html', requireAuth, requireOwnerPage, requireTenant, resolv
   return res.sendFile(path.join(__dirname, 'public', 'onboarding.html'));
 });
 
-app.get('/suscripcion.html', requireAuth, requireOwnerPage, requireTenant, resolveSubscription, (req, res) => (
-  res.sendFile(path.join(__dirname, 'public', 'subscription.html'))
-));
+function sendSubscriptionPage(req, res) {
+  return res.sendFile(path.join(__dirname, 'public', 'subscription.html'));
+}
+
+app.get('/suscripcion.html', requireAuth, requireOwnerPage, requireTenant, resolveSubscription, sendSubscriptionPage);
+app.get('/subscription.html', requireAuth, requireOwnerPage, requireTenant, resolveSubscription, sendSubscriptionPage);
 
 app.get('/admin.html', requireAuth, (req, res) => {
   if (req.auth.rol !== 'superadmin') return res.redirect('/app.html');
