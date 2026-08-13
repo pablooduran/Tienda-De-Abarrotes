@@ -56,7 +56,7 @@ Las migraciones son posibilidades; ninguna se crea por estar mencionada aqui.
 | TECH-005 | SAAS-C6-C8 frontend, regresion y cierre | C1 solo valido esquema y compatibilidad | alta | C2-C5, tenant, seguridad, browser y backup | No determinada | Implementado y cerrado | SAAS-C6-C8 |
 | TECH-006 | Seguridad publica final | Las fases A-C validaron el flujo local; correo real y despliegue quedan fuera | alta antes de beta | autenticacion, tenant, archivos privados, rate limits y secretos | No determinada | Implementado y cerrado | Pre-beta |
 | TECH-007 | CI y GitHub Actions | Workflow reproducible con MySQL efimero, migraciones 001-024 y regresion server-side | alta antes de beta | staging, artefactos no sensibles y store de rate limit para ejecucion distribuida | No | Implementado | Pre-beta |
-| TECH-008 | Staging y produccion de prueba | El proyecto no tiene despliegue de este estado | alta antes de beta | dominio, HTTPS, TLS, backup, datos sinteticos y topologia explicita de proxy | No | Pendiente; no usar tiendas reales todavia | Pre-beta |
+| TECH-008 | Staging y produccion de prueba | STAGING-1 prepara configuracion, pero no existe infraestructura ni despliegue | alta antes de beta | proveedor, dominio, HTTPS, MySQL/Redis, storage, backup, datos sinteticos, CIDR reales del proxy y reevaluacion del aviso moderado `uuid`/ExcelJS | No | En analisis; preparacion tecnica implementada, provisionamiento pendiente | STAGING-2 / Pre-beta |
 | TECH-009 | Backups externos y restauracion operativa | Los backups actuales son locales y manuales | alta antes de beta | cifrado/almacenamiento seguro, retencion, rollback y prueba periodica | No determinada | En analisis | Pre-beta |
 | TECH-010 | Monitoreo, alertas y logging seguro | Health local existe; no hay proveedor externo ni metricas persistentes | alta antes de beta | privacidad, alertas, on-call y costos | No | Pendiente | Pre-beta |
 | TECH-011 | Roles internos | Solo existen `superadmin` y `dueno_tienda` | alta antes de beta | permisos, invitaciones, sesiones, limites y auditoria | Probable nueva estructura de roles | Requiere decision del propietario; pendiente | SAAS futuro |
@@ -81,9 +81,9 @@ Quedan registrados como trabajo de plataforma, con evidencia en continuidad,
 mapa de pruebas y estado de despliegue:
 
 - SAAS-C esta cerrado; conservar su regresion al tocar pagos o suscripciones;
-- cierre Git de la seguridad publica final antes de iniciar CI;
-- CI y GitHub Actions con bases temporales protegidas;
-- staging y produccion de prueba en localhost controlado primero;
+- seguridad publica final y CI permanecen cerrados y publicados;
+- cierre Git de STAGING-1 antes de provisionar infraestructura;
+- STAGING-2 y produccion de prueba con datos sinteticos;
 - backups externos, almacenamiento cifrado, restauracion y rollback ensayados;
 - monitoreo, alertas, metricas persistentes y logging seguro;
 - runbooks de despliegue, migracion, restauracion y respuesta a incidentes;
@@ -310,9 +310,9 @@ explicita y una nueva evaluacion de seguridad, datos y alcance.
 
 ## 18. Roadmap futuro sugerido
 
-1. Cerrar y publicar seguridad publica final.
-2. Incorporar CI y GitHub Actions.
-3. Preparar staging, restauracion, monitoreo y produccion de prueba.
+1. Cerrar y publicar STAGING-1.
+2. Provisionar STAGING-2, restauracion, monitoreo y produccion de prueba usando el contrato seguro de STAGING-1.
+3. Validar el workflow CI antes de cada promocion.
 4. Cerrar documentacion operativa, terminos, privacidad y soporte.
 5. Ejecutar `PRODUCTO-0`, UX, `WELCOME` y `HELP`.
 6. Resolver roles internos y mejoras funcionales priorizadas.
@@ -327,6 +327,7 @@ explicita y una nueva evaluacion de seguridad, datos y alcance.
 | --- | --- | --- | --- | --- |
 | 2026-08-01 | SAAS-C1 / continuidad | Creacion del documento maestro de pendientes despues de publicar C1 | Codex | HEAD `7c73562` |
 | 2026-08-12 | SAAS-C8 | Pagos manuales C0-C8 cerrados; automatizaciones y beta permanecen pendientes | Codex | Base `daf4677` |
+| 2026-08-13 | STAGING-1 | Preparacion local/CI/hosted, proxy por CIDR y rate limits distribuidos sin despliegue | Codex | Cierre pendiente |
 
 ## 20. Regla permanente
 

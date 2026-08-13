@@ -17,6 +17,11 @@ function isProductionEnvironment(environment = process.env) {
     || String(environment.NODE_ENV || '').trim().toLowerCase() === 'production';
 }
 
+function isHostedEnvironment(environment = process.env) {
+  return ['staging', 'production'].includes(environmentName(environment))
+    || String(environment.NODE_ENV || '').trim().toLowerCase() === 'production';
+}
+
 function parseBoolean(value, name, defaultValue) {
   const normalized = String(value ?? '').trim().toLowerCase();
   if (!normalized) return defaultValue;
@@ -36,8 +41,8 @@ function loadCertificateAuthority(environment = process.env) {
   if (inlineCa && caPath) {
     throw new Error('Configure solo una fuente para la CA de MySQL: DB_SSL_CA o DB_SSL_CA_PATH.');
   }
-  if (caPath && isProductionEnvironment(environment)) {
-    throw new Error('En produccion la CA de MySQL debe proporcionarse mediante DB_SSL_CA.');
+  if (caPath && isHostedEnvironment(environment)) {
+    throw new Error('En staging/production la CA de MySQL debe proporcionarse mediante DB_SSL_CA.');
   }
   if (inlineCa) return inlineCa;
   if (caPath) {
@@ -63,10 +68,10 @@ function validateCertificateAuthority(ca) {
 }
 
 function sslOptions(environment = process.env) {
-  const production = isProductionEnvironment(environment);
+  const production = isHostedEnvironment(environment);
   const enabled = parseBoolean(environment.DB_SSL_ENABLED, 'DB_SSL_ENABLED', false);
   if (production && !enabled) {
-    throw new Error('En produccion DB_SSL_ENABLED debe ser true. No se permite MySQL sin TLS.');
+    throw new Error('En staging/production DB_SSL_ENABLED debe ser true. No se permite MySQL sin TLS.');
   }
   if (!enabled) return undefined;
   const ca = loadCertificateAuthority(environment);
@@ -126,6 +131,7 @@ module.exports = {
   buildDatabaseOptions,
   environmentName,
   installPoolSessionTimeZone,
+  isHostedEnvironment,
   isProductionEnvironment,
   loadCertificateAuthority,
   normalizePem,

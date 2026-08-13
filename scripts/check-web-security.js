@@ -15,6 +15,8 @@ const files = {
   errorHandler: read('middleware/error-handler.js'),
   logger: read('utils/security-logger.js'),
   env: read('config/env.js'),
+  deployment: read('config/deployment.js'),
+  rateLimitStore: read('services/rate-limit-store-service.js'),
   webConfig: read('config/web-security.js'),
   emailVerificationContract: read('config/email-verification-contract.js'),
   passwordRecoveryContract: read('config/password-recovery-contract.js'),
@@ -135,7 +137,9 @@ check('healthInternoProtegido', files.server.includes(
   "app.use('/api/admin/health', requireAuth, requireRole('superadmin'), adminHealthRoutes)"
 ));
 check('rateLimitProduccionObligatorio', files.webConfig.includes('RATE_LIMIT_ENABLED debe ser true'));
-check('rateLimitMemoryDocumentable', files.rateLimits.includes("require('express-rate-limit')"));
+check('rateLimitDistribuidoHospedado', files.deployment.includes("configured !== 'redis'")
+  && files.rateLimitStore.includes("require('rate-limit-redis')")
+  && files.server.includes('storeFactory: rateLimitStore.storeFor'));
 check('credencialesUniformes', files.auth.includes("error: 'Credenciales incorrectas.'")
   && !/res\.status\(403\).*tienda|res\.status\(403\).*administrador/is.test(files.auth));
 check('comparacionDummy', files.auth.includes('dummyPasswordHash') && files.auth.includes('bcrypt.compare'));
@@ -145,13 +149,15 @@ check('encabezadoCsrfExigido', files.requestSecurity.includes("X-Requested-With"
   && files.requestSecurity.includes('CSRF_VALIDATION_FAILED'));
 check('origenExternoRechazado', files.requestSecurity.includes('ORIGIN_NOT_ALLOWED'));
 check('trustedOriginsSinWildcard', files.webConfig.includes("text.includes('*')"));
-check('trustedOriginsObligatorioProduccion', files.webConfig.includes('En produccion TRUSTED_ORIGINS es obligatorio'));
+check('trustedOriginsObligatorioProduccion', files.webConfig.includes('En staging/production TRUSTED_ORIGINS es obligatorio'));
 check('sameSiteLax', /sameSite:\s*['"]lax['"]/.test(files.server));
 check('cookieHttpOnly', /httpOnly:\s*true/.test(files.server));
-check('cookieSecureProduccion', /secure:\s*appSecurityConfig\.production/.test(files.server));
-check('secretoSesionProduccionEndurecido', files.env.includes('SESSION_SECRET de produccion debe ser largo, aleatorio')
+check('cookieSecureProduccion', /secure:\s*appDeploymentConfig\.secureCookies/.test(files.server));
+check('secretoSesionProduccionEndurecido', files.env.includes('SESSION_SECRET de staging/production debe ser largo, aleatorio')
   && files.env.includes('value.length < 48'));
-check('trustProxyCondicional', files.server.includes("app.set('trust proxy', appSecurityConfig.production ? 1 : false)"));
+check('trustProxyExplicito', files.server.includes("app.set('trust proxy', appDeploymentConfig.trustProxy)")
+  && files.deployment.includes('parseProxyCidrs')
+  && !files.server.includes("app.set('trust proxy', true)"));
 check('corsGlobalAusente', !/require\(['"]cors['"]\)|Access-Control-Allow-Origin|app\.use\(cors/i.test(files.server + routeSource));
 check('cacheNoStore', files.server.includes('noStoreSensitiveResponses')
   && files.requestSecurity.includes("'Cache-Control', 'no-store, max-age=0'"));

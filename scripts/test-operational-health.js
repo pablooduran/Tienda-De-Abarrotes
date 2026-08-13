@@ -129,6 +129,19 @@ async function testServiceStates() {
   assert.strictEqual(ready.status, 'healthy');
   assert.deepStrictEqual(ready.checks, { database: 'ok', migrations: 'ok' });
 
+  const distributed = await service(healthyPool(), {
+    dependencyHealth: async () => ({ status: 'ok' })
+  }).readiness();
+  assert.deepStrictEqual(distributed.checks, {
+    database: 'ok', migrations: 'ok', rateLimitStore: 'ok'
+  });
+
+  const distributedFailure = await service(healthyPool(), {
+    dependencyHealth: async () => { throw new Error('detalle interno sintetico'); }
+  }).readiness();
+  assert.strictEqual(distributedFailure.reason, 'RATE_LIMIT_STORE_UNAVAILABLE');
+  assert.strictEqual(distributedFailure.checks.rateLimitStore, 'unavailable');
+
   const slow = await service(healthyPool({ delayMs: 35 }), {
     softLimitMs: 20,
     timeoutMs: 200
@@ -315,16 +328,24 @@ function lifecycleFixture({ neverClose = false } = {}) {
       events.push('session-store-close');
     }
   };
+  const rateLimitStore = {
+    closeCalls: 0,
+    async close() {
+      this.closeCalls += 1;
+      events.push('rate-limit-store-close');
+    }
+  };
   const logger = loggerCapture();
   const shutdown = createGracefulShutdown({
     server,
     pool,
     sessionStore,
+    rateLimitStore,
     logger,
     timeoutMs: neverClose ? 20 : 200,
     exit: (code) => exits.push(code)
   });
-  return { events, exits, logger, pool, server, sessionStore, shutdown };
+  return { events, exits, logger, pool, rateLimitStore, server, sessionStore, shutdown };
 }
 
 async function testLifecycle() {
@@ -334,10 +355,13 @@ async function testLifecycle() {
   assert.strictEqual(first, second, 'El cierre debe ser idempotente.');
   const result = await first;
   assert.deepStrictEqual(result, { status: 'completed', exitCode: 0 });
-  assert.deepStrictEqual(normal.events, ['server-close', 'session-store-close', 'pool-end']);
+  assert.deepStrictEqual(normal.events, [
+    'server-close', 'session-store-close', 'rate-limit-store-close', 'pool-end'
+  ]);
   assert.deepStrictEqual(normal.exits, [0]);
   assert.strictEqual(normal.server.closeCalls, 1);
   assert.strictEqual(normal.sessionStore.closeCalls, 1);
+  assert.strictEqual(normal.rateLimitStore.closeCalls, 1);
   assert.strictEqual(normal.pool.endCalls, 1);
 
   for (const signal of ['SIGTERM', 'SIGINT']) {

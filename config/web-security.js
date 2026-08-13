@@ -1,4 +1,4 @@
-const { isProductionEnvironment, parseBoolean } = require('./database-options');
+const { isHostedEnvironment, parseBoolean } = require('./database-options');
 
 const LOG_LEVELS = new Set(['off', 'error', 'warn', 'info']);
 
@@ -26,16 +26,16 @@ function normalizeOrigin(value, { production = false } = {}) {
     throw new Error(`TRUSTED_ORIGINS debe contener solo origenes HTTP(S), sin rutas: ${text.slice(0, 120)}.`);
   }
   if (production && parsed.protocol !== 'https:') {
-    throw new Error('En produccion todos los TRUSTED_ORIGINS deben usar HTTPS.');
+    throw new Error('En staging/production todos los TRUSTED_ORIGINS deben usar HTTPS.');
   }
   return parsed.origin;
 }
 
 function trustedOrigins(environment = process.env) {
-  const production = isProductionEnvironment(environment);
+  const production = isHostedEnvironment(environment);
   const configured = String(environment.TRUSTED_ORIGINS || '').trim();
   if (!configured) {
-    if (production) throw new Error('En produccion TRUSTED_ORIGINS es obligatorio.');
+    if (production) throw new Error('En staging/production TRUSTED_ORIGINS es obligatorio.');
     const port = integerSetting(environment, 'PORT', 3000, 1, 65535);
     return Object.freeze([
       `http://localhost:${port}`,
@@ -50,7 +50,7 @@ function trustedOrigins(environment = process.env) {
 }
 
 function webSecurityConfig(environment = process.env) {
-  const production = isProductionEnvironment(environment);
+  const production = isHostedEnvironment(environment);
   const testEnvironment = String(environment.APP_ENV || '').trim().toLowerCase() === 'test';
   const rateLimitEnabled = parseBoolean(
     environment.RATE_LIMIT_ENABLED,
@@ -58,7 +58,7 @@ function webSecurityConfig(environment = process.env) {
     !testEnvironment
   );
   if (production && !rateLimitEnabled) {
-    throw new Error('En produccion RATE_LIMIT_ENABLED debe ser true.');
+    throw new Error('En staging/production RATE_LIMIT_ENABLED debe ser true.');
   }
   const logLevel = String(environment.SECURITY_LOG_LEVEL || (production ? 'info' : 'warn')).trim().toLowerCase();
   if (!LOG_LEVELS.has(logLevel)) {

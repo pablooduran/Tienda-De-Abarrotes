@@ -15,7 +15,7 @@ Sistema con Node.js, Express, MySQL y frontend en HTML, CSS y JavaScript. Admini
 
 ## Requisitos
 
-- Node.js 18 o superior.
+- Node.js 20 o superior.
 - MySQL 8.0.16 o superior. Las migraciones 007, 008, 009 y 010 fueron disenadas para MySQL 8.0.46.
 - Una base local o de prueba para validar cambios antes de produccion.
 
@@ -54,11 +54,20 @@ cumple. No lee `.env.local`, no usa secretos ni backups reales, no despliega y
 no ejecuta pruebas browser dependientes de Edge local. Esas pruebas siguen
 siendo obligatorias en la validacion controlada previa a staging.
 
+## Preparacion de staging
+
+El contrato de configuracion para `local`, `ci`, `staging` y `production` esta
+documentado en [docs/CONFIGURACION_STAGING.md](docs/CONFIGURACION_STAGING.md).
+Esta preparacion no crea ni despliega staging. Los entornos hospedados exigen
+MySQL con TLS, HTTPS, CIDR explicitos del proxy, Redis con TLS para rate limits
+y almacenamiento privado fuera del repositorio. La seleccion de proveedor,
+dominio, redes y secretos sigue pendiente.
+
 ## TLS de MySQL
 
 La configuracion MySQL se construye en `config/database-options.js` y es compartida por el servidor, el almacen de sesiones, el migrador, los comprobadores y las pruebas. No existe deteccion automatica por dominio ni degradacion silenciosa.
 
-En produccion son obligatorios:
+En staging y produccion son obligatorios:
 
 ```text
 APP_ENV=production
@@ -66,7 +75,7 @@ DB_SSL_ENABLED=true
 DB_SSL_CA="-----BEGIN CERTIFICATE-----\n...contenido PEM de la CA...\n-----END CERTIFICATE-----"
 ```
 
-`DB_SSL_CA` admite saltos de linea reales o `\n` escapados, como los que puede conservar Render en una variable multilinea. La aplicacion valida el PEM al iniciar y configura `rejectUnauthorized=true`. Si TLS esta desactivado, falta la CA o el certificado no puede cargarse, el proceso se detiene; nunca vuelve a una conexion insegura. `DB_SSL_CA_PATH` queda limitado a desarrollo o entornos controlados y no se admite en produccion.
+`DB_SSL_CA` admite saltos de linea reales o `\n` escapados. La aplicacion valida el PEM al iniciar y configura `rejectUnauthorized=true`. Si TLS esta desactivado, falta la CA o el certificado no puede cargarse, el proceso se detiene; nunca vuelve a una conexion insegura. `DB_SSL_CA_PATH` queda limitado a desarrollo o entornos controlados y no se admite en staging/production.
 
 No agregue certificados al repositorio ni muestre la CA en logs. Obtenga la CA vigente desde el panel seguro del proveedor y carguela como secreto en el entorno de ejecucion.
 
@@ -1197,17 +1206,25 @@ SECURITY_LOG_LEVEL=info
 
 El login mantiene contadores separados por IP y por el hash de la combinacion IP + usuario normalizado. Las credenciales inexistentes, incorrectas o no disponibles devuelven la misma respuesta. Un exceso produce HTTP `429`, codigo `TOO_MANY_LOGIN_ATTEMPTS` y `Retry-After`. `APP_ENV=test` puede desactivar los limites con `RATE_LIMIT_ENABLED=false`; produccion no.
 
-La primera version usa el almacen en memoria de `express-rate-limit`. El limite se aplica por proceso y se reinicia al reiniciar la instancia; antes de escalar horizontalmente debe sustituirse por un almacen compartido, como Redis. No se presenta este contador como bloqueo distribuido o permanente.
+Local y CI usan el almacen en memoria de `express-rate-limit`. Staging y
+production no arrancan sin `RATE_LIMIT_STORE=redis` y una URL `rediss://`;
+cada limitador recibe un store compartido con prefijo por entorno. No se ha
+elegido proveedor Redis ni se incluyen credenciales reales.
 
 Cada respuesta incluye `X-Request-Id`. Los errores publicos incluyen una referencia sin stack, SQL, rutas internas ni secretos. El registro de seguridad usa la hora local de negocio, no guarda bodies completos y redacta contrasenas, hashes, cookies, tokens, autorizacion, secretos, certificados y contenido de WhatsApp.
 
-En Render, configure `TRUSTED_ORIGINS` con el dominio HTTPS publico exacto y conserve `trust proxy=1`, ya que existe un unico proxy frontal administrado. En local, el proxy no se confia y se admiten de forma explicita `http://localhost:3000` y `http://127.0.0.1:3000`. No agregue certificados, secretos ni archivos `.env` a Git.
+En local y CI, Express usa `trust proxy=false`. Staging y production exigen
+`TRUST_PROXY_CIDRS` con las redes directas verificadas del reverse proxy; no se
+aceptan `true`, numeros de saltos ni redes `/0`. Como la topologia aun no esta
+elegida, el proceso falla cerrado si falta esa lista. No agregue certificados,
+secretos ni archivos `.env` a Git.
 
 La prueba de seguridad usa servidores efimeros aislados: no requiere MySQL, no modifica datos y no necesita credenciales. El comprobador es estatico.
 
 ```powershell
 npm.cmd run check:web-security
 npm.cmd run test:web-security
+npm.cmd run test:staging-configuration
 ```
 
 Despues de iniciar el servidor local, las pruebas funcionales existentes ya envian el origen y encabezado requeridos mediante `scripts/http-test-security.js`.

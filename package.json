@@ -58,6 +58,7 @@
     "test:legacy-migrations": "node scripts/test-legacy-migrations.js",
     "test:backup-restore": "node scripts/test-backup-restore.js",
     "test:local-startup": "node scripts/test-local-startup.js",
+    "test:staging-configuration": "node scripts/test-staging-configuration.js",
     "test:operational-health": "node scripts/test-operational-health.js",
     "test:operational-backup-health": "node scripts/test-operational-backup-health.js",
     "test:operational-monitoring": "node scripts/test-operational-monitoring.js",
@@ -115,18 +116,20 @@
     "dotenv": "^16.4.5",
     "exceljs": "^4.4.0",
     "express": "^4.19.2",
-    "express-rate-limit": "^8.6.0",
     "express-mysql-session": "^3.0.3",
+    "express-rate-limit": "^8.6.0",
     "express-session": "^1.18.0",
     "helmet": "^7.1.0",
     "multer": "^2.2.0",
-    "mysql2": "^3.11.0"
+    "mysql2": "^3.11.0",
+    "rate-limit-redis": "^6.0.1",
+    "redis": "^6.2.1"
   },
   "devDependencies": {
     "nodemon": "^3.1.4",
     "playwright-core": "^1.61.1"
   },
   "engines": {
-    "node": ">=18"
+    "node": ">=20"
   }
 }

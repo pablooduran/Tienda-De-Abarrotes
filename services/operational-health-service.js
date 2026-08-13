@@ -63,6 +63,11 @@ function publicResult(status, checks, durationMs, checkedAt, reason = null, diag
   });
 }
 
+function dependencyCode(name, suffix) {
+  const normalized = String(name).replace(/([a-z0-9])([A-Z])/g, '$1_$2').toUpperCase();
+  return `${normalized}_${suffix}`;
+}
+
 function createOperationalHealthService(options) {
   const {
     pool,
@@ -70,6 +75,8 @@ function createOperationalHealthService(options) {
     softLimitMs = 300,
     timeoutMs = 1500,
     cacheMs = 4000,
+    dependencyHealth = null,
+    dependencyChecks = [],
     monotonicNow = () => performance.now(),
     clock = () => new Date(),
     timers = { setTimeout, clearTimeout }
@@ -80,6 +87,25 @@ function createOperationalHealthService(options) {
   }
   if (!(softLimitMs > 0 && timeoutMs > softLimitMs && cacheMs >= 0)) {
     throw new Error('Los tiempos del healthcheck no son validos.');
+  }
+  if (dependencyHealth !== null && typeof dependencyHealth !== 'function') {
+    throw new Error('La dependencia adicional de readiness no es valida.');
+  }
+  if (!Array.isArray(dependencyChecks)) {
+    throw new Error('Las dependencias de readiness no son validas.');
+  }
+  const dependencies = [
+    ...(dependencyHealth ? [{ name: 'rateLimitStore', check: dependencyHealth }] : []),
+    ...dependencyChecks
+  ];
+  for (const dependency of dependencies) {
+    if (!/^[a-z][a-zA-Z0-9]{1,39}$/.test(String(dependency?.name || ''))
+      || typeof dependency?.check !== 'function') {
+      throw new Error('Las dependencias de readiness no son validas.');
+    }
+  }
+  if (new Set(dependencies.map(({ name }) => name)).size !== dependencies.length) {
+    throw new Error('Las dependencias de readiness no pueden repetirse.');
   }
 
   const expected = new Set(expectedMigrations.map((name) => String(name).toLowerCase()));
@@ -97,12 +123,32 @@ function createOperationalHealthService(options) {
   async function performReadiness() {
     const startedAt = monotonicNow();
     let databasePassed = false;
+    let migrationsPassed = false;
+    let slowComponent = null;
+    const dependencyStates = Object.fromEntries(dependencies.map(({ name }) => [name, 'unavailable']));
     let migrationRows;
     try {
       const work = (async () => {
+        let componentStartedAt = monotonicNow();
         await dependencyQuery(pool, DATABASE_QUERY, timeoutMs, 'database');
         databasePassed = true;
+        if (monotonicNow() - componentStartedAt > softLimitMs) slowComponent = 'database';
+        componentStartedAt = monotonicNow();
         migrationRows = await dependencyQuery(pool, MIGRATIONS_QUERY, timeoutMs, 'migrations');
+        migrationsPassed = true;
+        if (!slowComponent && monotonicNow() - componentStartedAt > softLimitMs) slowComponent = 'migrations';
+        for (const dependency of dependencies) {
+          try {
+            componentStartedAt = monotonicNow();
+            await dependency.check();
+            dependencyStates[dependency.name] = 'ok';
+            if (!slowComponent && monotonicNow() - componentStartedAt > softLimitMs) {
+              slowComponent = dependency.name;
+            }
+          } catch {
+            throw new DependencyFailure(dependency.name);
+          }
+        }
       })();
       await withTimeout(work, timeoutMs, timers);
     } catch (error) {
@@ -111,8 +157,14 @@ function createOperationalHealthService(options) {
       if (error instanceof HealthTimeout) {
         return publicResult('unhealthy', {
           database: databasePassed ? 'ok' : 'unavailable',
-          migrations: 'unavailable'
-        }, durationMs, checkedAt, databasePassed ? 'MIGRATIONS_TIMEOUT' : 'DATABASE_TIMEOUT', {
+          migrations: migrationsPassed ? 'ok' : 'unavailable',
+          ...dependencyStates
+        }, durationMs, checkedAt, !databasePassed
+          ? 'DATABASE_TIMEOUT'
+          : !migrationsPassed ? 'MIGRATIONS_TIMEOUT' : dependencyCode(
+            Object.entries(dependencyStates).find(([, state]) => state !== 'ok')?.[0] || 'dependency',
+            'TIMEOUT'
+          ), {
           expectedMigrations: expected.size,
           appliedMigrations: null
         });
@@ -120,10 +172,13 @@ function createOperationalHealthService(options) {
       if (error instanceof DependencyFailure) {
         return publicResult('unhealthy', {
           database: error.component === 'database' ? 'unavailable' : 'ok',
-          migrations: 'unavailable'
+          migrations: error.component === 'migrations' || error.component === 'database' ? 'unavailable' : 'ok',
+          ...dependencyStates
         }, durationMs, checkedAt, error.component === 'database'
           ? 'DATABASE_UNAVAILABLE'
-          : 'MIGRATIONS_UNAVAILABLE', {
+          : error.component === 'migrations'
+            ? 'MIGRATIONS_UNAVAILABLE'
+            : dependencyCode(error.component, 'UNAVAILABLE'), {
           expectedMigrations: expected.size,
           appliedMigrations: null
         });
@@ -138,24 +193,29 @@ function createOperationalHealthService(options) {
     if (missingCount) {
       return publicResult('unhealthy', {
         database: 'ok',
-        migrations: 'error'
+        migrations: 'error',
+        ...dependencyStates
       }, durationMs, checkedAt, 'MIGRATIONS_INCOMPLETE', {
         expectedMigrations: expected.size,
         appliedMigrations: applied.size
       });
     }
-    if (durationMs > softLimitMs) {
+    if (slowComponent) {
+      const slowDependencies = Object.fromEntries(Object.entries(dependencyStates)
+        .map(([name, status]) => [name, name === slowComponent ? 'slow' : status]));
       return publicResult('degraded', {
-        database: 'slow',
-        migrations: 'ok'
-      }, durationMs, checkedAt, 'DATABASE_SLOW', {
+        database: slowComponent === 'database' ? 'slow' : 'ok',
+        migrations: slowComponent === 'migrations' ? 'slow' : 'ok',
+        ...slowDependencies
+      }, durationMs, checkedAt, dependencyCode(slowComponent, 'SLOW'), {
         expectedMigrations: expected.size,
         appliedMigrations: applied.size
       });
     }
     return publicResult('healthy', {
       database: 'ok',
-      migrations: 'ok'
+      migrations: 'ok',
+      ...dependencyStates
     }, durationMs, checkedAt, null, {
       expectedMigrations: expected.size,
       appliedMigrations: applied.size
@@ -212,7 +272,18 @@ function createOperationalDiagnosticService(options = {}) {
     const databaseStatus = readiness.checks.database === 'ok'
       ? 'ok'
       : readiness.checks.database === 'slow' ? 'warning' : 'error';
-    const migrationsStatus = readiness.checks.migrations === 'ok' ? 'ok' : 'error';
+    const migrationsStatus = readiness.checks.migrations === 'ok'
+      ? 'ok'
+      : readiness.checks.migrations === 'slow' ? 'warning' : 'error';
+    const dependencyResults = Object.fromEntries(
+      Object.entries(readiness.checks)
+        .filter(([name]) => !['database', 'migrations'].includes(name))
+        .map(([name, status]) => [name, Object.freeze({
+          status: status === 'ok' ? 'ok' : status === 'slow' ? 'warning' : 'error',
+          ...(readiness.reason?.startsWith(`${dependencyCode(name, '')}`)
+            ? { code: readiness.reason } : {})
+        })])
+    );
     const backupCheck = {
       status: backup.status,
       code: backup.code,
@@ -235,6 +306,7 @@ function createOperationalDiagnosticService(options = {}) {
           appliedCount: readiness.diagnostics.appliedMigrations,
           ...(readiness.reason?.startsWith('MIGRATIONS_') ? { code: readiness.reason } : {})
         }),
+        ...dependencyResults,
         backup: Object.freeze(backupCheck)
       }),
       checkedAt: clock().toISOString(),

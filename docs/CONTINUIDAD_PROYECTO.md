@@ -124,8 +124,10 @@ El contexto de tienda proviene de la sesion validada. El navegador no debe envia
 | Fase 11 - acceso publico | SAAS-A1-SAAS-A5 terminados | Registro publico transaccional, verificacion y reenvio local, recuperacion de contrasena, configuracion base, onboarding inicial y regresion integral E2E. |
 | Suscripciones SaaS | SAAS-B terminado | Ciclo de vida, acceso, planes, limites y administracion global sobre 022. |
 | Pagos manuales de suscripcion | SAAS-C terminado | C0-C8 cubren diseno, estructura, backend, almacenamiento privado, revision, aplicacion atomica, frontend, seguridad y regresion integral. El flujo actual es manual; no hay pagos automaticos. |
-| Seguridad publica final | Implementada; cierre Git pendiente | Alias fisico de suscripcion protegido, password acotado a 72 bytes UTF-8, secreto de sesion de produccion endurecido y rate limits dedicados para pagos y comprobantes. Regresion local, tenant, auditoria y browser aprobados. |
-| Staging y produccion | Pendiente | No se ha desplegado este estado. |
+| Seguridad publica final | Cerrada y publicada | Alias fisico de suscripcion protegido, password acotado a 72 bytes UTF-8, secreto de sesion de produccion endurecido y rate limits dedicados para pagos y comprobantes. Regresion local, tenant, auditoria y browser aprobados. |
+| CI / GitHub Actions | Cerrada y publicada | Node 20, MySQL 8 efimero, migraciones 001-024 y regresion server-side sin despliegue ni secretos reales. |
+| Preparacion de staging | STAGING-1 implementado; cierre pendiente | Contrato local/CI/staging/production, proxy por CIDR, Redis obligatorio en hosted, fail-fast y readiness de dependencias. No existe despliegue. |
+| Staging y produccion | Pendiente | No se ha provisionado ni desplegado este estado. |
 
 ## 4. Funcionalidades implementadas
 
@@ -262,12 +264,14 @@ No existe una orden generica `npm test` que represente toda la bateria. Revisar 
 | Script | Uso | Condiciones |
 | --- | --- | --- |
 | `start:local` | Inicia el servidor con `APP_ENV=local` y `.env.local`. | Recomendado para desarrollo; exige `DB_HOST=localhost`. |
-| `start` | Inicia el servidor sin forzar entorno. | Produccion debe declarar `APP_ENV=production`; con `APP_ENV` ausente usa `.env` y advierte. |
+| `start` | Inicia el servidor sin forzar entorno. | Hosted debe declarar `APP_ENV=staging|production`; con `APP_ENV` ausente usa `.env` y advierte. |
 | `dev` | Inicia con recarga para desarrollo. | Solo local. |
 
 `npm.cmd run start:local -- --check` valida la seleccion local sin abrir el servidor ni consultar
-la base. La prueba `test:local-startup` comprueba la seleccion de `.env.local`, la conservacion de
-`.env` para produccion y entorno indefinido, y que los mensajes no expongan secretos.
+la base. La prueba `test:local-startup` comprueba `.env.local`, `.env.ci`,
+`.env.staging`, `.env.production`, el fallback advertido para entorno indefinido
+y que los mensajes no expongan secretos. `test:staging-configuration` valida
+proxy, store distribuido, DB, secretos y readiness sin conexiones externas.
 
 ### Escritura administrativa o estructural
 
@@ -483,10 +487,11 @@ No mostrar estas variables en logs ni respuestas. Nunca versionar `.env`, `.env.
 - La reposicion es informativa: no hay proveedores seleccionados, ordenes de compra ni compras automaticas. Las ventanas son 7/30/90 o un rango manual de hasta 365 dias; ventas anuladas y devoluciones aplicadas no inflan la demanda.
 - Los backups son locales. No hay almacenamiento remoto, cifrado propio, programacion automatica, rotacion distribuida ni monitoreo externo.
 - Los backups contienen datos sensibles y deben residir en disco cifrado o almacenamiento seguro. No enviarlos por correo o WhatsApp.
-- El rate limiting actual en memoria aplica por instancia; para escala horizontal debe migrar a almacenamiento distribuido.
-- Antes de staging se debe validar la topologia real de proxy y configurar
-  `trust proxy` con el numero o funcion exactos; no asumir un unico salto sin
-  documentar el balanceador y sus encabezados.
+- Local y CI conservan rate limiting en memoria. Staging y production exigen
+  Redis con TLS y rechazan el arranque si no esta configurado.
+- STAGING-1 reemplaza la confianza por numero de saltos con CIDR explicitos. La
+  topologia real y las redes del proxy siguen pendientes; sin ellas hosted
+  falla cerrado.
 - B1-B3 aportan liveness/readiness, cierre ordenado, diagnostico superadmin, backup read-only,
   transiciones, anti-spam y comprobador local. No existen metricas persistentes ni proveedor de
   alertas; el estado, la cache y los limites siguen siendo por instancia.
@@ -495,7 +500,8 @@ No mostrar estas variables en logs ni respuestas. Nunca versionar `.env`, `.env.
 - CI GitHub Actions usa Node 20, MySQL 8 efimero, migraciones 001-024 y una
   regresion server-side serializada. No usa secretos, backups ni datos reales y
   no despliega. Los arneses browser siguen en la validacion local controlada.
-- No hay staging configurado ni despliegue de este estado.
+- Existe contrato de configuracion para staging, pero no infraestructura,
+  proveedor ni despliegue de este estado.
 - SAAS-A incorpora registro publico pendiente, verificacion, recuperacion de contrasena y onboarding mediante adaptador local en memoria. Aun no hay proveedor real de correo, invitaciones ni login social.
 - SAAS-C2 agrega rutas backend para planes y metodos publicos, cotizacion sin
   persistencia, creacion/listado/detalle/cancelacion tenant de solicitudes y
@@ -536,9 +542,9 @@ No mostrar estas variables en logs ni respuestas. Nunca versionar `.env`, `.env.
 
 No alterar este orden sin una decision explicita:
 
-1. Cerrar y publicar seguridad publica final.
-2. Cerrar y publicar CI y GitHub Actions.
-3. Staging y produccion de prueba con datos sinteticos.
+1. Cerrar y publicar STAGING-1.
+2. Autorizar y provisionar STAGING-2 con datos sinteticos.
+3. Validar restauracion, monitoreo y rollback del entorno aislado.
 4. Revision integral del propietario antes de decidir una beta.
 
 Cada bloque debe cerrar con pruebas, comprobadores, documentacion y un commit local independiente. No mezclar cambios de bloques distintos.
@@ -706,7 +712,7 @@ limpieza. Los pagos actuales son manuales. Siguen pendientes QR dinamico,
 tarjetas, conciliacion, webhooks, cobro recurrente y automatizaciones; tampoco
 existe facturacion fiscal ni se inicia una beta.
 
-La macrofase de **seguridad publica final** esta cerrada y publicada. La
-macrofase de **CI y GitHub Actions** agrega validacion reproducible sin
-despliegue sobre MySQL efimero; staging sigue siendo el siguiente bloque y no
-debe iniciarse desde esta etapa.
+Las macrofases de **seguridad publica final** y **CI / GitHub Actions** estan
+cerradas y publicadas. **STAGING-1** prepara el contrato de entorno, proxy,
+Redis, fail-fast y readiness sin crear infraestructura. STAGING-2 y cualquier
+despliegue requieren autorizacion separada.

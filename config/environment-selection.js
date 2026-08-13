@@ -3,7 +3,12 @@ function normalizeAppEnvironment(value) {
 }
 
 function resolveEnvironmentFile(value) {
-  return normalizeAppEnvironment(value) === 'local' ? '.env.local' : '.env';
+  const environment = normalizeAppEnvironment(value);
+  if (environment === 'local') return '.env.local';
+  if (environment === 'staging') return '.env.staging';
+  if (environment === 'ci' || environment === 'test') return '.env.ci';
+  if (environment === 'production') return '.env.production';
+  return '.env';
 }
 
 function missingEnvironmentWarning(value) {

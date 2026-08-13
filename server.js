@@ -4,11 +4,14 @@ const session = require('express-session');
 const MySQLSessionStore = require('express-mysql-session')(session);
 
 const { databaseConfig, isLocalEnvironment, logDatabaseTarget, sessionSecret } = require('./config/env');
+const { deploymentConfig } = require('./config/deployment');
 const { webSecurityConfig } = require('./config/web-security');
 let appDatabaseConfig;
 let appSessionSecret;
 let appSecurityConfig;
+let appDeploymentConfig;
 try {
+  appDeploymentConfig = deploymentConfig();
   appDatabaseConfig = databaseConfig();
   appSessionSecret = sessionSecret();
   appSecurityConfig = webSecurityConfig();
@@ -74,12 +77,21 @@ const posRoutes = require('./routes/pos');
 const salesCompensationRoutes = require('./routes/sales-compensations');
 const stockRoutes = require('./routes/stock');
 const { ownerDestination } = require('./services/subscription-access-service');
+const { createRateLimitStoreBackend } = require('./services/rate-limit-store-service');
+const { createPrivateReceiptStorage } = require('./services/private-receipt-storage');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 const securityLogger = createSecurityLogger(appSecurityConfig.logLevel);
 administrativeAuditService.setLogger(securityLogger);
+const rateLimitStore = createRateLimitStoreBackend(appDeploymentConfig.rateLimitStore, {
+  logger: securityLogger
+});
+const privateReceiptStorage = createPrivateReceiptStorage({
+  rootDirectory: appDeploymentConfig.privateStorage.root
+});
 const rateLimiters = createRateLimiters(appSecurityConfig.rateLimit, {
+  storeFactory: rateLimitStore.storeFor,
   onLoginLimited: (req) => administrativeAuditService.recordOutcome({
     actorType: 'anonimo',
     administratorId: null,
@@ -106,6 +118,16 @@ const operationalMonitor = createOperationalMonitor({
 });
 const healthService = createOperationalHealthService({
   pool,
+  dependencyChecks: appDeploymentConfig.hosted ? [
+    { name: 'rateLimitStore', check: rateLimitStore.health },
+    {
+      name: 'privateStorage',
+      check: async () => {
+        const result = await privateReceiptStorage.health();
+        if (!result.available) throw new Error('El almacenamiento privado no esta disponible.');
+      }
+    }
+  ] : [],
   softLimitMs: appSecurityConfig.operationalHealth.softLimitMs,
   timeoutMs: appSecurityConfig.operationalHealth.timeoutMs,
   cacheMs: appSecurityConfig.operationalHealth.cacheMs
@@ -154,7 +176,7 @@ sessionStore.on('error', (error) => {
   });
 });
 
-app.set('trust proxy', appSecurityConfig.production ? 1 : false);
+app.set('trust proxy', appDeploymentConfig.trustProxy);
 app.use(requestContext(securityLogger));
 app.use(securityHeaders(appSecurityConfig));
 app.use(permissionsPolicy);
@@ -171,7 +193,7 @@ app.use(session({
   cookie: {
     httpOnly: true,
     sameSite: 'lax',
-    secure: appSecurityConfig.production,
+    secure: appDeploymentConfig.secureCookies,
     maxAge: 1000 * 60 * 60 * 8
   }
 }));
@@ -316,7 +338,9 @@ app.get(
 app.use(notFoundHandler);
 app.use(createErrorHandler({ logger: securityLogger, production: appSecurityConfig.production }));
 
-function startServer() {
+async function startServer() {
+  await rateLimitStore.ready();
+  if (appDeploymentConfig.hosted) await privateReceiptStorage.health();
   if (isLocalEnvironment) logDatabaseTarget('Servidor local', appDatabaseConfig);
   const server = app.listen(PORT, () => {
     securityLogger.info('server_started', {
@@ -336,6 +360,7 @@ function startServer() {
     server,
     pool,
     sessionStore,
+    rateLimitStore,
     logger: securityLogger,
     monitor: operationalMonitor,
     timeoutMs: appSecurityConfig.operationalHealth.shutdownTimeoutMs
@@ -344,4 +369,15 @@ function startServer() {
   return server;
 }
 
-startServer();
+startServer().catch(async (error) => {
+  securityLogger.error('server_startup_failed', {
+    errorName: error?.name || 'Error',
+    errorCode: typeof error?.code === 'string' ? error.code.slice(0, 80) : null
+  });
+  await rateLimitStore.close().catch(() => {});
+  if (typeof sessionStore.close === 'function') {
+    await Promise.resolve(sessionStore.close()).catch(() => {});
+  }
+  await pool.end().catch(() => {});
+  process.exitCode = 1;
+});

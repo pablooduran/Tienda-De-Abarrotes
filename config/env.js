@@ -1,6 +1,6 @@
 const path = require('path');
 const dotenv = require('dotenv');
-const { buildDatabaseOptions, isProductionEnvironment } = require('./database-options');
+const { buildDatabaseOptions, isHostedEnvironment } = require('./database-options');
 const {
   missingEnvironmentWarning,
   normalizeAppEnvironment,
@@ -33,11 +33,11 @@ function sessionSecret(environment = process.env) {
   if (value.length < 32) {
     throw new Error('SESSION_SECRET debe tener al menos 32 caracteres.');
   }
-  if (isProductionEnvironment(environment)) {
+  if (isHostedEnvironment(environment)) {
     const placeholder = /(reemplazar|replace[-_ ]?me|change[-_ ]?me|placeholder)/i.test(value);
     const diversity = new Set(value).size;
     if (value.length < 48 || diversity < 10 || placeholder) {
-      throw new Error('SESSION_SECRET de produccion debe ser largo, aleatorio y no puede usar valores de ejemplo.');
+      throw new Error('SESSION_SECRET de staging/production debe ser largo, aleatorio y no puede usar valores de ejemplo.');
     }
   }
   return value;

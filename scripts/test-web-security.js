@@ -179,6 +179,8 @@ async function testConfiguration() {
   const strongSecret = 'Tienda-Prod_2026!Sesion#Privada$9xQ7mL2vR8kN5pZ4';
   check('Produccion acepta secreto de sesion robusto',
     sessionSecret({ APP_ENV: 'production', SESSION_SECRET: strongSecret }) === strongSecret);
+  check('Staging aplica la misma robustez del secreto de sesion',
+    sessionSecret({ APP_ENV: 'staging', SESSION_SECRET: strongSecret }) === strongSecret);
   const serverSource = fs.readFileSync(path.resolve(__dirname, '..', 'server.js'), 'utf8');
   check('Cookie conserva SameSite Lax', /sameSite:\s*['"]lax['"]/.test(serverSource));
   check('Proteccion global precede rutas autenticadas',

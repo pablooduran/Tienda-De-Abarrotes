@@ -10,6 +10,7 @@ function createGracefulShutdown(options) {
     server,
     pool,
     sessionStore,
+    rateLimitStore = null,
     logger,
     monitor = null,
     timeoutMs = 10000,
@@ -45,6 +46,9 @@ function createGracefulShutdown(options) {
         await closeHttpServer(server);
         if (sessionStore && typeof sessionStore.close === 'function') {
           await sessionStore.close();
+        }
+        if (rateLimitStore && typeof rateLimitStore.close === 'function') {
+          await rateLimitStore.close();
         }
         await pool.end();
         return 'completed';

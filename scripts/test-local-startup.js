@@ -74,7 +74,9 @@ function runEnvironmentProbe(appEnv) {
 function main() {
   assert.strictEqual(resolveEnvironmentFile('local'), '.env.local');
   assert.strictEqual(resolveEnvironmentFile(' LOCAL '), '.env.local');
-  assert.strictEqual(resolveEnvironmentFile('production'), '.env');
+  assert.strictEqual(resolveEnvironmentFile('ci'), '.env.ci');
+  assert.strictEqual(resolveEnvironmentFile('staging'), '.env.staging');
+  assert.strictEqual(resolveEnvironmentFile('production'), '.env.production');
   assert.strictEqual(resolveEnvironmentFile(undefined), '.env');
   assert.match(missingEnvironmentWarning(undefined), /npm run start:local/);
   assert.strictEqual(missingEnvironmentWarning('production'), null);
@@ -96,7 +98,7 @@ function main() {
   const productionProbe = runEnvironmentProbe('production');
   const productionOutput = outputOf(productionProbe);
   assert.strictEqual(productionProbe.status, 0, productionOutput);
-  assert.match(productionOutput, /"environmentFile":"\.env"/);
+  assert.match(productionOutput, /"environmentFile":"\.env\.production"/);
   assert.match(productionOutput, /"isLocalEnvironment":false/);
   assertNoSecrets(productionOutput);
 
@@ -109,7 +111,9 @@ function main() {
 
   console.log(JSON.stringify({
     localEnvironmentFile: '.env.local',
-    productionEnvironmentFile: '.env',
+    ciEnvironmentFile: '.env.ci',
+    stagingEnvironmentFile: '.env.staging',
+    productionEnvironmentFile: '.env.production',
     undefinedEnvironmentFile: '.env',
     startLocalSetsLocalEnvironment: true,
     npmStartUnchanged: true,

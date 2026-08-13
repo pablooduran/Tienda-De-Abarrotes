@@ -47,7 +47,8 @@ function limiter(config, {
   message,
   skipSuccessfulRequests = false,
   keyGenerator,
-  onLimit
+  onLimit,
+  store
 }) {
   if (!config.enabled) return disabledLimiter;
   return rateLimit({
@@ -56,6 +57,7 @@ function limiter(config, {
     identifier,
     standardHeaders: 'draft-8',
     legacyHeaders: false,
+    ...(store ? { store } : {}),
     skipSuccessfulRequests,
     ...(keyGenerator ? { keyGenerator } : {}),
     async handler(req, res) {
@@ -72,51 +74,52 @@ function limiter(config, {
   });
 }
 
-function createRateLimiters(config, { onLoginLimited = null } = {}) {
+function createRateLimiters(config, { onLoginLimited = null, storeFactory = null } = {}) {
   const commonMessage = 'Se alcanzaron demasiadas solicitudes. Intenta nuevamente mas tarde.';
+  const store = (identifier) => storeFactory ? storeFactory(identifier) : undefined;
   return Object.freeze({
     api: limiter(config, {
       identifier: 'api-general', limit: config.apiMax,
-      code: 'API_RATE_LIMIT_EXCEEDED', message: commonMessage
+      code: 'API_RATE_LIMIT_EXCEEDED', message: commonMessage, store: store('api-general')
     }),
     auth: limiter(config, {
       identifier: 'auth-sensitive', limit: config.authMax,
-      code: 'AUTH_RATE_LIMIT_EXCEEDED', message: commonMessage
+      code: 'AUTH_RATE_LIMIT_EXCEEDED', message: commonMessage, store: store('auth-sensitive')
     }),
     admin: limiter(config, {
       identifier: 'admin-sensitive', limit: config.adminMax,
-      code: 'ADMIN_RATE_LIMIT_EXCEEDED', message: commonMessage
+      code: 'ADMIN_RATE_LIMIT_EXCEEDED', message: commonMessage, store: store('admin-sensitive')
     }),
     payment: limiter(config, {
       identifier: 'payment-owner', limit: config.paymentMax,
-      code: 'PAYMENT_RATE_LIMIT_EXCEEDED', message: commonMessage
+      code: 'PAYMENT_RATE_LIMIT_EXCEEDED', message: commonMessage, store: store('payment-owner')
     }),
     paymentAdmin: limiter(config, {
       identifier: 'payment-admin', limit: config.paymentAdminMax,
-      code: 'PAYMENT_ADMIN_RATE_LIMIT_EXCEEDED', message: commonMessage
+      code: 'PAYMENT_ADMIN_RATE_LIMIT_EXCEEDED', message: commonMessage, store: store('payment-admin')
     }),
     receiptUpload: limiter(config, {
       identifier: 'payment-receipt-upload', limit: config.receiptUploadMax,
-      code: 'RECEIPT_UPLOAD_RATE_LIMIT_EXCEEDED', message: commonMessage
+      code: 'RECEIPT_UPLOAD_RATE_LIMIT_EXCEEDED', message: commonMessage, store: store('payment-receipt-upload')
     }),
     export: limiter(config, {
       identifier: 'exports', limit: config.exportMax,
-      code: 'EXPORT_RATE_LIMIT_EXCEEDED', message: commonMessage
+      code: 'EXPORT_RATE_LIMIT_EXCEEDED', message: commonMessage, store: store('exports')
     }),
     whatsapp: limiter(config, {
       identifier: 'whatsapp-prepared', limit: config.whatsappMax,
-      code: 'WHATSAPP_RATE_LIMIT_EXCEEDED', message: commonMessage
+      code: 'WHATSAPP_RATE_LIMIT_EXCEEDED', message: commonMessage, store: store('whatsapp-prepared')
     }),
     health: limiter(config, {
       identifier: 'health-public', limit: config.healthMax,
-      code: 'HEALTH_RATE_LIMIT_EXCEEDED', message: commonMessage
+      code: 'HEALTH_RATE_LIMIT_EXCEEDED', message: commonMessage, store: store('health-public')
     }),
     loginIp: limiter(config, {
       identifier: 'login-ip', limit: config.loginIpMax,
       code: 'TOO_MANY_LOGIN_ATTEMPTS',
       message: 'Demasiados intentos de inicio de sesion. Intenta nuevamente mas tarde.',
       skipSuccessfulRequests: true,
-      onLimit: onLoginLimited
+      onLimit: onLoginLimited, store: store('login-ip')
     }),
     loginIdentity: limiter(config, {
       identifier: 'login-identity', limit: config.loginIdentityMax,
@@ -124,43 +127,43 @@ function createRateLimiters(config, { onLoginLimited = null } = {}) {
       message: 'Demasiados intentos de inicio de sesion. Intenta nuevamente mas tarde.',
       skipSuccessfulRequests: true,
       keyGenerator: identityKey,
-      onLimit: onLoginLimited
+      onLimit: onLoginLimited, store: store('login-identity')
     }),
     publicRegistration: limiter(config, {
       identifier: 'public-registration', limit: config.publicRegistrationMax,
       code: 'PUBLIC_REGISTRATION_RATE_LIMIT_EXCEEDED', message: commonMessage,
-      keyGenerator: registrationKey
+      keyGenerator: registrationKey, store: store('public-registration')
     }),
     emailVerificationConfirm: limiter(config, {
       identifier: 'email-verification-confirm', limit: config.emailVerificationConfirmMax,
-      code: 'EMAIL_VERIFICATION_RATE_LIMIT_EXCEEDED', message: commonMessage
+      code: 'EMAIL_VERIFICATION_RATE_LIMIT_EXCEEDED', message: commonMessage, store: store('email-verification-confirm')
     }),
     emailVerificationResendIp: limiter(config, {
       identifier: 'email-verification-resend-ip', limit: config.emailVerificationResendIpMax,
-      code: 'EMAIL_VERIFICATION_RESEND_RATE_LIMIT_EXCEEDED', message: commonMessage
+      code: 'EMAIL_VERIFICATION_RESEND_RATE_LIMIT_EXCEEDED', message: commonMessage, store: store('email-verification-resend-ip')
     }),
     emailVerificationResendIdentity: limiter(config, {
       identifier: 'email-verification-resend-identity', limit: config.emailVerificationResendIdentityMax,
       code: 'EMAIL_VERIFICATION_RESEND_RATE_LIMIT_EXCEEDED', message: commonMessage,
-      keyGenerator: verificationIdentityKey
+      keyGenerator: verificationIdentityKey, store: store('email-verification-resend-identity')
     }),
     passwordRecoveryRequestIp: limiter(config, {
       identifier: 'password-recovery-request-ip', limit: config.passwordRecoveryRequestIpMax,
-      code: 'PASSWORD_RECOVERY_RATE_LIMIT_EXCEEDED', message: commonMessage
+      code: 'PASSWORD_RECOVERY_RATE_LIMIT_EXCEEDED', message: commonMessage, store: store('password-recovery-request-ip')
     }),
     passwordRecoveryRequestIdentity: limiter(config, {
       identifier: 'password-recovery-request-identity', limit: config.passwordRecoveryRequestIdentityMax,
       code: 'PASSWORD_RECOVERY_RATE_LIMIT_EXCEEDED', message: commonMessage,
-      keyGenerator: recoveryIdentityKey
+      keyGenerator: recoveryIdentityKey, store: store('password-recovery-request-identity')
     }),
     passwordRecoveryConfirmIp: limiter(config, {
       identifier: 'password-recovery-confirm-ip', limit: config.passwordRecoveryConfirmIpMax,
-      code: 'PASSWORD_RESET_RATE_LIMIT_EXCEEDED', message: commonMessage
+      code: 'PASSWORD_RESET_RATE_LIMIT_EXCEEDED', message: commonMessage, store: store('password-recovery-confirm-ip')
     }),
     passwordRecoveryConfirmToken: limiter(config, {
       identifier: 'password-recovery-confirm-token', limit: config.passwordRecoveryConfirmTokenMax,
       code: 'PASSWORD_RESET_RATE_LIMIT_EXCEEDED', message: commonMessage,
-      keyGenerator: recoveryTokenKey
+      keyGenerator: recoveryTokenKey, store: store('password-recovery-confirm-token')
     })
   });
 }
