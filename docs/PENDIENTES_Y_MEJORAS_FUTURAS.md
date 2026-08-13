@@ -11,15 +11,14 @@ el documento. Tampoco representa una promesa de lanzamiento. Cada pendiente
 debe actualizarse al cerrar una fase y revisarse antes de una beta y antes del
 lanzamiento oficial.
 
-Estado de referencia actualizado despues de DOCS-OPS y el inicio de PRODUCTO-0A:
+Estado de referencia actualizado despues de PRODUCTO-0A y PRODUCTO-0B:
 
 - Rama: `mejora-multitienda`.
-- Base estable publicada: HEAD `059b086`; CI remoto PASS.
+- Base estable publicada: HEAD `d6902c5`; CI remoto PASS.
 - SAAS-A, SAAS-B y SAAS-C0-C8 estan cerrados y publicados.
 - Seguridad publica final, CI, STAGING-1, PREPROD-1 y REGRESION GENERAL estan
   cerrados; la base local esta en migracion 024 y no existe 025.
-- DOCS-OPS esta cerrado. PRODUCTO-0A audita el producto sin implementar
-  cambios. STAGING-2B permanece diferido y no autoriza infraestructura ni gasto.
+- DOCS-OPS y PRODUCTO-0A estan cerrados. PRODUCTO-0B registra decisiones de producto sin implementar cambios. STAGING-2B permanece diferido y no autoriza infraestructura ni gasto.
 - Este documento no implementa funcionalidad ni modifica la base.
 
 ## 2. Estados y prioridades
@@ -74,10 +73,11 @@ Las migraciones son posibilidades; ninguna se crea por estar mencionada aqui.
 | TECH-023 | Facturacion fiscal | Existen comprobantes internos e imprimibles, no factura fiscal | alta antes del lanzamiento si aplica | normativa, impuestos, numeracion e integracion tributaria | Probable modelo fiscal | Requiere decision del propietario | Fiscal |
 | TECH-024 | Pruebas de volumen y rendimiento | Las pruebas actuales son funcionales y aisladas | alta antes de beta | grandes catalogos, concurrencia, limites y observabilidad | No | Pendiente | Pre-beta |
 | TECH-025 | Beta privada y lanzamiento | No se deben incorporar tiendas reales en este estado | critica antes de lanzamiento | staging, soporte, terminos, privacidad y checklist | No | Requiere decision del propietario | Lanzamiento |
-| UX-001 | Arquitectura de navegacion del propietario | PRODUCTO-0A encontro 18 destinos planos y dominios relacionados dispersos | alta antes de beta | menu, permisos por plan, responsive y aprendizaje; no cambia guards existentes | No | Pendiente; requiere decision de agrupacion | PRODUCTO-0B |
-| UX-002 | Lenguaje del ciclo comercial | "Compensaciones", "Eliminar" y los historiales usan terminos tecnicos o ambiguos para un propietario nuevo | alta antes de beta | copy, confirmaciones, trazabilidad y pruebas de interfaz | No | Pendiente; requiere decision sobre nombres visibles | PRODUCTO-0B |
-| UX-003 | Centro de configuracion de tienda | Ajustes base, credito e inventario estan repartidos entre onboarding y modulos | media antes de beta | navegacion, permisos y copy; no crea configuracion nueva | No | Pendiente; requiere definir alcance | PRODUCTO-0B |
-| UX-004 | Busqueda escalable de clientes en POS | El selector actual conserva un limite operativo de 500 clientes; la busqueda remota paginada esta diferida | media antes de beta | POS, rendimiento, tenant y experiencia de venta fiada | No determinada | Requiere decision del propietario | PRODUCTO-0B o mejora funcional posterior |
+| UX-001 | Arquitectura de navegacion del propietario | PRODUCTO-0A encontro 18 destinos planos y dominios relacionados dispersos | alta antes de beta | menu, permisos por plan, responsive y aprendizaje; no cambia guards existentes | No | Aprobado para fase futura; familias definidas | PRODUCTO-1 P1 |
+| UX-002 | Lenguaje del ciclo comercial | "Compensaciones", "Eliminar" y los historiales usan terminos tecnicos o ambiguos para un propietario nuevo | alta antes de beta | copy, confirmaciones, trazabilidad y pruebas de interfaz | No | Aprobado para fase futura; lenguaje de acciones definido | PRODUCTO-1 P2/P4 |
+| UX-003 | Centro de configuracion de tienda | Ajustes base, credito e inventario estan repartidos entre onboarding y modulos | media antes de beta | navegacion, permisos y copy; no crea configuracion nueva | No | Aprobado para fase futura; alcance tecnico por definir | PRODUCTO-1 P5 |
+| UX-004 | Busqueda escalable de clientes en POS | El selector actual conserva un limite operativo de 500 clientes; la busqueda remota paginada esta diferida | media antes de beta | POS, rendimiento, tenant y experiencia de venta fiada | No determinada | Aprobado para fase futura; priorizacion tecnica pendiente | PRODUCTO-1 P4 |
+| SECURITY-2 | Evolucion de seguridad de cuenta | PRODUCTO-0B requiere una auditoria previa antes de cambiar autenticacion o abrir nuevas superficies | alta antes de beta | sesiones, cookies, MFA, recuperacion, rate limits, logging y futuras superficies COMMERCE | No determinada | Pendiente; no iniciar sin auditoria y autorizacion separada | SECURITY-2 |
 
 ## 4. Desarrollo tecnico pendiente
 
@@ -327,8 +327,8 @@ explicita y una nueva evaluacion de seguridad, datos y alcance.
 
 ## 18. Roadmap futuro sugerido
 
-1. Completar PRODUCTO-0A y revisar sus decisiones con el propietario.
-2. Ejecutar PRODUCTO-0B, UX, `WELCOME` y `HELP`; no iniciar infraestructura
+1. Cerrar PRODUCTO-0B y convertir las decisiones aprobadas en bloques verificables de PRODUCTO-1.
+2. Ejecutar PRODUCTO-1, UX, `WELCOME` y `HELP`; no iniciar infraestructura
    externa durante esas fases.
 3. Resolver roles internos y mejoras funcionales priorizadas.
 4. Decidir proveedor, gasto y topologia para STAGING-2B despues de la revision
@@ -340,6 +340,11 @@ explicita y una nueva evaluacion de seguridad, datos y alcance.
 8. Ejecutar pruebas completas de volumen, usabilidad, seguridad y recuperacion.
 9. Decidir beta privada, beta publica y lanzamiento oficial.
 
+Secuencia aprobada: PRODUCTO-1 P1-P8 -> WELCOME -> HELP -> COMMERCE ->
+SECURITY-2 -> pruebas completas finales -> revision final del propietario ->
+STAGING-2B -> pruebas reales -> decision de beta/lanzamiento. Esta secuencia no
+autoriza por si sola el inicio de ninguna fase.
+
 ## 19. Registro de cambios
 
 | Fecha | Fase | Cambio | Autor | Referencia |
@@ -349,6 +354,7 @@ explicita y una nueva evaluacion de seguridad, datos y alcance.
 | 2026-08-13 | STAGING-1 / PREPROD-1 | Configuracion, proxy, runbook, backup, rollback y recuperacion local cerrados sin despliegue | Codex | HEAD `16fa54f` |
 | 2026-08-13 | REGRESION GENERAL | Regresion integral cerrada; correccion de devolucion vendible al lote original | Codex | HEAD `eb53214` |
 | 2026-08-13 | DOCS-OPS / PRODUCTO-0A | Documentacion operativa cerrada y auditoria funcional/UX iniciada sin cambios de producto | Codex | HEAD `059b086` |
+| 2026-08-13 | PRODUCTO-0B | Decisiones de navegacion, lenguaje, configuracion, filtros, carga y SECURITY-2 registradas sin implementacion | Codex | HEAD `d6902c5` |
 
 ## 20. Regla permanente
 

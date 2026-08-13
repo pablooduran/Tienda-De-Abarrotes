@@ -174,16 +174,13 @@ transversal.
 
 Baja: aclarar proposito de auditoria y consolidar patrones de estado vacio/error.
 
-## 12. Decisiones requeridas del propietario
+## 12. Decisiones del propietario resueltas en PRODUCTO-0B
 
-1. Confirmar los grupos principales de navegacion del propietario.
-2. Elegir si el menu debe revelar capacidades bloqueadas de forma explicativa.
-3. Decidir si "Compensaciones" se renombra a "Devoluciones y anulaciones".
-4. Aprobar "Ocultar/Archivar" como termino uniforme en vez de "Eliminar".
-5. Definir el alcance de un centro de configuracion de tienda.
-6. Decidir si Ventas debe reunir historial y correcciones en una misma familia.
-7. Priorizar busqueda remota de clientes para POS frente a otras mejoras UX.
-8. Elegir la secuencia entre PRODUCTO-0B, WELCOME y HELP.
+El propietario aprobo las familias Inicio, Ventas, Inventario, Clientes, Reportes, Administracion / Configuracion y Mi plan.
+
+Tambien aprobo la etiqueta visible "Devoluciones y anulaciones", el lenguaje especifico de acciones, el centro comun de Configuracion, el ciclo de Ventas, capacidades bloqueadas contextuales y discretas, y el diseno de busqueda escalable de clientes en POS.
+
+Estas decisiones son direccion de producto. No se ejecutaron cambios de codigo, rutas, servicios, permisos, migraciones ni comportamiento comercial. El contrato completo, los principios UX y los bloques propuestos viven en `docs/PRODUCTO_0_DECISIONES.md`.
 
 ## 13. Evidencia de validacion
 
