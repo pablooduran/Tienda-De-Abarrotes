@@ -1955,6 +1955,24 @@ textarea:focus-visible { outline: 3px solid rgba(40, 106, 89, .28); outline-offs
 .loading-state, .error-state, .empty-state { text-align: center; padding: 24px; }
 .loading-state.compact, .error-state.compact { padding: 10px; }
 .error-state p { color: var(--danger); }
+.ui-skeleton { display: grid; gap: 10px; padding: 10px 0; }
+.ui-skeleton span { display: block; height: 18px; border-radius: 4px; background: linear-gradient(90deg, #edf1f2 25%, #f8faf9 50%, #edf1f2 75%); background-size: 200% 100%; animation: uiSkeleton 1.2s ease-in-out infinite; }
+.ui-skeleton-rows span:nth-child(2n) { width: 82%; }
+.ui-skeleton-rows span:nth-child(3n) { width: 64%; }
+.ui-empty { text-align: center; padding: 24px; color: var(--muted); }
+.ui-empty strong { display: block; color: var(--ink); margin-bottom: 6px; }
+.ui-empty p { margin: 0; }
+.filter-disclosure { width: 100%; }
+.filter-disclosure > summary { display: inline-flex; gap: 8px; align-items: center; cursor: pointer; padding: 9px 12px; border: 1px solid var(--line); border-radius: 6px; font-weight: 600; list-style: none; }
+.filter-disclosure > summary::-webkit-details-marker { display: none; }
+.filter-disclosure > summary::before { content: '+'; font-size: 18px; }
+.filter-disclosure[open] > summary::before { content: '-'; }
+.filter-count { min-width: 20px; padding: 1px 6px; border-radius: 10px; color: white; background: var(--brand); font-size: 12px; text-align: center; }
+.filter-disclosure-body { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 12px; align-items: end; padding: 14px 0 2px; }
+.filter-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+button.is-busy { cursor: wait; opacity: .72; }
+@keyframes uiSkeleton { from { background-position: 200% 0; } to { background-position: -200% 0; } }
+@media (prefers-reduced-motion: reduce) { .ui-skeleton span { animation: none; } }
 
 .modal-backdrop {
   position: fixed;

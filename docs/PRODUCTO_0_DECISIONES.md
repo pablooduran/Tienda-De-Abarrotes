@@ -131,6 +131,15 @@ etiqueta visible de `compensaciones` pasa a `Devoluciones y anulaciones`. El
 superadmin conserva `admin.html` y su navegacion global separada. P1 esta
 implementado y pendiente de validacion/cierre; P2 no esta iniciado.
 
+### Estado de P2
+
+P2 implementa patrones compartidos para mensajes seguros, skeletons, estados
+vacios, mutaciones y filtros compactos, con foco visible, touch y
+`prefers-reduced-motion`. Se demuestra en cargas y formularios existentes sin
+cambiar consultas ni reglas de negocio. P3 no esta iniciado; los rediseños
+profundos de Inventario, Ventas, Clientes, Configuracion, Suscripcion y
+Superadmin quedan fuera de P2.
+
 ## Decisiones aun pendientes
 
 - Detalle visual de familias, iconografia, colores y marca.

@@ -157,7 +157,7 @@ document.addEventListener('keydown', (event) => {
     first.focus();
   }
 });
-function showError(text) { return modal({ title: 'No se pudo completar', body: `<p>${escapeHtml(text)}</p>`, confirmText: 'Entendido', danger: true }); }
+function showError(error) { return modal({ title: 'No se pudo completar', body: `<p>${escapeHtml(UiPatterns.messageFor(error))}</p>`, confirmText: 'Entendido', danger: true }); }
 function showSuccess(text) { return modal({ title: 'Listo', body: `<p>${escapeHtml(text)}</p>`, confirmText: 'Aceptar' }); }
 function confirmAction(text, danger = false) { return modal({ title: 'Confirmar acción', body: `<p>${escapeHtml(text)}</p>`, confirmText: 'Confirmar', cancelText: 'Cancelar', danger }); }
 
@@ -864,9 +864,12 @@ async function showHiddenDebts() {
 async function saveCrud(event, type) {
   event.preventDefault();
   const form = event.target;
+  const restoreMutation = UiPatterns.mutation(form.querySelector('button[type="submit"]'), form.dataset.id ? 'Guardando...' : 'Guardando...');
+  if (!restoreMutation) return;
   const data = formData(form);
   if ('telefono' in data && !validatePhoneValue(data.telefono)) {
     await showError('El teléfono solo debe contener números.');
+    restoreMutation();
     return;
   }
   const id = form.dataset.id;
@@ -874,7 +877,7 @@ async function saveCrud(event, type) {
     await api(`/api/${type}${id ? `/${id}` : ''}`, { method: id ? 'PUT' : 'POST', body: JSON.stringify(data) });
     await showSuccess('Registro guardado.');
     loadView(type);
-  } catch (error) { showError(error.message); }
+  } catch (error) { showError(error); } finally { restoreMutation(); }
 }
 
 async function clientes() {
@@ -1240,10 +1243,41 @@ async function productos() {
   document.getElementById('showHiddenProducts').addEventListener('click', openHiddenProducts);
   document.getElementById('openLots')?.addEventListener('click', () => loadView('lotesVencimientos'));
   ['productSearch', 'productCategory', 'productProvider', 'productLowStock', 'productSort'].forEach((id) => {
-    document.getElementById(id).addEventListener('input', filterProductsLocal);
-    document.getElementById(id).addEventListener('change', filterProductsLocal);
+    document.getElementById(id).addEventListener('input', updateProductFilterCount);
+    document.getElementById(id).addEventListener('change', updateProductFilterCount);
   });
+  collapseProductFilters();
   renderProductTable(state.productos);
+}
+
+function updateProductFilterCount() {
+  const count = ['productSearch', 'productCategory', 'productProvider', 'productLowStock', 'productSort']
+    .map((id) => document.getElementById(id))
+    .filter((control) => control && (control.type === 'checkbox' ? control.checked : control.value)).length;
+  const target = document.querySelector('[data-filter-count]');
+  if (target) target.textContent = count;
+}
+
+function collapseProductFilters() {
+  const toolbar = document.querySelector('#productSearch')?.closest('.toolbar');
+  if (!toolbar || toolbar.querySelector('.filter-disclosure')) return;
+  const controls = ['productSearch', 'productCategory', 'productProvider', 'productLowStock', 'productSort']
+    .map((id) => document.getElementById(id)?.closest('label')).filter(Boolean);
+  if (!controls.length) return;
+  const disclosure = document.createElement('details');
+  disclosure.className = 'filter-disclosure';
+  disclosure.innerHTML = '<summary>Filtros <span class="filter-count" data-filter-count>0</span></summary><div class="filter-disclosure-body"><div class="filter-actions"><button type="button" class="secondary" data-clear-product-filters>Limpiar filtros</button><button type="button" data-apply-product-filters>Aplicar</button></div></div>';
+  const body = disclosure.querySelector('.filter-disclosure-body');
+  controls.forEach((control) => body.insertBefore(control, body.firstChild));
+  toolbar.appendChild(disclosure);
+  document.querySelector('[data-apply-product-filters]').addEventListener('click', filterProductsLocal);
+  document.querySelector('[data-clear-product-filters]').addEventListener('click', () => {
+    ['productSearch', 'productCategory', 'productProvider', 'productSort'].forEach((id) => { document.getElementById(id).value = ''; });
+    document.getElementById('productLowStock').checked = false;
+    updateProductFilterCount();
+    filterProductsLocal();
+  });
+  updateProductFilterCount();
 }
 
 function movementTypeLabel(value) {
@@ -2453,6 +2487,7 @@ async function loadExpenses() {
   const query = new URLSearchParams(formData(form));
   const data = await api(`/api/gastos?${query}`);
   const container = document.getElementById('expenseList');
+  container.innerHTML = UiPatterns.skeleton('rows', 4);
   container.innerHTML = `<div class="summary-row"><strong>Total vigente: Bs ${money(data.montoVigente)}</strong><span>${data.total} registros</span></div>
     ${data.gastos.length ? `<div class="table-wrap"><table><thead><tr><th>Fecha</th><th>Categoría</th><th>Concepto</th><th>Método</th><th>Monto</th><th>Estado</th><th>Acciones</th></tr></thead><tbody>
       ${data.gastos.map((expense) => `<tr class="${expense.estado === 'anulado' ? 'row-muted' : ''}"><td>${formatDate(expense.fechaGasto)}</td><td>${escapeHtml(expense.categoria)}</td><td><strong>${escapeHtml(expense.concepto)}</strong>${expense.recurrente ? '<small>Recurrente</small>' : ''}</td><td>${escapeHtml(expense.metodoPago)}</td><td>Bs ${money(expense.monto)}</td><td>${statusBadge(expense.estado)}</td><td><div class="actions">${expense.estado === 'registrado' ? `<button class="small secondary" data-expense-edit="${expense.idGasto}" data-finance-write>Editar</button><button class="small danger" data-expense-cancel="${expense.idGasto}" data-finance-write>Anular</button>` : ''}</div></td></tr>`).join('')}
