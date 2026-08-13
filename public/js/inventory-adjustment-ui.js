@@ -23,7 +23,7 @@
   function create(dependencies) {
     const {
       api, root, getProducts, hasFeature, isReadOnly, escapeHtml,
-      formatDate, newOperationKey, showSuccess
+      formatDate, newOperationKey, showSuccess, patterns
     } = dependencies;
     const e = escapeHtml;
     const state = {
@@ -32,12 +32,12 @@
     };
 
     const loading = () =>
-      '<div class="inventory-operation-state" role="status" aria-live="polite">Cargando conciliacion...</div>';
+      `<div class="inventory-operation-state" role="status" aria-live="polite"><span class="sr-only">Cargando conciliación...</span>${patterns.skeleton('rows', 4)}</div>`;
 
     function errorState(error) {
       return `<div class="inventory-operation-state error" role="alert">
         <strong>No se pudo consultar el inventario.</strong>
-        <span>${e(error.message || 'Intente nuevamente.')}</span>
+        <span>${e(patterns.messageFor(error))}</span>
         <button type="button" class="secondary" data-inventory-retry>Reintentar</button>
       </div>`;
     }
@@ -57,7 +57,7 @@
 
     function reconciliationTable(data) {
       if (!data.resultados.length) {
-        return '<div class="inventory-operation-state" role="status">No hay productos para los filtros aplicados.</div>';
+        return patterns.empty('No hay productos para los filtros aplicados.', 'Ajusta los filtros o registra productos para revisar el inventario.');
       }
       return `<div class="table-scroll"><table class="inventory-reconciliation-table">
         <caption class="sr-only">Conciliacion de stock fisico y vendible</caption>
@@ -78,7 +78,7 @@
 
     function historyTable(data) {
       if (!data?.resultados?.length) {
-        return '<div class="inventory-operation-state" role="status">Todavia no hay ajustes manuales.</div>';
+        return patterns.empty('Todavía no hay ajustes manuales.', 'Los ajustes registrados se conservarán aquí como historial.');
       }
       return `<div class="table-scroll"><table>
         <caption class="sr-only">Historial de ajustes manuales</caption>
@@ -334,7 +334,8 @@
           <label>Estado<select name="estado"><option value="todos">Todos</option>
             <option value="ok">Correctos</option><option value="warning">Advertencias</option>
             <option value="error">Errores</option></select></label>
-          <button type="submit" class="secondary">Aplicar filtros</button>
+          <div class="filter-actions"><button type="submit" class="secondary">Aplicar filtros</button>
+            <button type="button" class="secondary" data-inventory-clear>Limpiar filtros</button></div>
         </form><div data-inventory-content>${loading()}</div>
       </section>`;
       root.querySelector('[data-new-inventory-adjustment]')?.addEventListener(
@@ -344,6 +345,14 @@
         event.preventDefault();
         state.search = event.currentTarget.elements.busqueda.value.trim();
         state.status = event.currentTarget.elements.estado.value;
+        state.page = 1;
+        load();
+      });
+      root.querySelector('[data-inventory-clear]').addEventListener('click', () => {
+        const form = root.querySelector('[data-inventory-filters]');
+        form.reset();
+        state.search = '';
+        state.status = 'todos';
         state.page = 1;
         load();
       });

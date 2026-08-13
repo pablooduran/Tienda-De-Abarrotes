@@ -129,16 +129,27 @@ Ventas, Inventario, Clientes, Reportes, Administracion y configuracion, y Mi
 plan. Conserva los destinos, guards de funcionalidades y rutas existentes; la
 etiqueta visible de `compensaciones` pasa a `Devoluciones y anulaciones`. El
 superadmin conserva `admin.html` y su navegacion global separada. P1 esta
-implementado y pendiente de validacion/cierre; P2 no esta iniciado.
+cerrado.
 
 ### Estado de P2
 
 P2 implementa patrones compartidos para mensajes seguros, skeletons, estados
 vacios, mutaciones y filtros compactos, con foco visible, touch y
 `prefers-reduced-motion`. Se demuestra en cargas y formularios existentes sin
-cambiar consultas ni reglas de negocio. P3 no esta iniciado; los rediseños
-profundos de Inventario, Ventas, Clientes, Configuracion, Suscripcion y
-Superadmin quedan fuera de P2.
+cambiar consultas ni reglas de negocio. P3 implementa Inventario y esta
+pendiente de validacion/cierre; los rediseños profundos de Ventas, Clientes,
+Configuracion, Suscripcion y Superadmin quedan fuera de P2.
+
+### Estado de P3
+
+P3 implementa la familia visual de Inventario sin cambiar reglas de stock,
+compras, lotes, trazabilidad, permisos ni contratos. Productos es el punto de
+entrada con la accion primaria **Agregar producto**; las acciones secundarias
+se agrupan con nombres concretos. Movimientos aclara que es un historial,
+Compras ordena el flujo proveedor-productos-confirmacion y Proveedores se
+presenta como parte del abastecimiento. Inteligencia, lotes y conciliacion
+reutilizan filtros compactos, skeletons, estados vacios y mensajes seguros.
+P4 no esta iniciado.
 
 ## Decisiones aun pendientes
 

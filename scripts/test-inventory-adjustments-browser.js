@@ -92,7 +92,12 @@ function harness() {
         escapeHtml,
         formatDate: (value) => String(value),
         newOperationKey: () => 'browser-operation-key-0001',
-        showSuccess: async (message) => { document.getElementById('message').textContent = message; }
+        showSuccess: async (message) => { document.getElementById('message').textContent = message; },
+        patterns: {
+          skeleton: (kind, count) => '<div class="ui-skeleton ui-skeleton-' + kind + '">' + '<span></span>'.repeat(count) + '</div>',
+          messageFor: () => 'No pudimos completar la operación. Inténtalo nuevamente.',
+          empty: (title, description) => '<div class="ui-empty"><strong>' + title + '</strong><p>' + description + '</p></div>'
+        }
       });
       window.__ready = window.__inventory.render();
     })();</script></body></html>`;

@@ -49,6 +49,8 @@ const navigationFamilies = [
   { id: 'plan', label: 'Mi plan', links: [{ href: '/suscripcion.html', label: 'Suscripcion, planes y pagos' }] }
 ];
 
+const inventoryWorkspaceSections = ['productos', 'compras', 'movimientosStock', 'proveedores', 'lotesVencimientos', 'inventarioInteligente', 'inventarioOperativo'];
+
 function money(value) { return Number(value || 0).toFixed(2); }
 function intValue(value) { return Number(value || 0).toFixed(0); }
 function newOperationKey() {
@@ -375,7 +377,8 @@ function inventoryOperationsUi() {
       escapeHtml,
       formatDate,
       newOperationKey,
-      showSuccess
+      showSuccess,
+      patterns: UiPatterns
     });
   }
   return inventoryAdjustmentUi;
@@ -498,7 +501,21 @@ async function loadView(id) {
   const handlers = { inicio, productos, movimientosStock, inventarioInteligente, inventarioOperativo, lotesVencimientos, clientes, proveedores, ventas, compras, historialVentas, pagos, gastos, finanzas, compensaciones, auditoria, cierreCaja, reportes };
   if (!handlers[id]) return loadView('inicio');
   await handlers[id]();
+  renderInventoryWorkspace(id);
   applyReadOnlyUi();
+}
+
+function renderInventoryWorkspace(activeId) {
+  if (!inventoryWorkspaceSections.includes(activeId) || view.querySelector('.inventory-workspace-nav')) return;
+  const destinations = inventoryWorkspaceSections
+    .filter((id) => sectionAllowed(id))
+    .map((id) => {
+      const section = sectionById(id);
+      return `<button type="button" data-inventory-workspace="${id}" class="${id === activeId ? 'active' : ''}" aria-current="${id === activeId ? 'page' : 'false'}">${escapeHtml(section?.[1] || id)}</button>`;
+    }).join('');
+  if (!destinations) return;
+  view.insertAdjacentHTML('afterbegin', `<nav class="inventory-workspace-nav" aria-label="Herramientas de inventario">${destinations}</nav>`);
+  view.querySelectorAll('[data-inventory-workspace]').forEach((button) => button.addEventListener('click', () => loadView(button.dataset.inventoryWorkspace)));
 }
 
 async function compensaciones() {
@@ -792,16 +809,19 @@ async function inicio() {
   ]);
 }
 
-function renderCrud(type, rows, fields, idField) {
+function renderCrud(type, rows, fields, idField, ui = {}) {
+  const primaryAction = ui.primaryAction || 'Guardar';
+  const groupedActions = Boolean(ui.groupedActions);
   const formHtml = (row = {}) => `
     <form class="grid" id="${type}Form" data-id="${row[idField] || ''}">
       ${fields.map((field) => `<label>${field.label}<input name="${field.name}" value="${escapeHtml(row[field.name] || '')}" ${field.phone ? 'inputmode="numeric" pattern="[0-9]*"' : ''} ${field.required ? 'required' : ''}></label>`).join('')}
-      <button type="submit">${row[idField] ? 'Actualizar' : 'Guardar'}</button>
+      <button type="submit">${row[idField] ? 'Actualizar' : primaryAction}</button>
     </form>`;
-  view.innerHTML = `<div class="panel">${formHtml()}</div><div class="panel table-wrap"><table>
-    <thead><tr>${fields.map((f) => `<th>${f.label}</th>`).join('')}<th>Acciones</th></tr></thead>
-    <tbody>${rows.map((row) => `<tr>${fields.map((f) => `<td>${escapeHtml(row[f.name] || '')}</td>`).join('')}<td class="actions"><button class="small secondary" data-edit="${row[idField]}">Editar</button><button class="small danger" data-delete="${row[idField]}">Eliminar</button></td></tr>`).join('')}</tbody>
-  </table></div>`;
+  const table = rows.length ? `<div class="panel table-wrap"><table>
+      <thead><tr>${fields.map((f) => `<th>${f.label}</th>`).join('')}<th>Acciones</th></tr></thead>
+      <tbody>${rows.map((row) => `<tr>${fields.map((f) => `<td>${escapeHtml(row[f.name] || '')}</td>`).join('')}<td class="actions"><button class="small secondary" data-edit="${row[idField]}">Editar</button>${groupedActions ? `<details class="row-actions"><summary>Más opciones</summary><button class="small danger" data-delete="${row[idField]}">Eliminar</button></details>` : `<button class="small danger" data-delete="${row[idField]}">Eliminar</button>`}</td></tr>`).join('')}</tbody>
+    </table></div>` : `<div class="panel">${UiPatterns.empty(ui.emptyTitle || 'Sin registros', ui.emptyDescription || 'Aún no hay registros para mostrar.')}</div>`;
+  view.innerHTML = `<section class="inventory-crud-heading"><div><h3>${escapeHtml(ui.title || '')}</h3><p>${escapeHtml(ui.description || '')}</p></div></section><div class="panel">${formHtml()}</div>${table}`;
   wireUppercase(view);
   view.querySelector(`#${type}Form`).addEventListener('submit', async (event) => saveCrud(event, type));
   view.querySelectorAll('[data-edit]').forEach((btn) => btn.addEventListener('click', () => {
@@ -889,7 +909,14 @@ async function proveedores() {
     { name: 'nombre', label: 'Nombre', required: true, upper: true },
     { name: 'telefono', label: 'Teléfono', phone: true },
     { name: 'direccion', label: 'Dirección', upper: true }
-  ], 'idProveedor');
+  ], 'idProveedor', {
+    title: 'Proveedores',
+    description: 'Mantén los contactos de abastecimiento junto a tus productos y compras.',
+    primaryAction: 'Agregar proveedor',
+    groupedActions: true,
+    emptyTitle: 'Aún no tienes proveedores',
+    emptyDescription: 'Registra un proveedor cuando necesites asociarlo a una compra o producto.'
+  });
 }
 
 function productForm(row = {}) {
@@ -1201,13 +1228,19 @@ function filterProductsLocal() {
 
 function renderProductTable(rows) {
   const target = document.getElementById('productTable');
+  if (!rows.length) {
+    target.innerHTML = UiPatterns.empty('Aún no tienes productos', 'Registra tu primer producto para comenzar a controlar existencias.',
+      !state.context?.soloLectura ? '<button type="button" data-empty-add-product>Agregar producto</button>' : '');
+    target.querySelector('[data-empty-add-product]')?.addEventListener('click', () => openProductModal());
+    return;
+  }
   target.innerHTML = `<div class="table-wrap"><table>
     <thead><tr><th>Nombre</th><th>Proveedor</th><th>Categoría</th><th>Precio</th><th>Stock</th><th>Presentación</th><th>Estado</th><th>Acciones</th></tr></thead>
     <tbody>${rows.map((p) => `<tr class="${p.bajoStock ? 'low-stock' : ''}">
       <td>${escapeHtml(p.nombre)}</td><td>${escapeHtml(p.proveedor || 'SIN PROVEEDOR')}</td><td>${escapeHtml(p.categoria)}</td>
       <td>Bs ${money(p.precioVenta)}</td><td>${stockLabel(p)}</td><td>${packageText(p)}</td>
       <td>${p.bajoStock ? '<span class="badge pendiente">Bajo stock</span>' : '<span class="badge pagado">Normal</span>'}${Number(p.controlaLotes) ? `<span class="lot-control-label">Lotes${Number(p.controlaVencimiento) ? ' y vencimiento' : ''}</span>` : ''}</td>
-      <td class="actions"><button class="small secondary" data-edit="${p.idProducto}">Editar</button>${hasFeature('ajuste_stock') && !state.context?.soloLectura ? `<button class="small" data-adjust-stock="${p.idProducto}">Ajustar stock</button>` : ''}<button class="small secondary" data-product-movements="${p.idProducto}">Ver movimientos</button>${Number(p.controlaLotes) || hasFeature('control_lotes') ? `<button class="small secondary" data-lot-config="${p.idProducto}">${Number(p.controlaLotes) ? 'Configurar lotes' : 'Activar lotes'}</button>` : ''}<button class="small danger" data-delete="${p.idProducto}">Ocultar</button></td>
+      <td class="actions"><button class="small secondary" data-edit="${p.idProducto}">Editar</button><details class="row-actions"><summary>Más opciones</summary>${hasFeature('ajuste_stock') && !state.context?.soloLectura ? `<button class="small" data-adjust-stock="${p.idProducto}">Ajustar stock</button>` : ''}<button class="small secondary" data-product-movements="${p.idProducto}">Ver movimientos</button>${Number(p.controlaLotes) || hasFeature('control_lotes') ? `<button class="small secondary" data-lot-config="${p.idProducto}">${Number(p.controlaLotes) ? 'Configurar lotes' : 'Activar lotes'}</button>` : ''}<button class="small danger" data-delete="${p.idProducto}">Ocultar</button></details></td>
     </tr>`).join('')}</tbody></table></div>`;
   target.querySelectorAll('[data-edit]').forEach((btn) => btn.addEventListener('click', () => openProductModal(state.productos.find((p) => String(p.idProducto) === btn.dataset.edit))));
   target.querySelectorAll('[data-adjust-stock]').forEach((btn) => btn.addEventListener('click', () => openStockAdjustment(state.productos.find((p) => String(p.idProducto) === btn.dataset.adjustStock))));
@@ -1225,11 +1258,9 @@ function renderProductTable(rows) {
 
 async function productos() {
   view.innerHTML = `
-    <div class="panel toolbar">
-      <button id="addProduct">Añadir producto</button>
-      <button id="addFromCatalog" class="secondary">Agregar desde catálogo</button>
-      <button id="showHiddenProducts" class="secondary">Ver productos ocultos</button>
-      ${hasLotOperationalAccess() ? '<button id="openLots" class="secondary">Lotes y vencimientos</button>' : ''}
+    <section class="inventory-product-heading"><div><h3>Productos</h3><p>Tu punto principal para consultar el catálogo y decidir el siguiente paso de inventario.</p></div>${state.context?.soloLectura ? '<span class="muted">Modo solo lectura</span>' : '<button id="addProduct">Agregar producto</button>'}</section>
+    <div class="panel toolbar inventory-product-toolbar">
+      <details class="inventory-secondary-actions"><summary>Más opciones</summary><div><button id="addFromCatalog" class="secondary">Agregar desde catálogo</button><button id="showHiddenProducts" class="secondary">Ver productos ocultos</button>${hasLotOperationalAccess() ? '<button id="openLots" class="secondary">Lotes y vencimientos</button>' : ''}</div></details>
       <label>Buscar<input id="productSearch" placeholder="Buscar producto"></label>
       <label>Categoría<select id="productCategory"><option value="">Todas</option>${categoryOptions()}</select></label>
       <label>Proveedor<select id="productProvider">${options(state.proveedores, 'idProveedor', 'nombre', 'Todos')}</select></label>
@@ -1238,7 +1269,7 @@ async function productos() {
     </div>
     <div class="panel" id="productTable"></div>`;
   wireUppercase(view);
-  document.getElementById('addProduct').addEventListener('click', () => openProductModal());
+  document.getElementById('addProduct')?.addEventListener('click', () => openProductModal());
   document.getElementById('addFromCatalog').addEventListener('click', openMasterCatalogPicker);
   document.getElementById('showHiddenProducts').addEventListener('click', openHiddenProducts);
   document.getElementById('openLots')?.addEventListener('click', () => loadView('lotesVencimientos'));
@@ -1280,6 +1311,33 @@ function collapseProductFilters() {
   updateProductFilterCount();
 }
 
+function compactInventoryFilters(form, controlIds, ignoredValues = {}) {
+  if (!form || form.querySelector('.filter-disclosure')) return () => {};
+  const controlFor = (id) => document.getElementById(id) || form.elements[id];
+  const controls = controlIds.map((id) => controlFor(id)?.closest('label')).filter(Boolean);
+  if (!controls.length) return () => {};
+  const disclosure = document.createElement('details');
+  disclosure.className = 'filter-disclosure inventory-filter-disclosure';
+  disclosure.innerHTML = '<summary>Filtros <span class="filter-count" data-filter-count>0</span></summary><div class="filter-disclosure-body"></div>';
+  const body = disclosure.querySelector('.filter-disclosure-body');
+  controls.forEach((control) => body.appendChild(control));
+  const firstAction = form.querySelector('.filter-actions');
+  if (firstAction) form.insertBefore(disclosure, firstAction);
+  else form.appendChild(disclosure);
+  const update = () => {
+    const count = controlIds.map((id) => controlFor(id)).filter((control) => {
+      if (!control) return false;
+      if (control.type === 'checkbox') return control.checked;
+      return Boolean(control.value) && control.value !== String(ignoredValues[control.name] ?? '');
+    }).length;
+    disclosure.querySelector('[data-filter-count]').textContent = String(count);
+  };
+  controlIds.forEach((id) => controlFor(id)?.addEventListener('input', update));
+  controlIds.forEach((id) => controlFor(id)?.addEventListener('change', update));
+  update();
+  return update;
+}
+
 function movementTypeLabel(value) {
   return ({
     entrada: 'Entrada', salida: 'Salida', ajuste_positivo: 'Ajuste positivo',
@@ -1302,7 +1360,7 @@ function movementReference(row) {
 }
 
 function movementTable(rows, { includeProduct = true } = {}) {
-  if (!rows.length) return '<p class="muted">No hay movimientos para mostrar.</p>';
+  if (!rows.length) return UiPatterns.empty('Aún no hay movimientos', 'Las compras, ventas y ajustes aparecerán aquí sin cambiar el stock actual.');
   return `<div class="table-wrap"><table class="movement-table">
     <thead><tr><th>Fecha</th>${includeProduct ? '<th>Producto</th>' : ''}<th>Movimiento</th><th>Cantidad</th><th>Stock</th><th>Motivo</th><th>Referencia</th><th>Responsable</th></tr></thead>
     <tbody>${rows.map((row) => {
@@ -1494,18 +1552,21 @@ async function openHiddenProducts() {
 
 async function movimientosStock() {
   view.innerHTML = `
-    <div class="panel movement-filters">
-      <label>Producto<input id="movementSearch" type="search" placeholder="Buscar producto"></label>
-      <label>Tipo<select id="movementType"><option value="">Todos</option><option value="entrada">Entrada</option><option value="salida">Salida</option><option value="ajuste_positivo">Ajuste positivo</option><option value="ajuste_negativo">Ajuste negativo</option><option value="inventario_inicial">Inventario inicial</option></select></label>
-      <label>Origen<select id="movementOrigin"><option value="">Todos</option><option value="compra">Compra</option><option value="venta">Venta</option><option value="ajuste_manual">Ajuste manual</option><option value="alta_producto">Alta de producto</option><option value="migracion_inicial">Migración inicial</option></select></label>
-      <label>Desde<input id="movementFrom" type="date"></label><label>Hasta<input id="movementTo" type="date"></label>
-      <label>Responsable<select id="movementOwner"><option value="">Todos</option></select></label>
-    </div>
-    <div class="panel" id="movementResults"><p class="muted">Cargando movimientos...</p></div>
+    <section class="inventory-section-heading"><div><h3>Stock y movimientos</h3><p>Consulta el stock actual en Productos; aquí revisa solamente su historial de entradas, salidas y ajustes.</p></div></section>
+    <form class="panel movement-filters" id="movementFilters">
+      <label>Producto<input id="movementSearch" name="q" type="search" placeholder="Buscar producto"></label>
+      <label>Tipo<select id="movementType" name="tipo"><option value="">Todos</option><option value="entrada">Entrada</option><option value="salida">Salida</option><option value="ajuste_positivo">Ajuste positivo</option><option value="ajuste_negativo">Ajuste negativo</option><option value="inventario_inicial">Inventario inicial</option></select></label>
+      <label>Origen<select id="movementOrigin" name="origen"><option value="">Todos</option><option value="compra">Compra</option><option value="venta">Venta</option><option value="ajuste_manual">Ajuste manual</option><option value="alta_producto">Alta de producto</option><option value="migracion_inicial">Migración inicial</option></select></label>
+      <label>Desde<input id="movementFrom" name="desde" type="date"></label><label>Hasta<input id="movementTo" name="hasta" type="date"></label>
+      <label>Responsable<select id="movementOwner" name="idAdministrador"><option value="">Todos</option></select></label>
+      <div class="filter-actions"><button type="submit">Aplicar filtros</button><button type="button" class="secondary" id="clearMovementFilters">Limpiar filtros</button></div>
+    </form>
+    <div class="panel" id="movementResults">${UiPatterns.skeleton('rows', 4)}</div>
     <div class="movement-pagination"><button id="movementPrevious" class="secondary">Anterior</button><span id="movementPage">Página 1</span><button id="movementNext" class="secondary">Siguiente</button></div>`;
   let currentPage = 1;
-  let searchTimer;
   const load = async (page = 1) => {
+    const results = document.getElementById('movementResults');
+    results.innerHTML = UiPatterns.skeleton('rows', 4);
     const query = new URLSearchParams({ page: String(page), limit: '25' });
     const values = {
       q: document.getElementById('movementSearch').value.trim(),
@@ -1516,25 +1577,27 @@ async function movimientosStock() {
       idAdministrador: document.getElementById('movementOwner').value
     };
     Object.entries(values).forEach(([key, value]) => { if (value) query.set(key, value); });
-    const data = await api(`/api/movimientos-stock?${query}`);
-    currentPage = data.page;
-    document.getElementById('movementResults').innerHTML = movementTable(data.rows);
-    const owner = document.getElementById('movementOwner');
-    const selected = owner.value;
-    owner.innerHTML = options(data.responsables, 'idAdministrador', 'usuario', 'Todos', selected);
-    document.getElementById('movementPage').textContent = `Página ${data.page} de ${data.pages}`;
-    document.getElementById('movementPrevious').disabled = data.page <= 1;
-    document.getElementById('movementNext').disabled = data.page >= data.pages;
+    try {
+      const data = await api(`/api/movimientos-stock?${query}`);
+      currentPage = data.page;
+      results.innerHTML = movementTable(data.rows);
+      const owner = document.getElementById('movementOwner');
+      const selected = owner.value;
+      owner.innerHTML = options(data.responsables, 'idAdministrador', 'usuario', 'Todos', selected);
+      document.getElementById('movementPage').textContent = `Página ${data.page} de ${data.pages}`;
+      document.getElementById('movementPrevious').disabled = data.page <= 1;
+      document.getElementById('movementNext').disabled = data.page >= data.pages;
+    } catch (error) {
+      results.innerHTML = UiPatterns.empty('No se pudieron cargar los movimientos', UiPatterns.messageFor(error), '<button type="button" class="secondary" data-retry-movements>Reintentar</button>');
+      results.querySelector('[data-retry-movements]')?.addEventListener('click', () => load(page));
+    }
   };
-  document.getElementById('movementSearch').addEventListener('input', () => {
-    window.clearTimeout(searchTimer);
-    searchTimer = window.setTimeout(() => load(1).catch((error) => showError(error.message)), 250);
-  });
-  ['movementType', 'movementOrigin', 'movementFrom', 'movementTo', 'movementOwner'].forEach((id) => {
-    document.getElementById(id).addEventListener('change', () => load(1).catch((error) => showError(error.message)));
-  });
-  document.getElementById('movementPrevious').addEventListener('click', () => load(currentPage - 1).catch((error) => showError(error.message)));
-  document.getElementById('movementNext').addEventListener('click', () => load(currentPage + 1).catch((error) => showError(error.message)));
+  const form = document.getElementById('movementFilters');
+  const updateMovementFilters = compactInventoryFilters(form, ['movementType', 'movementOrigin', 'movementFrom', 'movementTo', 'movementOwner']);
+  form.addEventListener('submit', (event) => { event.preventDefault(); load(1); });
+  document.getElementById('clearMovementFilters').addEventListener('click', () => { form.reset(); updateMovementFilters(); load(1); });
+  document.getElementById('movementPrevious').addEventListener('click', () => load(currentPage - 1));
+  document.getElementById('movementNext').addEventListener('click', () => load(currentPage + 1));
   await load(1);
 }
 
@@ -1587,9 +1650,12 @@ function renderAutocomplete(kind) {
 
 function operationView(kind) {
   const isSale = kind === 'ventas';
+  const isPurchase = kind === 'compras';
   view.innerHTML = `
-    <form id="${kind}Form" class="cart-layout" data-operation-key="${newOperationKey()}">
+    ${isPurchase ? '<section class="inventory-section-heading purchase-flow-heading"><div><h3>Registrar compra</h3><p>Completa el proveedor, agrega productos con sus cantidades y costos, y confirma el abastecimiento.</p></div></section>' : ''}
+    <form id="${kind}Form" class="cart-layout ${isPurchase ? 'inventory-purchase-flow' : ''}" data-operation-key="${newOperationKey()}">
       <section class="panel product-picker">
+        ${isPurchase ? '<p class="purchase-step"><strong>1. Proveedor y productos</strong><span>Busca y agrega los productos que recibiste.</span></p>' : ''}
         <div class="form-grid compact-fields">
           ${isSale ? `
             <label>Proveedor<select id="${kind}Provider">${options(state.proveedores, 'idProveedor', 'nombre', 'Todos')}</select></label>
@@ -1616,13 +1682,14 @@ function operationView(kind) {
             <label>Tipo de venta<select name="tipo"><option value="pagada">Venta pagada</option><option value="fiada">Venta fiada</option></select></label>
             <label>Cliente<select name="idCliente">${options(state.clientes, 'idCliente', 'nombre', 'Cliente ocasional')}</select></label>
           </div>
-        ` : '<p class="hint">Agregue productos al carrito. Cada producto muestra su proveedor asociado para evitar confusiones.</p>'}
+        ` : '<p class="purchase-step"><strong>2. Cantidades y costos</strong><span>Revisa cada producto antes de confirmar la compra.</span></p><p class="hint">Cada producto muestra su proveedor asociado para evitar confusiones.</p>'}
         <div id="items" class="cart-items"></div>
         <div id="cartWarnings" class="cart-warnings"></div>
         <div class="cart-total">
           <span>Total</span>
           <strong id="total">Bs 0.00</strong>
         </div>
+        ${isPurchase ? '<p class="purchase-step purchase-confirmation"><strong>3. Confirmación</strong><span>La compra registrará sus movimientos de inventario.</span></p>' : ''}
         <button type="submit" class="wide-button">${isSale ? 'Registrar venta' : 'Registrar compra'}</button>
       </aside>
     </form>`;
@@ -1843,11 +1910,13 @@ async function saveOperation(event, kind) {
   if (body.tipo === 'fiada' && !body.idCliente) return showError('Una venta fiada debe tener cliente registrado.');
   const label = kind === 'ventas' ? (body.tipo === 'fiada' ? 'venta fiada' : 'venta pagada') : 'compra';
   if (!await confirmAction(`¿Deseas registrar esta ${label}?`)) return;
+  const restoreMutation = UiPatterns.mutation(form.querySelector('button[type="submit"]'), kind === 'compras' ? 'Registrando compra...' : 'Registrando venta...');
+  if (!restoreMutation) return;
   try {
     await api(`/api/${kind}`, { method: 'POST', body: JSON.stringify(body) });
     await showSuccess('Operación registrada.');
     loadView(kind);
-  } catch (error) { showError(error.message); }
+  } catch (error) { showError(error); } finally { restoreMutation(); }
 }
 
 function posLinePrice(line) {
@@ -2732,15 +2801,15 @@ function inventoryPeriod(period) {
 }
 
 function inventoryEmpty(text) {
-  return `<div class="inventory-empty"><strong>Sin datos</strong><p>${escapeHtml(text)}</p></div>`;
+  return UiPatterns.empty('Sin datos', escapeHtml(text));
 }
 
 function inventoryErrorState(error) {
-  return `<div class="inventory-empty inventory-error" role="alert"><strong>No se pudo cargar este bloque</strong><p>${escapeHtml(error?.message || 'Inténtelo nuevamente.')}</p><button type="button" class="secondary" data-inventory-retry>Reintentar</button></div>`;
+  return `<div class="inventory-empty inventory-error" role="alert"><strong>No se pudo cargar este bloque</strong><p>${escapeHtml(UiPatterns.messageFor(error))}</p><button type="button" class="secondary" data-inventory-retry>Reintentar</button></div>`;
 }
 
 function inventoryLoading(text = 'Cargando información del inventario...') {
-  return `<div class="inventory-loading" role="status"><span aria-hidden="true"></span>${escapeHtml(text)}</div>`;
+  return `<div class="inventory-loading" role="status" aria-live="polite"><span class="sr-only">${escapeHtml(text)}</span>${UiPatterns.skeleton('rows', 4)}</div>`;
 }
 
 function localDateFromInput(value) {
@@ -3143,6 +3212,9 @@ async function inventarioInteligente() {
   ${!inventoryAdvancedAvailable() ? '<div class="inventory-plan-note"><strong>Análisis avanzado</strong><span>Compras sugeridas, rotación, productos sin movimiento y exportación están disponibles en el plan avanzado.</span></div>' : ''}
   <div class="panel inventory-content" id="inventoryContent"></div>`;
   const form = document.getElementById('inventoryFilters');
+  const updateInventoryFilters = compactInventoryFilters(form,
+    ['desde', 'hasta', 'ventana', 'categoria', 'proveedor', 'producto', 'estado', 'prioridad', 'tipoAlerta', 'estadoSugerencia', 'limite'],
+    { desde: form.elements.desde.value, hasta: form.elements.hasta.value, estadoSugerencia: 'todos', limite: '50' });
   form.addEventListener('submit', async (event) => {
     event.preventDefault();
     try {
@@ -3157,6 +3229,7 @@ async function inventarioInteligente() {
     form.elements.desde.value = localDateValue(start);
     form.elements.hasta.value = localDateValue(today);
     form.elements.ventana.value = '';
+    updateInventoryFilters();
     inventoryUi.page = 1;
     inventoryUi.data = {};
     await loadInventoryActiveTab(true);
@@ -3202,11 +3275,11 @@ function lotCost(value) {
 }
 
 function lotLoading(text = 'Cargando lotes...') {
-  return `<div class="inventory-loading" role="status"><span aria-hidden="true"></span>${escapeHtml(text)}</div>`;
+  return `<div class="inventory-loading" role="status" aria-live="polite"><span class="sr-only">${escapeHtml(text)}</span>${UiPatterns.skeleton('rows', 4)}</div>`;
 }
 
 function lotEmpty(text) {
-  return `<div class="inventory-empty"><strong>Sin datos</strong><p>${escapeHtml(text)}</p></div>`;
+  return UiPatterns.empty('Sin datos', escapeHtml(text));
 }
 
 function lotFilterQuery(page = lotUi.page) {
@@ -3409,8 +3482,11 @@ async function lotesVencimientos() {
     <div class="inventory-tabs" role="tablist" aria-label="Vistas de lotes"><button type="button" class="active" role="tab" data-lot-tab="lotes" aria-selected="true">Todos los lotes</button>${canAlert ? '<button type="button" role="tab" data-lot-tab="alertas" aria-selected="false">Alertas</button>' : ''}</div>
     <div class="panel" id="lotContent"></div>`;
   const form = document.getElementById('lotFilters');
+  const updateLotFilters = compactInventoryFilters(form,
+    ['producto', 'proveedor', 'codigoLote', 'estadoOperativo', 'estadoCalculado', 'venceDesde', 'venceHasta', 'limite', 'soloConSaldo'],
+    { limite: '25' });
   form.addEventListener('submit', (event) => { event.preventDefault(); loadLotsPanel(1); });
-  document.getElementById('clearLotFilters').addEventListener('click', () => { form.reset(); loadLotsPanel(1); });
+  document.getElementById('clearLotFilters').addEventListener('click', () => { form.reset(); updateLotFilters(); loadLotsPanel(1); });
   document.getElementById('exportLots')?.addEventListener('click', downloadLotExport);
   document.querySelectorAll('[data-lot-tab]').forEach((button) => button.addEventListener('click', () => {
     lotUi.activeTab = button.dataset.lotTab;

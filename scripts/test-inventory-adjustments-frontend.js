@@ -50,7 +50,8 @@ check('Tabla accesible distingue fisico, vendible y desglose',
     '<caption class="sr-only">', 'scope="col"', 'scope="row"',
     'Stock fisico', 'Stock vendible', 'Vencido:', 'Bloqueado:', 'Aislado:', 'Tecnico:'
   ]));
-check('Contenido dinamico se escapa', includesAll(ui, ['${e(row.nombre)}', '${e(error.message', '${e(row.producto)}']));
+check('Contenido dinamico se escapa y los errores usan el patron seguro',
+  includesAll(ui, ['${e(row.nombre)}', '${e(patterns.messageFor(error))}', '${e(row.producto)}']));
 check('Solicitudes obsoletas no reemplazan resultados',
   ui.includes('const request = ++state.request') && ui.includes('if (request !== state.request) return'));
 check('Responsive movil y tablet presente',

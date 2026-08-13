@@ -91,6 +91,8 @@
     "test:product-navigation-browser": "node scripts/test-product-navigation-browser.js",
     "test:product-ux": "node scripts/test-product-ux.js",
     "test:product-ux-browser": "node scripts/test-product-ux-browser.js",
+    "test:product-inventory": "node scripts/test-product-inventory.js",
+    "test:product-inventory-browser": "node scripts/test-product-inventory-browser.js",
     "test:saas-subscription-admin": "node scripts/test-saas-subscription-admin.js",
     "test:saas-subscription-admin-browser": "node scripts/test-saas-subscription-admin-browser.js",
     "test:onboarding": "node scripts/test-onboarding.js",

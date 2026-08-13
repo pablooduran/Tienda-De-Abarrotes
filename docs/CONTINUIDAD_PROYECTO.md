@@ -732,10 +732,9 @@ existe facturacion fiscal ni se inicia una beta.
 
 Las macrofases de **seguridad publica final**, **CI / GitHub Actions**,
 **STAGING-1**, **PREPROD-1** y **REGRESION GENERAL** estan cerradas y
-publicadas. DOCS-OPS y PRODUCTO-0A/0B estan cerrados. PRODUCTO-1 P1 implementa
-la navegacion agrupada del propietario y esta pendiente de validacion/cierre;
-PRODUCTO-1 P2 implementa patrones UX globales y esta pendiente de
-validacion/cierre; P3 y los bloques posteriores no estan iniciados. STAGING-2B queda diferido
+publicadas. DOCS-OPS y PRODUCTO-0A/0B estan cerrados. PRODUCTO-1 P1 y P2 estan
+cerrados. PRODUCTO-1 P3 implementa la experiencia integrada de Inventario y
+esta pendiente de validacion/cierre; P4 y los bloques posteriores no estan iniciados. STAGING-2B queda diferido
 hasta la revision final del propietario, una decision de proveedor/topologia y
 autorizacion expresa de gasto; cualquier despliegue sigue requiriendo
 autorizacion separada.
