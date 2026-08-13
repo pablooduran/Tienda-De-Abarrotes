@@ -23,6 +23,16 @@ function pagination(query) {
   return { page, limit, offset: (page - 1) * limit };
 }
 
+function customerSearchPagination(query) {
+  const rawPage = query.page === undefined ? '1' : String(query.page);
+  const rawLimit = query.limit === undefined ? '20' : String(query.limit);
+  if (!/^\d+$/.test(rawPage) || !/^\d+$/.test(rawLimit)) return null;
+  const page = Number(rawPage);
+  const limit = Number(rawLimit);
+  if (page < 1 || limit < 1 || limit > 50) return null;
+  return { page, limit, offset: (page - 1) * limit };
+}
+
 async function listProducts(req, res, next, forcedView = null) {
   try {
     const idTienda = tenantId(req);
@@ -126,6 +136,13 @@ router.get('/pos/productos/:idProducto', async (req, res, next) => {
 router.get('/pos/clientes', async (req, res, next) => {
   try {
     const q = String(req.query.q || '').trim().slice(0, 100);
+    const paginated = req.query.page !== undefined || req.query.limit !== undefined;
+    const pageData = paginated ? customerSearchPagination(req.query) : { page: 1, limit: 30, offset: 0 };
+    if (!pageData) return res.status(400).json({ error: 'Paginacion de clientes invalida.' });
+    const { page, limit, offset } = pageData;
+    if (paginated && q.length < 2) {
+      return res.json({ clientes: [], pagina: page, limite: limit, total: 0, hayMas: false });
+    }
     const params = [tenantId(req)];
     let search = '';
     if (q) {
@@ -135,10 +152,22 @@ router.get('/pos/clientes', async (req, res, next) => {
     const [rows] = await pool.query(
       `SELECT idCliente, nombre, telefono, direccion
        FROM cliente WHERE idTienda=? AND activo=1 ${search}
-       ORDER BY nombre LIMIT 30`,
+       ORDER BY nombre, idCliente LIMIT ? OFFSET ?`,
+      [...params, paginated ? limit : 30, paginated ? offset : 0]
+    );
+    if (!paginated) return res.json(rows);
+    const [[count]] = await pool.query(
+      `SELECT COUNT(*) total FROM cliente
+       WHERE idTienda=? AND activo=1 ${search}`,
       params
     );
-    res.json(rows);
+    return res.json({
+      clientes: rows,
+      pagina: page,
+      limite: limit,
+      total: Number(count.total),
+      hayMas: offset + rows.length < Number(count.total)
+    });
   } catch (error) {
     next(error);
   }

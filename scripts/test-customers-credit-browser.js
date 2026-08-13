@@ -159,12 +159,46 @@ async function login(page, baseUrl, user, password) {
     page.getByRole('button', { name: /Iniciar sesi/i }).click()
   ]);
   await page.locator('#menu').waitFor();
-  await page.locator('#menu').getByRole('button', { name: 'Clientes', exact: true }).waitFor();
+  await page.locator('#menu [data-view="clientes"]').waitFor({ state: 'attached' });
 }
 
 async function openMenu(page, name, readySelector) {
-  await page.locator('#menu').getByRole('button', { name, exact: true }).click();
+  const destination = page.locator('#menu [data-view]').filter({ hasText: name }).first();
+  const family = destination.locator('xpath=ancestor::details[contains(@class,"nav-family")]');
+  if (!await family.evaluate((node) => node.open)) await family.locator('> summary').click();
+  await destination.click();
   await page.locator(readySelector).waitFor();
+}
+
+async function clickCustomerAction(page, selector) {
+  const action = page.locator(selector).first();
+  const options = action.locator('xpath=ancestor::details[contains(@class,"row-actions")]');
+  if (await options.count()) {
+    if (!await options.evaluate((node) => node.open)) await options.locator('summary').click();
+  }
+  await action.click();
+}
+
+async function openCustomerFilters(page) {
+  const filters = page.locator('#customerFilters .customer-filter-disclosure');
+  if (!await filters.evaluate((node) => node.open)) await filters.locator('summary').click();
+}
+
+async function selectPosCustomer(page, name, expectedId) {
+  await page.locator('#posClientSearch').fill(name);
+  const option = page.getByRole('option', { name }).first();
+  await option.waitFor();
+  await option.click();
+  await page.waitForFunction((id) => document.getElementById('posClient').value === String(id), expectedId);
+}
+
+async function clickCustomerSecondaryAction(page, selector) {
+  const action = page.locator(selector).first();
+  const options = action.locator('xpath=ancestor::details[contains(@class,"inventory-secondary-actions")]');
+  if (await options.count()) {
+    if (!await options.evaluate((node) => node.open)) await options.locator('summary').click();
+  }
+  await action.click();
 }
 
 async function closeSuccess(page) {
@@ -316,8 +350,8 @@ async function main() {
       window.open = (url) => { window.__openedUrls.push(String(url)); return null; };
     });
     await login(page, baseUrl, advancedStore.body.propietario.usuario, advancedStore.password);
-    check(await page.locator('#menu').getByRole('button', { name: 'Clientes', exact: true }).count() === 1, 'La sesion avanzada muestra Clientes.');
-    check(await page.locator('#menu').getByRole('button', { name: 'Cobranza', exact: true }).count() === 1, 'La sesion avanzada muestra Cobranza.');
+    check(await page.locator('#menu [data-view="clientes"]').count() === 1, 'La sesion avanzada muestra Clientes.');
+    check(await page.locator('#menu [data-view="pagos"]').count() === 1, 'La sesion avanzada muestra Cobranza.');
 
     await openMenu(page, 'Clientes', '#customerFilters');
     check(await page.locator('[data-customer-segmentation]').count() === 1, 'El plan avanzado muestra Segmentacion.');
@@ -365,7 +399,7 @@ async function main() {
     const [[sameDocument]] = await connection.query('SELECT COUNT(*) total FROM cliente WHERE idTienda=? AND documentoNormalizado=?', [advancedStore.idTienda, `UI${marker.toUpperCase()}`]);
     check(Number(sameDocument.total) === 1, 'El documento duplicado no crea otro cliente.');
 
-    await page.locator(`[data-customer-edit="${createdCustomer.idCliente}"]`).first().click();
+    await clickCustomerAction(page, `[data-customer-edit="${createdCustomer.idCliente}"]`);
     await page.locator('[data-credit-modal] [name="direccion"]').fill(`Direccion editada ${marker}`);
     await page.locator('[data-modal-submit]').click();
     await page.getByRole('heading', { name: 'Listo' }).waitFor();
@@ -380,20 +414,21 @@ async function main() {
     check(await page.locator('.customer-profile-modal').count() === 0, 'Escape cierra la ficha.');
     check(await page.evaluate(() => document.activeElement?.dataset?.customerView !== undefined), 'Cerrar devuelve el foco al disparador.');
 
-    await page.locator(`[data-customer-hide="${createdCustomer.idCliente}"]`).first().click();
+    await clickCustomerAction(page, `[data-customer-hide="${createdCustomer.idCliente}"]`);
     check((await page.locator('#modalRoot').textContent()).includes('No se eliminara su historial'), 'Ocultar explica que conserva el historial.');
     await page.locator('[data-modal-cancel]').click();
     check(await page.locator(`[data-customer-hide="${createdCustomer.idCliente}"]`).count() >= 1, 'Cancelar ocultacion no cambia al cliente.');
-    await page.locator(`[data-customer-hide="${createdCustomer.idCliente}"]`).first().click();
+    await clickCustomerAction(page, `[data-customer-hide="${createdCustomer.idCliente}"]`);
     await page.locator('#adminDeletePassword').fill(advancedStore.password);
     await page.locator('[data-modal-confirm]').click();
     await page.getByRole('heading', { name: 'Listo' }).waitFor();
     await closeSuccess(page);
+    await openCustomerFilters(page);
     await page.locator('#customerFilters [name="estado"]').selectOption('ocultos');
     await page.locator('#customerFilters').evaluate((form) => form.requestSubmit());
     await page.getByText(`Cliente UI ${marker}`, { exact: true }).first().waitFor();
     check((await page.locator('#customerResults').textContent()).includes('Oculto'), 'El listado de ocultos muestra el badge correspondiente.');
-    await page.locator(`[data-customer-restore="${createdCustomer.idCliente}"]`).first().click();
+    await clickCustomerAction(page, `[data-customer-restore="${createdCustomer.idCliente}"]`);
     await page.locator('#adminDeletePassword').fill(advancedStore.password);
     await page.locator('[data-modal-confirm]').click();
     await page.getByRole('heading', { name: 'Listo' }).waitFor();
@@ -405,7 +440,7 @@ async function main() {
     await page.locator('#posSearch').fill(`Producto browser ${marker}`);
     await page.locator(`[data-pos-add="${product.idProducto}"]`).waitFor();
     await page.locator(`[data-pos-add="${product.idProducto}"]`).click();
-    await page.locator('#posClient').selectOption(String(createdCustomer.idCliente));
+    await selectPosCustomer(page, `Cliente UI ${marker}`, createdCustomer.idCliente);
     await page.locator('#posPaymentMode').selectOption('fiado');
     await page.locator('#posCreditDueDate').waitFor();
     check((await page.locator('#posCreditSummary').textContent()).includes('Cliente habilitado para fiado'), 'POS muestra el resumen de credito real.');
@@ -541,7 +576,7 @@ async function main() {
     await page.keyboard.press('Escape');
 
     await openMenu(page, 'Clientes', '#customerFilters');
-    await page.locator('[data-customer-segmentation]').click();
+    await clickCustomerSecondaryAction(page, '[data-customer-segmentation]');
     await page.locator('#segmentationFilters').waitFor();
     for (const segment of ['frecuentes', 'inactivos', 'con_deuda', 'vencidos', 'promesa_incumplida', 'buenos_pagadores', 'mayor_compra', 'mayor_saldo']) {
       await page.locator('#segmentationFilters [name="segmento"]').selectOption(segment);
@@ -555,8 +590,7 @@ async function main() {
       await route.continue();
     });
     await page.locator('#segmentationFilters [name="segmento"]').selectOption('frecuentes');
-    await page.locator('#menu').getByRole('button', { name: 'Clientes', exact: true }).click();
-    await page.locator('#customerFilters').waitFor();
+    await openMenu(page, 'Clientes', '#customerFilters');
     released();
     await delay(300);
     check(await page.locator('#customerFilters').count() === 1, 'Una respuesta obsoleta de Segmentacion no reemplaza Clientes.');
@@ -565,11 +599,11 @@ async function main() {
     await page.route('**/api/clientes/exportacion.xlsx?**', async (route) => {
       await route.fulfill({ status: 413, contentType: 'application/json', body: JSON.stringify({ error: 'Reduce el rango o los filtros.', code: 'EXPORT_LIMIT_EXCEEDED' }) });
     }, { times: 1 });
-    await page.locator('[data-export-customers]').click();
+    await clickCustomerSecondaryAction(page, '[data-export-customers]');
     await page.locator('#message').getByText('Reduce el rango o los filtros.').waitFor();
     check(await page.locator('[data-export-customers]').isEnabled(), 'Un error 413 libera el boton de exportacion para reintentar.');
     const customerDownload = page.waitForEvent('download');
-    await page.locator('[data-export-customers]').click();
+    await clickCustomerSecondaryAction(page, '[data-export-customers]');
     const download = await customerDownload;
     const downloadPath = path.join(artifactDir, download.suggestedFilename());
     await download.saveAs(downloadPath);
@@ -584,7 +618,7 @@ async function main() {
     }, { times: 1 });
     await page.locator('#customerFilters').evaluate((form) => form.requestSubmit());
     await page.locator('[data-retry-customers]').waitFor();
-    check((await page.locator('[role="alert"]').textContent()).includes('Demasiadas solicitudes'), 'La UI presenta un error 429 comprensible.');
+    check((await page.locator('[role="alert"]').textContent()).includes('Recibimos muchas solicitudes'), 'La UI presenta un error 429 comprensible y sanitizado.');
     await page.locator('[data-retry-customers]').click();
     await page.locator('#customerFilters').waitFor();
 
@@ -600,14 +634,15 @@ async function main() {
     }, { times: 1 });
     await page.locator('#customerFilters').evaluate((form) => form.requestSubmit());
     await page.locator('[data-retry-customers]').waitFor();
-    check((await page.locator('[role="alert"]').textContent()).includes('Error temporal de prueba'), 'Un error 500 se muestra sin bloquear la vista.');
+    check((await page.locator('[role="alert"]').textContent()).includes('No pudimos completar la operaci'), 'Un error 500 se muestra sin detalles internos.');
     await page.locator('[data-retry-customers]').click();
     await page.locator('#customerFilters').waitFor();
     check(await page.locator('[data-retry-customers]').count() === 0, 'La vista permite reintentar despues del error.');
 
+    await openCustomerFilters(page);
     await page.locator('#customerFilters [name="estado"]').selectOption('todos');
     await page.locator('#customerFilters').evaluate((form) => form.requestSubmit());
-    await page.locator(`[data-customer-statement="${createdCustomer.idCliente}"]`).first().waitFor();
+    await page.locator(`[data-customer-statement="${createdCustomer.idCliente}"]`).first().waitFor({ state: 'attached' });
 
     await expectHttp(advancedApi, `/api/clientes/${createdCustomer.idCliente}`, { method: 'PATCH', body: {
       limiteCredito: 5000
@@ -675,7 +710,7 @@ async function main() {
     );
 
     const firstPageResponsePromise = page.waitForResponse((response) => isStatementResponse(response, 1));
-    await page.locator(`[data-customer-statement="${createdCustomer.idCliente}"]`).first().click();
+    await clickCustomerAction(page, `[data-customer-statement="${createdCustomer.idCliente}"]`);
     const firstPageData = await (await firstPageResponsePromise).json();
     await page.locator('.statement-modal').waitFor();
     const firstPageVisibleRows = await page.locator('.statement-row').allTextContents();

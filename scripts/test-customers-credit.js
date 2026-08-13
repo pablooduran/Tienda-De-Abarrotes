@@ -1214,6 +1214,13 @@ async function main() {
       'POS excluye cliente oculto');
     assert(!(posHidden.clientes || posHidden).some((item) => Number(item.idCliente) === Number(basicCustomer.idCliente)),
       'El selector POS devolvio un cliente oculto.');
+    const posPaged = await expect(basic,
+      `/api/pos/clientes?q=${encodeURIComponent(`Cliente basico ${marker}`)}&page=1&limit=1`, {}, 200,
+      'POS pagina busqueda de clientes');
+    assert(Array.isArray(posPaged.clientes) && Number(posPaged.limite) === 1 && posPaged.clientes.length <= 1,
+      `La busqueda POS paginada no limito la respuesta: ${JSON.stringify(posPaged)}.`);
+    await expect(basic, '/api/pos/clientes?q=ab&page=1&limit=51', {}, 400,
+      'POS rechaza limite de clientes fuera de rango');
     await expect(basic, '/api/pos/ventas', { method: 'POST', body: saleBody(marker,
       'fiado-cliente-oculto', basicProduct.idProducto, basicCustomer.idCliente) }, 404,
     'Venta fiada rechaza cliente oculto');

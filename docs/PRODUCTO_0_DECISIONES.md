@@ -136,9 +136,9 @@ cerrado.
 P2 implementa patrones compartidos para mensajes seguros, skeletons, estados
 vacios, mutaciones y filtros compactos, con foco visible, touch y
 `prefers-reduced-motion`. Se demuestra en cargas y formularios existentes sin
-cambiar consultas ni reglas de negocio. P3 implementa Inventario y esta
-pendiente de validacion/cierre; los rediseños profundos de Ventas, Clientes,
-Configuracion, Suscripcion y Superadmin quedan fuera de P2.
+cambiar consultas ni reglas de negocio. P3 cerro la experiencia de Inventario;
+los rediseños profundos de Ventas, Clientes, Configuracion, Suscripcion y
+Superadmin quedan fuera de P2.
 
 ### Estado de P3
 
@@ -149,13 +149,29 @@ se agrupan con nombres concretos. Movimientos aclara que es un historial,
 Compras ordena el flujo proveedor-productos-confirmacion y Proveedores se
 presenta como parte del abastecimiento. Inteligencia, lotes y conciliacion
 reutilizan filtros compactos, skeletons, estados vacios y mensajes seguros.
-P4 no esta iniciado.
+P4 no estaba iniciado al cerrar P3.
+
+### Estado de P4
+
+P4 implementa una experiencia comercial mas clara sin alterar calculos, precios,
+pagos, compensaciones ni contratos del backend. Punto de venta conserva la venta
+como accion principal y reemplaza la carga completa de clientes por una busqueda
+con debounce, paginada y accesible; el tenant se sigue derivando exclusivamente
+de la sesion. Historial de ventas, Cobranza y Devoluciones y anulaciones
+permanecen en el mismo ciclo visual, con acciones secundarias agrupadas.
+Clientes reutiliza los filtros compactos, skeletons, estados vacios y mensajes
+seguros de P2.
+
+La busqueda POS no envia `idTienda`, no carga el catalogo completo de clientes y
+mantiene la seleccion opcional de cliente para ventas al contado. La paginacion,
+el limite maximo y la consulta por tenant se validan en backend. P4 queda
+implementado y pendiente de validacion/cierre; P5 no esta iniciado.
 
 ## Decisiones aun pendientes
 
 - Detalle visual de familias, iconografia, colores y marca.
 - Alcance exacto del centro de Configuracion y su orden de migracion visual.
-- Momento de implementar la busqueda escalable de clientes en POS.
+- Diseno exacto de futuras sugerencias avanzadas para la busqueda POS.
 - Capacidades bloqueadas que aportan valor al mostrarse contextualmente.
 - Secuencia entre PRODUCTO-1, WELCOME, HELP, COMMERCE y SECURITY-FINAL.
 - STAGING-2B, proveedor, topologia y gasto externo siguen diferidos.

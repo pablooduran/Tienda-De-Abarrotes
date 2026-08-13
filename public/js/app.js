@@ -10,6 +10,10 @@ let debtFocus = null;
 let posCart = [];
 let posOperationKey = null;
 let posSearchTimer = null;
+let posClientSearchTimer = null;
+let posClientSearchRequest = 0;
+let posClientSearchOptions = [];
+let posClientActiveIndex = -1;
 let lastBarcodeScan = { value: '', at: 0 };
 let inventoryUi = { activeTab: 'resumen', rankingMode: 'ingresos', movementClass: '', page: 1, request: 0, data: {} };
 let lotUi = { page: 1, pages: 1, activeTab: 'lotes' };
@@ -50,6 +54,7 @@ const navigationFamilies = [
 ];
 
 const inventoryWorkspaceSections = ['productos', 'compras', 'movimientosStock', 'proveedores', 'lotesVencimientos', 'inventarioInteligente', 'inventarioOperativo'];
+const salesWorkspaceSections = ['ventas', 'historialVentas', 'pagos', 'compensaciones'];
 
 function money(value) { return Number(value || 0).toFixed(2); }
 function intValue(value) { return Number(value || 0).toFixed(0); }
@@ -320,6 +325,7 @@ function creditUi() {
       localDateValue,
       requestAdminPassword,
       refreshCatalogs,
+      patterns: UiPatterns,
       secureFetch: SecurityHttp.secureFetch,
       errorFromResponse: SecurityHttp.errorFromResponse
     });
@@ -468,10 +474,10 @@ document.getElementById('logoutBtn').addEventListener('click', async () => {
   window.location.href = '/login.html';
 });
 
-async function refreshCatalogs() {
+async function refreshCatalogs({ includeClients = true } = {}) {
   const [productos, clientes, proveedores, fiados, ventas, categorias] = await Promise.all([
     api('/api/productos'),
-    api('/api/clientes'),
+    includeClients ? api('/api/clientes') : Promise.resolve(state.clientes),
     api('/api/proveedores'),
     api('/api/fiados'),
     api('/api/ventas'),
@@ -497,11 +503,12 @@ async function loadView(id) {
   renderMenu(id);
   title.textContent = section[1];
   subtitle.textContent = section[2];
-  await refreshCatalogs();
+  await refreshCatalogs({ includeClients: !['ventas', 'clientes'].includes(id) });
   const handlers = { inicio, productos, movimientosStock, inventarioInteligente, inventarioOperativo, lotesVencimientos, clientes, proveedores, ventas, compras, historialVentas, pagos, gastos, finanzas, compensaciones, auditoria, cierreCaja, reportes };
   if (!handlers[id]) return loadView('inicio');
   await handlers[id]();
   renderInventoryWorkspace(id);
+  renderSalesWorkspace(id);
   applyReadOnlyUi();
 }
 
@@ -516,6 +523,19 @@ function renderInventoryWorkspace(activeId) {
   if (!destinations) return;
   view.insertAdjacentHTML('afterbegin', `<nav class="inventory-workspace-nav" aria-label="Herramientas de inventario">${destinations}</nav>`);
   view.querySelectorAll('[data-inventory-workspace]').forEach((button) => button.addEventListener('click', () => loadView(button.dataset.inventoryWorkspace)));
+}
+
+function renderSalesWorkspace(activeId) {
+  if (!salesWorkspaceSections.includes(activeId) || view.querySelector('.sales-workspace-nav')) return;
+  const destinations = salesWorkspaceSections
+    .filter((id) => sectionAllowed(id))
+    .map((id) => {
+      const section = sectionById(id);
+      return `<button type="button" data-sales-workspace="${id}" class="${id === activeId ? 'active' : ''}" aria-current="${id === activeId ? 'page' : 'false'}">${escapeHtml(section?.[1] || id)}</button>`;
+    }).join('');
+  if (!destinations) return;
+  view.insertAdjacentHTML('afterbegin', `<nav class="sales-workspace-nav" aria-label="Ciclo de ventas">${destinations}</nav>`);
+  view.querySelectorAll('[data-sales-workspace]').forEach((button) => button.addEventListener('click', () => loadView(button.dataset.salesWorkspace)));
 }
 
 async function compensaciones() {
@@ -2239,7 +2259,8 @@ async function submitPosSale(event) {
   }
   if (!await confirmAction(`Registrar venta por Bs ${money(totals.total)}${payment.balance > 0 ? ` con saldo Bs ${money(payment.balance)}` : ''}?`)) return;
   const button = document.getElementById('posSubmit');
-  button.disabled = true;
+  const restoreMutation = UiPatterns.mutation(button, 'Procesando venta...');
+  if (!restoreMutation) return;
   try {
     const data = await api('/api/pos/ventas', {
       method: 'POST',
@@ -2267,20 +2288,120 @@ async function submitPosSale(event) {
     creditUi().resetPosCredit();
     renderPosCart();
     showSaleReceipt(data.comprobante);
-    refreshCatalogs().catch(() => {});
+    refreshCatalogs({ includeClients: false }).catch(() => {});
   } catch (error) {
     showError(error.code === 'INSUFFICIENT_SELLABLE_LOT_STOCK'
       ? 'Hay stock físico, pero parte está vencida o bloqueada.'
-      : error.message);
+      : error);
   } finally {
+    restoreMutation();
     button.disabled = Boolean(state.context?.soloLectura);
+  }
+}
+
+function posCustomerLabel(customer) {
+  return `${customer.nombre}${customer.telefono ? ` · ${customer.telefono}` : ''}`;
+}
+
+function setPosCustomerSelection(customer = null) {
+  const selected = document.getElementById('posClient');
+  const search = document.getElementById('posClientSearch');
+  const summary = document.getElementById('posClientSelection');
+  const clear = document.getElementById('posClientClear');
+  if (!selected || !search || !summary || !clear) return;
+  selected.value = customer?.idCliente ? String(customer.idCliente) : '';
+  search.value = customer ? posCustomerLabel(customer) : '';
+  summary.textContent = customer ? `Cliente seleccionado: ${posCustomerLabel(customer)}` : 'Cliente ocasional';
+  clear.hidden = !customer;
+  clear.disabled = !customer;
+  posClientSearchOptions = [];
+  posClientActiveIndex = -1;
+  renderPosCustomerResults();
+  selected.dispatchEvent(new Event('change'));
+}
+
+function clearPosCustomerSelection() {
+  const selected = document.getElementById('posClient');
+  const summary = document.getElementById('posClientSelection');
+  const clear = document.getElementById('posClientClear');
+  if (!selected || !summary || !clear) return;
+  selected.value = '';
+  summary.textContent = 'Cliente ocasional';
+  clear.hidden = true;
+  clear.disabled = true;
+  selected.dispatchEvent(new Event('change'));
+}
+
+function renderPosCustomerResults({ loading = false, message = '' } = {}) {
+  const search = document.getElementById('posClientSearch');
+  const results = document.getElementById('posClientResults');
+  const status = document.getElementById('posClientStatus');
+  if (!search || !results || !status) return;
+  if (loading) {
+    results.hidden = false;
+    results.innerHTML = UiPatterns.skeleton('rows', 2);
+    status.textContent = 'Buscando clientes...';
+    search.setAttribute('aria-expanded', 'true');
+    return;
+  }
+  if (message) {
+    results.hidden = false;
+    results.innerHTML = `<p class="pos-customer-empty">${escapeHtml(message)}</p>`;
+    status.textContent = message;
+    search.setAttribute('aria-expanded', 'true');
+    search.removeAttribute('aria-activedescendant');
+    return;
+  }
+  if (!posClientSearchOptions.length) {
+    results.hidden = true;
+    results.innerHTML = '';
+    status.textContent = '';
+    search.setAttribute('aria-expanded', 'false');
+    search.removeAttribute('aria-activedescendant');
+    return;
+  }
+  results.hidden = false;
+  results.innerHTML = posClientSearchOptions.map((customer, index) => `<button type="button" role="option" id="pos-client-option-${index}" aria-selected="${index === posClientActiveIndex}" class="pos-customer-option ${index === posClientActiveIndex ? 'active' : ''}" data-pos-client-option="${index}"><strong>${escapeHtml(customer.nombre)}</strong><span>${escapeHtml(customer.telefono || 'Sin teléfono')}</span></button>`).join('');
+  results.querySelectorAll('[data-pos-client-option]').forEach((button) => button.addEventListener('click', () => {
+    setPosCustomerSelection(posClientSearchOptions[Number(button.dataset.posClientOption)]);
+  }));
+  status.textContent = `${posClientSearchOptions.length} cliente${posClientSearchOptions.length === 1 ? '' : 's'} encontrado${posClientSearchOptions.length === 1 ? '' : 's'}.`;
+  search.setAttribute('aria-expanded', 'true');
+  if (posClientActiveIndex >= 0) search.setAttribute('aria-activedescendant', `pos-client-option-${posClientActiveIndex}`);
+  else search.removeAttribute('aria-activedescendant');
+}
+
+async function searchPosCustomers(query) {
+  const normalized = String(query || '').trim();
+  const request = ++posClientSearchRequest;
+  if (normalized.length < 2) {
+    posClientSearchOptions = [];
+    posClientActiveIndex = -1;
+    renderPosCustomerResults({ message: normalized ? 'Escribe al menos 2 caracteres para buscar.' : '' });
+    return;
+  }
+  renderPosCustomerResults({ loading: true });
+  try {
+    const data = await api(`/api/pos/clientes?q=${encodeURIComponent(normalized)}&page=1&limit=15`);
+    if (request !== posClientSearchRequest) return;
+    posClientSearchOptions = data.clientes || [];
+    posClientActiveIndex = -1;
+    renderPosCustomerResults({ message: posClientSearchOptions.length ? '' : 'No encontramos clientes con esos datos.' });
+  } catch (error) {
+    if (request !== posClientSearchRequest) return;
+    posClientSearchOptions = [];
+    posClientActiveIndex = -1;
+    renderPosCustomerResults({ message: UiPatterns.messageFor(error) });
   }
 }
 
 async function ventas() {
   posOperationKey = posOperationKey || newOperationKey();
+  posClientSearchOptions = [];
+  posClientActiveIndex = -1;
   view.innerHTML = `
-    <form id="posForm" class="pos-layout">
+    <section class="sales-section-heading"><div><h3>Registrar venta</h3><p>Agrega productos, confirma la forma de cobro y registra la venta sin pasos innecesarios.</p></div></section>
+    <form id="posForm" class="pos-layout sales-pos-layout">
       <section class="panel pos-picker">
         <div class="pos-search-row">
           <label class="pos-search-label">Buscar o escanear producto<input id="posSearch" autocomplete="off" placeholder="Nombre o código de barras"></label>
@@ -2297,9 +2418,13 @@ async function ventas() {
       <aside class="panel pos-cart-panel">
         <div class="cart-head"><div><h3>Venta actual</h3><p class="muted" id="posCartCount">0 productos</p></div></div>
         <div id="posCartItems" class="pos-cart-items"></div>
-        <div class="pos-customer-grid">
-          <label>Buscar cliente<input id="posClientSearch" placeholder="Nombre o teléfono"></label>
-          <label>Cliente<select id="posClient"><option value="">Cliente ocasional</option>${state.clientes.map((client) => `<option value="${client.idCliente}">${escapeHtml(client.nombre)}</option>`).join('')}</select></label>
+        <div class="pos-customer-picker">
+          <label for="posClientSearch">Cliente opcional</label>
+          <div class="pos-customer-search-control"><input id="posClientSearch" type="search" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="posClientResults" autocomplete="off" placeholder="Busca por nombre o teléfono"><button type="button" class="secondary" id="posClientClear" hidden disabled>Limpiar</button></div>
+          <input id="posClient" type="hidden" value="">
+          <p id="posClientSelection" class="pos-customer-selection">Cliente ocasional</p>
+          <p id="posClientStatus" class="sr-only" role="status" aria-live="polite"></p>
+          <div id="posClientResults" class="pos-customer-results" role="listbox" aria-label="Resultados de clientes" hidden></div>
         </div>
         <div id="posCreditSummary" class="pos-credit-summary" aria-live="polite"></div>
         <div class="pos-charge-box">
@@ -2312,7 +2437,7 @@ async function ventas() {
           <div class="pos-total-grid"><span>Subtotal <strong id="posSubtotal">Bs 0.00</strong></span><span>Total <strong id="posTotal">Bs 0.00</strong></span></div>
           <div id="posPaymentSummary" class="pos-payment-summary"></div>
         </div>
-        <button type="submit" id="posSubmit" class="wide-button">Registrar y cobrar</button>
+        <button type="submit" id="posSubmit" class="wide-button">Registrar venta</button>
       </aside>
     </form>`;
   const search = document.getElementById('posSearch');
@@ -2348,14 +2473,44 @@ async function ventas() {
     creditUi().resetPosCredit();
     creditUi().refreshPosCredit(posPaymentDraft().balance);
   });
-  document.getElementById('posClientSearch').addEventListener('input', async (event) => {
-    try {
-      const clients = await api(`/api/pos/clientes?q=${encodeURIComponent(event.target.value)}`);
-      const select = document.getElementById('posClient');
-      const selected = select.value;
-      select.innerHTML = `<option value="">Cliente ocasional</option>${clients.map((client) => `<option value="${client.idCliente}" ${String(client.idCliente) === selected ? 'selected' : ''}>${escapeHtml(client.nombre)}${client.telefono ? ` · ${escapeHtml(client.telefono)}` : ''}</option>`).join('')}`;
-      creditUi().refreshPosCredit(posPaymentDraft().balance);
-    } catch (error) { showMessage(error.message, true); }
+  const clientSearch = document.getElementById('posClientSearch');
+  clientSearch.addEventListener('input', (event) => {
+    const query = event.target.value;
+    if (document.getElementById('posClient').value) clearPosCustomerSelection();
+    clearTimeout(posClientSearchTimer);
+    posClientSearchTimer = setTimeout(() => searchPosCustomers(query), 250);
+  });
+  clientSearch.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape') {
+      clearTimeout(posClientSearchTimer);
+      posClientSearchRequest += 1;
+      posClientSearchOptions = [];
+      posClientActiveIndex = -1;
+      renderPosCustomerResults();
+      return;
+    }
+    if (!posClientSearchOptions.length) return;
+    if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+      event.preventDefault();
+      const direction = event.key === 'ArrowDown' ? 1 : -1;
+      posClientActiveIndex = (posClientActiveIndex + direction + posClientSearchOptions.length) % posClientSearchOptions.length;
+      renderPosCustomerResults();
+      return;
+    }
+    if (event.key === 'Enter' && posClientActiveIndex >= 0) {
+      event.preventDefault();
+      setPosCustomerSelection(posClientSearchOptions[posClientActiveIndex]);
+    }
+  });
+  document.getElementById('posClientClear').addEventListener('click', () => {
+    clientSearch.value = '';
+    clearPosCustomerSelection();
+    clearTimeout(posClientSearchTimer);
+    posClientSearchRequest += 1;
+    posClientSearchOptions = [];
+    posClientActiveIndex = -1;
+    renderPosCustomerResults();
+    clientSearch.focus();
   });
   document.getElementById('posForm').addEventListener('submit', submitPosSale);
   renderPosCart();
@@ -2365,10 +2520,11 @@ async function ventas() {
 async function compras() { operationView('compras'); }
 
 async function historialVentas() {
-  view.innerHTML = `<div class="panel table-wrap"><table>
+  const rows = state.ventas || [];
+  view.innerHTML = `<section class="sales-section-heading"><div><h3>Historial de ventas</h3><p>Revisa comprobantes, cobros y saldos sin perder el contexto de cada venta.</p></div></section>${rows.length ? `<div class="panel table-wrap"><table>
     <thead><tr><th>Comprobante</th><th>Fecha</th><th>Cliente</th><th>Total</th><th>Pagado</th><th>Saldo</th><th>Métodos</th><th>Estado</th><th>Acciones</th></tr></thead>
-    <tbody>${state.ventas.map((v) => `<tr><td>${escapeHtml(v.codigoComprobante || `Venta #${v.idVenta}`)}</td><td>${formatDate(v.fecha)}</td><td>${escapeHtml(v.cliente)}</td><td>Bs ${money(v.total)}</td><td>Bs ${money(v.montoPagado)}</td><td class="${Number(v.saldoActualFiado ?? v.saldoPendiente) > 0 ? 'text-danger' : 'text-ok'}">Bs ${money(v.saldoActualFiado ?? v.saldoPendiente)}</td><td>${escapeHtml(String(v.metodosPago || 'No especificado').replaceAll(',', ', '))}</td><td>${statusBadge(v.estadoPago === 'pagada' ? 'pagado' : v.estadoPago)}</td><td><div class="actions"><button class="small secondary" data-detail="${v.idVenta}">Detalle</button><button class="small" data-receipt="${v.idVenta}">Comprobante</button></div></td></tr>`).join('')}</tbody>
-  </table></div>`;
+    <tbody>${rows.map((v) => `<tr><td>${escapeHtml(v.codigoComprobante || `Venta #${v.idVenta}`)}</td><td>${formatDate(v.fecha)}</td><td>${escapeHtml(v.cliente)}</td><td>Bs ${money(v.total)}</td><td>Bs ${money(v.montoPagado)}</td><td class="${Number(v.saldoActualFiado ?? v.saldoPendiente) > 0 ? 'text-danger' : 'text-ok'}">Bs ${money(v.saldoActualFiado ?? v.saldoPendiente)}</td><td>${escapeHtml(String(v.metodosPago || 'No especificado').replaceAll(',', ', '))}</td><td>${statusBadge(v.estadoPago === 'pagada' ? 'pagado' : v.estadoPago)}</td><td><button class="small secondary" data-detail="${v.idVenta}">Ver detalle</button><details class="row-actions"><summary>Más opciones</summary><button type="button" class="small" data-receipt="${v.idVenta}">Comprobante</button></details></td></tr>`).join('')}</tbody>
+  </table></div>` : UiPatterns.empty('Aún no hay ventas registradas', 'Cuando completes una venta, su comprobante y estado de cobro aparecerán aquí.')}`;
   view.querySelectorAll('[data-detail]').forEach((btn) => btn.addEventListener('click', () => showSaleDetail(btn.dataset.detail)));
   view.querySelectorAll('[data-receipt]').forEach((btn) => btn.addEventListener('click', async () => {
     try { showSaleReceipt(await api(`/api/ventas/${btn.dataset.receipt}/comprobante`)); } catch (error) { showError(error.message); }

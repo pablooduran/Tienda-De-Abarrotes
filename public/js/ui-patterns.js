@@ -1,5 +1,6 @@
 (() => {
   const safeMessages = {
+    RATE_LIMITED: 'Recibimos muchas solicitudes. Espera un momento e intentalo nuevamente.',
     NETWORK_ERROR: 'Parece que no tienes conexión. Revisa internet e inténtalo otra vez.',
     TIMEOUT: 'La solicitud tardó demasiado. Inténtalo nuevamente.',
     SUBSCRIPTION_GRACE_READ_ONLY: 'Tu suscripción está en gracia. Puedes consultar los datos, pero no registrar cambios.',

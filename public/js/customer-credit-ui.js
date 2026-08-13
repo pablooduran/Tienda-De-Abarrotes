@@ -20,7 +20,7 @@
     const {
       api, view, modalRoot, getState, hasFeature, escapeHtml: e, money, formatDate,
       showError, showSuccess, showMessage, newOperationKey, localDateValue, requestAdminPassword,
-      refreshCatalogs, secureFetch, errorFromResponse
+      refreshCatalogs, patterns, secureFetch, errorFromResponse
     } = deps;
     const ui = {
       customerPage: 1,
@@ -41,6 +41,11 @@
     };
 
     const state = () => getState();
+    const uiPatterns = patterns || {
+      skeleton: () => '<div class="loading-state" role="status">Cargando...</div>',
+      empty: (title, description) => `<div class="panel empty-state"><strong>${e(title)}</strong><p>${e(description)}</p></div>`,
+      messageFor: () => 'No se pudo completar la operación. Inténtalo nuevamente.'
+    };
     const can = (code) => hasFeature(code);
     const readOnly = () => Boolean(state().context?.soloLectura);
     const nullable = (value) => {
@@ -184,37 +189,36 @@
 
     function customerFiltersMarkup() {
       const f = ui.customerFilters;
+      const filterCount = Object.entries(f).filter(([key, value]) => value !== '' && !(key === 'estado' && value === 'activos')).length;
       return `
         <form class="panel credit-filters" id="customerFilters">
           <label>Buscar<input name="texto" type="search" value="${e(f.texto || '')}" placeholder="Nombre, telefono o documento"></label>
-          <label>Telefono<input name="telefono" value="${e(f.telefono || '')}"></label>
-          <label>Documento<input name="documento" value="${e(f.documento || '')}"></label>
-          <label>Estado<select name="estado">${option('activos', 'Activos', f.estado)}${option('ocultos', 'Ocultos', f.estado)}${option('todos', 'Todos', f.estado)}</select></label>
-          <label>Fiado<select name="permiteFiado">${option('', 'Todos', f.permiteFiado)}${option('1', 'Permitido', f.permiteFiado)}${option('0', 'Bloqueado', f.permiteFiado)}</select></label>
-          <label>Deuda<select name="conDeuda">${option('', 'Todos', f.conDeuda)}${option('1', 'Con deuda', f.conDeuda)}${option('0', 'Sin deuda', f.conDeuda)}</select></label>
-          <label>Vencimiento<select name="vencido">${option('', 'Todos', f.vencido)}${option('1', 'Con deuda vencida', f.vencido)}${option('0', 'Sin deuda vencida', f.vencido)}</select></label>
-          <div class="credit-filter-actions"><button type="submit">Aplicar</button><button type="button" class="secondary" data-clear-customer-filters>Limpiar</button></div>
+          <details class="filter-disclosure customer-filter-disclosure"><summary>Filtros${filterCount ? ` <span class="filter-count">${filterCount}</span>` : ''}</summary><div class="filter-disclosure-body">
+            <label>Telefono<input name="telefono" value="${e(f.telefono || '')}"></label>
+            <label>Documento<input name="documento" value="${e(f.documento || '')}"></label>
+            <label>Estado<select name="estado">${option('activos', 'Activos', f.estado)}${option('ocultos', 'Ocultos', f.estado)}${option('todos', 'Todos', f.estado)}</select></label>
+            <label>Fiado<select name="permiteFiado">${option('', 'Todos', f.permiteFiado)}${option('1', 'Permitido', f.permiteFiado)}${option('0', 'Bloqueado', f.permiteFiado)}</select></label>
+            <label>Deuda<select name="conDeuda">${option('', 'Todos', f.conDeuda)}${option('1', 'Con deuda', f.conDeuda)}${option('0', 'Sin deuda', f.conDeuda)}</select></label>
+            <label>Vencimiento<select name="vencido">${option('', 'Todos', f.vencido)}${option('1', 'Con deuda vencida', f.vencido)}${option('0', 'Sin deuda vencida', f.vencido)}</select></label>
+          </div></details>
+          <div class="filter-actions"><button type="submit">Aplicar</button><button type="button" class="secondary" data-clear-customer-filters>Limpiar filtros</button></div>
         </form>`;
     }
 
     function customerActions(customer) {
       if (!customer.activo) return `<div class="actions customer-actions">
         <button type="button" class="small secondary" data-customer-view="${customer.idCliente}">Ver ficha</button>
-        <button type="button" class="small secondary" data-customer-statement="${customer.idCliente}">Estado de cuenta</button>
-        ${!readOnly() ? `<button type="button" class="small" data-customer-restore="${customer.idCliente}">Restaurar cliente</button>` : ''}
+        <details class="row-actions"><summary>Más opciones</summary><button type="button" class="small secondary" data-customer-statement="${customer.idCliente}">Estado de cuenta</button>${!readOnly() ? `<button type="button" class="small" data-customer-restore="${customer.idCliente}">Restaurar cliente</button>` : ''}</details>
       </div>`;
       return `<div class="actions customer-actions">
         <button type="button" class="small secondary" data-customer-view="${customer.idCliente}">Ver ficha</button>
-        ${!readOnly() ? `<button type="button" class="small secondary" data-customer-edit="${customer.idCliente}">Editar</button>` : ''}
         ${Number(customer.deudaActual || 0) > 0 && !readOnly() ? `<button type="button" class="small" data-customer-pay="${customer.idCliente}">Registrar pago</button>` : ''}
-        <button type="button" class="small secondary" data-customer-statement="${customer.idCliente}">Estado de cuenta</button>
-        ${can('recordatorios_fiado') && customer.aceptaRecordatorios ? `<button type="button" class="small secondary" data-customer-whatsapp="${customer.idCliente}">WhatsApp</button>` : ''}
-        ${!readOnly() ? `<button type="button" class="small danger" data-customer-hide="${customer.idCliente}">Ocultar cliente</button>` : ''}
+        <details class="row-actions"><summary>Más opciones</summary>${!readOnly() ? `<button type="button" class="small secondary" data-customer-edit="${customer.idCliente}">Editar</button>` : ''}<button type="button" class="small secondary" data-customer-statement="${customer.idCliente}">Estado de cuenta</button>${can('recordatorios_fiado') && customer.aceptaRecordatorios ? `<button type="button" class="small secondary" data-customer-whatsapp="${customer.idCliente}">WhatsApp</button>` : ''}${!readOnly() ? `<button type="button" class="small danger" data-customer-hide="${customer.idCliente}">Ocultar cliente</button>` : ''}</details>
       </div>`;
     }
 
     function customerRowsMarkup(customers) {
-      if (!customers.length) return '<div class="panel empty-state"><strong>No hay clientes con estos filtros.</strong><p>Prueba limpiando los filtros o registra un cliente nuevo.</p></div>';
+      if (!customers.length) return uiPatterns.empty('No hay clientes con estos filtros', 'Prueba limpiando los filtros o registra un cliente nuevo.');
       const desktop = `<div class="panel table-wrap customer-desktop-table"><table><thead><tr>
         <th>Cliente</th><th>Telefono</th><th>Documento</th><th>Deuda</th><th>Vencido</th><th>Limite</th><th>Credito disponible</th><th>Ultima compra</th><th>Estado</th><th>Acciones</th>
       </tr></thead><tbody>${customers.map((customer) => `<tr class="${customer.activo ? '' : 'customer-hidden'}">
@@ -335,7 +339,7 @@
     async function renderCustomers() {
       ui.segmentationRequest += 1;
       ui.collectionRequest += 1;
-      view.innerHTML = '<div class="panel loading-state" role="status" aria-live="polite">Cargando clientes...</div>';
+      view.innerHTML = `<div class="panel" role="status" aria-live="polite">${uiPatterns.skeleton('rows', 4)}<span class="sr-only">Cargando clientes...</span></div>`;
       try {
         const query = new URLSearchParams({ pagina: ui.customerPage, limite: 20 });
         Object.entries(ui.customerFilters).forEach(([key, value]) => { if (value !== '') query.set(key, value); });
@@ -350,7 +354,7 @@
         const withDebt = Number(summary.clientesConDeuda ?? customers.filter((item) => Number(item.deudaActual || 0) > 0).length);
         view.innerHTML = `
           <div class="credit-heading"><div><span class="eyebrow">Clientes</span><h3>Relaciones claras, cuentas al dia</h3><p>Consulta deuda, credito y actividad sin perder el historial.</p></div>
-            <div class="actions">${!readOnly() ? '<button type="button" data-new-customer>Agregar cliente</button>' : ''}${can('segmentacion_clientes') ? '<button type="button" class="secondary" data-customer-segmentation>Segmentacion</button>' : ''}${can('limites_credito') ? '<button type="button" class="secondary" data-credit-config>Configurar credito</button>' : ''}${can('exportacion_clientes_fiados') ? `<button type="button" class="secondary" data-export-customers ${readOnly() ? 'disabled title="La suscripcion debe estar activa para exportar."' : ''}>Exportar clientes</button>` : ''}</div></div>
+            <div class="actions">${!readOnly() ? '<button type="button" data-new-customer>Agregar cliente</button>' : ''}<details class="inventory-secondary-actions"><summary>Más opciones</summary><div>${can('segmentacion_clientes') ? '<button type="button" class="secondary" data-customer-segmentation>Segmentacion</button>' : ''}${can('limites_credito') ? '<button type="button" class="secondary" data-credit-config>Configurar credito</button>' : ''}${can('exportacion_clientes_fiados') ? `<button type="button" class="secondary" data-export-customers ${readOnly() ? 'disabled title="La suscripcion debe estar activa para exportar."' : ''}>Exportar clientes</button>` : ''}</div></details></div></div>
           <div class="cards customer-summary-cards"><article class="card"><span>Clientes activos</span><strong>${active}</strong></article>
             <article class="card"><span>Clientes ocultos</span><strong>${hidden}</strong></article>
             <article class="card"><span>Clientes con deuda</span><strong>${withDebt}</strong></article>
@@ -361,7 +365,7 @@
           ${readOnly() ? '<div class="panel readonly-note"><strong>Modo de solo lectura.</strong><p>Puedes consultar perfiles, deuda y estados de cuenta. Las altas, ediciones y cobros estan deshabilitados hasta reactivar la suscripcion.</p></div>' : ''}`;
         wireCustomerView(customers);
       } catch (error) {
-        view.innerHTML = `<div class="panel error-state" role="alert"><strong>No se pudieron cargar los clientes.</strong><p>${e(error.message)}</p><button type="button" data-retry-customers>Reintentar</button></div>`;
+        view.innerHTML = `<div class="panel error-state" role="alert"><strong>No se pudieron cargar los clientes.</strong><p>${e(uiPatterns.messageFor(error))}</p><button type="button" data-retry-customers>Reintentar</button></div>`;
         view.querySelector('[data-retry-customers]')?.addEventListener('click', renderCustomers);
       }
     }
