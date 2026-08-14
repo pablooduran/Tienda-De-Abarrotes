@@ -96,6 +96,8 @@
     "test:product-design-consistency-browser": "node scripts/test-product-design-consistency-browser.js",
     "test:product-responsive-accessibility": "node scripts/test-product-responsive-accessibility.js",
     "test:product-responsive-accessibility-browser": "node scripts/test-product-responsive-accessibility-browser.js",
+    "test:product-ui-hardening": "node scripts/test-product-ui-hardening.js",
+    "test:product-ui-hardening-browser": "node scripts/test-product-ui-hardening-browser.js",
     "test:product-inventory": "node scripts/test-product-inventory.js",
     "test:product-inventory-browser": "node scripts/test-product-inventory-browser.js",
     "test:product-configuration": "node scripts/test-product-configuration.js",

@@ -82,7 +82,7 @@ Escribir en espanol claro, frases cortas y terminos del negocio. Mantener `Venta
 
 ## Estados y motion
 
-Cada componente contempla default, hover, focus, active, disabled, loading, error y empty. Las mutaciones deshabilitan el control, conservan ancho y usan texto contextual. El motion comunica cambio de estado, es breve y respeta `prefers-reduced-motion`; no es decorativo.
+Cada componente contempla default, hover, focus, active, disabled, loading, error y empty. Las mutaciones deshabilitan el control, anuncian `aria-busy`, conservan ancho y usan texto contextual hasta restaurar exactamente su estado anterior. El motion comunica cambio de estado, es breve y respeta `prefers-reduced-motion`; no es decorativo.
 
 ## Responsive y accesibilidad
 

@@ -193,6 +193,23 @@ body {
   min-width: 0;
   box-shadow: 0 8px 22px rgba(29, 39, 51, 0.035);
 }
+.card,
+.topbar,
+.dashboard-hero,
+.modal,
+.ui-empty,
+.message,
+.table-wrap { min-width: 0; max-width: 100%; }
+
+th,
+td,
+button,
+summary,
+.message,
+.ui-empty,
+.card,
+.topbar,
+.modal { overflow-wrap: anywhere; }
 .dashboard-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));

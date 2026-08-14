@@ -248,3 +248,14 @@ un producto,
 normaliza foco visible para enlaces y resumenes, y aplica reduced motion a las
 transiciones no esenciales. No cambia rutas, APIs, permisos, tenant, planes ni
 logica comercial. P7D, P7E y P8 siguen pendientes.
+
+### Estado de P7D
+
+P7D endurece la presentacion ante contenido extenso, tablas amplias, filtros
+sin resultados, estados vacios, errores seguros, red lenta simulada y clics
+repetidos. Las mutaciones anuncian `aria-busy` mientras permanecen bloqueadas;
+las superficies compartidas pueden partir cadenas largas sin ensanchar la
+pagina. Los arneses locales cubren POS, Inventario, Clientes, Configuracion,
+Mi plan y Superadmin con datos sinteticos, sin modificar contratos, tenant,
+permisos ni logica comercial. UX-005 se mantiene para P7E; TECH-026 permanece
+para P8. P7E y P8 no estan iniciados.

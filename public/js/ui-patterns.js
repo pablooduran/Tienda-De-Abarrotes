@@ -23,12 +23,20 @@
   }
   function mutation(button, busyText = 'Procesando...') {
     if (!button || button.disabled) return null;
-    const original = { text: button.textContent, width: button.getBoundingClientRect().width };
+    const original = { text: button.textContent, width: button.getBoundingClientRect().width, ariaBusy: button.getAttribute('aria-busy') };
     button.disabled = true;
+    button.setAttribute('aria-busy', 'true');
     button.classList.add('is-busy');
     button.style.minWidth = `${Math.ceil(original.width)}px`;
     button.textContent = busyText;
-    return () => { button.disabled = false; button.classList.remove('is-busy'); button.style.minWidth = ''; button.textContent = original.text; };
+    return () => {
+      button.disabled = false;
+      button.classList.remove('is-busy');
+      button.style.minWidth = '';
+      button.textContent = original.text;
+      if (original.ariaBusy === null) button.removeAttribute('aria-busy');
+      else button.setAttribute('aria-busy', original.ariaBusy);
+    };
   }
   window.UiPatterns = { messageFor, skeleton, empty, mutation };
 })();

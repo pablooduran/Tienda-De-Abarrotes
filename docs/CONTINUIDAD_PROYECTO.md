@@ -755,3 +755,9 @@ locales confirman reflow en 360x800, 768x1024 y 1366x768 sin overflow de pagina
 en las superficies revisadas. Se endurecen foco, reduced motion y los dialogos
 operativos revisados sin tocar backend ni contratos. P7D, P7E y P8 no estan
 iniciados.
+
+P7D agrega hardening visual local para contenido extenso y estados incomodos:
+listas paginadas, vacio, error seguro, red lenta y doble activacion. Las
+mutaciones de interfaz anuncian actividad y las superficies comunes conservan
+reflow sin overflow de pagina. No modifica backend, rutas, base, permisos,
+tenant ni reglas comerciales. P7E y P8 no estan iniciados.
