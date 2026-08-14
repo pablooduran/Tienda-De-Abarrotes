@@ -736,8 +736,10 @@ publicadas. DOCS-OPS y PRODUCTO-0A/0B estan cerrados. PRODUCTO-1 P1-P5 estan
 cerrados. P6 ordena Mi plan y la administracion SaaS sin alterar el motor de
 suscripciones, pagos manuales, limites, snapshots, tenant o permisos. Para el
 propietario, el catalogo publico queda limitado a Basico, Standard y Pro; el
-plan avanzado legado no se ofrece como opcion. P6 queda implementado y pendiente
-de validacion/cierre; P7 y los bloques posteriores no estan iniciados. STAGING-2B queda diferido
+plan avanzado legado no se ofrece como opcion. P6 esta cerrado. P7A crea la
+base formal de diseno con `DESIGN.md` y `$product-design-review`, sin alterar
+HTML, CSS, JavaScript, rutas, permisos, tenant, planes, pagos ni logica
+comercial. P7B-P7E y P8 no estan iniciados. STAGING-2B queda diferido
 hasta la revision final del propietario, una decision de proveedor/topologia y
 autorizacion expresa de gasto; cualquier despliegue sigue requiriendo
 autorizacion separada.

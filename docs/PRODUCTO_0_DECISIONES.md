@@ -117,7 +117,8 @@ debera quedar incluida en esta auditoria antes de las pruebas finales.
 | P4 - Ventas y clientes | POS, historial, credito/cobranza, devoluciones y busqueda escalable | Precios, pagos o compensaciones sin contrato |
 | P5 - Configuracion | Centro que enlace ajustes existentes | Ajustes o roles nuevos |
 | P6 - Suscripcion y superadmin | Mi plan, capacidades contextuales y administracion ordenada | Pagos automaticos o cambios de plan |
-| P7 - Responsive, accesibilidad y branding | Validacion transversal, favicon e identidad minima | Marca completa |
+| P7A - Base de diseno del producto | Guia Operate, tokens, vocabulario, auditoria base y skill de revision | Redisenos profundos, branding definitivo y cambios de comportamiento |
+| P7B-P7E - Responsive, accesibilidad y branding | Aplicacion y validacion transversal de la guia aprobada | Marca completa y nuevas reglas comerciales |
 | P8 - Regresion de producto | Browser, accesibilidad, tenant, seguridad y limpieza | Funcionalidades nuevas |
 
 Cada bloque declarara archivos, contratos, pruebas, fixtures, procesos y limpieza. Ninguno inicia WELCOME, HELP, COMMERCE o SECURITY-FINAL sin autorizacion separada.
@@ -209,4 +210,17 @@ suscripciones, pagos manuales y control administrativo; las acciones poco
 frecuentes se concentran en **Mas opciones** y las acciones sensibles conservan
 su confirmacion y trazabilidad. P6 no altera tenant, permisos, limites,
 snapshots, precios, tasa, comprobantes ni la aplicacion atomica de pagos. Queda
-implementado y pendiente de validacion/cierre; P7 no esta iniciado.
+implementado y cerrado. P7A crea la base formal de diseno sin modificar sus
+pantallas; P7B-P7E y P8 no estan iniciados.
+
+### Estado de P7A
+
+P7A incorpora `DESIGN.md` como guia estable del producto y la skill
+`$product-design-review` para revisar una superficie segun tarea, jerarquia,
+copy, estados, responsive, accesibilidad y casos limite. La guia formaliza el
+modo Operate, reutiliza los tokens actuales, define vocabulario de componentes,
+acciones y antipatrones, y deja una auditoria base de acceso, onboarding,
+Inicio, POS, Inventario, Clientes, Configuracion, Mi plan y superadmin.
+
+No cambia HTML, CSS, JavaScript, rutas, permisos, tenant, planes, pagos o
+logica comercial. P7B-P7E y P8 siguen pendientes.
