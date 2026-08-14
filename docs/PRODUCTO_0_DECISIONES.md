@@ -269,8 +269,6 @@ periodo**. Ambas lecturas conservan sus datos y calculos; solo cambia su peso
 visual. Se normalizan cifras de metricas y encabezados de tabla para mejorar la
 lectura operativa. UX-005 queda resuelto en P7E tras validacion browser local.
 
-P8 sigue pendiente y TECH-026 conserva su alcance de E2E critico de negocio.
-
 ### Estado de P8
 
 P8 incorpora `test:e2e-critical-business`, un recorrido hibrido de propietario
@@ -285,6 +283,21 @@ El flujo completo de comprobante, revision y aplicacion de pagos conserva su
 cobertura especializada C2-C6; el robot critico valida Mi plan, catalogo
 publico y disponibilidad de cotizacion, sin afirmar que esa administracion se
 realiza enteramente por clicks. El workflow incorpora el robot como gate
-browser portable, pero su ejecucion remota solo puede confirmarse despues de
-publicar P8. Por ello TECH-026 queda parcialmente resuelto y P8 implementado,
-pendiente de cierre; WELCOME, HELP, COMMERCE y SECURITY-FINAL no se inician.
+browser portable y este paso en remoto: run `31806746685`, job `94787399829`,
+**Run critical browser business gate** PASS. TECH-026 queda resuelto y
+PRODUCTO-1 P1-P8 cerrado. WELCOME puede comenzar; HELP, COMMERCE y
+SECURITY-FINAL no se inician.
+
+### Estado de WELCOME
+
+WELCOME agrega una guia opcional y retomable dentro de **Inicio**, separada del
+onboarding de configuracion. Conduce a la primera secuencia operativa:
+**producto -> stock -> primera venta**. El progreso se infiere de productos,
+existencias y ventas ya disponibles; `Ahora no` solo guarda una preferencia
+visual namespaced por usuario y tienda, sin datos sensibles ni IDs internos.
+
+Los CTA reutilizan Productos, Compras y Punto de venta. Una cuenta en modo solo
+lectura puede consultar el progreso, pero no recibe acciones activas. Las
+pruebas Welcome cubren progreso, salto, retomar, tienda existente, teclado,
+responsive y consola sin duplicar el E2E critico. WELCOME queda implementado;
+HELP, COMMERCE y SECURITY-FINAL siguen pendientes.

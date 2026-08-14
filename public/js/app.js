@@ -790,6 +790,11 @@ async function inicio() {
   const dayValues = salesDays.map((day) => day.total);
   const dayTooltips = salesDays.map((day) => `<strong>${escapeHtml(day.label)}</strong><br>${escapeHtml(day.key)}<br>Ventas: Bs ${money(day.total)}`);
   const activeDebts = Number(debtState.pendiente || 0) + Number(debtState.parcial || 0);
+  const welcome = window.WelcomeGuide?.render({
+    context: state.context,
+    products: state.productos,
+    sales: state.ventas
+  }) || '';
 
   view.innerHTML = `
     <div class="dashboard-hero">
@@ -815,6 +820,7 @@ async function inicio() {
       <div class="card metric-card"><span>Bajo stock</span><strong>${data.bajoStock}</strong></div>
       <div class="card metric-card"><span>Fiados activos</span><strong>${activeDebts}</strong></div>
     </div>
+    ${welcome}
     <div class="dashboard-grid modern-dashboard">
       <div class="panel chart-panel chart-panel-wide">
         <div class="panel-title"><div><h3>Ventas de los últimos 5 días</h3><p class="muted">Hoy, ayer y los 3 días anteriores.</p></div></div>
@@ -844,6 +850,19 @@ async function inicio() {
     `<strong>Mes pasado</strong><br>Ventas: Bs ${money(data.ventasMesPasado)}`,
     `<strong>Mes actual</strong><br>Ventas: Bs ${money(data.ventasMes)}`
   ]);
+  window.WelcomeGuide?.bind(view, {
+    context: state.context,
+    products: state.productos,
+    sales: state.ventas,
+    refresh: () => loadView('inicio'),
+    navigate: async (destination, step) => {
+      await loadView(destination);
+      const target = step === 'producto' ? document.getElementById('addProduct')
+        : step === 'venta' ? document.getElementById('posSearch')
+          : document.querySelector('#view form input, #view form select, #view form button');
+      target?.focus?.();
+    }
+  });
 }
 
 function renderCrud(type, rows, fields, idField, ui = {}) {

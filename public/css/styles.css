@@ -266,6 +266,59 @@ summary,
 .dashboard-cards {
   margin-bottom: 14px;
 }
+.welcome-guide {
+  display: grid;
+  gap: 12px;
+  margin: 0 0 14px;
+}
+.welcome-guide-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+.welcome-guide-heading h3,
+.welcome-guide-heading p { margin: 4px 0; }
+.welcome-guide-heading p { color: var(--muted); max-width: 68ch; }
+.welcome-guide-progress,
+.welcome-guide-readonly { margin: 0; color: var(--muted); }
+.welcome-guide-readonly { border-left: 3px solid var(--warn); padding-left: 10px; }
+.welcome-steps {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.welcome-step {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 10px;
+  align-content: space-between;
+  min-height: 116px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fff;
+}
+.welcome-step > div { display: grid; gap: 5px; }
+.welcome-step strong { color: var(--ink); }
+.welcome-step span { color: var(--muted); font-size: 13px; }
+.welcome-step.is-complete { border-color: #7ca897; background: #f3faf6; }
+.welcome-step-status { font-weight: 700; color: var(--ok) !important; }
+.welcome-step button { justify-self: start; }
+.welcome-resume { display: flex; justify-content: flex-end; margin: 0 0 12px; }
+.welcome-complete {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin: 0 0 14px;
+}
+.welcome-complete h3,
+.welcome-complete p { margin: 0; }
+.welcome-complete p { color: var(--muted); margin-top: 4px; }
 .metric-card {
   display: grid;
   gap: 4px;
@@ -2918,6 +2971,13 @@ button.is-busy { cursor: wait; opacity: .72; }
 }
 
 @media (max-width: 560px) {
+  .welcome-guide-heading { display: grid; }
+  .welcome-guide-heading > .link-button { justify-self: start; }
+  .welcome-steps { grid-template-columns: 1fr; }
+  .welcome-step { min-height: 0; }
+  .welcome-step button { width: 100%; }
+  .welcome-complete { display: grid; }
+  .welcome-complete button { justify-self: start; }
   .audit-filters,
   .audit-detail-grid,
   .audit-payload { grid-template-columns: 1fr; }

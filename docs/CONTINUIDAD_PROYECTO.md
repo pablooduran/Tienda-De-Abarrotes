@@ -775,9 +775,17 @@ como detalle expandible. Tambien normaliza la lectura de metricas y tablas con
 los tokens existentes. UX-005 queda resuelto tras arnes browser local; no se
 modifican backend, rutas, base, tenant, permisos ni reglas comerciales.
 
-P8 implementa la regresion final de PRODUCTO-1 y el usuario robot TECH-026. El
+P8 cierra la regresion final de PRODUCTO-1 y el usuario robot TECH-026. El
 recorrido local pasa 3/3 sobre datos sinteticos aislados y comprueba producto,
 compra, venta, stock, cliente, credito, cobranza, devolucion, reportes, Mi plan
-y tenant. El workflow queda preparado para usarlo como gate browser sin
-descargar binarios; la verificacion de ese gate en GitHub permanece pendiente
-hasta publicar P8. No se inician WELCOME, HELP, COMMERCE ni SECURITY-FINAL.
+y tenant. El gate browser remoto tambien paso: run `31806746685`, job
+`94787399829`, paso **Run critical browser business gate**. PRODUCTO-1 P1-P8
+y TECH-026 quedan cerrados. La siguiente fase autorizada es WELCOME; HELP,
+COMMERCE y SECURITY-FINAL permanecen sin iniciar.
+
+WELCOME queda implementado en Inicio como una guia breve, opcional y retomable
+para producto, stock y primera venta. No reemplaza el onboarding de
+configuracion, no agrega rutas ni persistencia de negocio y no omite permisos,
+limites ni modo solo lectura. El progreso se deriva de datos existentes y su
+preferencia visual no contiene datos sensibles. HELP, COMMERCE y
+SECURITY-FINAL permanecen sin iniciar.

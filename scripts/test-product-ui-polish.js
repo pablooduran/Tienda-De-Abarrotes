@@ -17,7 +17,7 @@ const checks = [
   ['Las tablas mantienen una jerarquía visual compacta', css.includes('thead { background: #f8faf9; }') && css.includes('td { line-height: 1.4; }')],
   ['El detalle de período conserva foco y estado visible', css.includes('.dashboard-period-detail > summary') && css.includes('.dashboard-period-detail[open] > summary::after')],
   ['UX-005 se registra como resuelto en P7E', pending.includes('| UX-005 |') && pending.includes('Resuelto en P7E')],
-  ['TECH-026 permanece pendiente para P8', pending.includes('| TECH-026 |') && pending.includes('P8 / pruebas finales')],
+  ['TECH-026 queda resuelto tras P8', pending.includes('| TECH-026 |') && pending.includes('Resuelto: local 3/3 PASS')],
   ['El frontend no controla tenant', !app.includes('idTienda')]
 ];
 
