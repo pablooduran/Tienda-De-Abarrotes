@@ -93,6 +93,8 @@
     "test:product-ux-browser": "node scripts/test-product-ux-browser.js",
     "test:product-inventory": "node scripts/test-product-inventory.js",
     "test:product-inventory-browser": "node scripts/test-product-inventory-browser.js",
+    "test:product-configuration": "node scripts/test-product-configuration.js",
+    "test:product-configuration-browser": "node scripts/test-product-configuration-browser.js",
     "test:product-sales-clients": "node scripts/test-product-sales-clients.js",
     "test:product-sales-clients-browser": "node scripts/test-product-sales-clients-browser.js",
     "test:saas-subscription-admin": "node scripts/test-saas-subscription-admin.js",

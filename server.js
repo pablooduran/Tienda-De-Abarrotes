@@ -71,6 +71,7 @@ const inventoryIntelligenceRoutes = require('./routes/inventory-intelligence');
 const lotRoutes = require('./routes/lots');
 const masterCatalogRoutes = require('./routes/master-catalog');
 const onboardingRoutes = require('./routes/onboarding');
+const storeConfigurationRoutes = require('./routes/store-configuration');
 const { createPaymentSubscriptionsRouter } = require('./routes/payment-subscriptions');
 const subscriptionRoutes = require('./routes/subscription');
 const posRoutes = require('./routes/pos');
@@ -277,6 +278,14 @@ app.use(
   onboardingRoutes
 );
 app.use('/api/catalogo-maestro', requireAuth, requireTenant, resolveSubscription, requireActiveSubscription, masterCatalogRoutes);
+app.use(
+  '/api/configuracion-tienda',
+  requireAuth,
+  requireTenant,
+  resolveSubscription,
+  requireActiveSubscription,
+  storeConfigurationRoutes
+);
 app.use(
   '/api',
   requireAuth,

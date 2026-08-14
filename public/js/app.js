@@ -21,6 +21,7 @@ let customerCreditUi = null;
 let compensationUi = null;
 let administrativeAuditUi = null;
 let inventoryAdjustmentUi = null;
+let storeConfigurationUi = null;
 
 const sections = [
   ['inicio', 'Inicio', 'Resumen general del negocio'],
@@ -38,6 +39,7 @@ const sections = [
   ['gastos', 'Gastos', 'Egresos operativos y categorias'],
   ['finanzas', 'Finanzas', 'Ventas, cobros, costos y ganancias'],
   ['compensaciones', 'Devoluciones y anulaciones', 'Anulaciones, devoluciones y ajustes trazables'],
+  ['configuracion', 'Configuracion', 'Datos operativos de la tienda'],
   ['auditoria', 'Auditoria', 'Acciones administrativas y resultados'],
   ['cierreCaja', 'Cierre de caja', 'Control de efectivo por periodo'],
   ['reportes', 'Reportes', 'Consultas, filtros y ganancias']
@@ -49,7 +51,7 @@ const navigationFamilies = [
   { id: 'inventario', label: 'Inventario', sections: ['productos', 'movimientosStock', 'compras', 'proveedores', 'inventarioInteligente', 'inventarioOperativo', 'lotesVencimientos'] },
   { id: 'clientes', label: 'Clientes', sections: ['clientes'] },
   { id: 'reportes', label: 'Reportes', sections: ['reportes', 'finanzas', 'gastos', 'cierreCaja'] },
-  { id: 'administracion', label: 'Administracion y configuracion', sections: ['auditoria'] },
+  { id: 'administracion', label: 'Administracion y configuracion', sections: ['configuracion', 'auditoria'] },
   { id: 'plan', label: 'Mi plan', links: [{ href: '/suscripcion.html', label: 'Suscripcion, planes y pagos' }] }
 ];
 
@@ -368,6 +370,19 @@ function auditUi() {
   return administrativeAuditUi;
 }
 
+function configurationUi() {
+  if (!storeConfigurationUi) {
+    storeConfigurationUi = window.StoreConfigurationUI.create({
+      api, root: view, isReadOnly: () => Boolean(state.context?.soloLectura), patterns: UiPatterns
+    });
+  }
+  return storeConfigurationUi;
+}
+
+async function configuracion() {
+  await configurationUi().render();
+}
+
 async function auditoria() {
   await auditUi().render();
 }
@@ -503,8 +518,10 @@ async function loadView(id) {
   renderMenu(id);
   title.textContent = section[1];
   subtitle.textContent = section[2];
-  await refreshCatalogs({ includeClients: !['ventas', 'clientes'].includes(id) });
-  const handlers = { inicio, productos, movimientosStock, inventarioInteligente, inventarioOperativo, lotesVencimientos, clientes, proveedores, ventas, compras, historialVentas, pagos, gastos, finanzas, compensaciones, auditoria, cierreCaja, reportes };
+  if (!['ventas', 'clientes', 'configuracion'].includes(id)) {
+    await refreshCatalogs({ includeClients: !['ventas', 'clientes'].includes(id) });
+  }
+  const handlers = { inicio, productos, movimientosStock, inventarioInteligente, inventarioOperativo, lotesVencimientos, clientes, proveedores, ventas, compras, historialVentas, pagos, gastos, finanzas, compensaciones, configuracion, auditoria, cierreCaja, reportes };
   if (!handlers[id]) return loadView('inicio');
   await handlers[id]();
   renderInventoryWorkspace(id);

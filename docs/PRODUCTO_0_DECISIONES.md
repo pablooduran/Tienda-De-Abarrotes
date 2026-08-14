@@ -183,3 +183,14 @@ completas finales -> revision final del propietario -> STAGING-2B -> pruebas
 reales -> decision de beta/lanzamiento.
 
 Esta secuencia es una guia de dependencias y no inicia ninguna fase posterior.
+
+### Estado de P5
+
+P5 incorpora un centro de **Configuracion** dentro de Administracion y
+configuracion para el propietario. Reutiliza el contrato de onboarding y solo
+permite editar nombre mostrado, moneda BOB, zona horaria America/La_Paz,
+telefono, direccion y dato fiscal basico. El tenant se deriva de la sesion,
+las mutaciones son transaccionales y la vista respeta el modo solo lectura.
+No incluye roles, secretos, pagos, planes, infraestructura ni una segunda
+auditoria. P5 queda implementado y pendiente de validacion/cierre; P6 no esta
+iniciado.
