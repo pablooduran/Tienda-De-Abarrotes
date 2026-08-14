@@ -139,6 +139,31 @@
     return button;
   }
 
+  function groupedActions(data) {
+    const controls = document.createDocumentFragment();
+    const secondary = [];
+    if (data.estadoEfectivo === 'suspendida') controls.append(actionButton('reactivar', 'Reactivar', 'button-primary'));
+    else if (data.estadoEfectivo !== 'cancelada') controls.append(actionButton('renovar', 'Renovar tecnicamente', 'button-primary'));
+    if (!['suspendida', 'cancelada'].includes(data.estadoEfectivo)) secondary.push(actionButton('suspender', 'Suspender'));
+    if (data.estadoEfectivo !== 'cancelada') {
+      secondary.push(actionButton('upgrade', 'Cambiar a un plan superior'));
+      secondary.push(actionButton('downgrade', 'Programar cambio de plan'));
+      secondary.push(actionButton('cancelar', 'Cancelar', 'button-danger'));
+    }
+    if (secondary.length) {
+      const details = document.createElement('details');
+      details.className = 'saas-more-actions';
+      const summary = document.createElement('summary');
+      summary.textContent = 'Mas opciones';
+      const list = document.createElement('div');
+      list.className = 'button-row';
+      list.append(...secondary);
+      details.append(summary, list);
+      controls.append(details);
+    }
+    return controls;
+  }
+
   function renderDetail(data) {
     state.reference = data.referencia;
     state.detailData = data;
@@ -196,15 +221,7 @@
       row.append(strong, span);
       elements.audit.appendChild(row);
     }
-    elements.actions.replaceChildren();
-    if (!['suspendida', 'cancelada'].includes(data.estadoEfectivo)) elements.actions.append(actionButton('suspender', 'Suspender'));
-    if (data.estadoEfectivo === 'suspendida') elements.actions.append(actionButton('reactivar', 'Reactivar', 'button-primary'));
-    if (data.estadoEfectivo !== 'cancelada') {
-      elements.actions.append(actionButton('renovar', 'Renovar tecnicamente'));
-      elements.actions.append(actionButton('upgrade', 'Upgrade'));
-      elements.actions.append(actionButton('downgrade', 'Downgrade'));
-      elements.actions.append(actionButton('cancelar', 'Cancelar', 'button-danger'));
-    }
+    elements.actions.replaceChildren(groupedActions(data));
     elements.detail.hidden = false;
     elements.detail.scrollIntoView({ behavior: 'smooth', block: 'start' });
   }

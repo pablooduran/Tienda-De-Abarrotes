@@ -18,9 +18,12 @@
       </div>
 
       <nav aria-label="Navegación administrativa">
+        <p class="admin-nav-group">Operacion global</p>
         <a class="nav-link active" href="#tiendas">Tiendas</a>
+        <p class="admin-nav-group">Suscripciones y pagos</p>
         <a class="nav-link" id="saasSubscriptionsLink" href="#suscripciones-saas">Suscripciones SaaS</a>
         <a class="nav-link" id="paymentSubscriptionsLink" href="#pagos-suscripcion">Pagos de suscripción</a>
+        <p class="admin-nav-group">Catalogo y control</p>
         <a class="nav-link" href="#catalogo">Catálogo maestro</a>
         <a class="nav-link" id="auditAdminLink" href="#auditoria">Auditoría</a>
       </nav>
@@ -66,6 +69,7 @@
           <div><p class="eyebrow">Pagos manuales</p><h2 id="paymentAdminHeading">Solicitudes de suscripción</h2><p>Revisa solicitudes y configura las condiciones manuales sin registrar cobros automáticos.</p></div>
           <button id="refreshPaymentAdmin" class="button button-secondary" type="button">Actualizar</button>
         </div>
+        <p id="paymentAdminFeedback" class="payment-admin-feedback" role="status" aria-live="polite"></p>
         <div class="payment-admin-grid">
           <section class="payment-admin-card" aria-labelledby="paymentRateHeading">
             <h3 id="paymentRateHeading">Tipo de cambio USD/BOB</h3>
@@ -379,6 +383,7 @@
 
   <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
   <script src="/js/http-security.js" defer></script>
+  <script src="/js/ui-patterns.js" defer></script>
   <script src="/js/administrative-audit-ui.js" defer></script>
   <script src="/js/admin.js" defer></script>
   <script src="/js/saas-subscription-admin-ui.js" defer></script>

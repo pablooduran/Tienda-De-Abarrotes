@@ -41,11 +41,12 @@ function plans() {
   };
   return {
     planActual: { codigo: 'basico', nombre: 'Basico' },
-    planProgramado: { codigo: 'reducido', nombre: 'Reducido', fechaAplicacion: '2026-09-01 00:00:00' },
+    planProgramado: { codigo: 'basico', nombre: 'Basico', fechaAplicacion: '2026-09-01 00:00:00' },
     planes: [
       { codigo: 'basico', nombre: 'Basico', tipoCambio: 'mismo_plan', limites: {}, disponibilidad: {}, funcionalidades: [] },
-      { codigo: 'avanzado', nombre: 'Avanzado', tipoCambio: 'upgrade', descripcion: 'Mas capacidad.', limites: {}, disponibilidad: {}, funcionalidades: [] },
-      { codigo: 'reducido', nombre: 'Reducido', tipoCambio: 'downgrade', descripcion: 'Capacidad menor.', limites: {}, disponibilidad: availability, funcionalidades: [] }
+      { codigo: 'standard', nombre: 'Standard', tipoCambio: 'upgrade', descripcion: 'Mas capacidad.', limites: {}, disponibilidad: {}, funcionalidades: [] },
+      { codigo: 'pro', nombre: 'Pro', tipoCambio: 'downgrade', descripcion: 'Capacidad menor.', limites: {}, disponibilidad: availability, funcionalidades: [] },
+      { codigo: 'avanzado', nombre: 'Avanzado', tipoCambio: 'upgrade', descripcion: 'Plan legado.', limites: {}, disponibilidad: {}, funcionalidades: [] }
     ]
   };
 }
@@ -108,7 +109,8 @@ async function main() {
       page.on('console', (message) => { if (message.type() === 'error') errors.push(message.text()); });
       page.on('pageerror', (error) => errors.push(error.message));
       await page.goto(`${baseUrl}/suscripcion.html`);
-      await page.locator('article[data-plan-code="avanzado"]').waitFor();
+      await page.locator('article[data-plan-code="standard"]').waitFor();
+      assert.strictEqual(await page.locator('article[data-plan-code="avanzado"]').count(), 0);
       assert.strictEqual(await page.evaluate(() => document.documentElement.scrollWidth > document.documentElement.clientWidth + 1), false);
       assert.strictEqual(await page.locator('.subscription-plan-excess').isVisible(), true);
       await page.keyboard.press('Tab');
@@ -129,7 +131,7 @@ async function main() {
     ]);
     assert.strictEqual(fixture.requests.length, 2);
     assert.deepStrictEqual(fixture.requests.map((item) => item.body), [
-      { codigoPlan: 'avanzado' }, { codigoPlan: 'reducido' }
+      { codigoPlan: 'standard' }, { codigoPlan: 'pro' }
     ]);
     assert(fixture.requests.every((item) => /^plan-change:[0-9a-f-]{36}$/.test(item.key)));
     assert(fixture.requests.every((item) => !JSON.stringify(item).includes('idTienda')));

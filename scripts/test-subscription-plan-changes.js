@@ -26,7 +26,10 @@ async function catalogPlans(connection) {
   const [rows] = await connection.query(
     `SELECT idPlan,codigo,nombre,precioMensual,duracionDias,
             limitePropietarios,limiteProductos,limiteClientes,limiteProveedores
-     FROM plan WHERE activo=1 ORDER BY idPlan`
+     FROM plan
+     WHERE activo=1 AND visiblePublicamente=1 AND esLegado=0
+       AND codigo IN ('basico','standard','pro')
+     ORDER BY ordenComercial,codigo`
   );
   for (const row of rows) {
     const [features] = await connection.query(

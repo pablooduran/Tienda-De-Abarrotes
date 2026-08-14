@@ -139,7 +139,7 @@ async function main() {
     ]) {
       const { page } = await openState(browser, baseUrl, 'gracia', viewport);
       assert.strictEqual(await page.locator('.subscription-notice').isVisible(), true);
-      assert.strictEqual(await page.locator('button:disabled').count(), 1);
+      assert.strictEqual(await page.locator('button:disabled').count(), 0);
       await page.keyboard.press('Tab');
       const focus = await page.evaluate(() => ({
         tag: document.activeElement?.tagName,
@@ -154,7 +154,7 @@ async function main() {
       const { page } = await openState(browser, baseUrl, mode, { width: 1366, height: 768 });
       const panelLinks = await page.locator('[data-subscription-panel]').count();
       assert.strictEqual(panelLinks, ['activa', 'prueba'].includes(mode) ? 1 : 0);
-      if (mode === 'prueba') assert.strictEqual(await page.locator('.subscription-status').textContent(), 'prueba');
+      if (mode === 'prueba') assert.strictEqual(await page.locator('.subscription-status').textContent(), 'Prueba gratuita');
       await page.close();
     }
 

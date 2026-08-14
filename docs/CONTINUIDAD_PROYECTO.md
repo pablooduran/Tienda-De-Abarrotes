@@ -732,15 +732,12 @@ existe facturacion fiscal ni se inicia una beta.
 
 Las macrofases de **seguridad publica final**, **CI / GitHub Actions**,
 **STAGING-1**, **PREPROD-1** y **REGRESION GENERAL** estan cerradas y
-publicadas. DOCS-OPS y PRODUCTO-0A/0B estan cerrados. PRODUCTO-1 P1, P2 y P3
-estan cerrados. PRODUCTO-1 P4 implementa la experiencia integrada de Ventas y
-Clientes: POS con busqueda paginada de clientes, historial, cobranza y acciones
-compactas sin cambiar logica comercial. P4 esta pendiente de validacion/cierre;
-P5 implementa el centro de Configuracion del propietario sobre el contrato de
-onboarding existente. Sus campos soportados son nombre mostrado, moneda BOB,
-zona horaria America/La_Paz, telefono, direccion y dato fiscal basico; no
-reinicia onboarding ni modifica suscripcion. P5 queda pendiente de
-validacion/cierre; P6 y los bloques posteriores no estan iniciados. STAGING-2B queda diferido
+publicadas. DOCS-OPS y PRODUCTO-0A/0B estan cerrados. PRODUCTO-1 P1-P5 estan
+cerrados. P6 ordena Mi plan y la administracion SaaS sin alterar el motor de
+suscripciones, pagos manuales, limites, snapshots, tenant o permisos. Para el
+propietario, el catalogo publico queda limitado a Basico, Standard y Pro; el
+plan avanzado legado no se ofrece como opcion. P6 queda implementado y pendiente
+de validacion/cierre; P7 y los bloques posteriores no estan iniciados. STAGING-2B queda diferido
 hasta la revision final del propietario, una decision de proveedor/topologia y
 autorizacion expresa de gasto; cualquier despliegue sigue requiriendo
 autorizacion separada.

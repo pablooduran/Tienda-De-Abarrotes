@@ -20,6 +20,25 @@
     return String(value || 'no disponible').replaceAll('_', ' ');
   }
 
+  const STATUS_LABELS = Object.freeze({
+    prueba: 'Prueba gratuita', activa: 'Activa', gracia: 'Periodo de gracia',
+    suspendida: 'Suspendida', cancelada: 'Cancelada', pendiente: 'Pendiente',
+    completo: 'Acceso completo', solo_lectura: 'Solo lectura', restringido: 'Acceso restringido',
+    upgrade: 'Cambio inmediato', downgrade: 'Cambio proximo periodo',
+    mismo_plan: 'Plan actual', cambio_invalido: 'No disponible'
+  });
+
+  const FEATURE_LABELS = Object.freeze({
+    ventas: 'Ventas', inventario: 'Inventario', productos: 'Productos', clientes: 'Clientes',
+    proveedores: 'Proveedores', compras: 'Compras', punto_venta: 'Punto de venta',
+    reportes_financieros: 'Reportes financieros', exportaciones: 'Exportaciones',
+    rentabilidad_producto: 'Rentabilidad por producto', rotacion_inventario: 'Rotacion de inventario',
+    recordatorios_fiado: 'Mensajes preparados de cobranza'
+  });
+
+  function statusLabel(value) { return STATUS_LABELS[value] || label(value); }
+  function featureLabel(value) { return FEATURE_LABELS[value] || label(value); }
+
   function create({ root, api = null, navigate = (path) => { global.location.href = path; } } = {}) {
     if (!root) throw new Error('El contenedor de suscripcion es obligatorio.');
 
@@ -56,7 +75,7 @@
       const scheduled = data.planProgramado
         ? `<p class="subscription-plan-scheduled" role="status">Cambio programado a <strong>${escapeHtml(data.planProgramado.nombre)}</strong> para ${escapeHtml(formatDate(data.planProgramado.fechaAplicacion))}.</p>`
         : '';
-      const choices = data.planes.map((plan) => {
+      const choices = data.planes.filter((plan) => plan.codigo !== 'avanzado').map((plan) => {
         const action = plan.tipoCambio === 'upgrade' ? 'upgrade'
           : (plan.tipoCambio === 'downgrade' ? 'downgrade' : null);
         const exceeded = Object.entries(plan.disponibilidad || {})
@@ -68,11 +87,11 @@
             ? 'Se aplicara en el siguiente periodo. Tus datos no se eliminaran.'
             : (plan.tipoCambio === 'mismo_plan' ? 'Este es tu plan actual.' : 'Este cambio combina ampliaciones y reducciones y no esta disponible.'));
         return `<article class="subscription-plan" data-plan-code="${escapeHtml(plan.codigo)}">
-          <header><h3>${escapeHtml(plan.nombre)}</h3><strong>${escapeHtml(label(plan.tipoCambio))}</strong></header>
+          <header><h3>${escapeHtml(plan.nombre)}</h3><strong>${escapeHtml(statusLabel(plan.tipoCambio))}</strong></header>
           <p>${escapeHtml(plan.descripcion || message)}</p>
           <p class="subscription-plan-help">${escapeHtml(message)}</p>
           ${exceeded.length ? `<p class="subscription-plan-excess">Limites excedidos: ${escapeHtml(exceeded.join(', '))}. Se conservaran los datos y se bloquearan nuevas altas.</p>` : ''}
-          <button type="button" data-plan-action="${escapeHtml(action || '')}" data-plan-code="${escapeHtml(plan.codigo)}" ${action ? '' : 'disabled'}>${action === 'upgrade' ? 'Aplicar upgrade' : (action === 'downgrade' ? 'Programar downgrade' : 'No disponible')}</button>
+          <button type="button" data-plan-action="${escapeHtml(action || '')}" data-plan-code="${escapeHtml(plan.codigo)}" ${action ? '' : 'disabled'}>${action === 'upgrade' ? `Cambiar a ${escapeHtml(plan.nombre)}` : (action === 'downgrade' ? 'Programar cambio' : 'No disponible')}</button>
         </article>`;
       }).join('');
       return `<section class="subscription-section" aria-labelledby="subscription-plans-title">
@@ -120,33 +139,47 @@
       const visibleStatus = data.estadoEfectivo === 'activa' && data.tipo === 'prueba'
         ? 'prueba'
         : data.estadoEfectivo;
+      const relevantDate = grace && data.fechaFinGracia
+        ? { label: 'Fin de gracia', value: data.fechaFinGracia }
+        : { label: 'Fin de vigencia', value: data.fechaFin };
       const graceRow = data.fechaFinGracia
         ? `<div><dt>Fin del periodo de gracia</dt><dd>${escapeHtml(formatDate(data.fechaFinGracia))}</dd></div>`
         : '';
-      const features = Array.isArray(data.funcionalidades) && data.funcionalidades.length
-        ? data.funcionalidades.map((feature) => `<li>${escapeHtml(label(feature))}</li>`).join('')
+      const featureItems = Array.isArray(data.funcionalidades) ? data.funcionalidades : [];
+      const visibleFeatures = featureItems.slice(0, 6);
+      const remainingFeatures = featureItems.slice(6);
+      const features = visibleFeatures.length
+        ? visibleFeatures.map((feature) => `<li>${escapeHtml(featureLabel(feature))}</li>`).join('')
         : '<li>No hay funcionalidades visibles.</li>';
+      const featureDetail = remainingFeatures.length
+        ? `<details class="subscription-feature-detail"><summary>Ver todas las funcionalidades (${escapeHtml(remainingFeatures.length + visibleFeatures.length)})</summary><ul>${remainingFeatures.map((feature) => `<li>${escapeHtml(featureLabel(feature))}</li>`).join('')}</ul></details>`
+        : '';
       root.innerHTML = `
         <div class="subscription-shell" data-subscription-view data-access="${escapeHtml(access.nivel)}">
           <header class="subscription-heading">
             <div>
-              <p class="subscription-eyebrow">Mi suscripcion</p>
+              <p class="subscription-eyebrow">Mi plan</p>
               <h1>${escapeHtml(data.plan?.nombre || 'Sin plan asignado')}</h1>
               <p>${escapeHtml(access.mensaje || 'Consulta el estado de tu suscripcion.')}</p>
             </div>
-            <span class="subscription-status" data-status="${escapeHtml(visibleStatus)}">${escapeHtml(label(visibleStatus))}</span>
+            <span class="subscription-status" data-status="${escapeHtml(visibleStatus)}">${escapeHtml(statusLabel(visibleStatus))}</span>
           </header>
-          ${grace ? '<div class="subscription-notice" role="status"><strong>Modo de solo lectura</strong><span>No puedes registrar ni modificar operaciones durante la gracia.</span></div>' : ''}
-          ${restricted ? '<div class="subscription-notice subscription-notice-critical" role="status"><strong>Acceso comercial restringido</strong><span>Tus datos permanecen conservados.</span></div>' : ''}
+          <section class="subscription-overview" aria-label="Resumen de mi plan">
+            <article><span>Plan actual</span><strong>${escapeHtml(data.plan?.nombre || 'Sin plan asignado')}</strong></article>
+            <article><span>Estado</span><strong>${escapeHtml(statusLabel(visibleStatus))}</strong></article>
+            <article><span>${escapeHtml(relevantDate.label)}</span><strong>${escapeHtml(formatDate(relevantDate.value))}</strong></article>
+          </section>
+          ${grace ? '<div class="subscription-notice" role="status"><strong>Periodo de gracia: solo lectura</strong><span>Puedes consultar la informacion permitida y gestionar tu suscripcion, pero no registrar operaciones comerciales.</span></div>' : ''}
+          ${restricted ? '<div class="subscription-notice subscription-notice-critical" role="status"><strong>Acceso comercial restringido</strong><span>Tus datos permanecen conservados. Consulta esta pagina para conocer la siguiente accion permitida.</span></div>' : ''}
           <section class="subscription-section" aria-labelledby="subscription-period-title">
             <h2 id="subscription-period-title">Periodo actual</h2>
             <dl class="subscription-details">
-              <div><dt>Tipo</dt><dd>${escapeHtml(label(data.tipo))}</dd></div>
-              <div><dt>Periodo</dt><dd>${escapeHtml(label(data.periodo?.tipo))}</dd></div>
+              <div><dt>Tipo</dt><dd>${escapeHtml(statusLabel(data.tipo))}</dd></div>
+              <div><dt>Periodo</dt><dd>${escapeHtml(statusLabel(data.periodo?.tipo))}</dd></div>
               <div><dt>Inicio</dt><dd>${escapeHtml(formatDate(data.fechaInicio))}</dd></div>
               <div><dt>Fin</dt><dd>${escapeHtml(formatDate(data.fechaFin))}</dd></div>
               ${graceRow}
-              <div><dt>Acceso</dt><dd>${escapeHtml(label(access.nivel))}</dd></div>
+              <div><dt>Acceso</dt><dd>${escapeHtml(statusLabel(access.nivel))}</dd></div>
             </dl>
           </section>
           <section class="subscription-section" aria-labelledby="subscription-limits-title">
@@ -161,13 +194,13 @@
           <section class="subscription-section" aria-labelledby="subscription-features-title">
             <h2 id="subscription-features-title">Funcionalidades incluidas</h2>
             <ul class="subscription-features">${features}</ul>
+            ${featureDetail}
           </section>
           ${planChoices(plans)}
           <section id="paymentSubscriptionRoot" class="subscription-section payment-subscription-section" aria-live="polite"></section>
           <div class="subscription-actions">
             ${restricted ? '' : '<a class="button-link secondary" href="/app.html" data-subscription-panel>Volver al panel</a>'}
-            <button type="button" disabled aria-describedby="future-action-help">${data.puedeReactivar ? 'Reactivar' : 'Renovar'}: proximamente</button>
-            <span id="future-action-help">La accion estara disponible en una proxima etapa.</span>
+            <span id="future-action-help">Usa el flujo de pagos manuales para renovar o reactivar cuando tu estado lo permita.</span>
             <button type="button" class="secondary" data-subscription-logout>Cerrar sesion</button>
           </div>
         </div>`;

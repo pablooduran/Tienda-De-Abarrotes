@@ -97,6 +97,8 @@
     "test:product-configuration-browser": "node scripts/test-product-configuration-browser.js",
     "test:product-sales-clients": "node scripts/test-product-sales-clients.js",
     "test:product-sales-clients-browser": "node scripts/test-product-sales-clients-browser.js",
+    "test:product-subscription-admin": "node scripts/test-product-subscription-admin.js",
+    "test:product-subscription-admin-browser": "node scripts/test-product-subscription-admin-browser.js",
     "test:saas-subscription-admin": "node scripts/test-saas-subscription-admin.js",
     "test:saas-subscription-admin-browser": "node scripts/test-saas-subscription-admin-browser.js",
     "test:onboarding": "node scripts/test-onboarding.js",

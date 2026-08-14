@@ -138,6 +138,7 @@ async function main() {
     const page = await browser.newPage({ viewport: { width: 1366, height: 768 } });
     await page.goto(`${baseUrl}/admin.html#suscripciones-saas`);
     await page.locator('#saasSubscriptionsTableBody .table-action').click();
+    await page.locator('#saasDetailActions .saas-more-actions summary').click();
     await page.locator('#saasDetailActions button', { hasText: 'Suspender' }).click();
     await page.locator('#saasSubscriptionActionDialog[open]').waitFor();
     await Promise.all([

@@ -289,7 +289,10 @@ async function listPlans(database = pool, input = {}) {
   const [catalog] = await database.query(
     `SELECT idPlan,codigo,nombre,descripcion,precioMensual,duracionDias,
             limitePropietarios,limiteProductos,limiteClientes,limiteProveedores
-     FROM plan WHERE activo=1 ORDER BY precioMensual,codigo`
+     FROM plan
+     WHERE activo=1 AND visiblePublicamente=1 AND esLegado=0
+       AND codigo IN ('basico','standard','pro')
+     ORDER BY ordenComercial,codigo`
   );
   const usage = input.uso || {};
   const plans = [];

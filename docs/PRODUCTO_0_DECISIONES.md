@@ -164,8 +164,9 @@ seguros de P2.
 
 La busqueda POS no envia `idTienda`, no carga el catalogo completo de clientes y
 mantiene la seleccion opcional de cliente para ventas al contado. La paginacion,
-el limite maximo y la consulta por tenant se validan en backend. P4 queda
-implementado y pendiente de validacion/cierre; P5 no esta iniciado.
+el limite maximo y la consulta por tenant se validan en backend. P4 esta
+cerrado. P5 no incluye roles, secretos, pagos, planes, infraestructura ni una
+segunda auditoria; P5 esta cerrado.
 
 ## Decisiones aun pendientes
 
@@ -192,5 +193,20 @@ permite editar nombre mostrado, moneda BOB, zona horaria America/La_Paz,
 telefono, direccion y dato fiscal basico. El tenant se deriva de la sesion,
 las mutaciones son transaccionales y la vista respeta el modo solo lectura.
 No incluye roles, secretos, pagos, planes, infraestructura ni una segunda
-auditoria. P5 queda implementado y pendiente de validacion/cierre; P6 no esta
-iniciado.
+auditoria. P5 esta cerrado.
+
+### Estado de P6
+
+P6 ordena visualmente **Mi plan** y la administracion SaaS sin cambiar el motor
+de suscripciones ni pagos. El propietario ve plan actual, estado en lenguaje
+claro, fecha relevante, limites, capacidades resumidas y el flujo manual
+existente para renovar, reactivar o cambiar a un plan superior. El catalogo de
+planes de propietario se limita a Basico, Standard y Pro: el plan legado
+avanzado no se publica como opcion.
+
+La superficie de superadmin continua separada en `admin.html`. Agrupa tiendas,
+suscripciones, pagos manuales y control administrativo; las acciones poco
+frecuentes se concentran en **Mas opciones** y las acciones sensibles conservan
+su confirmacion y trazabilidad. P6 no altera tenant, permisos, limites,
+snapshots, precios, tasa, comprobantes ni la aplicacion atomica de pagos. Queda
+implementado y pendiente de validacion/cierre; P7 no esta iniciado.
