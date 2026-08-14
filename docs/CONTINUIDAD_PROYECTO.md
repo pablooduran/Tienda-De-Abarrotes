@@ -761,3 +761,11 @@ listas paginadas, vacio, error seguro, red lenta y doble activacion. Las
 mutaciones de interfaz anuncian actividad y las superficies comunes conservan
 reflow sin overflow de pagina. No modifica backend, rutas, base, permisos,
 tenant ni reglas comerciales. P7E y P8 no estan iniciados.
+
+P7E completa el refinamiento visual final de PRODUCTO-1. En Inicio conserva
+las dos lecturas diarias sin cambiar datos, calculos ni consultas: el resumen
+principal es **Ventas de los ultimos 5 dias** y la participacion diaria queda
+como detalle expandible. Tambien normaliza la lectura de metricas y tablas con
+los tokens existentes. UX-005 queda resuelto tras arnes browser local; no se
+modifican backend, rutas, base, tenant, permisos ni reglas comerciales. P8 no
+esta iniciado y TECH-026 sigue pendiente para sus pruebas finales.

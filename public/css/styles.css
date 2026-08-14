@@ -270,8 +270,10 @@ summary,
   display: grid;
   gap: 4px;
 }
+.metric-card span { line-height: 1.35; }
 .metric-card strong {
   font-size: 24px;
+  font-variant-numeric: tabular-nums;
 }
 .modern-dashboard {
   grid-template-columns: minmax(0, 1.15fr) minmax(300px, 0.85fr);
@@ -283,6 +285,32 @@ summary,
 .chart-panel-wide {
   grid-row: span 2;
 }
+.dashboard-period-detail {
+  align-self: start;
+  min-width: 0;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel);
+  box-shadow: 0 8px 22px rgba(29, 39, 51, 0.035);
+}
+.dashboard-period-detail > summary {
+  display: grid;
+  gap: 3px;
+  grid-template-columns: minmax(0, 1fr) auto;
+  cursor: pointer;
+  list-style: none;
+  color: var(--ink);
+  font-weight: 700;
+}
+.dashboard-period-detail > summary span,
+.dashboard-period-detail > summary small { grid-column: 1; }
+.dashboard-period-detail > summary::-webkit-details-marker { display: none; }
+.dashboard-period-detail > summary::after { content: '+'; grid-column: 2; grid-row: 1 / span 2; align-self: center; color: var(--brand); font-size: 18px; line-height: 1; }
+.dashboard-period-detail[open] > summary::after { content: '-'; }
+.dashboard-period-detail > summary small { color: var(--muted); font-weight: 400; }
+.dashboard-period-detail[open] > summary { margin-bottom: 10px; }
+.dashboard-period-detail-body { border-top: 1px solid var(--line); padding-top: 10px; }
 .panel-title {
   display: flex;
   justify-content: space-between;
@@ -373,7 +401,9 @@ button.small { padding: 7px 10px; font-size: 13px; }
 .table-wrap { overflow-x: auto; }
 table { width: 100%; border-collapse: collapse; background: white; }
 th, td { padding: 10px; border-bottom: 1px solid var(--line); text-align: left; vertical-align: top; }
-th { color: var(--muted); font-size: 13px; }
+thead { background: #f8faf9; }
+th { color: var(--muted); font-size: 13px; font-weight: 700; }
+td { line-height: 1.4; }
 tbody tr:hover { background: #f7faf9; }
 tr.low-stock { background: var(--warn); }
 .actions { display: flex; gap: 6px; flex-wrap: wrap; }

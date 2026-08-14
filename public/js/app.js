@@ -820,10 +820,10 @@ async function inicio() {
         <div class="panel-title"><div><h3>Ventas de los últimos 5 días</h3><p class="muted">Hoy, ayer y los 3 días anteriores.</p></div></div>
         <canvas id="dailyBars"></canvas>
       </div>
-      <div class="panel chart-panel">
-        <div class="panel-title"><div><h3>Proporción por día</h3><p class="muted">Participación de cada día en el total.</p></div></div>
-        <canvas id="dailyPie"></canvas>
-      </div>
+      <details class="dashboard-period-detail">
+        <summary><span>Ver detalle del período</span><small>Participación de cada día en el total.</small></summary>
+        <div class="dashboard-period-detail-body"><canvas id="dailyPie"></canvas></div>
+      </details>
       <div class="panel chart-panel">
         <div class="panel-title"><div><h3>Comparativa semanal</h3><p class="muted">Semana actual frente a la anterior.</p></div></div>
         <canvas id="weekCompare"></canvas>

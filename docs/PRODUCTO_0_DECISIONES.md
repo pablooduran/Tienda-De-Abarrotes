@@ -259,3 +259,14 @@ pagina. Los arneses locales cubren POS, Inventario, Clientes, Configuracion,
 Mi plan y Superadmin con datos sinteticos, sin modificar contratos, tenant,
 permisos ni logica comercial. UX-005 se mantiene para P7E; TECH-026 permanece
 para P8. P7E y P8 no estan iniciados.
+
+### Estado de P7E
+
+P7E completa el polish visual de PRODUCTO-1 sin alterar logica comercial ni
+contratos. En Inicio, **Ventas de los ultimos 5 dias** queda como resumen
+principal y la participacion por dia permanece disponible en **Ver detalle del
+periodo**. Ambas lecturas conservan sus datos y calculos; solo cambia su peso
+visual. Se normalizan cifras de metricas y encabezados de tabla para mejorar la
+lectura operativa. UX-005 queda resuelto en P7E tras validacion browser local.
+
+P8 sigue pendiente y TECH-026 conserva su alcance de E2E critico de negocio.
