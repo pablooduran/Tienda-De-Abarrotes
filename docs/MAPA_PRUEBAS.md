@@ -50,6 +50,7 @@ autorizacion expresa.
 | Backups, restore y health operacional | `routes/health.js`, servicios operativos, `scripts/*backup*` | `npm.cmd run test:operational-health`; `npm.cmd run check:operational-health` | `npm.cmd run test:operational-backup-health`; `npm.cmd run test:operational-monitoring` | `npm.cmd run test:backup-restore` solo con entorno y permisos autorizados | Restore crea `tmp_tienda_restore_*`; backup usa procesos locales | Nunca restaurar la base principal; borrar temporales y esperar procesos hijos |
 | Frontend estatico | `public/js/`, `public/css/`, `public/app.html` | `node --check` de JS tocado | Prueba frontend especifica del modulo; `npm.cmd run check:web-security` | Browser del modulo afectado | No requiere servidor salvo que el arnes lo inicie | Revisar foco, errores y no enviar `idTienda` |
 | Pruebas browser | `scripts/test-*-browser.js`, UI y rutas usadas | `node --check` del arnes | Browser especifico del modulo | Solo cuando cambia UX, contrato visual o se cierra bloque | Edge/servidor temporal segun arnes | Timeout explicito, `finally`, consola limpia; no cerrar Edge del usuario |
+| E2E critico de negocio | `scripts/test-e2e-critical-business.js`, flujos de propietario y contratos HTTP/DB existentes | `npm.cmd run test:e2e-critical-business` | tenant, inventario, ventas, credito, compensaciones, suscripciones y seguridad web | Gate browser unico de CI; no sustituye las suites especializadas | Base temporal 001-024, Express y navegador locales; Edge en Windows y Chrome/Chromium preinstalado en Linux | Ejecutar en serie; eliminar base, servidor y browser propios en `finally`; detener ante stock, saldo, tenant o idempotencia incoherentes |
 | Migraciones y esquema | `database/migrations/`, `database/tienda_abarrotes.sql`, `scripts/migrate-db.js` | `node --check`; revision SQL; `git diff --check` | Comprobador del dominio y huella de solo lectura | Regresion afectada; readiness despues de aplicacion autorizada | Probar primero en base temporal | Detener ante migracion parcial o cambio comercial inesperado; no aplicar principal sin autorizacion |
 | Revision administrativa de pagos | `routes/admin-payment-reviews.js`, `services/saas-c-payment-review-service.js`, contratos C3/C4 | `node --check`; `npm.cmd run test:saas-c-payment-reviews`; `npm.cmd run test:saas-c-payment-review-security` | C3, C2, tenant, auditoria y seguridad web | Validar superadmin, tenant explicito, comprobante privado, transiciones e idempotencia | Sin aplicar pagos; limpiar fixtures, revisiones y archivos privados atribuibles |
 | Aplicacion de pagos de suscripcion | `services/saas-c-payment-application-service.js`, ruta administrativa y contrato C5 | `node --check`; `npm.cmd run test:saas-c-payment-applications`; `npm.cmd run test:saas-c-payment-application-security` | C4, C3, C2, B2, B4, esquema C, tenant, auditoria y seguridad web | No agrega frontend; validar snapshot congelado, superadmin, estado exacto, idempotencia, carrera y rollback | Fixtures sinteticos locales; borrar aplicaciones, revisiones, historiales, operaciones, solicitudes, tasa/metodo de prueba y tenants en `finally` |
@@ -79,9 +80,13 @@ efimero. Con `APP_ENV=local`, `DB_HOST=localhost` y credenciales sinteticas
 ejecuta `db:init`, `db:migrate`, el ensayo estructural 001-024 y los
 comprobadores de SAAS-C, multitienda, auditoria, seguridad web, suscripciones y
 pagos manuales. Tambien ejecuta `test:staging-configuration` con dobles, sin
-conectar a una infraestructura de staging. Las suites que comparten fixtures se ejecutan en serie y el
-servidor HTTP se cierra incluso ante fallo.
+conectar a una infraestructura de staging. P8 agrega un unico gate browser con
+`test:e2e-critical-business`: usa Chrome/Chromium ya disponible en Linux, Edge
+o Chrome local en Windows y no descarga navegadores. Las suites que comparten
+fixtures se ejecutan en serie y los servidores HTTP se cierran incluso ante
+fallo.
 
-CI no despliega, no lee archivos `.env`, no usa backups ni datos reales y no
-ejecuta arneses browser que requieren Edge local. Antes de staging debe
-ejecutarse la validacion browser aplicable desde un entorno local controlado.
+CI no despliega, no lee archivos `.env`, no usa backups ni datos reales. El
+gate critico no reemplaza los arneses browser especializados de P1-P7, que
+siguen ejecutandose localmente cuando cambia su superficie. La incorporacion
+del gate queda pendiente de verificacion remota hasta publicar P8.

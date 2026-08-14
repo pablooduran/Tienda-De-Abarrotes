@@ -713,6 +713,12 @@ Han sido validadas en bloques anteriores:
   CI y browser de propietario/superadmin validados. La correccion publicada
   conserva `clasificacionInventario` al devolver unidades vendibles al lote
   original.
+- PRODUCTO-1 P8: la regresion distribuida vuelve a validar autenticacion,
+  tenant, inventario, ventas, clientes, compensaciones, suscripciones, pagos,
+  seguridad y P1-P7. El nuevo `test:e2e-critical-business` completa tres
+  ejecuciones locales consecutivas sobre base temporal 001-024 y comprueba el
+  recorrido critico, sus invariantes y la limpieza sin modificar la base
+  principal.
 
 Estos resultados corresponden al ultimo estado conocido. Antes de iniciar el siguiente bloque, repetir las comprobaciones relevantes en localhost y registrar resultados exactos.
 
@@ -732,14 +738,14 @@ existe facturacion fiscal ni se inicia una beta.
 
 Las macrofases de **seguridad publica final**, **CI / GitHub Actions**,
 **STAGING-1**, **PREPROD-1** y **REGRESION GENERAL** estan cerradas y
-publicadas. DOCS-OPS y PRODUCTO-0A/0B estan cerrados. PRODUCTO-1 P1-P5 estan
+publicadas. DOCS-OPS y PRODUCTO-0A/0B estan cerrados. PRODUCTO-1 P1-P7 estan
 cerrados. P6 ordena Mi plan y la administracion SaaS sin alterar el motor de
 suscripciones, pagos manuales, limites, snapshots, tenant o permisos. Para el
 propietario, el catalogo publico queda limitado a Basico, Standard y Pro; el
 plan avanzado legado no se ofrece como opcion. P6 esta cerrado. P7A crea la
 base formal de diseno con `DESIGN.md` y `$product-design-review`, sin alterar
 HTML, CSS, JavaScript, rutas, permisos, tenant, planes, pagos ni logica
-comercial. P7B-P7E y P8 no estan iniciados. STAGING-2B queda diferido
+comercial. STAGING-2B queda diferido
 hasta la revision final del propietario, una decision de proveedor/topologia y
 autorizacion expresa de gasto; cualquier despliegue sigue requiriendo
 autorizacion separada.
@@ -767,5 +773,11 @@ las dos lecturas diarias sin cambiar datos, calculos ni consultas: el resumen
 principal es **Ventas de los ultimos 5 dias** y la participacion diaria queda
 como detalle expandible. Tambien normaliza la lectura de metricas y tablas con
 los tokens existentes. UX-005 queda resuelto tras arnes browser local; no se
-modifican backend, rutas, base, tenant, permisos ni reglas comerciales. P8 no
-esta iniciado y TECH-026 sigue pendiente para sus pruebas finales.
+modifican backend, rutas, base, tenant, permisos ni reglas comerciales.
+
+P8 implementa la regresion final de PRODUCTO-1 y el usuario robot TECH-026. El
+recorrido local pasa 3/3 sobre datos sinteticos aislados y comprueba producto,
+compra, venta, stock, cliente, credito, cobranza, devolucion, reportes, Mi plan
+y tenant. El workflow queda preparado para usarlo como gate browser sin
+descargar binarios; la verificacion de ese gate en GitHub permanece pendiente
+hasta publicar P8. No se inician WELCOME, HELP, COMMERCE ni SECURITY-FINAL.

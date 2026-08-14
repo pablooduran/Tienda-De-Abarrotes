@@ -61,7 +61,7 @@ Las migraciones son posibilidades; ninguna se crea por estar mencionada aqui.
 | TECH-011 | Roles internos | Solo existen `superadmin` y `dueno_tienda` | alta antes de beta | permisos, invitaciones, sesiones, limites y auditoria | Probable nueva estructura de roles | Requiere decision del propietario; pendiente | SAAS futuro |
 | TECH-012 | Editor seguro de planes | Los planes, precios y funcionalidades requieren gobierno versionado | media | superadmin, snapshots, auditoria y no retroactividad | Posible versionado adicional | Pendiente | SAAS futuro |
 | TECH-013 | Cambio definitivo de precios y limites | Los valores C1 son provisionales | alta antes de lanzamiento | moneda, periodos, snapshot y comunicacion comercial | C1 ya deja estructura; revisar si hace falta otra | Requiere decision del propietario | SAAS futuro |
-| TECH-026 | E2E critico de negocio / usuario robot | La regresion cubre modulos, pero falta un recorrido completo desde la tarea del propietario | critica antes de pruebas finales | tienda, producto, compra, venta, stock, cliente, credito, cobranza, devolucion/anulacion, reportes y suscripcion/pago; valida continuidad y limpieza | No | Pendiente; no iniciar durante P7A | P8 / pruebas finales |
+| TECH-026 | E2E critico de negocio / usuario robot | P8 agrega el recorrido local y el gate al workflow; falta verificar su ejecucion remota tras publicar | critica antes de pruebas finales | tienda, producto, compra, venta, stock, cliente, credito, cobranza, devolucion/anulacion, reportes y suscripcion/pago; valida continuidad y limpieza | No | Parcial: recorrido local 3/3 PASS; gate CI pendiente de verificacion remota | P8 / cierre remoto |
 | TECH-014 | Fuente operativa USD/BOB | C1 permite carga manual, sin tasa sembrada ni API | alta antes de solicitudes cobrables | vigencia, precision, redondeo, fallback y auditoria | C1 ya contiene versionado | Requiere decision del propietario | SAAS-C2 |
 | TECH-015 | Pagos automaticos | C1 excluye tarjetas, webhooks y cobro recurrente | futura | proveedor, cumplimiento, conciliacion y sesiones | Por determinar | Diferido | SAAS-C posterior |
 | TECH-016 | Producto visual PRODUCTO-0 | El rediseño general no se incluyo en SAAS-A/B/C1 | media antes de beta | inventario de pantallas, lenguaje visual y pruebas de usabilidad | No | Propuesta de trabajo; en analisis | PRODUCTO-0 |
@@ -378,6 +378,7 @@ autoriza por si sola el inicio de ninguna fase.
 | 2026-08-13 | REGRESION GENERAL | Regresion integral cerrada; correccion de devolucion vendible al lote original | Codex | HEAD `eb53214` |
 | 2026-08-13 | DOCS-OPS / PRODUCTO-0A | Documentacion operativa cerrada y auditoria funcional/UX iniciada sin cambios de producto | Codex | HEAD `059b086` |
 | 2026-08-13 | PRODUCTO-0B | Decisiones de navegacion, lenguaje, configuracion, filtros, carga y SECURITY-FINAL registradas sin implementacion | Codex | HEAD `d6902c5` |
+| 2026-08-14 | PRODUCTO-1 P8 | TECH-026 implementado y validado localmente 3/3; gate browser agregado al workflow, pendiente de verificacion remota | Codex | Base `1f0e1f9` |
 
 ## 20. Regla permanente
 

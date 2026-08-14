@@ -100,6 +100,7 @@
     "test:product-ui-hardening-browser": "node scripts/test-product-ui-hardening-browser.js",
     "test:product-ui-polish": "node scripts/test-product-ui-polish.js",
     "test:product-ui-polish-browser": "node scripts/test-product-ui-polish-browser.js",
+    "test:e2e-critical-business": "node scripts/test-e2e-critical-business.js",
     "test:product-inventory": "node scripts/test-product-inventory.js",
     "test:product-inventory-browser": "node scripts/test-product-inventory-browser.js",
     "test:product-configuration": "node scripts/test-product-configuration.js",

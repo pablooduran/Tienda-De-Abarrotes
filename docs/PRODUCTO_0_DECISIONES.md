@@ -270,3 +270,21 @@ visual. Se normalizan cifras de metricas y encabezados de tabla para mejorar la
 lectura operativa. UX-005 queda resuelto en P7E tras validacion browser local.
 
 P8 sigue pendiente y TECH-026 conserva su alcance de E2E critico de negocio.
+
+### Estado de P8
+
+P8 incorpora `test:e2e-critical-business`, un recorrido hibrido de propietario
+que usa browser para login, Productos, POS, Clientes, historial y Mi plan, y
+HTTP/DB de prueba para preparar datos y comprobar invariantes. Sobre una base
+temporal 001-024 valida producto, proveedor, compra, venta, stock, cliente,
+credito, cobranza, devolucion, reportes, suscripcion y aislamiento entre dos
+tenants. El recorrido paso tres ejecuciones consecutivas y limpia base,
+servidor y navegador propios.
+
+El flujo completo de comprobante, revision y aplicacion de pagos conserva su
+cobertura especializada C2-C6; el robot critico valida Mi plan, catalogo
+publico y disponibilidad de cotizacion, sin afirmar que esa administracion se
+realiza enteramente por clicks. El workflow incorpora el robot como gate
+browser portable, pero su ejecucion remota solo puede confirmarse despues de
+publicar P8. Por ello TECH-026 queda parcialmente resuelto y P8 implementado,
+pendiente de cierre; WELCOME, HELP, COMMERCE y SECURITY-FINAL no se inician.

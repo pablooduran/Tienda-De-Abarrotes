@@ -25,6 +25,7 @@ function checkWorkflow(source) {
     'npm run db:check-saas-c',
     'npm run test:tenant-isolation',
     'npm run test:administrative-audit',
+    'npm run test:e2e-critical-business',
     'npm run check:web-security',
     'npm run test:web-security'
   ];
@@ -33,6 +34,8 @@ function checkWorkflow(source) {
   for (const forbidden of [/\.env\.local/i, /aiven/i, /render\.com/i, /deploy/i, /DATABASE_URL\s*:/i]) {
     assert(!forbidden.test(source), `El workflow incluye una referencia no permitida: ${forbidden}.`);
   }
+  assert(!/playwright\s+install/i.test(source),
+    'El gate browser no debe descargar navegadores durante CI.');
 }
 
 try {
