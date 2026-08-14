@@ -237,3 +237,14 @@ planes, pagos y logica comercial.
 El duplicado visual de las dos lecturas del periodo diario en Inicio queda como
 UX-005 para P7E: requiere una decision de jerarquia analitica, no un cambio de
 datos. P7C-P7E y P8 siguen pendientes.
+
+### Estado de P7C
+
+P7C revisa login, onboarding, Inicio, POS, Inventario, Clientes,
+Configuracion, Mi plan y superadmin en los tres viewports acordados. No
+encuentra P0. Corrige la semantica, foco inicial y retorno de foco de los
+dialogos de configuracion, ajuste, motivo y gasto, restaura foco tras guardar
+un producto,
+normaliza foco visible para enlaces y resumenes, y aplica reduced motion a las
+transiciones no esenciales. No cambia rutas, APIs, permisos, tenant, planes ni
+logica comercial. P7D, P7E y P8 siguen pendientes.

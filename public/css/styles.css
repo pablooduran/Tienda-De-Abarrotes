@@ -1575,7 +1575,9 @@ tr.low-stock { background: var(--warn); }
 button:focus-visible,
 input:focus-visible,
 select:focus-visible,
-textarea:focus-visible { outline: 3px solid rgba(40, 106, 89, .28); outline-offset: 2px; }
+textarea:focus-visible,
+a:focus-visible,
+summary:focus-visible { outline: 3px solid rgba(40, 106, 89, .45); outline-offset: 2px; }
 .sr-only {
   position: absolute;
   width: 1px;
@@ -1993,7 +1995,9 @@ textarea:focus-visible { outline: 3px solid rgba(40, 106, 89, .28); outline-offs
 .filter-actions { display: flex; gap: 8px; flex-wrap: wrap; }
 button.is-busy { cursor: wait; opacity: .72; }
 @keyframes uiSkeleton { from { background-position: 200% 0; } to { background-position: -200% 0; } }
-@media (prefers-reduced-motion: reduce) { .ui-skeleton span { animation: none; } }
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; scroll-behavior: auto !important; transition-duration: .01ms !important; }
+}
 
 .inventory-workspace-nav {
   display: flex;

@@ -749,3 +749,9 @@ normaliza jerarquia, copy y acciones secundarias en Inicio, Mi plan y
 superadmin sin cambiar backend, contratos, permisos, tenant ni reglas
 comerciales. La revision de jerarquia analitica del Inicio queda registrada
 como UX-005 para P7E. P7C-P7E y P8 no estan iniciados.
+
+P7C completa la pasada transversal de responsive y accesibilidad: los arneses
+locales confirman reflow en 360x800, 768x1024 y 1366x768 sin overflow de pagina
+en las superficies revisadas. Se endurecen foco, reduced motion y los dialogos
+operativos revisados sin tocar backend ni contratos. P7D, P7E y P8 no estan
+iniciados.

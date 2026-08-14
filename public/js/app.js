@@ -1050,7 +1050,8 @@ async function openProductModal(row = {}) {
     await api(`/api/productos${isEdit ? `/${row.idProducto}` : ''}`, { method: isEdit ? 'PUT' : 'POST', body: JSON.stringify(data) });
     modalRoot.innerHTML = '';
     await showSuccess('Producto guardado.');
-    loadView('productos');
+    await loadView('productos');
+    document.querySelector(isEdit ? `[data-edit="${row.idProducto}"]` : '#addProduct')?.focus();
   } catch (error) { showError(error.message); }
 }
 
@@ -1415,8 +1416,9 @@ function movementTable(rows, { includeProduct = true } = {}) {
 
 function requestStockAdjustment(product) {
   return new Promise((resolve) => {
-    modalRoot.innerHTML = `<div class="modal-backdrop"><div class="modal">
-      <h3>Ajustar stock de ${escapeHtml(product.nombre)}</h3>
+    const returnFocus = document.activeElement;
+    modalRoot.innerHTML = `<div class="modal-backdrop"><div class="modal" role="dialog" aria-modal="true" aria-labelledby="stockAdjustmentTitle">
+      <h3 id="stockAdjustmentTitle">Ajustar stock de ${escapeHtml(product.nombre)}</h3>
       <div class="modal-body"><form id="stockAdjustmentForm" class="grid">
         <p class="wide stock-adjustment-summary">Stock actual: <strong>${intValue(product.stockUnidadesTotal)} unidades base</strong></p>
         <label>Nuevo stock contado<input name="nuevoStock" type="number" min="0" step="1" required value="${Number(product.stockUnidadesTotal || 0)}"></label>
@@ -1432,6 +1434,7 @@ function requestStockAdjustment(product) {
     const close = (value) => {
       passwordInput.value = '';
       modalRoot.innerHTML = '';
+      returnFocus?.focus?.();
       resolve(value);
     };
     modalRoot.querySelector('[data-modal-cancel]').addEventListener('click', () => close(null));
@@ -1439,6 +1442,7 @@ function requestStockAdjustment(product) {
       if (!form.reportValidity()) return;
       close(formData(form));
     });
+    form.querySelector('[name="nuevoStock"]')?.focus();
   });
 }
 
@@ -2226,6 +2230,7 @@ async function copyReceiptText(text) {
 }
 
 function showSaleReceipt(receipt) {
+  const returnFocus = document.activeElement;
   const text = receiptText(receipt);
   const whatsappUrl = receipt.whatsappUrl || '';
   modalRoot.innerHTML = `
@@ -2239,7 +2244,10 @@ function showSaleReceipt(receipt) {
         <button type="button" data-modal-confirm>Cerrar</button>
       </div>
     </div></div>`;
-  modalRoot.querySelector('[data-modal-confirm]').addEventListener('click', () => { modalRoot.innerHTML = ''; });
+  modalRoot.querySelector('[data-modal-confirm]').addEventListener('click', () => {
+    modalRoot.innerHTML = '';
+    returnFocus?.focus?.();
+  });
   modalRoot.querySelector('[data-receipt-copy]').addEventListener('click', async () => {
     try { await copyReceiptText(text); showMessage('Comprobante copiado.'); } catch { showError('No se pudo copiar el comprobante.'); }
   });
@@ -2635,26 +2643,33 @@ function financeQuery(form) {
 
 async function requestReason(modalTitle, label) {
   return new Promise((resolve) => {
-    modalRoot.innerHTML = `<div class="modal-backdrop"><form class="modal" id="reasonForm">
-      <h3>${escapeHtml(modalTitle)}</h3>
+    const returnFocus = document.activeElement;
+    modalRoot.innerHTML = `<div class="modal-backdrop"><form class="modal" id="reasonForm" role="dialog" aria-modal="true" aria-labelledby="reasonFormTitle">
+      <h3 id="reasonFormTitle">${escapeHtml(modalTitle)}</h3>
       <div class="modal-body"><label>${escapeHtml(label)}<textarea name="motivo" minlength="8" maxlength="300" required></textarea></label></div>
       <div class="modal-actions"><button type="button" class="secondary" data-cancel>Cancelar</button><button type="submit" class="danger">Confirmar</button></div>
     </form></div>`;
-    const close = (value) => { modalRoot.innerHTML = ''; resolve(value); };
+    const close = (value) => {
+      modalRoot.innerHTML = '';
+      returnFocus?.focus?.();
+      resolve(value);
+    };
     modalRoot.querySelector('[data-cancel]').addEventListener('click', () => close(null));
     modalRoot.querySelector('#reasonForm').addEventListener('submit', (event) => {
       event.preventDefault();
       const reason = new FormData(event.target).get('motivo').trim();
       if (reason.length >= 8) close(reason);
     });
+    modalRoot.querySelector('[name="motivo"]')?.focus();
   });
 }
 
 async function expenseEditor(expense = null) {
   const categories = await api('/api/gastos/categorias');
   return new Promise((resolve) => {
-    modalRoot.innerHTML = `<div class="modal-backdrop"><form class="modal modal-wide" id="expenseForm">
-      <h3>${expense ? 'Editar gasto' : 'Registrar gasto'}</h3>
+    const returnFocus = document.activeElement;
+    modalRoot.innerHTML = `<div class="modal-backdrop"><form class="modal modal-wide" id="expenseForm" role="dialog" aria-modal="true" aria-labelledby="expenseFormTitle">
+      <h3 id="expenseFormTitle">${expense ? 'Editar gasto' : 'Registrar gasto'}</h3>
       <div class="modal-body form-grid">
         <label>Categoría<select name="idCategoriaGasto" required>${options(categories, 'idCategoriaGasto', 'nombre', 'Seleccione', expense?.idCategoriaGasto)}</select></label>
         <label>Fecha y hora<input name="fechaGasto" type="datetime-local" step="1" required value="${expense ? localDateTimeValue(expense.fechaGasto) : localDateTimeValue()}"></label>
@@ -2670,7 +2685,11 @@ async function expenseEditor(expense = null) {
       </div>
       <div class="modal-actions"><button type="button" class="secondary" data-cancel>Cancelar</button><button type="submit">Guardar</button></div>
     </form></div>`;
-    const close = (value) => { modalRoot.innerHTML = ''; resolve(value); };
+    const close = (value) => {
+      modalRoot.innerHTML = '';
+      returnFocus?.focus?.();
+      resolve(value);
+    };
     modalRoot.querySelector('[data-cancel]').addEventListener('click', () => close(false));
     modalRoot.querySelector('#expenseForm').addEventListener('submit', async (event) => {
       event.preventDefault();
@@ -2683,6 +2702,7 @@ async function expenseEditor(expense = null) {
         close(true);
       } catch (error) { modalRoot.querySelector('[data-form-error]').textContent = error.message; }
     });
+    modalRoot.querySelector('[name="idCategoriaGasto"]')?.focus();
   });
 }
 
@@ -3272,12 +3292,13 @@ async function saveInventoryConfiguration(event) {
 async function openInventoryProductConfiguration(idProducto) {
   if (state.context?.soloLectura) return showError('La cuenta está en modo de solo lectura.');
   try {
+    const returnFocus = document.activeElement;
     const data = await api(`/api/inventario-inteligente/configuracion?producto=${encodeURIComponent(idProducto)}&limite=1`);
     const product = data.productos?.rows?.[0];
     if (!product) throw new Error('No se encontró el producto dentro de esta tienda.');
     const packageAvailable = Number(product.unidadesPorPaquete) > 1;
-    modalRoot.innerHTML = `<div class="modal-backdrop"><form class="modal" id="inventoryProductConfigurationForm">
-      <h3>Configurar ${escapeHtml(product.nombre)}</h3>
+    modalRoot.innerHTML = `<div class="modal-backdrop"><form class="modal" id="inventoryProductConfigurationForm" role="dialog" aria-modal="true" aria-labelledby="inventoryProductConfigurationTitle">
+      <h3 id="inventoryProductConfigurationTitle">Configurar ${escapeHtml(product.nombre)}</h3>
       <div class="modal-body inventory-product-config">
         <p class="muted">Deje un campo vacío para usar la configuración general de la tienda.</p>
         <label>Días de reposición<input name="diasReposicion" type="number" min="0" max="365" step="1" value="${escapeHtml(product.diasReposicion ?? '')}" placeholder="Automático"></label>
@@ -3289,7 +3310,12 @@ async function openInventoryProductConfiguration(idProducto) {
       <div class="modal-actions"><button type="button" class="secondary" data-modal-cancel>Cancelar</button><button type="submit" data-inventory-write>Guardar</button></div>
     </form></div>`;
     const form = document.getElementById('inventoryProductConfigurationForm');
-    modalRoot.querySelector('[data-modal-cancel]').addEventListener('click', () => { modalRoot.innerHTML = ''; });
+    const close = () => {
+      modalRoot.innerHTML = '';
+      returnFocus?.focus?.();
+    };
+    modalRoot.querySelector('[data-modal-cancel]').addEventListener('click', close);
+    form.querySelector('input, select')?.focus();
     form.addEventListener('submit', async (event) => {
       event.preventDefault();
       const values = formData(form);
@@ -3309,10 +3335,11 @@ async function openInventoryProductConfiguration(idProducto) {
         };
         submit.disabled = true;
         await api(`/api/productos/${encodeURIComponent(idProducto)}/configuracion-inventario`, { method: 'PATCH', body: JSON.stringify(body) });
-        modalRoot.innerHTML = '';
+        close();
         inventoryUi.data = {};
         await showSuccess('Configuración del producto actualizada.');
         await loadInventoryActiveTab(true);
+        document.querySelector('[data-inventory-tab].active')?.focus();
       } catch (error) {
         errorTarget.textContent = error.message;
         submit.disabled = false;
