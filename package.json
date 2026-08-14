@@ -92,6 +92,8 @@
     "test:product-ux": "node scripts/test-product-ux.js",
     "test:product-ux-browser": "node scripts/test-product-ux-browser.js",
     "test:product-design-foundation": "node scripts/test-product-design-foundation.js",
+    "test:product-design-consistency": "node scripts/test-product-design-consistency.js",
+    "test:product-design-consistency-browser": "node scripts/test-product-design-consistency-browser.js",
     "test:product-inventory": "node scripts/test-product-inventory.js",
     "test:product-inventory-browser": "node scripts/test-product-inventory-browser.js",
     "test:product-configuration": "node scripts/test-product-configuration.js",

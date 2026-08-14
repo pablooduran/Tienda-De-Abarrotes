@@ -106,7 +106,7 @@ function validatePhoneValue(value) {
   return !value || /^\d+$/.test(String(value).trim());
 }
 
-function modal({ title: modalTitle, body, confirmText = 'Aceptar', cancelText = '', danger = false, wide = false, preserveOnConfirm = false, onOpen = null }) {
+function modal({ title: modalTitle, body, confirmText = 'Cerrar', cancelText = '', danger = false, wide = false, preserveOnConfirm = false, onOpen = null }) {
   return new Promise((resolve) => {
     const returnFocus = document.activeElement;
     modalRoot.innerHTML = `
@@ -167,7 +167,7 @@ document.addEventListener('keydown', (event) => {
   }
 });
 function showError(error) { return modal({ title: 'No se pudo completar', body: `<p>${escapeHtml(UiPatterns.messageFor(error))}</p>`, confirmText: 'Entendido', danger: true }); }
-function showSuccess(text) { return modal({ title: 'Listo', body: `<p>${escapeHtml(text)}</p>`, confirmText: 'Aceptar' }); }
+function showSuccess(text) { return modal({ title: 'Listo', body: `<p>${escapeHtml(text)}</p>`, confirmText: 'Cerrar' }); }
 function confirmAction(text, danger = false) { return modal({ title: 'Confirmar acción', body: `<p>${escapeHtml(text)}</p>`, confirmText: 'Confirmar', cancelText: 'Cancelar', danger }); }
 
 function requestAdminPassword(actionText) {
@@ -795,8 +795,8 @@ async function inicio() {
     <div class="dashboard-hero">
       <div>
         <span class="eyebrow">Resumen de ventas</span>
-        <h3>Movimiento del negocio</h3>
-        <p>Comparación visual con datos reales de ventas registradas.</p>
+        <h3>Resumen de hoy</h3>
+        <p>Ventas, cobros, inventario y alertas para decidir que revisar.</p>
       </div>
       <div class="hero-total">
         <span>Ventas de hoy</span>
@@ -852,7 +852,7 @@ function renderCrud(type, rows, fields, idField, ui = {}) {
   const formHtml = (row = {}) => `
     <form class="grid" id="${type}Form" data-id="${row[idField] || ''}">
       ${fields.map((field) => `<label>${field.label}<input name="${field.name}" value="${escapeHtml(row[field.name] || '')}" ${field.phone ? 'inputmode="numeric" pattern="[0-9]*"' : ''} ${field.required ? 'required' : ''}></label>`).join('')}
-      <button type="submit">${row[idField] ? 'Actualizar' : primaryAction}</button>
+      <button type="submit">${row[idField] ? 'Guardar cambios' : primaryAction}</button>
     </form>`;
   const table = rows.length ? `<div class="panel table-wrap"><table>
       <thead><tr>${fields.map((f) => `<th>${f.label}</th>`).join('')}<th>Acciones</th></tr></thead>
@@ -1039,7 +1039,7 @@ function wireProductForm() {
 
 async function openProductModal(row = {}) {
   const isEdit = Boolean(row.idProducto);
-  const ok = await modal({ title: isEdit ? 'Editar producto' : 'Añadir producto', body: productForm(row), confirmText: isEdit ? 'Actualizar' : 'Guardar', cancelText: 'Cancelar', wide: true, preserveOnConfirm: true, onOpen: wireProductForm });
+  const ok = await modal({ title: isEdit ? 'Editar producto' : 'Añadir producto', body: productForm(row), confirmText: isEdit ? 'Guardar cambios' : 'Agregar producto', cancelText: 'Cancelar', wide: true, preserveOnConfirm: true, onOpen: wireProductForm });
   if (!ok) return;
   const form = document.getElementById('productoForm');
   const data = formData(form);

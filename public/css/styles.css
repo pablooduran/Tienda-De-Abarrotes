@@ -2568,6 +2568,8 @@ button.is-busy { cursor: wait; opacity: .72; }
 .payment-flow { display: flex; flex-wrap: wrap; gap: 8px; margin: 0; padding: 0; list-style: none; }
 .payment-flow li { padding: 6px 9px; border: 1px solid var(--line); border-radius: 5px; background: #fff; color: var(--muted); font-size: 13px; }
 .payment-form-actions { display: flex; flex-wrap: wrap; gap: 8px; grid-column: 1 / -1; }
+.payment-form-actions .payment-primary { border-color: var(--brand); background: var(--brand); color: #fff; }
+.payment-form-actions .payment-primary:hover { border-color: var(--brand-dark); background: var(--brand-dark); }
 .payment-quote,
 .payment-instructions,
 .payment-observation { padding: 13px; border-left: 4px solid #1f5f8b; background: #eaf4fb; }

@@ -224,3 +224,16 @@ Inicio, POS, Inventario, Clientes, Configuracion, Mi plan y superadmin.
 
 No cambia HTML, CSS, JavaScript, rutas, permisos, tenant, planes, pagos o
 logica comercial. P7B-P7E y P8 siguen pendientes.
+
+### Estado de P7B
+
+P7B aplica la primera critique transversal con `DESIGN.md` sobre Inicio, POS,
+Inventario, Clientes, Configuracion, Mi plan y superadmin. No hubo hallazgos
+P0. Corrige la jerarquia de Inicio y Mi plan, normaliza copy operativo de
+cierre y guardado, y agrupa en **Mas opciones** las acciones administrativas
+poco frecuentes o destructivas. Mantiene handlers, rutas, permisos, tenant,
+planes, pagos y logica comercial.
+
+El duplicado visual de las dos lecturas del periodo diario en Inicio queda como
+UX-005 para P7E: requiere una decision de jerarquia analitica, no un cambio de
+datos. P7C-P7E y P8 siguen pendientes.

@@ -743,3 +743,9 @@ comercial. P7B-P7E y P8 no estan iniciados. STAGING-2B queda diferido
 hasta la revision final del propietario, una decision de proveedor/topologia y
 autorizacion expresa de gasto; cualquier despliegue sigue requiriendo
 autorizacion separada.
+
+P7B realiza la primera critique transversal con `DESIGN.md`: no encuentra P0,
+normaliza jerarquia, copy y acciones secundarias en Inicio, Mi plan y
+superadmin sin cambiar backend, contratos, permisos, tenant ni reglas
+comerciales. La revision de jerarquia analitica del Inicio queda registrada
+como UX-005 para P7E. P7C-P7E y P8 no estan iniciados.

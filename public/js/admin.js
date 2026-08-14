@@ -230,12 +230,14 @@ function renderSubscriptions() {
   state.subscriptions.forEach((subscription) => {
     const actions = document.createElement('div');
     actions.className = 'button-row';
+    const secondary = [];
     if (['activa', 'pendiente'].includes(subscription.estado)) {
-      actions.append(ownerAction('Suspender', 'button-secondary', () => changeSubscriptionStatus(subscription, 'suspender')));
+      secondary.push(ownerAction('Suspender', 'button-secondary', () => changeSubscriptionStatus(subscription, 'suspender')));
     }
     if (subscription.estado !== 'cancelada') {
-      actions.append(ownerAction('Cancelar', 'button-danger', () => changeSubscriptionStatus(subscription, 'cancelar')));
+      secondary.push(ownerAction('Cancelar', 'button-danger', () => changeSubscriptionStatus(subscription, 'cancelar')));
     }
+    if (secondary.length) actions.append(adminMoreActions(secondary));
     const row = document.createElement('tr');
     row.append(
       tableCell(subscription.planNombre),
@@ -259,6 +261,18 @@ function ownerAction(label, className, action) {
   return button;
 }
 
+function adminMoreActions(buttons) {
+  const details = document.createElement('details');
+  details.className = 'admin-more-actions';
+  const summary = document.createElement('summary');
+  summary.textContent = 'Mas opciones';
+  const list = document.createElement('div');
+  list.className = 'button-row';
+  list.append(...buttons);
+  details.append(summary, list);
+  return details;
+}
+
 function renderOwners() {
   elements.ownersTableBody.replaceChildren();
   elements.emptyOwners.hidden = state.owners.length > 0;
@@ -269,15 +283,15 @@ function renderOwners() {
     access.textContent = isActive(owner.activo) ? 'Activo' : 'Inactivo';
     const actions = document.createElement('div');
     actions.className = 'button-row';
-    actions.append(
-      ownerAction('Editar usuario', 'button-secondary', () => editOwner(owner)),
+    actions.append(ownerAction('Editar usuario', 'button-secondary', () => editOwner(owner)));
+    actions.append(adminMoreActions([
       ownerAction('Nueva contraseña', 'button-secondary', () => resetOwnerPassword(owner)),
       ownerAction(
         isActive(owner.activo) ? 'Desactivar' : 'Activar',
         isActive(owner.activo) ? 'button-danger' : 'button-primary',
         () => toggleOwner(owner)
       )
-    );
+    ]));
     row.append(tableCell(owner.usuario), tableCell(access), tableCell(actions));
     elements.ownersTableBody.appendChild(row);
   });
@@ -663,11 +677,11 @@ function renderMasterProducts() {
     name.append(strong, description);
     const actions = document.createElement('div');
     actions.className = 'button-row';
-    actions.append(
-      ownerAction('Editar', 'button-secondary', () => openMasterProduct(product)),
+    actions.append(ownerAction('Editar', 'button-secondary', () => openMasterProduct(product)));
+    actions.append(adminMoreActions([
       ownerAction(isActive(product.activo) ? 'Desactivar' : 'Activar',
         isActive(product.activo) ? 'button-danger' : 'button-primary', () => toggleMasterProduct(product))
-    );
+    ]));
     const row = document.createElement('tr');
     row.append(
       tableCell(name),
@@ -698,11 +712,11 @@ function renderTaxonomy(kind) {
     name.textContent = row.nombre;
     const actions = document.createElement('div');
     actions.className = 'taxonomy-actions';
-    actions.append(
-      ownerAction('Editar', 'button-secondary', () => openTaxonomy(kind, row)),
+    actions.append(ownerAction('Editar', 'button-secondary', () => openTaxonomy(kind, row)));
+    actions.append(adminMoreActions([
       ownerAction(isActive(row.activo) ? 'Desactivar' : 'Activar',
         isActive(row.activo) ? 'button-danger' : 'button-primary', () => toggleTaxonomy(kind, row))
-    );
+    ]));
     item.append(name, actions);
     target.appendChild(item);
   });
