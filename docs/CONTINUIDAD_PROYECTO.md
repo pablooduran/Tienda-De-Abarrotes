@@ -819,6 +819,13 @@ WELCOME y HELP emiten eventos UX locales sin red. Los eventos de negocio siguen
 reservados para emisiones posteriores al commit exitoso; analytics no persiste,
 no usa cookies y nunca puede interrumpir una operacion comercial.
 
+PRODUCT-GROWTH-0B confirma que hoy la cancelacion de suscripcion es una accion
+administrativa; el propietario solo puede cancelar solicitudes de pago. Se crea
+el catalogo de motivos de churn y se tipan eventos de inicio/finalizacion, sin
+emitir cancelacion confirmada ni mostrar CTA falso. `motivoTransicion` no se
+reutiliza para churn: una futura fuente de verdad propia requiere decision sobre
+semantica de fechaFin, gracia, persistencia e historial.
+
 Tambien quedan registrados el futuro flujo de churn sin dark patterns y
 `SEO-001` para metadata y descubrimiento publico. La eleccion entre Render,
 Aiven, R2, Resend y PostHog queda pendiente de evaluacion durante el entorno

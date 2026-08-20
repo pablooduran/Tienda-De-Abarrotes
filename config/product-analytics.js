@@ -14,6 +14,8 @@ const EVENTS = Object.freeze({
   plan_viewed: { source: 'ux', properties: ['module', 'plan'] },
   quote_started: { source: 'ux', properties: ['module', 'operation', 'plan'] },
   payment_request_created: { source: 'business', properties: ['module', 'operation', 'plan', 'currency'] }
+  ,subscription_cancel_started: { source: 'ux', properties: ['module', 'reason', 'plan', 'mode'] }
+  ,subscription_cancelled: { source: 'business', properties: ['module', 'reason', 'plan', 'mode'] }
 });
 
 function sanitize(eventName, properties = {}) {

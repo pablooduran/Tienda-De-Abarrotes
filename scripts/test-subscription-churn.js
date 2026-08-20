@@ -1,0 +1,12 @@
+const assert = require('assert');
+const { CHURN_REASONS, validateChurnInput } = require('../config/subscription-churn');
+const { sanitize } = require('../config/product-analytics');
+assert.strictEqual(CHURN_REASONS.length, 8);
+assert.deepStrictEqual(validateChurnInput({ reason: 'demasiado_caro', comment: 'Plan actual' }), { reason: 'demasiado_caro', comment: 'Plan actual' });
+assert.throws(() => validateChurnInput({ reason: 'desconocido' }), /CHURN_REASON_INVALID/);
+assert.throws(() => validateChurnInput({ reason: 'otro', tenantId: 3 }), /CHURN_PAYLOAD_INVALID/);
+assert.throws(() => validateChurnInput({ reason: 'otro', comment: '<script>' }), /CHURN_COMMENT_INVALID/);
+const event = sanitize('subscription_cancel_started', { module: 'mi-plan', reason: 'otro', plan: 'pro', mode: 'owner', comment: 'privado', idTienda: 2 });
+assert.deepStrictEqual(event.properties, { module: 'mi-plan', reason: 'otro', plan: 'pro', mode: 'owner' });
+assert.strictEqual(sanitize('subscription_cancelled', { module: 'mi-plan' }).source, 'business');
+console.log('test:subscription-churn OK');
