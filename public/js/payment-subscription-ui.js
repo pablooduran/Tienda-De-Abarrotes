@@ -114,6 +114,11 @@
       feedback.textContent = action === 'quote' ? 'Calculando cotización...' : 'Creando solicitud...';
       try {
         if (action === 'quote') {
+          global.ProductAnalytics?.track('quote_started', {
+            module: 'subscription_payments',
+            operation: form.elements.operacion.value,
+            plan: selectedPlan()?.referencia
+          });
           const quote = await request('/api/pagos-suscripcion/cotizar', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
           root.querySelector('[data-payment-quote]').innerHTML = `<div class="payment-quote"><strong>${money(quote.montoCobro.monto, quote.montoCobro.moneda)}</strong><span>Referencia comercial: ${money(quote.precioBase.monto, quote.precioBase.moneda)} · válida hasta ${escapeHtml(date(quote.vigenteHasta))}</span><p>${escapeHtml(quote.efectoEsperado.tipo.replaceAll('_', ' '))}. El monto se congelará al crear la solicitud.</p></div>`;
           feedback.textContent = 'Cotización actualizada.';

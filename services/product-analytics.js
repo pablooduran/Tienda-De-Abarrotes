@@ -45,6 +45,27 @@ function createBusinessAnalytics(analytics = createAnalytics()) {
         { module: 'pos', paymentMode, currency },
         completed && !repeated
       );
+    },
+    creditSaleCompleted({ completed, repeated = false, currency = 'BOB' } = {}) {
+      return confirmed(
+        'credit_sale_completed',
+        { module: 'credit', currency },
+        completed && !repeated
+      );
+    },
+    collectionCompleted({ completed, repeated = false, currency = 'BOB' } = {}) {
+      return confirmed(
+        'collection_completed',
+        { module: 'collections', currency },
+        completed && !repeated
+      );
+    },
+    paymentRequestCreated({ created, replayed = false, operation, plan, currency = 'BOB' } = {}) {
+      return confirmed(
+        'payment_request_created',
+        { module: 'subscription_payments', operation, plan, currency },
+        created && !replayed
+      );
     }
   });
 }

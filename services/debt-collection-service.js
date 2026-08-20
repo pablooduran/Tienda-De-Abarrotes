@@ -14,6 +14,7 @@ const {
   moneyToCents
 } = require('./customer-credit-service');
 const { administrativeAuditService } = require('./administrative-audit-service');
+const { businessAnalytics } = require('./product-analytics');
 
 const COLLECTION_METHODS = new Set(['efectivo', 'qr', 'transferencia', 'tarjeta', 'otro', 'no_especificado']);
 
@@ -318,6 +319,7 @@ async function executeCollection(connection, input) {
 async function runCollection(input) {
   const ownedConnection = !input.connection;
   const connection = input.connection || await pool.getConnection();
+  const analytics = input.analytics || businessAnalytics;
   try {
     if (ownedConnection) await connection.beginTransaction();
     const result = await executeCollection(connection, {
@@ -338,7 +340,14 @@ async function runCollection(input) {
         metadata: { metodoPago: result.metodoPago }
       });
     }
-    if (ownedConnection) await connection.commit();
+    if (ownedConnection) {
+      await connection.commit();
+      analytics.collectionCompleted({
+        completed: true,
+        repeated: result.repetido,
+        currency: 'BOB'
+      });
+    }
     return result;
   } catch (error) {
     if (ownedConnection) await connection.rollback();

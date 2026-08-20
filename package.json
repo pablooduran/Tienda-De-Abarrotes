@@ -107,6 +107,7 @@
     "test:help-browser": "node scripts/test-help-browser.js",
     "test:product-analytics": "node scripts/test-product-analytics.js",
     "test:product-analytics-business": "node scripts/test-product-analytics-business.js",
+    "test:product-analytics-commerce": "node scripts/test-product-analytics-commerce.js",
     "test:subscription-churn": "node scripts/test-subscription-churn.js",
     "test:product-inventory": "node scripts/test-product-inventory.js",
     "test:product-inventory-browser": "node scripts/test-product-inventory-browser.js",

@@ -41,6 +41,14 @@
 
   function create({ root, api = null, navigate = (path) => { global.location.href = path; } } = {}) {
     if (!root) throw new Error('El contenedor de suscripcion es obligatorio.');
+    const viewedPlans = new Set();
+
+    function trackPlanViewed(data) {
+      const plan = data?.plan?.codigo;
+      if (!['basico', 'standard', 'pro'].includes(plan) || viewedPlans.has(plan)) return;
+      viewedPlans.add(plan);
+      global.ProductAnalytics?.track('plan_viewed', { module: 'subscription', plan });
+    }
 
     async function request(url, options = {}) {
       if (api) return api(url, options);
@@ -207,6 +215,7 @@
         </div>`;
       root.querySelector('[data-subscription-logout]').addEventListener('click', () => { void logout(); });
       bindPlanActions();
+      trackPlanViewed(data);
     }
 
     async function render() {

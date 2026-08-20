@@ -412,6 +412,11 @@ async function registerSale({
       paymentMode: balanceCents > 0 ? 'credit' : 'paid',
       currency: 'BOB'
     });
+    analytics.creditSaleCompleted({
+      completed: balanceCents > 0,
+      repeated: false,
+      currency: 'BOB'
+    });
     return {
       idVenta,
       idFiado,

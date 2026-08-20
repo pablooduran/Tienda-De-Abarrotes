@@ -846,6 +846,17 @@ pendiente porque la creacion actual no distingue de forma segura una operacion
 nueva de un retry; no se cambia su contrato solo para analytics. PRODUCT-029
 sigue siendo una hipotesis no validada y no existe un evento `aha_moment`.
 
+PRODUCT-GROWTH-0C2 agrega `credit_sale_completed`, `collection_completed` y
+`payment_request_created` unicamente despues del commit y usando las senales
+canonicas de operacion nueva/replay. Una venta a credito confirma tanto
+`sale_completed` como el hecho especifico de credito. La UI local registra
+`plan_viewed` una vez por codigo publico mostrado y `quote_started` al iniciar
+la accion, siempre sobre el provider `noop`. `customer_created` se difiere junto
+con `product_created`: sus altas no distinguen retries de forma fiable y no se
+modifica el contrato comercial para analytics. No se incluyen PII, tenant, IDs,
+montos, saldos, referencias ni comprobantes; PostHog sigue siendo solo candidato,
+TECH-028 permanece parcial y PRODUCT-029 sigue sin validacion remota.
+
 Tambien quedan registrados el futuro flujo de churn sin dark patterns y
 `SEO-001` para metadata y descubrimiento publico. La eleccion entre Render,
 Aiven, R2, Resend y PostHog queda pendiente de evaluacion durante el entorno

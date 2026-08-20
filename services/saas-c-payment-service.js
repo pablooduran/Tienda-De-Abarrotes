@@ -21,6 +21,7 @@ const {
 const { PLAN_CHANGE_TYPES, comparePlanEntitlements } = require('../config/subscription-plan-change-contract');
 const { canonicalPayload, computeEffectiveStatus } = require('./subscription-lifecycle-service');
 const { administrativeAuditService } = require('./administrative-audit-service');
+const { businessAnalytics } = require('./product-analytics');
 const { sha256 } = require('../config/subscription-lifecycle-contract');
 const {
   addLocalDays,
@@ -594,11 +595,11 @@ async function auditPayment(connection, input) {
   });
 }
 
-async function createPaymentRequest(database, input) {
+async function createPaymentRequest(database, input, analytics) {
   const idTienda = positiveId(input.idTienda, 'La tienda');
   const idSuscripcion = positiveId(input.idSuscripcion, 'La suscripcion');
   const now = normalizeNow(input.now);
-  return withTransaction(database, async (connection) => {
+  const result = await withTransaction(database, async (connection) => {
     await lockStore(connection, idTienda);
     const subscription = await currentSubscription(connection, idTienda, idSuscripcion, true);
     const idAdministrador = await validateActor(connection, {
@@ -696,6 +697,14 @@ async function createPaymentRequest(database, input) {
       venceEn: data.expiresAt
     }, false, true);
   });
+  analytics.paymentRequestCreated({
+    created: result.created,
+    replayed: result.replayed,
+    operation: result.operacion,
+    plan: result.plan.codigo,
+    currency: COMMERCIAL_CURRENCIES.charge
+  });
+  return result;
 }
 
 async function listPaymentRequests(database, input) {
@@ -1043,13 +1052,21 @@ async function configurePaymentMethod(database, input) {
   });
 }
 
-function createSaasCPaymentService({ database = pool, clock = getLocalNow } = {}) {
+function createSaasCPaymentService({
+  database = pool,
+  clock = getLocalNow,
+  analytics = businessAnalytics
+} = {}) {
   const at = (input) => input?.now ?? clock();
   return Object.freeze({
     listPublicPlans: (input) => listPublicPlans(database, { ...input, now: at(input) }),
     listOwnerMethods: () => listOwnerMethods(database),
     quote: (input) => quote(database, { ...input, body: quoteBody(input.body), now: at(input) }),
-    createRequest: (input) => createPaymentRequest(database, { ...input, body: quoteBody(input.body), now: at(input) }),
+    createRequest: (input) => createPaymentRequest(
+      database,
+      { ...input, body: quoteBody(input.body), now: at(input) },
+      analytics
+    ),
     listRequests: (input) => listPaymentRequests(database, { ...input, now: at(input) }),
     requestDetail: (input) => paymentRequestDetail(database, { ...input, now: at(input) }),
     cancelRequest: (input) => cancelPaymentRequest(database, { ...input, now: at(input) }),
