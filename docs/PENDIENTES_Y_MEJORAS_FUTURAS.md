@@ -11,14 +11,14 @@ el documento. Tampoco representa una promesa de lanzamiento. Cada pendiente
 debe actualizarse al cerrar una fase y revisarse antes de una beta y antes del
 lanzamiento oficial.
 
-Estado de referencia actualizado despues de PRODUCTO-0A y PRODUCTO-0B:
+Estado de referencia actualizado despues del cierre de HELP:
 
 - Rama: `mejora-multitienda`.
-- Base estable publicada: HEAD `d6902c5`; CI remoto PASS.
+- Base estable publicada: HEAD `0176ae6`; CI remoto PASS en los bloques cerrados.
 - SAAS-A, SAAS-B y SAAS-C0-C8 estan cerrados y publicados.
 - Seguridad publica final, CI, STAGING-1, PREPROD-1 y REGRESION GENERAL estan
   cerrados; la base local esta en migracion 024 y no existe 025.
-- DOCS-OPS y PRODUCTO-0A estan cerrados. PRODUCTO-0B registra decisiones de producto sin implementar cambios. STAGING-2B permanece diferido y no autoriza infraestructura ni gasto.
+- DOCS-OPS, PRODUCTO-0A, PRODUCTO-0B, PRODUCTO-1, WELCOME y HELP estan cerrados. PRODUCTO-GROWTH, COMMERCE y SECURITY-FINAL no estan iniciados. STAGING-2B permanece diferido y no autoriza infraestructura ni gasto.
 - Este documento no implementa funcionalidad ni modifica la base.
 
 ## 2. Estados y prioridades
@@ -69,6 +69,11 @@ Las migraciones son posibilidades; ninguna se crea por estar mencionada aqui.
 | TECH-018 | WELCOME y tutorial guiado | Guia integrada de producto, stock y primera venta | media antes de beta | copy, estados y soporte | No | Implementado y publicado; CI remoto PASS en run `31808668518`, job `94793671745` | WELCOME cerrado |
 | TECH-019 | HELP y centro de soporte | Centro de ayuda contextual estatico para funciones existentes; no hay canal humano formal | media antes del lanzamiento | contenido, privacidad, operador y costos | No | Implementado; tickets, chat, chatbot, analitica de busquedas y soporte multidioma permanecen diferidos | HELP cerrado |
 | TECH-027 | Canal formal de soporte | HELP no inventa correo, WhatsApp, telefono ni SLA mientras no exista una decision del propietario | media antes del lanzamiento | privacidad, operador, costos, horarios y consentimiento | No determinada | Requiere decision del propietario | Pre-beta / Soporte |
+| TECH-028 | Product Analytics | PRODUCT-GROWTH necesita medir uso sin acoplar la aplicacion a un proveedor | alta antes de beta | adaptador desacoplado, eventos, funnels, activacion, retencion, privacidad y proveedor desactivable/no-op local | No | Aprobado para fase futura; PostHog es candidato inicial, sin contrato ni configuracion | PRODUCT-GROWTH-0 |
+| PRODUCT-029 | Activation / Aha Moment | La secuencia producto -> stock -> primera venta es una hipotesis que debe medirse | alta antes de beta | activation rate, time to first sale, D1, D7, D30 y relacion con WELCOME/retencion | No | Aprobado para fase futura; hipotesis no confirmada | PRODUCT-GROWTH-0 |
+| PRODUCT-030 | Churn / Cancelacion | Hace falta observar abandono sin dark patterns ni cambiar el flujo comercial actual | media antes del lanzamiento | inicio de cancelacion, motivo estructurado, comentario opcional, confirmacion, evento analitico y analisis | No | Aprobado para fase futura; no implementado | PRODUCT-GROWTH-0 |
+| SEO-001 | Metadata y descubrimiento publico | La presencia publica no forma parte del producto privado actual | media antes de beta | metadata, canonical, Open Graph, preview 1200x630, favicon, theme metadata, robots, sitemap y noindex privado | No | Pendiente; metadata de tiendas/productos depende de COMMERCE | Landing / SEO |
+| PILOT-001 | Piloto real de tienda | La validacion con una tienda real requiere evidencia previa y autorizacion expresa de datos | critica antes de datos reales | entorno hospedado sintetico, backup/restore, seguridad, integridad de stock/dinero/credito, reconciliacion y soporte | No | Aprobado para fase futura; no desplegar, contratar ni introducir datos reales | PILOT-READINESS |
 | TECH-020 | Cuentas de clientes compradores | El cliente actual es entidad comercial de tienda, no cuenta de comprador | media antes del lanzamiento | identidad, privacidad, tiendas y pedidos | Probable modelo nuevo | Requiere decision del propietario | COMMERCE |
 | TECH-021 | Comercio entre compradores y tiendas | No existe catalogo publico, carrito ni pedido interno | futura | stock, precios, aceptacion, sustituciones, delivery y fraude | Probable varias tablas | Pendiente | COMMERCE-MVP |
 | TECH-022 | WhatsApp automatico y chatbot | Hoy solo se prepara texto/enlace manual; no hay API, webhook ni chatbot | futura | consentimiento, costos, opt-out y proveedor | No determinada | Diferido | COMMERCE / SAAS futuro |
@@ -360,14 +365,48 @@ explicita y una nueva evaluacion de seguridad, datos y alcance.
 5. Provisionar STAGING-2B, restauracion, monitoreo y produccion de prueba con
    datos sinteticos usando el contrato seguro de STAGING-1.
 6. Validar el workflow CI antes de cada promocion.
-7. Definir y construir `COMMERCE-0` y `COMMERCE-MVP` si se aprueba.
-8. Ejecutar pruebas completas de volumen, usabilidad, seguridad y recuperacion.
-9. Decidir beta privada, beta publica y lanzamiento oficial.
+7. Ejecutar `PRODUCT-GROWTH-0` para definir medicion desacoplada y validar las hipotesis de activacion y churn.
+8. Completar `PILOT-READINESS`, revision del propietario y un entorno hospedado minimo con datos sinteticos.
+9. Validar cloud y, solo con autorizacion de datos reales, ejecutar el piloto de 7 dias, reconciliacion y retrospectiva.
+10. Decidir y ejecutar `COMMERCE`, Landing/SEO, `SECURITY-FINAL`, escala, resiliencia, operacion/legal/soporte y la revision final del propietario.
+11. Preparar beta de 3 a 10 tiendas, analizarla y decidir `v1.0.0` / lanzamiento.
 
-Secuencia aprobada: PRODUCTO-1 P1-P8 -> WELCOME -> HELP -> COMMERCE ->
-SECURITY-FINAL -> pruebas completas finales -> revision final del propietario ->
-STAGING-2B -> pruebas reales -> decision de beta/lanzamiento. Esta secuencia no
-autoriza por si sola el inicio de ninguna fase.
+Secuencia aprobada: HELP cerrado -> PRODUCT-GROWTH-0 -> PILOT-READINESS ->
+revision del propietario #1 -> entorno hospedado con datos sinteticos -> pruebas
+cloud -> piloto real de 7 dias -> reconciliacion y retrospectiva -> correcciones
+o segundo piloto -> COMMERCE -> Landing / SEO / metadata -> SECURITY-FINAL ->
+escala y resiliencia -> operacion/legal/soporte -> revision del propietario #2 ->
+beta de 3 a 10 tiendas -> analisis beta -> `v1.0.0` / lanzamiento. Esta
+secuencia no autoriza por si sola el inicio de ninguna fase.
+
+### PRODUCT-GROWTH, piloto y presencia publica
+
+PRODUCT-GROWTH registrara eventos de producto, funnels, activacion y retencion
+mediante un adaptador desacoplado. PostHog es solo el candidato inicial; no se
+contrata ni configura por esta alineacion. En local el proveedor debe poder ser
+desactivable o no-op, y no se almacenan secretos en el frontend. Session Replay
+queda fuera del alcance inicial.
+
+La secuencia producto -> stock -> primera venta es una hipotesis de activacion,
+no una conclusion. Se mediran activation rate, time to first sale, D1, D7, D30
+y la relacion entre completar WELCOME y retencion. El futuro flujo de churn debe
+evitar dark patterns y conservar el motivo estructurado en una fuente propia.
+
+PILOT-001 propone que la tienda de los padres sea el primer negocio real de
+validacion, pero no autoriza datos reales. Antes se requiere `PILOT-READINESS`,
+revision del propietario, entorno hospedado con datos sinteticos, validacion
+cloud y autorizacion explicita. La condicion `PILOT_READY` exige cero criticos
+conocidos, E2E/CI/seguridad/backup/restore PASS e integridad de stock, dinero y
+credito. Tras siete dias se reconciliaran ventas, stock, compras, creditos,
+cobranzas, devoluciones, reportes, backups, logs y analytics; `REAL_STORE_VALIDATED`
+requiere cero perdidas o duplicaciones conocidas y una usuaria capaz de operar
+el flujo diario.
+
+SEO-001 queda diferido para metadata publica, canonical, Open Graph, preview,
+favicon, robots, sitemap y noindex de superficies privadas. La seleccion entre
+Render, Aiven, R2, Resend y PostHog queda pendiente de evaluacion en la fase de
+entorno piloto; no se contrata infraestructura por capacidad hipotetica y no
+hay gasto externo sin autorizacion expresa.
 
 ## 19. Registro de cambios
 
@@ -380,6 +419,7 @@ autoriza por si sola el inicio de ninguna fase.
 | 2026-08-13 | DOCS-OPS / PRODUCTO-0A | Documentacion operativa cerrada y auditoria funcional/UX iniciada sin cambios de producto | Codex | HEAD `059b086` |
 | 2026-08-13 | PRODUCTO-0B | Decisiones de navegacion, lenguaje, configuracion, filtros, carga y SECURITY-FINAL registradas sin implementacion | Codex | HEAD `d6902c5` |
 | 2026-08-14 | PRODUCTO-1 P8 | TECH-026 cerrado: E2E local 3/3 y gate remoto PASS (run `31806746685`, job `94787399829`) | Codex | Commit `ffdc246` |
+| 2026-08-20 | HELP / alineacion de roadmap | Registrados PRODUCT-GROWTH, hipotesis de activacion y churn, SEO-001 y PILOT-001; COMMERCE y SECURITY-FINAL permanecen posteriores | Codex | Commit `0176ae6` |
 
 ## 20. Regla permanente
 

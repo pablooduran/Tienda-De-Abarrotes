@@ -796,3 +796,34 @@ enlaces contextuales de Ventas, Inventario, Clientes, Configuracion y Mi plan
 abren el tema relacionado; el centro puede volver a mostrar WELCOME. No agrega
 API, rutas backend, persistencia comercial, permisos ni dependencias. COMMERCE
 y SECURITY-FINAL permanecen sin iniciar.
+
+## 18. Roadmap posterior a HELP
+
+HELP esta cerrado y publicado. La siguiente fase aprobada es `PRODUCT-GROWTH-0`,
+seguida de `PILOT-READINESS`, revision del propietario #1, un entorno hospedado
+minimo con datos sinteticos, validacion cloud y, solo con autorizacion expresa,
+un piloto real de siete dias. La tienda de los padres es el primer negocio
+propuesto para validacion, pero no se desplegara, contratara infraestructura ni
+introduciran datos reales en esta fase documental.
+
+PRODUCT-GROWTH medira eventos, funnels, activacion y retencion mediante un
+adaptador desacoplado. PostHog es candidato inicial, no una decision de
+proveedor; en local debe existir un proveedor desactivable o no-op, sin secretos
+en frontend ni Session Replay inicial. La secuencia producto -> stock -> primera
+venta es una hipotesis que se medira con activation rate, time to first sale,
+D1, D7, D30 y su relacion con WELCOME.
+
+Tambien quedan registrados el futuro flujo de churn sin dark patterns y
+`SEO-001` para metadata y descubrimiento publico. La eleccion entre Render,
+Aiven, R2, Resend y PostHog queda pendiente de evaluacion durante el entorno
+piloto. No se contrata infraestructura por capacidad hipotetica, no se autoriza
+gasto externo y STAGING-2B de lanzamiento sigue siendo una etapa posterior y
+mas estricta.
+
+Secuencia aprobada: HELP cerrado -> PRODUCT-GROWTH-0 -> PILOT-READINESS ->
+revision del propietario #1 -> entorno hospedado con datos sinteticos -> pruebas
+cloud -> piloto real 7 dias -> reconciliacion y retrospectiva -> correcciones o
+segundo piloto -> COMMERCE -> Landing / SEO / metadata -> SECURITY-FINAL ->
+escala y resiliencia -> operacion/legal/soporte -> revision del propietario #2 ->
+beta 3-10 tiendas -> analisis beta -> `v1.0.0` / lanzamiento. Esta secuencia no
+inicia ninguna fase por si sola.
