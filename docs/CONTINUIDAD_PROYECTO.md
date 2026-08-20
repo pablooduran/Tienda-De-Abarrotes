@@ -857,6 +857,15 @@ modifica el contrato comercial para analytics. No se incluyen PII, tenant, IDs,
 montos, saldos, referencias ni comprobantes; PostHog sigue siendo solo candidato,
 TECH-028 permanece parcial y PRODUCT-029 sigue sin validacion remota.
 
+PRODUCT-GROWTH-0 queda cerrado dentro de su alcance local y desacoplado. El
+contrato central, la allowlist, los adaptadores `noop` y memoria de pruebas, el
+aislamiento de fallos y los eventos UX y de negocio confirmados quedan
+disponibles sin PII, tenant, IDs, montos, red, cookies ni proveedor analytics
+activo. CHURN-001 queda resuelto documentalmente con la semantica de no
+renovacion; su persistencia propia se difiere y no se crea la migracion 025.
+Este cierre no afirma medicion remota, Session Replay, activation rate, Aha ni
+retencion D1/D7/D30, y no contiene resultados de usuarios reales.
+
 Tambien quedan registrados el futuro flujo de churn sin dark patterns y
 `SEO-001` para metadata y descubrimiento publico. La eleccion entre Render,
 Aiven, R2, Resend y PostHog queda pendiente de evaluacion durante el entorno
@@ -864,7 +873,7 @@ piloto. No se contrata infraestructura por capacidad hipotetica, no se autoriza
 gasto externo y STAGING-2B de lanzamiento sigue siendo una etapa posterior y
 mas estricta.
 
-Secuencia aprobada: HELP cerrado -> PRODUCT-GROWTH-0 -> PILOT-READINESS ->
+Secuencia aprobada: HELP cerrado -> PRODUCT-GROWTH-0 (cerrado en alcance local) -> PILOT-READINESS ->
 revision del propietario #1 -> entorno hospedado con datos sinteticos -> pruebas
 cloud -> piloto real 7 dias -> reconciliacion y retrospectiva -> correcciones o
 segundo piloto -> COMMERCE -> Landing / SEO / metadata -> SECURITY-FINAL ->
