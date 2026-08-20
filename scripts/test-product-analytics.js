@@ -1,0 +1,13 @@
+const assert = require('assert');
+const { EVENTS, sanitize } = require('../config/product-analytics');
+const { createAnalytics, createMemoryAdapter } = require('../services/product-analytics');
+const memory = createMemoryAdapter();
+const analytics = createAnalytics(memory);
+assert(EVENTS.welcome_started && EVENTS.sale_completed && EVENTS.payment_request_created);
+assert.strictEqual(analytics.track('welcome_started', { module: 'welcome', step: 'producto', email: 'x@y.test', idTienda: 7 }), true);
+assert.deepStrictEqual(memory.events[0].properties, { module: 'welcome', step: 'producto' });
+assert.strictEqual(analytics.track('unknown_event', {}), false);
+assert.strictEqual(sanitize('sale_completed', { nombre: 'privado' }).properties.nombre, undefined);
+assert.doesNotThrow(() => createAnalytics({ track: () => { throw new Error('provider'); } }).track('welcome_completed', { module: 'welcome' }));
+assert.strictEqual(EVENTS.sale_completed.source, 'business');
+console.log('test:product-analytics OK');

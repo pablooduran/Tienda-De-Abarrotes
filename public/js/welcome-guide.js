@@ -38,6 +38,7 @@
   }
 
   function show(context) {
+    global.ProductAnalytics?.track('welcome_started', { module: 'welcome', step: 'producto' });
     setHidden(context, false);
     setStarted(context);
   }

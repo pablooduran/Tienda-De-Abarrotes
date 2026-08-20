@@ -813,6 +813,12 @@ en frontend ni Session Replay inicial. La secuencia producto -> stock -> primera
 venta es una hipotesis que se medira con activation rate, time to first sale,
 D1, D7, D30 y su relacion con WELCOME.
 
+PRODUCT-GROWTH-0A incorpora solo el fundamento desacoplado: plan central de
+eventos, allowlist de propiedades de baja sensibilidad y adaptadores noop/memoria.
+WELCOME y HELP emiten eventos UX locales sin red. Los eventos de negocio siguen
+reservados para emisiones posteriores al commit exitoso; analytics no persiste,
+no usa cookies y nunca puede interrumpir una operacion comercial.
+
 Tambien quedan registrados el futuro flujo de churn sin dark patterns y
 `SEO-001` para metadata y descubrimiento publico. La eleccion entre Render,
 Aiven, R2, Resend y PostHog queda pendiente de evaluacion durante el entorno

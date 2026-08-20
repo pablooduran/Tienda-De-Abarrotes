@@ -81,6 +81,7 @@
 
   function render({ root, topic = null, onBack = () => {}, onWelcome = () => {} } = {}) {
     if (!root) return;
+    global.ProductAnalytics?.track('help_opened', { module: 'help', topic: topic || 'general' });
     let selectedCategory = '';
     let query = '';
     root.innerHTML = `
