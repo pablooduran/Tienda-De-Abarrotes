@@ -37,6 +37,11 @@
     try { global.localStorage.setItem(startedKey(context), '1'); } catch { /* Preferencia opcional. */ }
   }
 
+  function show(context) {
+    setHidden(context, false);
+    setStarted(context);
+  }
+
   function progress(products, sales) {
     const productRows = Array.isArray(products) ? products : [];
     const saleRows = Array.isArray(sales) ? sales : [];
@@ -109,5 +114,5 @@
     });
   }
 
-  global.WelcomeGuide = { progress, render, bind, storageKey, isHidden, setHidden };
+  global.WelcomeGuide = { progress, render, bind, storageKey, isHidden, setHidden, show };
 }(window));

@@ -285,7 +285,7 @@ publico y disponibilidad de cotizacion, sin afirmar que esa administracion se
 realiza enteramente por clicks. El workflow incorpora el robot como gate
 browser portable y este paso en remoto: run `31806746685`, job `94787399829`,
 **Run critical browser business gate** PASS. TECH-026 queda resuelto y
-PRODUCTO-1 P1-P8 cerrado. WELCOME puede comenzar; HELP, COMMERCE y
+PRODUCTO-1 P1-P8 cerrado. WELCOME y HELP pueden comenzar; COMMERCE y
 SECURITY-FINAL no se inician.
 
 ### Estado de WELCOME
@@ -299,5 +299,16 @@ visual namespaced por usuario y tienda, sin datos sensibles ni IDs internos.
 Los CTA reutilizan Productos, Compras y Punto de venta. Una cuenta en modo solo
 lectura puede consultar el progreso, pero no recibe acciones activas. Las
 pruebas Welcome cubren progreso, salto, retomar, tienda existente, teclado,
-responsive y consola sin duplicar el E2E critico. WELCOME queda implementado;
-HELP, COMMERCE y SECURITY-FINAL siguen pendientes.
+responsive y consola sin duplicar el E2E critico. WELCOME queda publicado con
+CI remoto PASS: run `31808668518`, job `94793671745` y paso **Run critical
+browser business gate** PASS.
+
+### Estado de HELP
+
+HELP queda implementado como un **Centro de ayuda** integrado y buscable, con
+temas breves sobre las funciones existentes. La entrada global no compite con
+los modulos operativos; los enlaces contextuales desde Ventas, Inventario,
+Clientes, Configuracion y Mi plan enfocan el tema correspondiente. La guia
+WELCOME se reutiliza desde el centro sin duplicar su checklist. HELP no agrega
+rutas, backend, datos comerciales ni permisos. COMMERCE y SECURITY-FINAL siguen
+pendientes.

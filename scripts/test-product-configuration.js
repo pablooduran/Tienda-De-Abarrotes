@@ -13,7 +13,8 @@ const html = read('public/app.html');
 assert(service.includes('normalizeOnboardingPatch') && service.includes('configuracionTienda'), 'P5 no reutiliza el contrato real.');
 assert(route.includes('req.tenant.idTienda') && !route.includes('req.body.idTienda'), 'El tenant no se deriva solo del backend.');
 assert(app.includes("['configuracion', 'Configuracion'"), 'La configuracion no esta en el menu del propietario.');
-assert(app.includes("['ventas', 'clientes', 'configuracion']"), 'Configuracion no conserva el acceso de solo lectura.');
+assert(app.includes("!['ventas', 'clientes', 'configuracion', 'ayuda'].includes(id)")
+  && app.includes('isReadOnly: () => Boolean(state.context?.soloLectura)'), 'Configuracion no conserva el acceso de solo lectura.');
 assert(ui.includes("'Guardar cambios'") && ui.includes("'Guardando...'"), 'Falta el estado de mutacion de configuracion.');
 assert(html.includes('/js/store-configuration-ui.js'), 'La UI de configuracion no esta cargada.');
 console.log('Configuracion de tienda: contrato, tenant y UI verificados.');

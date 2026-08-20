@@ -780,12 +780,19 @@ recorrido local pasa 3/3 sobre datos sinteticos aislados y comprueba producto,
 compra, venta, stock, cliente, credito, cobranza, devolucion, reportes, Mi plan
 y tenant. El gate browser remoto tambien paso: run `31806746685`, job
 `94787399829`, paso **Run critical browser business gate**. PRODUCTO-1 P1-P8
-y TECH-026 quedan cerrados. La siguiente fase autorizada es WELCOME; HELP,
-COMMERCE y SECURITY-FINAL permanecen sin iniciar.
+y TECH-026 quedan cerrados. WELCOME queda publicado con CI remoto PASS: run
+`31808668518`, job `94793671745` y paso **Run critical browser business gate**
+PASS.
 
 WELCOME queda implementado en Inicio como una guia breve, opcional y retomable
 para producto, stock y primera venta. No reemplaza el onboarding de
 configuracion, no agrega rutas ni persistencia de negocio y no omite permisos,
 limites ni modo solo lectura. El progreso se deriva de datos existentes y su
-preferencia visual no contiene datos sensibles. HELP, COMMERCE y
-SECURITY-FINAL permanecen sin iniciar.
+preferencia visual no contiene datos sensibles.
+
+HELP queda implementado como Centro de ayuda interno, con busqueda local,
+categorias de funciones existentes y articulos breves orientados a tareas. Los
+enlaces contextuales de Ventas, Inventario, Clientes, Configuracion y Mi plan
+abren el tema relacionado; el centro puede volver a mostrar WELCOME. No agrega
+API, rutas backend, persistencia comercial, permisos ni dependencias. COMMERCE
+y SECURITY-FINAL permanecen sin iniciar.

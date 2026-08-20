@@ -4,6 +4,7 @@ const subtitle = document.getElementById('viewSubtitle');
 const menu = document.getElementById('menu');
 const message = document.getElementById('message');
 const modalRoot = document.getElementById('modalRoot');
+const helpButton = document.getElementById('helpBtn');
 
 let state = { productos: [], clientes: [], proveedores: [], fiados: [], ventas: [], categorias: [], context: null, lotAccess: null };
 let debtFocus = null;
@@ -22,6 +23,9 @@ let compensationUi = null;
 let administrativeAuditUi = null;
 let inventoryAdjustmentUi = null;
 let storeConfigurationUi = null;
+let activeView = 'inicio';
+let helpReturnView = 'inicio';
+let requestedHelpTopic = null;
 
 const sections = [
   ['inicio', 'Inicio', 'Resumen general del negocio'],
@@ -42,7 +46,8 @@ const sections = [
   ['configuracion', 'Configuracion', 'Datos operativos de la tienda'],
   ['auditoria', 'Auditoria', 'Acciones administrativas y resultados'],
   ['cierreCaja', 'Cierre de caja', 'Control de efectivo por periodo'],
-  ['reportes', 'Reportes', 'Consultas, filtros y ganancias']
+  ['reportes', 'Reportes', 'Consultas, filtros y ganancias'],
+  ['ayuda', 'Centro de ayuda', 'Resuelve tareas comunes sin salir de la aplicacion']
 ];
 
 const navigationFamilies = [
@@ -432,6 +437,46 @@ function sectionAllowed(id) {
   return true;
 }
 
+const contextualHelp = {
+  ventas: { topic: 'realizar-venta', label: 'Ayuda sobre ventas' },
+  productos: { topic: 'productos', label: 'Ayuda sobre inventario' },
+  movimientosStock: { topic: 'stock-movimientos', label: 'Ayuda sobre inventario' },
+  compras: { topic: 'compras', label: 'Ayuda sobre compras' },
+  proveedores: { topic: 'proveedores', label: 'Ayuda sobre proveedores' },
+  inventarioInteligente: { topic: 'inventario-inteligente', label: 'Ayuda sobre inventario' },
+  inventarioOperativo: { topic: 'ajustes', label: 'Ayuda sobre ajustes de inventario' },
+  lotesVencimientos: { topic: 'lotes', label: 'Ayuda sobre lotes y vencimientos' },
+  clientes: { topic: 'clientes', label: 'Ayuda sobre clientes y credito' },
+  configuracion: { topic: 'configuracion-tienda', label: 'Ayuda sobre configuracion' }
+};
+
+function openHelp(topic = null, returnView = activeView) {
+  requestedHelpTopic = topic;
+  helpReturnView = returnView === 'ayuda' ? helpReturnView : returnView;
+  void loadView('ayuda');
+}
+
+function renderContextualHelp(id) {
+  const current = contextualHelp[id];
+  if (!current || view.querySelector('[data-context-help]')) return;
+  view.insertAdjacentHTML('beforeend', `<p class="context-help" data-context-help><button type="button" class="link-button" data-context-help-topic="${escapeHtml(current.topic)}">${escapeHtml(current.label)}</button></p>`);
+  view.querySelector('[data-context-help-topic]')?.addEventListener('click', () => openHelp(current.topic, id));
+}
+
+function ayuda() {
+  window.HelpCenter?.render({
+    root: view,
+    topic: requestedHelpTopic,
+    onBack: () => loadView(helpReturnView || 'inicio'),
+    onWelcome: () => {
+      window.WelcomeGuide?.show(state.context);
+      requestedHelpTopic = null;
+      return loadView('inicio');
+    }
+  });
+  requestedHelpTopic = null;
+}
+
 function sectionById(id) {
   return sections.find((section) => section[0] === id);
 }
@@ -515,19 +560,24 @@ async function loadView(id) {
     if (id !== 'inicio') return loadView('inicio');
     return;
   }
+  if (id === 'ayuda' && activeView !== 'ayuda') helpReturnView = activeView;
+  activeView = id;
   renderMenu(id);
   title.textContent = section[1];
   subtitle.textContent = section[2];
-  if (!['ventas', 'clientes', 'configuracion'].includes(id)) {
+  if (!['ventas', 'clientes', 'configuracion', 'ayuda'].includes(id)) {
     await refreshCatalogs({ includeClients: !['ventas', 'clientes'].includes(id) });
   }
-  const handlers = { inicio, productos, movimientosStock, inventarioInteligente, inventarioOperativo, lotesVencimientos, clientes, proveedores, ventas, compras, historialVentas, pagos, gastos, finanzas, compensaciones, configuracion, auditoria, cierreCaja, reportes };
+  const handlers = { inicio, productos, movimientosStock, inventarioInteligente, inventarioOperativo, lotesVencimientos, clientes, proveedores, ventas, compras, historialVentas, pagos, gastos, finanzas, compensaciones, configuracion, auditoria, cierreCaja, reportes, ayuda };
   if (!handlers[id]) return loadView('inicio');
   await handlers[id]();
   renderInventoryWorkspace(id);
   renderSalesWorkspace(id);
+  renderContextualHelp(id);
   applyReadOnlyUi();
 }
+
+helpButton?.addEventListener('click', () => openHelp());
 
 function renderInventoryWorkspace(activeId) {
   if (!inventoryWorkspaceSections.includes(activeId) || view.querySelector('.inventory-workspace-nav')) return;
@@ -3946,6 +3996,13 @@ readOnlyObserver.observe(modalRoot, { childList: true, subtree: true });
 async function initializeApp() {
   await loadContext();
   renderMenu();
+  const topic = new URLSearchParams(window.location.search).get('help');
+  if (topic) {
+    requestedHelpTopic = topic;
+    window.history.replaceState({}, '', '/app.html');
+    await loadView('ayuda');
+    return;
+  }
   await loadView('inicio');
 }
 

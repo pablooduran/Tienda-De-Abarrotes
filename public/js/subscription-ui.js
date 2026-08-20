@@ -200,6 +200,7 @@
           <section id="paymentSubscriptionRoot" class="subscription-section payment-subscription-section" aria-live="polite"></section>
           <div class="subscription-actions">
             ${restricted ? '' : '<a class="button-link secondary" href="/app.html" data-subscription-panel>Volver al panel</a>'}
+            <a class="button-link secondary" href="/app.html?help=mi-plan">Ayuda sobre Mi plan</a>
             <span id="future-action-help">Usa el flujo de pagos manuales para renovar o reactivar cuando tu estado lo permita.</span>
             <button type="button" class="secondary" data-subscription-logout>Cerrar sesion</button>
           </div>
