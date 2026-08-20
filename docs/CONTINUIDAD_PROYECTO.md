@@ -855,7 +855,9 @@ la accion, siempre sobre el provider `noop`. `customer_created` se difiere junto
 con `product_created`: sus altas no distinguen retries de forma fiable y no se
 modifica el contrato comercial para analytics. No se incluyen PII, tenant, IDs,
 montos, saldos, referencias ni comprobantes; PostHog sigue siendo solo candidato,
-TECH-028 permanece parcial y PRODUCT-029 sigue sin validacion remota.
+TECH-028 permanece parcial: el alcance local esta cerrado, pero la medicion
+remota, el proveedor y el control operativo siguen pendientes para beta/escala
+y no bloquean el primer piloto.
 
 PRODUCT-GROWTH-0 queda cerrado dentro de su alcance local y desacoplado. El
 contrato central, la allowlist, los adaptadores `noop` y memoria de pruebas, el
@@ -880,3 +882,13 @@ segundo piloto -> COMMERCE -> Landing / SEO / metadata -> SECURITY-FINAL ->
 escala y resiliencia -> operacion/legal/soporte -> revision del propietario #2 ->
 beta 3-10 tiendas -> analisis beta -> `v1.0.0` / lanzamiento. Esta secuencia no
 inicia ninguna fase por si sola.
+
+Para `PILOT_READY` bloquean: cero criticos conocidos; E2E critico; evidencia de
+CI y gates requeridos; security review especifica del piloto; backup; restore
+probado; integridad de ventas y dinero; integridad de stock; integridad de
+credito y cobranzas; y entorno hospedado sintetico validado antes de introducir
+datos reales. Tambien se requiere autorizacion explicita del propietario.
+PostHog, el proveedor analytics remoto, la medicion de PRODUCT-029,
+`product_created`, `customer_created`, Session Replay y la persistencia
+self-service de churn no son blockers de `PILOT_READY`; siguen pendientes para
+beta/escala.
