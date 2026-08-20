@@ -6,6 +6,7 @@ const { createSubscription } = require('./subscription-service');
 const { bootstrapStore } = require('./store-bootstrap-service');
 const { administrativeAuditService } = require('./administrative-audit-service');
 const { emailVerificationService } = require('./email-verification-service');
+const { businessAnalytics } = require('./product-analytics');
 const {
   INITIAL_ONBOARDING_STATUS,
   INITIAL_PLAN_CODE,
@@ -56,6 +57,7 @@ function createPublicRegistrationService({
   bcryptLib = bcrypt,
   bootstrap = bootstrapStore,
   verificationService = emailVerificationService,
+  analytics = businessAnalytics,
   clock = () => formatLocalDateTime(),
   fingerprintSecret = null
 } = {}) {
@@ -158,6 +160,11 @@ function createPublicRegistrationService({
         metadata: { planCodigo: subscription.planCodigo, tipoSuscripcion: subscription.tipo }
       });
       await connection.commit();
+      analytics.accountRegistered({
+        created: true,
+        replayed: false,
+        plan: subscription.planCodigo
+      });
       await verificationService.deliver(verificationIssue, requestId);
       return safeRegistrationResponse(false);
     } catch (error) {

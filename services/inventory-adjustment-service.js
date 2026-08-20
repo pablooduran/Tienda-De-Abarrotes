@@ -24,6 +24,7 @@ const {
   stockError
 } = require('./stock-movement-service');
 const { administrativeAuditService } = require('./administrative-audit-service');
+const { businessAnalytics } = require('./product-analytics');
 const { formatLocalDate, formatLocalDateTime } = require('../utils/local-datetime');
 
 const MAX_HISTORY_PAGE_SIZE = 100;
@@ -218,6 +219,7 @@ function auditInput(context, action, result, resultCode, reference, before, afte
 function createInventoryAdjustmentService({
   database = pool,
   audit = administrativeAuditService,
+  analytics = businessAnalytics,
   clock = () => new Date()
 } = {}) {
   async function applyAdjustment(context, rawRequest) {
@@ -410,6 +412,11 @@ function createInventoryAdjustmentService({
         }
       ));
       await connection.commit();
+      analytics.stockRegistered({
+        registered: request.tipoAjuste === 'positivo',
+        repeated: false,
+        mode: 'manual_adjustment'
+      });
       return {
         idAjusteInventario,
         idProducto,

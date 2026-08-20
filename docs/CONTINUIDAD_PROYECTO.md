@@ -836,6 +836,16 @@ estructura y migracion futuras. No se crea la migracion 025 y esta decision no
 bloquea PRODUCT-GROWTH-0C ni PILOT-READINESS. `subscription_cancelled` permanece
 sin emision hasta que exista un flujo semantico aprobado.
 
+PRODUCT-GROWTH-0C1 instrumenta hechos confirmados despues del commit para
+`account_registered`, `email_verified`, `store_configured`, `stock_registered`
+mediante ajuste positivo idempotente y `sale_completed`. Replays y rollbacks no
+emiten, el fallo del adaptador no altera el resultado comercial y las propiedades
+no incluyen PII, tenant, IDs, montos ni cantidades. El proveedor sigue siendo
+`noop`, sin red, cookies ni persistencia analytics. `product_created` permanece
+pendiente porque la creacion actual no distingue de forma segura una operacion
+nueva de un retry; no se cambia su contrato solo para analytics. PRODUCT-029
+sigue siendo una hipotesis no validada y no existe un evento `aha_moment`.
+
 Tambien quedan registrados el futuro flujo de churn sin dark patterns y
 `SEO-001` para metadata y descubrimiento publico. La eleccion entre Render,
 Aiven, R2, Resend y PostHog queda pendiente de evaluacion durante el entorno

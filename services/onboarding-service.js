@@ -6,6 +6,7 @@ const {
   onboardingError
 } = require('../config/onboarding-contract');
 const { administrativeAuditService } = require('./administrative-audit-service');
+const { businessAnalytics } = require('./product-analytics');
 
 function positiveId(value, label) {
   const parsed = Number(value);
@@ -93,6 +94,7 @@ function auditInput(context, action, result, resultCode, before, after, metadata
 function createOnboardingService({
   database = pool,
   audit = administrativeAuditService,
+  analytics = businessAnalytics,
   clock = () => formatLocalDateTime()
 } = {}) {
   function contextFrom(input) {
@@ -201,6 +203,7 @@ function createOnboardingService({
         onboardingCompletadoEn: now
       }, access.configuration);
       await connection.commit();
+      analytics.storeConfigured({ completed: true, repeated: false });
       return state;
     } catch (error) {
       if (connection) await connection.rollback();

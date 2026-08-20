@@ -17,6 +17,7 @@ const {
   validateNewCredit
 } = require('./customer-credit-service');
 const { administrativeAuditService } = require('./administrative-audit-service');
+const { businessAnalytics } = require('./product-analytics');
 const { formatLocalDate, formatLocalDateTime } = require('../utils/local-datetime');
 
 const SALE_PRESENTATIONS = new Set(['unidad', 'paquete']);
@@ -221,7 +222,8 @@ async function registerSale({
   idAdministrador,
   body,
   requestId = null,
-  legacyMode = false
+  legacyMode = false,
+  analytics = businessAnalytics
 }) {
   body = body && typeof body === 'object' ? body : {};
   if (!legacyMode && !String(body.claveOperacion || '').trim()) {
@@ -404,6 +406,12 @@ async function registerSale({
       });
     }
     await connection.commit();
+    analytics.saleCompleted({
+      completed: true,
+      repeated: false,
+      paymentMode: balanceCents > 0 ? 'credit' : 'paid',
+      currency: 'BOB'
+    });
     return {
       idVenta,
       idFiado,

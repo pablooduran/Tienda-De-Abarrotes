@@ -2,6 +2,7 @@ const pool = require('../config/db');
 const { administrativeAuditService } = require('./administrative-audit-service');
 const { localVerificationMailAdapter } = require('./local-verification-mail-adapter');
 const { formatLocalDateTime } = require('../utils/local-datetime');
+const { businessAnalytics } = require('./product-analytics');
 const {
   EMAIL_VERIFICATION_TYPE,
   createVerificationToken,
@@ -35,6 +36,7 @@ function createEmailVerificationService({
   database = pool,
   auditService = administrativeAuditService,
   mailAdapter = localVerificationMailAdapter,
+  analytics = businessAnalytics,
   clock = () => new Date(),
   tokenFactory = createVerificationToken,
   tokenTtlHours = verificationTokenTtlHours()
@@ -174,6 +176,7 @@ function createEmailVerificationService({
         after: { estado: 'activo' }
       });
       await connection.commit();
+      analytics.emailVerified({ changed: true });
       return Object.freeze({ message: 'Correo verificado. Ya puedes iniciar sesion.' });
     } catch (error) {
       if (connection) await connection.rollback();
