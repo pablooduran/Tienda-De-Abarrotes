@@ -820,11 +820,21 @@ reservados para emisiones posteriores al commit exitoso; analytics no persiste,
 no usa cookies y nunca puede interrumpir una operacion comercial.
 
 PRODUCT-GROWTH-0B confirma que hoy la cancelacion de suscripcion es una accion
-administrativa; el propietario solo puede cancelar solicitudes de pago. Se crea
-el catalogo de motivos de churn y se tipan eventos de inicio/finalizacion, sin
-emitir cancelacion confirmada ni mostrar CTA falso. `motivoTransicion` no se
-reutiliza para churn: una futura fuente de verdad propia requiere decision sobre
-semantica de fechaFin, gracia, persistencia e historial.
+administrativa; el propietario solo puede cancelar solicitudes de pago. CHURN-001
+queda resuelto documentalmente: el futuro flujo del propietario se expresara como
+"No planeo renovar" o "No continuar con el servicio". Registrara una intencion,
+motivo y comentario opcional, pero no cortara acceso, no modificara `fechaFin`,
+gracia, suspension, plan, pagos ni datos. El acceso continua hasta `fechaFin` y
+despues sigue el comportamiento actual `fechaFin -> gracia -> suspension` si no
+hay renovacion.
+
+La cancelacion administrativa sigue siendo independiente e inmediata segun su
+contrato actual. `motivoTransicion` no se reutiliza para churn. La persistencia
+futura sera tenant-safe, auditable, estructurada y separada, con estado de
+intencion retirada si el propietario renueva; probablemente requerira una
+estructura y migracion futuras. No se crea la migracion 025 y esta decision no
+bloquea PRODUCT-GROWTH-0C ni PILOT-READINESS. `subscription_cancelled` permanece
+sin emision hasta que exista un flujo semantico aprobado.
 
 Tambien quedan registrados el futuro flujo de churn sin dark patterns y
 `SEO-001` para metadata y descubrimiento publico. La eleccion entre Render,
