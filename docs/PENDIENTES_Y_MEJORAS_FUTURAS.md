@@ -74,7 +74,7 @@ Las migraciones son posibilidades; ninguna se crea por estar mencionada aqui.
 | PRODUCT-030 | Churn / Cancelacion | Hace falta observar abandono sin dark patterns ni cambiar el flujo comercial actual | media antes del lanzamiento | intencion de no renovacion, motivo estructurado, comentario opcional, retirada de la intencion, evento semantico futuro y analisis | Probable migracion propia | Contrato listo en PRODUCT-GROWTH-0; el self-service persistente queda diferido hasta antes de beta externa o una necesidad real de suscripciones de clientes | PRODUCT-GROWTH-0 / antes de beta |
 | CHURN-001 | Persistencia de intencion de no renovacion | Decision resuelta: el propietario expresara que no planea renovar; no existe cancelacion inmediata ni se reutiliza `motivoTransicion` administrativo | alta antes de beta externa | fuente tenant-safe y auditable, motivo estructurado, comentario opcional, estado/intencion retirada al renovar, semantica de fechaFin/gracia y retencion | Nueva estructura por definir | Resuelto documentalmente; implementacion persistente diferida. No bloquea PRODUCT-GROWTH-0C ni PILOT-READINESS | Antes de beta externa / suscripciones de clientes |
 | SEO-001 | Metadata y descubrimiento publico | La presencia publica no forma parte del producto privado actual | media antes de beta | metadata, canonical, Open Graph, preview 1200x630, favicon, theme metadata, robots, sitemap y noindex privado | No | Pendiente; metadata de tiendas/productos depende de COMMERCE | Landing / SEO |
-| PILOT-001 | Piloto real de tienda | La validacion con una tienda real requiere evidencia previa y autorizacion expresa de datos | critica antes de datos reales | entorno hospedado sintetico, backup/restore, seguridad, integridad de stock/dinero/credito, reconciliacion y soporte | No | Aprobado para fase futura; no desplegar, contratar ni introducir datos reales | PILOT-READINESS |
+| PILOT-001 | Piloto real de tienda | La validacion con una tienda real requiere evidencia previa y autorizacion expresa de datos | critica antes de datos reales | entorno hospedado sintetico, backup/restore, seguridad, integridad de stock/dinero/credito, reconciliacion y soporte | No | Auditoria PILOT-READINESS-1 local PASS; pendientes externos antes de `PILOT_READY`; no desplegar, contratar ni introducir datos reales | PILOT-READINESS |
 | TECH-020 | Cuentas de clientes compradores | El cliente actual es entidad comercial de tienda, no cuenta de comprador | media antes del lanzamiento | identidad, privacidad, tiendas y pedidos | Probable modelo nuevo | Requiere decision del propietario | COMMERCE |
 | TECH-021 | Comercio entre compradores y tiendas | No existe catalogo publico, carrito ni pedido interno | futura | stock, precios, aceptacion, sustituciones, delivery y fraude | Probable varias tablas | Pendiente | COMMERCE-MVP |
 | TECH-022 | WhatsApp automatico y chatbot | Hoy solo se prepara texto/enlace manual; no hay API, webhook ni chatbot | futura | consentimiento, costos, opt-out y proveedor | No determinada | Diferido | COMMERCE / SAAS futuro |
@@ -412,7 +412,20 @@ especifica del piloto, backup, restore probado, integridad de ventas/dinero,
 stock y credito/cobranzas, y un entorno hospedado sintetico validado antes de
 datos reales. Analytics remoto, PostHog, PRODUCT-029, `product_created`,
 `customer_created`, Session Replay y churn persistente no son blockers del
-primer piloto. Tras siete dias se reconciliaran ventas, stock, compras, creditos,
+primer piloto.
+
+### PILOT-READINESS-1
+
+Auditoria local PASS; quedan pendientes antes de `PILOT_READY` la evidencia CI
+remota (`PENDING_REMOTE_EVIDENCE`), el entorno hospedado sintetico
+(`PENDING_EXTERNAL_STAGE`) y la autorizacion explicita del propietario
+(`PENDING_OWNER_AUTHORIZATION`). La evidencia local incluye E2E critico PASS,
+security review CRITICAL 0 / HIGH 0, `BACKUP_OK`, restore temporal con 64 tablas,
+24 migraciones y 174 FKs, y PASS local de ventas/dinero, stock y
+credito/cobranzas. No se afirma validacion cloud.
+
+PostHog, analytics remoto, PRODUCT-029, `product_created`, `customer_created`,
+Session Replay y churn persistente no son blockers del primer piloto. Tras siete dias se reconciliaran ventas, stock, compras, creditos,
 cobranzas, devoluciones, reportes, backups, logs y analytics; `REAL_STORE_VALIDATED`
 requiere cero perdidas o duplicaciones conocidas y una usuaria capaz de operar
 el flujo diario.

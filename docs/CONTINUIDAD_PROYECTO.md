@@ -892,3 +892,31 @@ PostHog, el proveedor analytics remoto, la medicion de PRODUCT-029,
 `product_created`, `customer_created`, Session Replay y la persistencia
 self-service de churn no son blockers de `PILOT_READY`; siguen pendientes para
 beta/escala.
+
+### PILOT-READINESS-1 — auditoria local
+
+La auditoria local de PILOT-READINESS-1 queda en PASS para los gates que pueden
+probarse sin infraestructura externa: cero criticos conocidos; E2E critico;
+security review especifica del piloto; backup; restore; ventas/dinero; stock; y
+credito/cobranzas. La evidencia conservada es E2E PASS, security piloto con
+CRITICAL 0 / HIGH 0, `BACKUP_OK`, restore sobre base temporal con 64 tablas, 24
+migraciones y 174 FKs, y suites locales de integridad PASS.
+
+| Gate | Estado |
+| --- | --- |
+| Criticos conocidos | PASS |
+| E2E critico | PASS |
+| CI/gates remotos | `PENDING_REMOTE_EVIDENCE` |
+| Security review del piloto | PASS |
+| Backup | PASS (`BACKUP_OK`) |
+| Restore | PASS (64 tablas, 24 migraciones, 174 FKs) |
+| Ventas/dinero | PASS local |
+| Stock | PASS local |
+| Credito/cobranzas | PASS local |
+| Entorno hospedado sintetico | `PENDING_EXTERNAL_STAGE` |
+| Autorizacion de datos reales | `PENDING_OWNER_AUTHORIZATION` |
+
+Este resultado no declara `PILOT_READY` ni equipara pruebas locales con
+validacion cloud. PostHog, analytics remoto, PRODUCT-029, `product_created`,
+`customer_created`, Session Replay y churn persistente no bloquean el primer
+piloto.
