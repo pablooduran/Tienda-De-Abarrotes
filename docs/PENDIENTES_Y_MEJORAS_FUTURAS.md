@@ -416,8 +416,11 @@ primer piloto.
 
 ### PILOT-READINESS-1
 
-Auditoria local PASS; quedan pendientes antes de `PILOT_READY` la evidencia CI
-remota (`PENDING_REMOTE_EVIDENCE`), el entorno hospedado sintetico
+Auditoria local PASS; la evidencia CI remota queda PASS con el run `32402037197`
+del workflow `CI` y el job `Node 20 / MySQL 8` (`96532261093`), incluido el
+`Run critical browser business gate`, schema 001-024, integration suite,
+static security checks, workflow/isolation/config contracts y cleanup. Quedan
+pendientes antes de `PILOT_READY` el entorno hospedado sintetico
 (`PENDING_EXTERNAL_STAGE`) y la autorizacion explicita del propietario
 (`PENDING_OWNER_AUTHORIZATION`). La evidencia local incluye E2E critico PASS,
 security review CRITICAL 0 / HIGH 0, `BACKUP_OK`, restore temporal con 64 tablas,

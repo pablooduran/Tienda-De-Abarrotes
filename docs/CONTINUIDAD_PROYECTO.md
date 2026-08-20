@@ -906,7 +906,7 @@ migraciones y 174 FKs, y suites locales de integridad PASS.
 | --- | --- |
 | Criticos conocidos | PASS |
 | E2E critico | PASS |
-| CI/gates remotos | `PENDING_REMOTE_EVIDENCE` |
+| CI/gates remotos | PASS |
 | Security review del piloto | PASS |
 | Backup | PASS (`BACKUP_OK`) |
 | Restore | PASS (64 tablas, 24 migraciones, 174 FKs) |
@@ -915,6 +915,12 @@ migraciones y 174 FKs, y suites locales de integridad PASS.
 | Credito/cobranzas | PASS local |
 | Entorno hospedado sintetico | `PENDING_EXTERNAL_STAGE` |
 | Autorizacion de datos reales | `PENDING_OWNER_AUTHORIZATION` |
+
+El gate CI remoto queda confirmado por el run `32402037197` del workflow `CI`,
+evento `push`, sobre el commit `92ad8d8c546e1f6057faee4d9b361613bc336a9a`.
+El job `Node 20 / MySQL 8` (`96532261093`) termino en success, incluido
+`Run critical browser business gate`, schema 001-024, integration suite,
+static security checks, workflow/isolation/config contracts y cleanup.
 
 Este resultado no declara `PILOT_READY` ni equipara pruebas locales con
 validacion cloud. PostHog, analytics remoto, PRODUCT-029, `product_created`,
