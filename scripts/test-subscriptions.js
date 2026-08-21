@@ -609,7 +609,7 @@ async function main() {
     await expect(superSession, `/api/admin/suscripciones/${renewed.suscripcion.idSuscripcion}/suspender`, {
       method: 'PATCH'
     }, 200, 'Suspension de suscripcion');
-    await expect(basicSession, '/api/productos', {}, 403, 'Lectura bloqueada por suspension');
+    await expect(basicSession, '/api/productos', {}, 200, 'Lectura permitida en modo solo lectura suspendido');
     await expect(basicSession, `/api/productos/${firstProduct.idProducto}`, {
       method: 'PUT', body: updateProduct
     }, 403, 'Escritura bloqueada por suspension');

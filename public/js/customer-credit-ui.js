@@ -61,8 +61,15 @@
     };
     const valueOrUnknown = (value, prefix = '') => value === null || value === undefined || value === ''
       ? 'Sin limite' : `${prefix}${money(value)}`;
-    const statusText = (value) => String(value || 'sin_fecha').replaceAll('_', ' ');
+    const statusText = (value) => ({ vencido_con_promesa: 'vencida con promesa vigente' }[value] || String(value || 'sin_fecha').replaceAll('_', ' '));
     const statusBadge = (value) => `<span class="credit-status status-${e(value || 'sin_fecha')}">${e(statusText(value))}</span>`;
+    const debtDisplayState = (debt) => {
+      const originalDate = dateText(debt?.fechaVencimiento);
+      const promisedDate = dateText(debt?.fechaPrometidaPago);
+      const today = dateText(localDateValue());
+      return originalDate && originalDate < today && promisedDate && promisedDate >= today
+        ? 'vencido_con_promesa' : (debt?.estadoCobranza || debt?.estado);
+    };
     const option = (value, label, selected) => `<option value="${e(value)}" ${String(value) === String(selected ?? '') ? 'selected' : ''}>${e(label)}</option>`;
     function setBusy(button, busy, label = 'Procesando...') {
       if (!button) return;
@@ -670,8 +677,8 @@
     function collectionRowsMarkup(rows) {
       if (!rows.length) return '<div class="panel empty-state"><strong>No hay cuentas en este estado.</strong><p>Los filtros actuales no devolvieron resultados.</p></div>';
       return `<div class="panel collection-desktop-table table-wrap"><table><thead><tr><th>Cliente</th><th>Telefono</th><th>Saldo</th><th>Vencimiento</th><th>Promesa</th><th>Estado</th><th>Tiempo</th><th>Acciones</th></tr></thead><tbody>${rows.map((row) => `<tr>
-        <td><strong>${e(row.cliente)}</strong>${row.clienteActivo ? '' : `<small>${statusBadge('oculto')}</small>`}</td><td>${e(row.telefono || 'Sin telefono')}</td><td>Bs ${money(row.saldoPendiente)}</td><td>${e(dateText(row.fechaVencimiento) || 'Sin fecha')}</td><td>${e(dateText(row.fechaPrometidaPago) || 'Sin promesa')}</td><td>${statusBadge(row.estadoCobranza || row.estado)}</td><td>${row.diasAtraso ? `${e(row.diasAtraso)} dias de atraso` : row.diasRestantes !== null && row.diasRestantes !== undefined ? `${e(row.diasRestantes)} dias restantes` : 'Sin calculo'}</td><td>${collectionActions(row)}</td></tr>`).join('')}</tbody></table></div>
-        <div class="collection-mobile-list">${rows.map((row) => `<article class="collection-card ${row.clienteActivo ? '' : 'customer-hidden'}"><header><div><strong>${e(row.cliente)}</strong><span>${e(row.telefono || 'Sin telefono')}</span>${row.clienteActivo ? '' : '<span>Cliente oculto</span>'}</div>${statusBadge(row.estadoCobranza || row.estado)}</header><dl><div><dt>Saldo</dt><dd>Bs ${money(row.saldoPendiente)}</dd></div><div><dt>Vencimiento</dt><dd>${e(dateText(row.fechaVencimiento) || 'Sin fecha')}</dd></div><div><dt>Promesa</dt><dd>${e(dateText(row.fechaPrometidaPago) || 'Sin promesa')}</dd></div></dl>${collectionActions(row)}</article>`).join('')}</div>`;
+        <td><strong>${e(row.cliente)}</strong>${row.clienteActivo ? '' : `<small>${statusBadge('oculto')}</small>`}</td><td>${e(row.telefono || 'Sin telefono')}</td><td>Bs ${money(row.saldoPendiente)}</td><td>${e(dateText(row.fechaVencimiento) || 'Sin fecha')}</td><td>${e(dateText(row.fechaPrometidaPago) || 'Sin promesa')}</td><td>${statusBadge(debtDisplayState(row))}</td><td>${row.diasAtraso ? `${e(row.diasAtraso)} dias de atraso` : row.diasRestantes !== null && row.diasRestantes !== undefined ? `${e(row.diasRestantes)} dias restantes` : 'Sin calculo'}</td><td>${collectionActions(row)}</td></tr>`).join('')}</tbody></table></div>
+        <div class="collection-mobile-list">${rows.map((row) => `<article class="collection-card ${row.clienteActivo ? '' : 'customer-hidden'}"><header><div><strong>${e(row.cliente)}</strong><span>${e(row.telefono || 'Sin telefono')}</span>${row.clienteActivo ? '' : '<span>Cliente oculto</span>'}</div>${statusBadge(debtDisplayState(row))}</header><dl><div><dt>Saldo</dt><dd>Bs ${money(row.saldoPendiente)}</dd></div><div><dt>Vencimiento</dt><dd>${e(dateText(row.fechaVencimiento) || 'Sin fecha')}</dd></div><div><dt>Promesa</dt><dd>${e(dateText(row.fechaPrometidaPago) || 'Sin promesa')}</dd></div></dl>${collectionActions(row)}</article>`).join('')}</div>`;
     }
 
     async function renderCollections(focus = null) {
@@ -757,7 +764,7 @@
       if (!debt || readOnly()) return;
       await openFormModal({
         title: `Promesa de pago de ${debt.cliente}`,
-        body: `<div class="promise-context"><span>Vencimiento original<strong>${e(dateText(debt.fechaVencimiento) || 'Sin fecha')}</strong></span><span>Promesa vigente<strong>${e(dateText(debt.fechaPrometidaPago) || 'Sin promesa')}</strong></span>${statusBadge(debt.estadoCobranza)}</div>
+        body: `<div class="promise-context"><span>Vencimiento original<strong>${e(dateText(debt.fechaVencimiento) || 'Sin fecha')}</strong></span><span>Promesa vigente<strong>${e(dateText(debt.fechaPrometidaPago) || 'Sin promesa')}</strong></span>${statusBadge(debtDisplayState(debt))}</div>
           <div class="form-grid"><label>Fecha prometida<input name="fechaPrometidaPago" type="date" min="${e(localDateValue())}" required value="${e(dateText(debt.fechaPrometidaPago))}"></label><label>Canal<select name="canal">${CHANNELS.map((item) => option(item, statusText(item), 'telefono')).join('')}</select></label>${debt.fechaPrometidaPago ? '<label class="check"><input name="limpiarFechaPrometida" type="checkbox"> Quitar la promesa vigente</label>' : ''}<label class="wide">Detalle o motivo<textarea name="detalle" required maxlength="2000"></textarea></label></div>`,
         submitText: 'Guardar promesa',
         onOpen: (form) => form.elements.limpiarFechaPrometida?.addEventListener('change', () => {

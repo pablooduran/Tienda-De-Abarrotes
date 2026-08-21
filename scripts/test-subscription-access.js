@@ -121,7 +121,7 @@ async function cleanup(connection, fixtures) {
 function assertPurePolicy() {
   assert.strictEqual(accessLevelForStatus('activa'), ACCESS_LEVELS.FULL);
   assert.strictEqual(accessLevelForStatus('gracia'), ACCESS_LEVELS.READ_ONLY);
-  assert.strictEqual(accessLevelForStatus('suspendida'), ACCESS_LEVELS.RESTRICTED);
+  assert.strictEqual(accessLevelForStatus('suspendida'), ACCESS_LEVELS.READ_ONLY);
   assert(subscriptionRequestDecision({ method: 'GET', path: '/api/productos', accessLevel: 'solo_lectura' }).allowed);
   assert(!subscriptionRequestDecision({ method: 'POST', path: '/api/productos', accessLevel: 'solo_lectura' }).allowed);
   assert(!subscriptionRequestDecision({ method: 'GET', path: '/api/exportaciones/ventas.xlsx', accessLevel: 'solo_lectura' }).allowed);
@@ -197,12 +197,17 @@ async function main() {
       [formatLocalDateTime(), first.idTienda, first.idSuscripcion]
     );
     const suspended = await expect(firstSession, '/api/suscripcion', {}, 200, 'Consulta suspendida');
-    assert.strictEqual(suspended.body.acceso.nivel, 'restringido');
-    const suspendedRead = await expect(firstSession, '/api/productos', {}, 403, 'Lectura comercial suspendida');
-    assert.strictEqual(suspendedRead.body.code, 'SUBSCRIPTION_SUSPENDED');
+    assert.strictEqual(suspended.body.acceso.nivel, 'solo_lectura');
+    const suspendedRead = await expect(firstSession, '/api/productos', {}, 200, 'Lectura comercial suspendida');
+    assert(Array.isArray(suspendedRead.body));
+    await expect(firstSession, '/api/configuracion-tienda', {}, 200, 'Configuracion suspendida');
+    const suspendedWrite = await expect(firstSession, '/api/productos', {
+      method: 'POST', body: { nombre: 'No debe crearse suspendida' }
+    }, 403, 'Escritura bloqueada suspendida');
+    assert.strictEqual(suspendedWrite.body.code, 'SUBSCRIPTION_SUSPENDED');
     await expect(firstSession, '/api/contexto', {}, 200, 'Contexto minimo suspendido');
-    const pageRedirect = await expect(firstSession, '/app.html', {}, 302, 'Panel redirige a suscripcion');
-    assert.strictEqual(pageRedirect.headers.get('location'), '/suscripcion.html');
+    const suspendedPanel = await expect(firstSession, '/app.html', {}, 200, 'Panel de solo lectura suspendido');
+    assert(String(suspendedPanel.body).includes('id="view"'), 'El panel suspendido no cargo la superficie de consulta.');
 
     await connection.query(
       `UPDATE suscripcionTienda SET estado='cancelada', canceladaEn=?, motivoTransicion='cancelacion_administrativa'

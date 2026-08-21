@@ -11,6 +11,14 @@ el documento. Tampoco representa una promesa de lanzamiento. Cada pendiente
 debe actualizarse al cerrar una fase y revisarse antes de una beta y antes del
 lanzamiento oficial.
 
+## Bloque 1 - integridad funcional pre-UX
+
+- Configuracion suspendida: las lecturas seguras quedan disponibles en modo solo lectura; las escrituras comerciales siguen bloqueadas.
+- Planes publicos: Basic, Standard y Pro ya tienen contrato vigente en 023. `avanzado` permanece como legado no publico y no se deben corregir cuentas historicas a ciegas.
+- Pago mixto ocasional: efectivo + QR totalmente pagado queda cubierto por regresion; el saldo pendiente continua requiriendo cliente registrado.
+- Promesas de pago: se conserva el vencimiento original y la promesa vigente; la etiqueta visual de vencida con promesa no agrega estado persistido.
+- Lotes y vencimientos: el flujo existente de distribucion inicial y FEFO/FIFO fue diagnosticado y probado. La integracion de lote/vencimiento dentro de Compras requiere decision de flujo y posible trabajo estructural; queda diferida y no implica crear la migracion 025.
+
 Estado de referencia actualizado despues del cierre de HELP:
 
 - Rama: `mejora-multitienda`.

@@ -317,6 +317,22 @@ async function main() {
     assert(await scalar(connection, 'SELECT COUNT(*) total FROM pagoVenta WHERE idTienda=? AND idVenta=?', [fixture.storeA, mixedSale.idVenta]) === 2,
       'El pago mixto no creo dos componentes.');
 
+    const occasionalMixedSale = await expect(ownerA, '/api/pos/ventas', {
+      method: 'POST', body: {
+        claveOperacion: `mixed-occasional-${marker}`,
+        items: [{ idProducto: productNoBarcode.idProducto, cantidad: 1, presentacion: 'unidad' }],
+        pagos: [{ metodoPago: 'efectivo', monto: 4 }, { metodoPago: 'qr', monto: 6, referencia: 'MIX-OCCASIONAL' }],
+        efectivoRecibido: 4, saldoFiado: 0
+      }
+    }, 201, 'Venta mixta totalmente pagada sin cliente');
+    assert(occasionalMixedSale.estadoPago === 'pagada' && !occasionalMixedSale.idCliente,
+      'El cliente ocasional no pudo completar un pago mixto totalmente pagado.');
+    await expect(ownerA, '/api/pos/ventas', { method: 'POST', body: {
+      claveOperacion: `mixed-occasional-debt-${marker}`,
+      items: [{ idProducto: productNoBarcode.idProducto, cantidad: 1, presentacion: 'unidad' }],
+      pagos: [{ metodoPago: 'efectivo', monto: 4 }], saldoFiado: 6
+    } }, 400, 'Saldo pendiente sin cliente ocasional rechazado');
+
     const creditSale = await expect(ownerA, '/api/pos/ventas', {
       method: 'POST', body: {
         claveOperacion: `credit-${marker}`, idCliente: clientA.idCliente,

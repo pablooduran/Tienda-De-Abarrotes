@@ -568,6 +568,8 @@ async function main() {
     assert(dueTodayCredit.fechaVencimiento === formatLocalDate(), 'El fiado no conservo el vencimiento de hoy.');
 
     const promiseDate = addDays(formatLocalDate(), 5);
+    const beforePromise = await expect(advanced, `/api/fiados/${confirmedCredit.idFiado}`, {}, 200, 'Detalle antes de promesa');
+    const originalDueDate = String(beforePromise.fiado.fechaVencimiento || '').slice(0, 10);
     await expect(advanced, `/api/fiados/${confirmedCredit.idFiado}/fecha-prometida`, { method: 'PATCH', body: {
       fechaPrometidaPago: promiseDate,
       detalle: 'Cliente promete pagar en cinco dias.',
@@ -576,6 +578,8 @@ async function main() {
     const promiseDebt = await expect(advanced, `/api/fiados/${confirmedCredit.idFiado}`, {}, 200, 'Detalle con promesa');
     assert(String(promiseDebt.fiado.fechaPrometidaPago).slice(0, 10) === promiseDate,
       'La fecha prometida no se guardo o sustituyo la original.');
+    assert(String(promiseDebt.fiado.fechaVencimiento || '').slice(0, 10) === originalDueDate,
+      'La promesa reemplazo el vencimiento original.');
     await expect(advanced, '/api/cobranza/seguimientos', { method: 'POST', body: {
       idCliente: customer.idCliente,
       idFiado: confirmedCredit.idFiado,
@@ -1301,8 +1305,8 @@ async function main() {
     );
     await connection.query('UPDATE suscripcionTienda SET estado=?,actualizadoEn=? WHERE idSuscripcion=?',
       ['suspendida', formatLocalDateTime(), basicSubscription.idSuscripcion]);
-    await expect(basic, `/api/clientes/${basicCustomer.idCliente}`, {}, 403,
-      'Lectura comercial bloqueada con suscripcion suspendida');
+    await expect(basic, `/api/clientes/${basicCustomer.idCliente}`, {}, 200,
+      'Lectura de clientes permitida en modo solo lectura suspendido');
     const suspendedExport = await expectRaw(basic, '/api/clientes/exportacion.xlsx', 403,
       'Suscripcion suspendida no exporta');
     assert(JSON.parse(suspendedExport.buffer.toString('utf8')).code === 'SUBSCRIPTION_SUSPENDED',
@@ -1319,17 +1323,17 @@ async function main() {
     );
     await connection.query('UPDATE suscripcionTienda SET estado=?,actualizadoEn=? WHERE idSuscripcion=?',
       ['suspendida', formatLocalDateTime(), advancedSubscription.idSuscripcion]);
-    await expect(advanced, '/api/clientes/segmentacion?segmento=con_deuda', {}, 403,
-      'Suscripcion suspendida bloquea segmentacion avanzada');
-    await expect(advanced, '/api/plantillas-cobranza', {}, 403,
-      'Suscripcion suspendida bloquea lectura de plantillas');
+    await expect(advanced, '/api/clientes/segmentacion?segmento=con_deuda', {}, 200,
+      'Lectura de segmentacion permitida en modo solo lectura suspendido');
+    await expect(advanced, '/api/plantillas-cobranza', {}, 200,
+      'Lectura de plantillas permitida en modo solo lectura suspendido');
     const suspendedTemplateWrite = await expect(advanced, '/api/plantillas-cobranza', { method: 'POST', body: {
       tipo: 'recordatorio_previo', nombre: `Suspendida ${marker}`, contenido: 'No debe guardarse'
     } }, 403, 'Suscripcion suspendida no crea plantillas');
     assert(suspendedTemplateWrite.code === 'SUBSCRIPTION_SUSPENDED',
       'La escritura suspendida no devolvio el contrato de acceso restringido.');
     await expect(advanced, `/api/cobros-fiado/${partial.idCobroFiado}/comprobante`, {}, 403,
-      'Suscripcion suspendida bloquea comprobante historico');
+      'Comprobante fuera de lectura suspendida permitida');
     await connection.query('UPDATE suscripcionTienda SET estado=?,actualizadoEn=? WHERE idSuscripcion=?',
       ['activa', formatLocalDateTime(), advancedSubscription.idSuscripcion]);
     await connection.query('UPDATE suscripcionTienda SET idPlan=? WHERE idSuscripcion=?', [plans.basic.idPlan, advancedSubscription.idSuscripcion]);

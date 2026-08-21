@@ -19,7 +19,7 @@ function executable() {
 }
 
 function state(status) {
-  const access = status === 'gracia' ? 'solo_lectura' : (['suspendida', 'cancelada'].includes(status) ? 'restringido' : 'completo');
+  const access = ['gracia', 'suspendida'].includes(status) ? 'solo_lectura' : (status === 'cancelada' ? 'restringido' : 'completo');
   const effectiveStatus = status === 'prueba' ? 'activa' : status;
   return {
     estado: effectiveStatus,
@@ -37,7 +37,7 @@ function state(status) {
       mensaje: access === 'completo'
         ? 'La suscripcion permite el acceso normal segun el plan.'
         : (access === 'solo_lectura'
-          ? 'El periodo termino y la tienda esta en gracia. Los datos pueden consultarse, pero no modificarse.'
+          ? (status === 'suspendida' ? 'La suscripcion esta suspendida. Los datos pueden consultarse, pero no modificarse.' : 'El periodo termino y la tienda esta en gracia. Los datos pueden consultarse, pero no modificarse.')
           : 'La suscripcion no permite acceso comercial. Los datos permanecen conservados.'),
       siguienteAccion: access === 'completo' ? 'continuar' : (status === 'cancelada' ? 'contactar_soporte' : 'reactivar')
     },
@@ -120,7 +120,7 @@ async function openState(browser, baseUrl, mode, viewport) {
   await page.goto(`${baseUrl}/suscripcion.html`);
   await page.locator('[data-subscription-view]').waitFor();
   assert.strictEqual(await page.locator('[data-subscription-view]').getAttribute('data-access'),
-    mode === 'gracia' ? 'solo_lectura' : (['suspendida', 'cancelada'].includes(mode) ? 'restringido' : 'completo'));
+        ['gracia', 'suspendida'].includes(mode) ? 'solo_lectura' : (mode === 'cancelada' ? 'restringido' : 'completo'));
   assert.strictEqual(await page.evaluate(() => document.documentElement.scrollWidth > document.documentElement.clientWidth + 1), false);
   assert.deepStrictEqual(errors, [], `${mode} ${viewport.width}x${viewport.height} debe mantener consola limpia.`);
   return { page, errors };
@@ -153,7 +153,7 @@ async function main() {
     for (const mode of ['activa', 'prueba', 'suspendida', 'cancelada']) {
       const { page } = await openState(browser, baseUrl, mode, { width: 1366, height: 768 });
       const panelLinks = await page.locator('[data-subscription-panel]').count();
-      assert.strictEqual(panelLinks, ['activa', 'prueba'].includes(mode) ? 1 : 0);
+      assert.strictEqual(panelLinks, mode === 'cancelada' ? 0 : 1);
       if (mode === 'prueba') assert.strictEqual(await page.locator('.subscription-status').textContent(), 'Prueba gratuita');
       await page.close();
     }

@@ -131,6 +131,18 @@ El contexto de tienda proviene de la sesion validada. El navegador no debe envia
 
 ## 4. Funcionalidades implementadas
 
+### Bloque 1 - integridad funcional pre-UX
+
+La auditoria funcional previa al rediseño corrigio solo contratos existentes:
+
+- Configuracion de tienda: las lecturas de configuracion quedan disponibles en modo solo lectura para una suscripcion suspendida; las mutaciones siguen bloqueadas por suscripcion, permiso y tenant.
+- Planes: Basic, Standard y Pro son los planes publicos vigentes con limites 1/500/25/15, 3/1200/70/50 e ilimitado mediante `NULL`, respectivamente. `avanzado` se conserva como cuenta de cortesia/legado y no se publica.
+- POS: un cliente ocasional puede pagar efectivo, QR o una combinacion totalmente saldada; si queda saldo pendiente se exige cliente registrado.
+- Cobranza: una promesa conserva `fechaVencimiento`, `fechaPrometidaPago` y el seguimiento historico; la interfaz muestra el contexto de vencimiento sin crear un estado persistido nuevo.
+- Lotes: existe distribucion inicial, trazabilidad y FEFO/FIFO; la integracion completa de lotes con Compras queda como diagnostico diferido y no se amplia en este bloque.
+
+No se creo la migracion 025 ni se modificaron reglas comerciales, precios, planes historicos o la arquitectura de lotes.
+
 ### Multitienda, administracion y planes
 
 - Creacion y administracion de tiendas y propietarios por superadmin.

@@ -32,7 +32,8 @@ const GRACE_READ_PATHS = Object.freeze([
   /^\/api\/lotes(?:\/|$)/,
   /^\/api\/compensaciones(?:\/|$)/,
   /^\/api\/auditoria(?:\/|$)/,
-  /^\/api\/catalogo-maestro(?:\/|$)/
+  /^\/api\/catalogo-maestro(?:\/|$)/,
+  /^\/api\/configuracion-tienda\/?$/
 ]);
 const BLOCKED_READ_OUTPUTS = Object.freeze([
   /(?:^|\/)exportacion(?:es)?(?:\.|\/|$)/,
@@ -42,7 +43,7 @@ const BLOCKED_READ_OUTPUTS = Object.freeze([
 
 function accessLevelForStatus(status) {
   if (status === 'activa') return ACCESS_LEVELS.FULL;
-  if (status === 'gracia') return ACCESS_LEVELS.READ_ONLY;
+  if (status === 'gracia' || status === 'suspendida') return ACCESS_LEVELS.READ_ONLY;
   return ACCESS_LEVELS.RESTRICTED;
 }
 
@@ -86,7 +87,9 @@ function accessDescription(status) {
   if (level === ACCESS_LEVELS.READ_ONLY) {
     return Object.freeze({
       nivel: level,
-      mensaje: 'El periodo termino y la tienda esta en gracia. Los datos pueden consultarse, pero no modificarse.',
+      mensaje: status === 'suspendida'
+        ? 'La suscripcion esta suspendida. Los datos pueden consultarse, pero no modificarse. Puedes renovarla para reactivar la operacion.'
+        : 'El periodo termino y la tienda esta en gracia. Los datos pueden consultarse, pero no modificarse.',
       siguienteAccion: 'renovar'
     });
   }
