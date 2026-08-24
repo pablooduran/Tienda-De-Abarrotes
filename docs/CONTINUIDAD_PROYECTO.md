@@ -967,3 +967,21 @@ como rate limit distribuido y que las sesiones permanecen en MySQL; tambien
 delimita el storage privado de comprobantes, health, red, backup/restore y los
 criterios objetivos de `entorno hospedado sintetico listo`. Su documentacion no
 provisiona ni valida recursos externos.
+
+### PILOT-READINESS-3 - piloto gratuito controlado
+
+Se documento el protocolo para una sola tienda en planes gratuitos: primero
+datos sinteticos y, solo con PASS objetivo y autorizacion explicita del
+propietario, un piloto real de siete dias ampliable hasta catorce. No es un
+lanzamiento publico ni autoriza mas tiendas. El nucleo operativo permitido
+abarca catalogo, compras, stock, ventas, credito/cobranzas, cierres, reportes y
+auditoria bajo los guards existentes. Correo hosted permanece fuera de alcance;
+los comprobantes manuales de suscripcion quedan restringidos hasta validar
+storage privado persistente, backup y restore remotos.
+
+El pase sintetico a datos reales exige tres sesiones sinteticas completas y
+consecutivas sin diferencias de dinero, stock o credito, sin duplicados,
+backup/restore remoto PASS, CI vigente y autorizacion del propietario. Cualquier
+fallo de salud, integridad, tenant, autorizacion, TLS, Redis, MySQL, storage o
+limite que afecte disponibilidad detiene el piloto. `PILOT_READY` sigue sin
+declararse; faltan ejecutar el contrato y las pruebas hospedadas sinteticas.

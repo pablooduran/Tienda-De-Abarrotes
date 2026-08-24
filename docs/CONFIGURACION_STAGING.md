@@ -182,6 +182,98 @@ PASS; backup y restore remoto sintetico PASS; limites/costo/disponibilidad del
 plan aceptados; y limpieza completa. La autorizacion para datos reales sigue
 siendo un gate separado posterior.
 
+## Piloto gratuito controlado - pendiente de ejecucion
+
+Este protocolo prepara una validacion controlada de una sola tienda sobre los
+planes gratuitos existentes. No es un lanzamiento publico, no autoriza cambios
+en proveedores ni incorpora datos reales. Primero debe completarse el entorno
+hospedado sintetico; solo despues y con autorizacion expresa del propietario se
+podra iniciar un piloto real de siete dias, ampliable hasta catorce si la
+evidencia requiere observar mas ciclos operativos. Antes de abrir a mas tiendas
+debe decidirse una etapa hospedada con capacidad, persistencia y soporte
+pagados o formalmente aprobados.
+
+### Alcance permitido despues del PASS sintetico
+
+- Una cuenta y una tienda aisladas; autenticacion de una cuenta ya preparada,
+  sesion, navegacion y consultas protegidas por tenant.
+- Catalogo, proveedores, compras, stock, ajustes con motivo, consultas de lotes
+  ya disponibles sin inventar una carga nueva, POS, ventas totalmente pagadas,
+  clientes, fiado, cobranza, devoluciones/anulaciones conforme a sus contratos,
+  caja, cierres, reportes y auditoria.
+- El uso diario debe respetar guards de suscripcion, permisos, CSRF, rate limits
+  distribuidos e idempotencia; no se admite enviar ni elegir `idTienda` desde el
+  cliente.
+
+### Funcionalidades restringidas o bloqueadas
+
+- El registro publico, verificacion y recuperacion por correo no se prueban en
+  hosted mientras `EMAIL_DELIVERY_MODE=disabled`; no se finge una entrega.
+- Subir, revisar o descargar comprobantes de pagos manuales de suscripcion solo
+  se permite si el filesystem privado persistente, su backup y su restauracion
+  ya fueron validados. Sin esa evidencia el flujo queda fuera del smoke y del
+  piloto gratuito.
+- Los scripts de backup y restore del repositorio son locales. El respaldo y la
+  restauracion remotos necesitan un procedimiento externo probado con datos
+  sinteticos antes de admitir datos reales.
+- Quedan bloqueados el lanzamiento publico, multiples tiendas, correo externo,
+  pagos automaticos y cualquier dato real antes del PASS sintetico y la
+  autorizacion explicita.
+
+### Redis/Valkey y salud operativa
+
+El codigo no permite el fallback en memoria en `staging`: requiere un servicio
+Redis o Valkey compatible con TLS, URL `rediss://`, secreto robusto, aislamiento
+por prefijo y conexion `PING` antes de escuchar. El servicio actual no es cache,
+cola ni store de sesiones; solo respalda rate limits distribuidos. No hay
+evidencia de un servicio gratuito compatible ya disponible, por lo que su
+eleccion y validacion siguen siendo una decision externa, sin relajar TLS ni la
+red.
+
+Antes de cada sesion deben responder `200` ambos endpoints:
+
+- `GET` o `HEAD /health/live`: proceso vivo.
+- `GET` o `HEAD /health/ready`: MySQL, migraciones esperadas, Redis/Valkey y
+  storage privado cuando ese flujo este incluido.
+
+Un `503`, una dependencia no lista o una respuesta sin el contrato esperado
+detiene la sesion; no se cargan ni se operan datos reales.
+
+### Checklist diario
+
+**Sesion sintetica.** Antes de operar, verificar rama/artefacto autorizado,
+HTTPS, ambos health checks, aislamiento de la base sintetica y backup disponible.
+Ejecutar y reconciliar una compra o entrada, una venta de contado o QR, una
+venta a credito y una cobranza, un ajuste permitido, una devolucion o anulacion
+solo sobre un registro de prueba y un cierre/reporte. Comparar stock, saldos,
+totales, movimientos y auditoria; comprobar que una reactivacion de la accion no
+duplique la mutacion. Registrar resultado sin secretos, crear la evidencia de
+backup definida y limpiar los datos sinteticos conforme al procedimiento externo.
+
+**Piloto real, solo despues de PASS sintetico.** Repetir al inicio live/ready y
+confirmar backup verificable. Operar las transacciones reales del dia con una
+sola tienda: acceso, venta, pago, stock, compra, fiado/cobranza, cierre y
+reporte. Al cierre, reconciliar ventas, dinero, stock, credito/cobranzas,
+duplicados y datos faltantes; conservar evidencia de backup sin exponer datos.
+No se ensayan anulaciones, reintentos ni cargas artificiales sobre operaciones
+reales solo para probar el sistema.
+
+### Gate de sinteticos a datos reales y detencion inmediata
+
+El paso a datos reales requiere: entorno hospedado sintetico listo segun el
+criterio anterior; al menos tres sesiones sinteticas completas consecutivas sin
+criticos, duplicados ni diferencias de ventas, stock o credito; backup y restore
+remotos sinteticos PASS; evidencia CI vigente; y autorizacion explicita del
+propietario para esa unica tienda. Esto no declara `PILOT_READY` hasta que todos
+los gates oficiales queden documentados.
+
+Detener de inmediato el piloto ante perdida o inconsistencia de dinero, stock o
+credito; mutacion duplicada; acceso entre tenants o bypass de autorizacion;
+exposicion de secretos o datos sensibles; fallo de TLS, Redis, MySQL, storage,
+backup o restore; suspension/limite del plan Free que afecte la disponibilidad;
+o entrada accidental de datos reales al entorno sintetico. Preservar evidencia
+segura y no continuar ni restaurar sobre una base real.
+
 ## Trust proxy
 
 Express recibe una lista de CIDR mediante `TRUST_PROXY_CIDRS`. No se acepta

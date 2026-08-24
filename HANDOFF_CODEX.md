@@ -192,8 +192,9 @@ UX-001 a UX-005 y el resto del polish visual permanecen en el roadmap.
 - TECH-026 E2E critico existe; validar CI vigente.
 - Render y Aiven ya existen y su inventario fue auditado parcialmente; no se
   deben tratar como una provision desde cero ni como staging validado. Quedan
-  pendientes el contrato tecnico de staging, Redis/Valkey, red restringida,
-  storage privado persistente, health check y backup/restore remoto sintetico.
+  pendientes ejecutar el contrato tecnico y el protocolo de piloto gratuito:
+  Redis/Valkey, red restringida, storage privado persistente, health check y
+  backup/restore remoto sintetico.
 
 ## 12. Problemas conocidos y roadmap
 
@@ -213,14 +214,14 @@ PRODUCT-GROWTH-0, CHURN-001, PILOT-GATE-ALIGNMENT, PILOT-READINESS-1 local y
 BLOQUE 1 funcional.
 
 El siguiente macroestado es **PILOT-READINESS**. PILOT-READINESS-1 local esta
-en PASS; el siguiente paso es cerrar el contrato tecnico de staging sobre la
-infraestructura existente, documentado en `docs/CONFIGURACION_STAGING.md`, y
-despues ejecutar pruebas hospedadas exclusivamente con datos sinteticos. Redis
-solo sirve al rate limit distribuido; las sesiones siguen en MySQL y los
-comprobantes requieren filesystem privado. No existe PILOT_READY hasta completar
-esa validacion y obtener la autorizacion explicita del propietario antes de
-incorporar datos reales. No iniciar COMMERCE, SECURITY-FINAL, piloto real ni
-otra fase por inferencia.
+en PASS; el contrato tecnico y el protocolo de piloto gratuito controlado ya
+estan documentados en `docs/CONFIGURACION_STAGING.md`. El siguiente paso es
+ejecutar las pruebas hospedadas exclusivamente con datos sinteticos. Redis solo
+sirve al rate limit distribuido; las sesiones siguen en MySQL y los comprobantes
+requieren filesystem privado. Solo tras PASS sintetico, backup/restore remoto y
+autorizacion explicita puede comenzar un piloto de una tienda por siete dias,
+ampliable hasta catorce. No existe PILOT_READY hasta completar esos gates. No
+iniciar COMMERCE, SECURITY-FINAL, piloto real ni otra fase por inferencia.
 
 ## INSTRUCCIONES PARA CONTINUAR
 

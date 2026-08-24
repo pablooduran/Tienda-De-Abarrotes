@@ -16,12 +16,12 @@
 - Macroestado vigente: `PILOT-READINESS`; `PILOT-READINESS-1` local PASS
 - Infraestructura hospedada: Render y Aiven existentes, auditados parcialmente
   el 2026-08-24; no validados aun como staging sintetico.
-- Contrato tecnico de staging: documentado y pendiente de ejecucion; Redis solo
-  cubre rate limit distribuido, sesiones usan MySQL y comprobantes requieren
-  filesystem privado persistente si se incluye ese flujo.
-- `PILOT_READY`: no declarado; primero cerrar el contrato tecnico de staging y
-  ejecutar pruebas hospedadas solo con datos sinteticos. Despues se requerira la
-  autorizacion explicita del propietario antes de datos reales.
+- Contrato tecnico y protocolo de piloto gratuito: documentados y pendientes de
+  ejecucion. Redis solo cubre rate limit distribuido, sesiones usan MySQL y los
+  comprobantes requieren filesystem privado persistente si se incluye ese flujo.
+- `PILOT_READY`: no declarado; primero ejecutar pruebas hospedadas solo con
+  datos sinteticos. Despues, con backup/restore remoto PASS y autorizacion
+  explicita, puede iniciar un piloto de una tienda por 7-14 dias.
 
 Restricciones: no crear 025, no tocar produccion/remotos, no ejecutar
 migraciones sobre la base principal sin autorizacion, no romper tenant

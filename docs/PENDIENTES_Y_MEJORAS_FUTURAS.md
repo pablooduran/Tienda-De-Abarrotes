@@ -63,7 +63,7 @@ Las migraciones son posibilidades; ninguna se crea por estar mencionada aqui.
 | TECH-005 | SAAS-C6-C8 frontend, regresion y cierre | C1 solo valido esquema y compatibilidad | alta | C2-C5, tenant, seguridad, browser y backup | No determinada | Implementado y cerrado | SAAS-C6-C8 |
 | TECH-006 | Seguridad publica final | Las fases A-C validaron el flujo local; correo real y despliegue quedan fuera | alta antes de beta | autenticacion, tenant, archivos privados, rate limits y secretos | No determinada | Implementado y cerrado | Pre-beta |
 | TECH-007 | CI y GitHub Actions | Workflow reproducible con MySQL efimero, migraciones 001-024 y regresion server-side | alta antes de beta | staging, artefactos no sensibles y store de rate limit para ejecucion distribuida | No | Implementado | Pre-beta |
-| TECH-008 | Staging y produccion de prueba | Render y Aiven existen y fueron auditados parcialmente el 2026-08-24, pero no hay entorno sintetico validado | alta antes de beta | rama autorizada, red restringida, Redis/Valkey TLS, storage privado, health check, datos sinteticos, CIDR, smoke tests, proxy/HTTPS reales y aviso `uuid`/ExcelJS | No | Contrato tecnico documentado; pendiente de ejecucion y pruebas hospedadas, sin autorizar datos reales ni piloto | PILOT-READINESS |
+| TECH-008 | Staging y produccion de prueba | Render y Aiven existen y fueron auditados parcialmente el 2026-08-24, pero no hay entorno sintetico validado | alta antes de beta | rama autorizada, red restringida, Redis/Valkey TLS, storage privado, health check, datos sinteticos, CIDR, smoke tests, proxy/HTTPS reales y aviso `uuid`/ExcelJS | No | Contrato y protocolo de piloto gratuito documentados; pendiente de ejecucion y pruebas hospedadas sinteticas. No autoriza datos reales ni piloto | PILOT-READINESS |
 | TECH-009 | Backups externos y restauracion operativa | Backup local verificado y backups administrados visibles en Aiven; falta ensayo remoto sintetico y respaldo del storage privado | alta antes de beta | cifrado/almacenamiento seguro, retencion, rollback y prueba periodica | No determinada | En analisis | PILOT-READINESS |
 | TECH-010 | Monitoreo, alertas y logging seguro | Health local existe; no hay proveedor externo ni metricas persistentes | alta antes de beta | privacidad, alertas, on-call y costos | No | Pendiente | Pre-beta |
 | TECH-011 | Roles internos | Solo existen `superadmin` y `dueno_tienda` | alta antes de beta | permisos, invitaciones, sesiones, limites y auditoria | Probable nueva estructura de roles | Requiere decision del propietario; pendiente | SAAS futuro |
@@ -125,7 +125,8 @@ mapa de pruebas y estado de despliegue:
 - SAAS-C esta cerrado; conservar su regresion al tocar pagos o suscripciones;
 - seguridad publica final y CI permanecen cerrados y publicados;
 - entorno hospedado sintetico sobre la infraestructura existente, pendiente de
-  contrato tecnico y pruebas cloud antes de datos reales;
+  contrato tecnico, protocolo de piloto gratuito y pruebas cloud antes de datos
+  reales;
 - backups externos, almacenamiento cifrado, restauracion y rollback ensayados;
 - monitoreo, alertas, metricas persistentes y logging seguro;
 - runbooks de despliegue, migracion, restauracion y respuesta a incidentes;
@@ -147,6 +148,14 @@ sin crear recursos desde este documento:
   alineacion regional;
 - resolucion o aceptacion documentada del aviso ExcelJS/`uuid`;
 - smoke tests con datos sinteticos y pruebas detras del proxy/HTTPS reales.
+
+El piloto gratuito controlado queda limitado a una tienda, no es lanzamiento
+publico y dura siete dias como minimo, ampliable hasta catorce si falta
+evidencia. Solo puede usar datos reales tras PASS sintetico, backup/restore
+remoto, CI vigente y autorizacion explicita. El correo hosted queda fuera de
+alcance; los comprobantes de pagos manuales requieren storage privado
+persistente validado. Antes de abrir a mas tiendas se requiere decidir una etapa
+hospedada con capacidad, persistencia y soporte aprobados.
 
 ## 5. UX, rediseño y accesibilidad
 
@@ -413,7 +422,8 @@ y la relacion entre completar WELCOME y retencion. El futuro flujo de churn debe
 evitar dark patterns y conservar el motivo estructurado en una fuente propia.
 
 PILOT-001 propone que la tienda de los padres sea el primer negocio real de
-validacion, pero no autoriza datos reales. Antes se requiere `PILOT-READINESS`,
+validacion, durante siete dias como minimo y hasta catorce si la evidencia lo
+requiere, pero no autoriza datos reales. Antes se requiere `PILOT-READINESS`,
 revision del propietario, entorno hospedado con datos sinteticos, validacion
 cloud y autorizacion explicita. La condicion `PILOT_READY` exige cero criticos
 conocidos, E2E critico, evidencia CI y gates requeridos, security review
