@@ -16,6 +16,9 @@
 - Macroestado vigente: `PILOT-READINESS`; `PILOT-READINESS-1` local PASS
 - Infraestructura hospedada: Render y Aiven existentes, auditados parcialmente
   el 2026-08-24; no validados aun como staging sintetico.
+- Contrato tecnico de staging: documentado y pendiente de ejecucion; Redis solo
+  cubre rate limit distribuido, sesiones usan MySQL y comprobantes requieren
+  filesystem privado persistente si se incluye ese flujo.
 - `PILOT_READY`: no declarado; primero cerrar el contrato tecnico de staging y
   ejecutar pruebas hospedadas solo con datos sinteticos. Despues se requerira la
   autorizacion explicita del propietario antes de datos reales.

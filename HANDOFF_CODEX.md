@@ -214,11 +214,13 @@ BLOQUE 1 funcional.
 
 El siguiente macroestado es **PILOT-READINESS**. PILOT-READINESS-1 local esta
 en PASS; el siguiente paso es cerrar el contrato tecnico de staging sobre la
-infraestructura existente y despues ejecutar pruebas hospedadas exclusivamente
-con datos sinteticos. No existe PILOT_READY hasta completar esa validacion y
-obtener la autorizacion explicita del propietario antes de incorporar datos
-reales. No iniciar COMMERCE, SECURITY-FINAL, piloto real ni otra fase por
-inferencia.
+infraestructura existente, documentado en `docs/CONFIGURACION_STAGING.md`, y
+despues ejecutar pruebas hospedadas exclusivamente con datos sinteticos. Redis
+solo sirve al rate limit distribuido; las sesiones siguen en MySQL y los
+comprobantes requieren filesystem privado. No existe PILOT_READY hasta completar
+esa validacion y obtener la autorizacion explicita del propietario antes de
+incorporar datos reales. No iniciar COMMERCE, SECURITY-FINAL, piloto real ni
+otra fase por inferencia.
 
 ## INSTRUCCIONES PARA CONTINUAR
 

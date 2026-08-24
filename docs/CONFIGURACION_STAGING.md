@@ -72,6 +72,116 @@ se imprimen en logs ni deben aparecer en Git.
 - Correo permanece deshabilitado. No se inspeccionaron ni registraron nombres
   de host, usuarios, URIs, certificados ni valores secretos.
 
+## Contrato tecnico de staging — pendiente de ejecucion
+
+Este contrato se deriva del codigo actual y no autoriza crear, cambiar ni pagar
+recursos externos. El objetivo es validar un unico entorno hospedado con datos
+sinteticos. No declara `PILOT_READY` ni habilita datos reales.
+
+### Dependencias y almacenamiento comprobados
+
+- Redis/Valkey es obligatorio solo para `APP_ENV=staging|production`. No guarda
+  sesiones, cache de negocio ni colas: el store de sesiones es MySQL. Su unica
+  funcion actual es el rate limiting distribuido de API, autenticacion,
+  administracion, pagos, exportaciones, uploads y health. El proceso falla al
+  arrancar si no conecta y hace `PING`; readiness tambien lo exige.
+- El unico binario persistente identificado es el comprobante privado de pagos
+  manuales de suscripcion. El driver soportado es filesystem privado, absoluto
+  y fuera del repositorio; readiness comprueba que este disponible. No se
+  identifico almacenamiento persistente para imagenes, adjuntos generales o
+  exportaciones; los backups son un mecanismo separado.
+- Por lo tanto, el servicio hospedado necesita storage privado persistente si
+  se probaran comprobantes. El plan actual de Render no lo aporta; no se debe
+  declarar ese flujo validado hasta resolverlo o excluirlo explicitamente del
+  smoke sintetico autorizado.
+
+### Variables por nombre
+
+Todas se cargan exclusivamente desde el gestor de secretos autorizado; este
+documento no contiene valores, URIs, certificados ni ejemplos sensibles.
+
+| Grupo | Variables requeridas para staging | Notas de contrato |
+| --- | --- | --- |
+| Aplicacion y HTTP | `APP_ENV`, `NODE_ENV`, `PORT`, `APP_BASE_URL`, `DB_ENVIRONMENT`, `TRUSTED_ORIGINS`, `TRUST_PROXY_CIDRS`, `EMAIL_DELIVERY_MODE` | `APP_ENV` y `DB_ENVIRONMENT` deben ser `staging`; origen HTTPS exacto, sin comodines; correo sigue deshabilitado. |
+| MySQL | `DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_USER`, `DB_PASSWORD`, `DB_SSL_ENABLED`, `DB_SSL_CA` | TLS obligatorio; la base debe identificarse como staging y no puede ser local. |
+| Redis/Valkey y rate limit | `RATE_LIMIT_ENABLED`, `RATE_LIMIT_STORE`, `RATE_LIMIT_REDIS_URL`, `RATE_LIMIT_REDIS_PREFIX` | Store `redis`, URL TLS y prefijo aislado de staging. Los limites individuales son configurables y no sustituyen el store distribuido. |
+| Sesiones | `SESSION_SECRET` | Se usa con `express-session` y store MySQL; debe cumplir la validacion reforzada de hosted. |
+| Storage privado | `PAYMENT_RECEIPT_STORAGE_DRIVER`, `PAYMENT_RECEIPT_STORAGE_DIR` | Solo se admite filesystem fuera del repositorio. |
+| Backup y restore local | `BACKUP_DIR`, `MYSQLDUMP_PATH`, `MYSQL_CLIENT_PATH`, `BACKUP_RESTORE_USER`, `BACKUP_RESTORE_PASSWORD`, `BACKUP_RETENTION_DAYS`, `BACKUP_RETENTION_COUNT` | Los scripts existentes son exclusivamente locales; no constituyen un procedimiento remoto. |
+| Observabilidad | `SECURITY_LOG_LEVEL`, `HEALTH_READINESS_SOFT_MS`, `HEALTH_READINESS_TIMEOUT_MS`, `HEALTH_READINESS_CACHE_MS`, `SHUTDOWN_TIMEOUT_MS`, `BACKUP_WARNING_HOURS`, `BACKUP_CRITICAL_HOURS`, `BACKUP_STATUS_CACHE_MS`, `MONITOR_WARNING_REMINDER_MS`, `MONITOR_ERROR_REMINDER_MS`, `MONITOR_CRITICAL_REMINDER_MS` | Ajustes no secretos; los valores y el receptor externo de alertas requieren decision operativa. |
+
+### Health y criterio de arranque
+
+- `GET` o `HEAD` en `/health/live` debe devolver `200` y comprobar solo que el
+  proceso responde. La respuesta no se cachea.
+- `GET` o `HEAD` en `/health/ready` debe devolver `200` si esta disponible y
+  `503` si no lo esta. Comprueba MySQL, el conjunto completo de migraciones
+  esperadas, Redis/Valkey y storage privado en hosted. Los detalles se reducen
+  a estados y codigos sanitizados.
+- Antes de escuchar, el proceso valida configuracion, abre el store distribuido
+  y comprueba storage privado. Cualquier variable obligatoria ausente, TLS no
+  valido, proxy sin CIDR, Redis no disponible o storage inaccesible es criterio
+  objetivo de no despliegue.
+
+### Red, datos y regiones
+
+1. La aplicacion debe salir desde una rama autorizada de staging, nunca desde
+   `main` por defecto, y publicar solo un origen HTTPS incluido en
+   `TRUSTED_ORIGINS`.
+2. MySQL debe usar TLS con CA validada y una allowlist restringida al egreso
+   verificable de la aplicacion. La allowlist abierta observada en Aiven impide
+   validar el entorno sintetico.
+3. Redis/Valkey debe usar TLS y ser alcanzable solo conforme a la topologia
+   aprobada. Sus CIDR y los CIDR directos del proxy deben ser conocidos antes de
+   configurar `TRUST_PROXY_CIDRS`.
+4. Render esta en Oregon y Aiven en San Francisco. La diferencia de region no
+   bloquea por si sola, pero obliga a medir latencia y revisar costos/egreso
+   durante el smoke; alinear regiones sigue siendo una decision externa.
+5. Solo se permiten bases, usuarios, comprobantes y datos sinteticos. Ningun
+   dato de una tienda real puede entrar al entorno durante esta validacion.
+
+### Secuencia externa ordenada
+
+1. Aprobar rama de staging, dominio HTTPS, topologia, CIDR, capacidad, limite
+   de gasto y propietario operativo del entorno existente.
+2. Crear o aislar una base de staging vacia y sintetica; restringir la red de
+   MySQL; decidir y disponer Redis/Valkey TLS y storage privado persistente.
+3. Cargar secretos sinteticos por nombre en el gestor autorizado, sin archivos
+   versionados ni reutilizacion de secretos locales.
+4. Construir con Node 20 y dependencias bloqueadas; aplicar solamente las
+   migraciones existentes 001–024 sobre la base vacia autorizada.
+5. Arrancar con fail-fast, configurar health check sobre `/health/ready` y
+   validar tambien `/health/live`.
+6. Ejecutar smoke tests sinteticos: sesion, tenant, venta, inventario,
+   suscripcion/pago si el storage ya esta resuelto, y comprobacion de logs sin
+   secretos.
+7. Crear evidencia del backup administrado elegido, checksum/manifiesto si el
+   proveedor lo permite, y restaurar solo sobre una base temporal sintetica.
+8. Ante fallo, no promover: detener el despliegue, preservar evidencia segura,
+   volver al artefacto conocido o retirar el entorno sintetico segun el
+   procedimiento externo aprobado. No restaurar sobre una base real.
+
+### Backups y evidencia exigida
+
+El repositorio solo implementa backup/restore local: dump, manifiesto, hash,
+verificacion y restore temporal protegido. No hay planificador ni restore
+remoto soportado por codigo. Para staging se debe decidir externamente la
+frecuencia, retencion y ubicacion del respaldo; como evidencia minima se exige
+un backup administrado verificable, su politica visible, una restauracion en
+base sintetica aislada, migraciones 001–024 y FKs comprobadas, y limpieza de la
+base temporal. Tambien debe definirse el respaldo del storage privado.
+
+### Criterio objetivo de entorno hospedado sintetico listo
+
+Solo puede declararse listo cuando todos estos puntos tengan evidencia: rama
+autorizada distinta del despliegue actual por defecto; HTTPS y proxy con CIDR
+exactos; MySQL TLS con red restringida; Redis/Valkey TLS en `PING`; storage
+privado disponible si el flujo de comprobantes se incluye; `/health/live` y
+`/health/ready` sanos; migraciones 001–024 en base vacia sintetica; smoke tests
+PASS; backup y restore remoto sintetico PASS; limites/costo/disponibilidad del
+plan aceptados; y limpieza completa. La autorizacion para datos reales sigue
+siendo un gate separado posterior.
+
 ## Trust proxy
 
 Express recibe una lista de CIDR mediante `TRUST_PROXY_CIDRS`. No se acepta

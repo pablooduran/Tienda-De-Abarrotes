@@ -960,3 +960,10 @@ probar backup/restore remoto con datos sinteticos, resolver limites/suspension y
 facturacion del plan Free, decidir la alineacion regional y mantener solo datos
 sinteticos. Luego siguen las pruebas cloud; el piloto real de siete dias y la
 autorizacion de datos reales permanecen posteriores.
+
+El contrato tecnico ejecutable queda documentado en
+`docs/CONFIGURACION_STAGING.md`. Deriva del codigo que Redis/Valkey se usa solo
+como rate limit distribuido y que las sesiones permanecen en MySQL; tambien
+delimita el storage privado de comprobantes, health, red, backup/restore y los
+criterios objetivos de `entorno hospedado sintetico listo`. Su documentacion no
+provisiona ni valida recursos externos.
