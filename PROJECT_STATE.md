@@ -2,7 +2,7 @@
 
 - Proyecto: `pablooduran/Tienda-De-Abarrotes`
 - Rama: `mejora-multitienda`
-- HEAD: `46c8c2d` (`fix: corregir integridad funcional previa a UX`)
+- HEAD de referencia documental: `ac62c1b` (`docs: alinear roadmap de pilot readiness`)
 - Remoto: `0/0` con `origin/mejora-multitienda`
 - Working tree: limpio antes de crear este handoff; volver a verificar
 - APP_ENV: `local`
@@ -14,9 +14,11 @@
 - CI: run `32509213826` PASS; job `96856170249` PASS; gate browser critico PASS
 - PRODUCT-GROWTH-0: cerrado dentro de su alcance local y desacoplado
 - Macroestado vigente: `PILOT-READINESS`; `PILOT-READINESS-1` local PASS
-- `PILOT_READY`: no declarado; pendientes externos exactos: entorno hospedado
-  con datos sinteticos y autorizacion explicita del propietario antes de datos
-  reales
+- Infraestructura hospedada: Render y Aiven existentes, auditados parcialmente
+  el 2026-08-24; no validados aun como staging sintetico.
+- `PILOT_READY`: no declarado; primero cerrar el contrato tecnico de staging y
+  ejecutar pruebas hospedadas solo con datos sinteticos. Despues se requerira la
+  autorizacion explicita del propietario antes de datos reales.
 
 Restricciones: no crear 025, no tocar produccion/remotos, no ejecutar
 migraciones sobre la base principal sin autorizacion, no romper tenant

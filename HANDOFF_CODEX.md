@@ -12,9 +12,11 @@ suscripciones y administracion. El producto esta orientado a propietarios de
 tiendas y a un superadmin separado.
 
 Estado general verificado: producto local funcional, esquema 024, pagos de
-suscripcion manuales, CI con MySQL efimero y sin infraestructura hospedada de
-staging. BLOQUE 1 - INTEGRIDAD FUNCIONAL PRE-UX y PRODUCT-GROWTH-0 estan
-cerrados dentro de sus alcances publicados. El macroestado vigente es
+suscripcion manuales y CI con MySQL efimero. La infraestructura hospedada
+existente fue auditada parcialmente el 2026-08-24: hay una aplicacion publica
+en Render y un servicio MySQL en Aiven, pero no constituyen todavia un entorno
+sintetico validado. BLOQUE 1 - INTEGRIDAD FUNCIONAL PRE-UX y PRODUCT-GROWTH-0
+estan cerrados dentro de sus alcances publicados. El macroestado vigente es
 PILOT-READINESS: la auditoria PILOT-READINESS-1 local esta en PASS, pero
 PILOT_READY no esta declarado.
 
@@ -188,15 +190,17 @@ UX-001 a UX-005 y el resto del polish visual permanecen en el roadmap.
 - Analytics local usa `noop`; no hay proveedor remoto activo.
 - `product_created` y `customer_created` siguen diferidos si no hay replay seguro.
 - TECH-026 E2E critico existe; validar CI vigente.
-- Staging-2B, proveedor, dominio, CIDR, MySQL/Redis/storage/correo remotos y
-  backup externo siguen diferidos.
+- Render y Aiven ya existen y su inventario fue auditado parcialmente; no se
+  deben tratar como una provision desde cero ni como staging validado. Quedan
+  pendientes el contrato tecnico de staging, Redis/Valkey, red restringida,
+  storage privado persistente, health check y backup/restore remoto sintetico.
 
 ## 12. Problemas conocidos y roadmap
 
 | Problema | Modulo | Prioridad/impacto | Estado |
 | --- | --- | --- | --- |
 | Integracion de lotes dentro de Compras | Lotes/Compras | alta antes de beta | Diferida; no nueva arquitectura ni 025 |
-| Entorno hospedado sintetico | Staging | critico antes de datos reales | Pendiente externo |
+| Entorno hospedado sintetico | Staging | critico antes de datos reales | Infraestructura existente auditada parcialmente; falta contrato tecnico y validacion con datos sinteticos |
 | Evidencia final del CI del ultimo commit | CI | critico de cierre | Run 32509213826; PASS, job 96856170249 |
 | Correo externo | Acceso publico | alta antes de beta | No habilitado |
 | Analytics remoto/PostHog | Product Growth | media | No blocker del primer piloto |
@@ -209,10 +213,12 @@ PRODUCT-GROWTH-0, CHURN-001, PILOT-GATE-ALIGNMENT, PILOT-READINESS-1 local y
 BLOQUE 1 funcional.
 
 El siguiente macroestado es **PILOT-READINESS**. PILOT-READINESS-1 local esta
-en PASS; no existe PILOT_READY hasta completar exactamente el entorno hospedado
-con datos sinteticos y obtener la autorizacion explicita del propietario antes
-de incorporar datos reales. No iniciar COMMERCE, SECURITY-FINAL, staging real
-ni otra fase por inferencia.
+en PASS; el siguiente paso es cerrar el contrato tecnico de staging sobre la
+infraestructura existente y despues ejecutar pruebas hospedadas exclusivamente
+con datos sinteticos. No existe PILOT_READY hasta completar esa validacion y
+obtener la autorizacion explicita del propietario antes de incorporar datos
+reales. No iniciar COMMERCE, SECURITY-FINAL, piloto real ni otra fase por
+inferencia.
 
 ## INSTRUCCIONES PARA CONTINUAR
 

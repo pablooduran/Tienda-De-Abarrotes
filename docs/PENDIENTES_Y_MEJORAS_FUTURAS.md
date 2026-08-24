@@ -63,8 +63,8 @@ Las migraciones son posibilidades; ninguna se crea por estar mencionada aqui.
 | TECH-005 | SAAS-C6-C8 frontend, regresion y cierre | C1 solo valido esquema y compatibilidad | alta | C2-C5, tenant, seguridad, browser y backup | No determinada | Implementado y cerrado | SAAS-C6-C8 |
 | TECH-006 | Seguridad publica final | Las fases A-C validaron el flujo local; correo real y despliegue quedan fuera | alta antes de beta | autenticacion, tenant, archivos privados, rate limits y secretos | No determinada | Implementado y cerrado | Pre-beta |
 | TECH-007 | CI y GitHub Actions | Workflow reproducible con MySQL efimero, migraciones 001-024 y regresion server-side | alta antes de beta | staging, artefactos no sensibles y store de rate limit para ejecucion distribuida | No | Implementado | Pre-beta |
-| TECH-008 | Staging y produccion de prueba | STAGING-1 y PREPROD-1 preparan contrato y runbook local, pero no existe infraestructura ni despliegue | alta antes de beta | proveedor/topologia, dominio, HTTPS, MySQL staging, Redis, storage privado compartido, correo externo, backup remoto, datos sinteticos, CIDR reales del proxy, smoke tests reales, proxy/HTTPS reales y reevaluacion del aviso moderado `uuid`/ExcelJS | No | Diferido hasta la revision final del producto y la autorizacion de gasto externo; no implementado | STAGING-2B / Pre-beta |
-| TECH-009 | Backups externos y restauracion operativa | Los backups actuales son locales y manuales | alta antes de beta | cifrado/almacenamiento seguro, retencion, rollback y prueba periodica | No determinada | En analisis | Pre-beta |
+| TECH-008 | Staging y produccion de prueba | Render y Aiven existen y fueron auditados parcialmente el 2026-08-24, pero no hay entorno sintetico validado | alta antes de beta | rama autorizada, red restringida, Redis/Valkey TLS, storage privado, health check, datos sinteticos, CIDR, smoke tests, proxy/HTTPS reales y aviso `uuid`/ExcelJS | No | Pendiente de cerrar contrato tecnico y pruebas hospedadas; no autoriza datos reales ni piloto | PILOT-READINESS |
+| TECH-009 | Backups externos y restauracion operativa | Backup local verificado y backups administrados visibles en Aiven; falta ensayo remoto sintetico y respaldo del storage privado | alta antes de beta | cifrado/almacenamiento seguro, retencion, rollback y prueba periodica | No determinada | En analisis | PILOT-READINESS |
 | TECH-010 | Monitoreo, alertas y logging seguro | Health local existe; no hay proveedor externo ni metricas persistentes | alta antes de beta | privacidad, alertas, on-call y costos | No | Pendiente | Pre-beta |
 | TECH-011 | Roles internos | Solo existen `superadmin` y `dueno_tienda` | alta antes de beta | permisos, invitaciones, sesiones, limites y auditoria | Probable nueva estructura de roles | Requiere decision del propietario; pendiente | SAAS futuro |
 | TECH-012 | Editor seguro de planes | Los planes, precios y funcionalidades requieren gobierno versionado | media | superadmin, snapshots, auditoria y no retroactividad | Posible versionado adicional | Pendiente | SAAS futuro |
@@ -82,7 +82,7 @@ Las migraciones son posibilidades; ninguna se crea por estar mencionada aqui.
 | PRODUCT-030 | Churn / Cancelacion | Hace falta observar abandono sin dark patterns ni cambiar el flujo comercial actual | media antes del lanzamiento | intencion de no renovacion, motivo estructurado, comentario opcional, retirada de la intencion, evento semantico futuro y analisis | Probable migracion propia | Contrato listo en PRODUCT-GROWTH-0; el self-service persistente queda diferido hasta antes de beta externa o una necesidad real de suscripciones de clientes | PRODUCT-GROWTH-0 / antes de beta |
 | CHURN-001 | Persistencia de intencion de no renovacion | Decision resuelta: el propietario expresara que no planea renovar; no existe cancelacion inmediata ni se reutiliza `motivoTransicion` administrativo | alta antes de beta externa | fuente tenant-safe y auditable, motivo estructurado, comentario opcional, estado/intencion retirada al renovar, semantica de fechaFin/gracia y retencion | Nueva estructura por definir | Resuelto documentalmente; implementacion persistente diferida. No bloquea PRODUCT-GROWTH-0C ni PILOT-READINESS | Antes de beta externa / suscripciones de clientes |
 | SEO-001 | Metadata y descubrimiento publico | La presencia publica no forma parte del producto privado actual | media antes de beta | metadata, canonical, Open Graph, preview 1200x630, favicon, theme metadata, robots, sitemap y noindex privado | No | Pendiente; metadata de tiendas/productos depende de COMMERCE | Landing / SEO |
-| PILOT-001 | Piloto real de tienda | La validacion con una tienda real requiere evidencia previa y autorizacion expresa de datos | critica antes de datos reales | entorno hospedado sintetico, backup/restore, seguridad, integridad de stock/dinero/credito, reconciliacion y soporte | No | Auditoria PILOT-READINESS-1 local PASS; pendientes externos antes de `PILOT_READY`; no desplegar, contratar ni introducir datos reales | PILOT-READINESS |
+| PILOT-001 | Piloto real de tienda | La validacion con una tienda real requiere evidencia previa y autorizacion expresa de datos | critica antes de datos reales | entorno hospedado sintetico, backup/restore, seguridad, integridad de stock/dinero/credito, reconciliacion y soporte | No | PILOT-READINESS-1 local PASS e infraestructura parcialmente auditada; faltan contrato tecnico y pruebas sinteticas hospedadas antes de `PILOT_READY` | PILOT-READINESS |
 | TECH-020 | Cuentas de clientes compradores | El cliente actual es entidad comercial de tienda, no cuenta de comprador | media antes del lanzamiento | identidad, privacidad, tiendas y pedidos | Probable modelo nuevo | Requiere decision del propietario | COMMERCE |
 | TECH-021 | Comercio entre compradores y tiendas | No existe catalogo publico, carrito ni pedido interno | futura | stock, precios, aceptacion, sustituciones, delivery y fraude | Probable varias tablas | Pendiente | COMMERCE-MVP |
 | TECH-022 | WhatsApp automatico y chatbot | Hoy solo se prepara texto/enlace manual; no hay API, webhook ni chatbot | futura | consentimiento, costos, opt-out y proveedor | No determinada | Diferido | COMMERCE / SAAS futuro |
@@ -124,8 +124,8 @@ mapa de pruebas y estado de despliegue:
 
 - SAAS-C esta cerrado; conservar su regresion al tocar pagos o suscripciones;
 - seguridad publica final y CI permanecen cerrados y publicados;
-- STAGING-2B y produccion de prueba con datos sinteticos, diferidos hasta la
-  revision final del producto y la autorizacion de gasto;
+- entorno hospedado sintetico sobre la infraestructura existente, pendiente de
+  contrato tecnico y pruebas cloud antes de datos reales;
 - backups externos, almacenamiento cifrado, restauracion y rollback ensayados;
 - monitoreo, alertas, metricas persistentes y logging seguro;
 - runbooks de despliegue, migracion, restauracion y respuesta a incidentes;
@@ -134,16 +134,17 @@ mapa de pruebas y estado de despliegue:
 No se deben introducir jobs, proveedores externos ni produccion mientras no
 exista un procedimiento aprobado y una decision del propietario.
 
-### STAGING-2 diferido
+### Entorno hospedado sintetico pendiente
 
-STAGING-2 queda diferido hasta que el propietario revise el producto completo y
-autorice infraestructura externa y gasto. Antes de retomar STAGING-2B debe
-decidirse, sin crear recursos desde este documento:
+Render y Aiven ya existen, pero su auditoria parcial no valida staging ni
+autoriza un piloto. Antes de las pruebas hospedadas sinteticas debe cerrarse,
+sin crear recursos desde este documento:
 
-- proveedor y topologia; dominio y HTTPS;
-- CIDR reales del reverse proxy;
-- MySQL exclusivo de staging, Redis TLS y storage privado compartido;
-- correo externo, backup remoto y procedimiento de restauracion;
+- rama autorizada de despliegue, topologia, dominio HTTPS y CIDR reales;
+- red restringida de MySQL, Redis/Valkey TLS y storage privado persistente;
+- health check, backup/restore remoto y procedimiento de rollback;
+- limites, suspension y facturacion del plan Free, incluida la decision de
+  alineacion regional;
 - resolucion o aceptacion documentada del aviso ExcelJS/`uuid`;
 - smoke tests con datos sinteticos y pruebas detras del proxy/HTTPS reales.
 
@@ -369,10 +370,10 @@ explicita y una nueva evaluacion de seguridad, datos y alcance.
 2. Ejecutar PRODUCTO-1, UX, `WELCOME` y `HELP`; no iniciar infraestructura
    externa durante esas fases.
 3. Resolver roles internos y mejoras funcionales priorizadas.
-4. Decidir proveedor, gasto y topologia para STAGING-2B despues de la revision
-   final del producto.
-5. Provisionar STAGING-2B, restauracion, monitoreo y produccion de prueba con
-   datos sinteticos usando el contrato seguro de STAGING-1.
+4. Cerrar el contrato tecnico de staging sobre Render/Aiven existentes, sin
+   asumir que el despliegue actual es apto.
+5. Ejecutar pruebas hospedadas con datos sinteticos, restauracion y monitoreo
+   usando el contrato seguro de STAGING-1.
 6. Validar el workflow CI antes de cada promocion.
 7. Ejecutar `PRODUCT-GROWTH-0` para definir medicion desacoplada y validar las hipotesis de activacion y churn.
 8. Completar `PILOT-READINESS`, revision del propietario y un entorno hospedado minimo con datos sinteticos.
@@ -442,10 +443,10 @@ requiere cero perdidas o duplicaciones conocidas y una usuaria capaz de operar
 el flujo diario.
 
 SEO-001 queda diferido para metadata publica, canonical, Open Graph, preview,
-favicon, robots, sitemap y noindex de superficies privadas. La seleccion entre
-Render, Aiven, R2, Resend y PostHog queda pendiente de evaluacion en la fase de
-entorno piloto; no se contrata infraestructura por capacidad hipotetica y no
-hay gasto externo sin autorizacion expresa.
+favicon, robots, sitemap y noindex de superficies privadas. Render y Aiven ya
+existen, pero R2, Resend y PostHog siguen pendientes de evaluacion. No se
+asume gasto ni capacidad adicional hasta cerrar el contrato tecnico del entorno
+sintetico.
 
 ## 19. Registro de cambios
 

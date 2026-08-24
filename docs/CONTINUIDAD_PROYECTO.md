@@ -126,8 +126,8 @@ El contexto de tienda proviene de la sesion validada. El navegador no debe envia
 | Pagos manuales de suscripcion | SAAS-C terminado | C0-C8 cubren diseno, estructura, backend, almacenamiento privado, revision, aplicacion atomica, frontend, seguridad y regresion integral. El flujo actual es manual; no hay pagos automaticos. |
 | Seguridad publica final | Cerrada y publicada | Alias fisico de suscripcion protegido, password acotado a 72 bytes UTF-8, secreto de sesion de produccion endurecido y rate limits dedicados para pagos y comprobantes. Regresion local, tenant, auditoria y browser aprobados. |
 | CI / GitHub Actions | Cerrada y publicada | Node 20, MySQL 8 efimero, migraciones 001-024 y regresion server-side sin despliegue ni secretos reales. |
-| Preparacion de staging y preproduccion | STAGING-1 y PREPROD-1 cerrados y publicados | Contrato local/CI/staging/production, proxy por CIDR, Redis obligatorio en hosted, fail-fast, readiness, backup, rollback y recuperacion documentados. No existe despliegue. |
-| Staging y produccion | STAGING-2B diferido | No se ha provisionado ni desplegado infraestructura; requiere revision final, proveedor/topologia y autorizacion de gasto. |
+| Preparacion de staging y preproduccion | STAGING-1 y PREPROD-1 cerrados y publicados | Contrato local/CI/staging/production, proxy por CIDR, Redis obligatorio en hosted, fail-fast, readiness, backup, rollback y recuperacion documentados. La infraestructura existente fue auditada parcialmente el 2026-08-24, sin validar un despliegue sintetico. |
+| Staging y produccion | PILOT-READINESS pendiente externo | Render y Aiven existen, pero falta cerrar el contrato tecnico y validar el entorno hospedado con datos sinteticos antes de cualquier dato real. |
 
 ## 4. Funcionalidades implementadas
 
@@ -499,7 +499,9 @@ No mostrar estas variables en logs ni respuestas. Nunca versionar `.env`, `.env.
   responsive. La retencion inicial conserva al menos 365 dias en linea y se revisa
   trimestralmente; no existe borrado automatico ni API de escritura.
 - La reposicion es informativa: no hay proveedores seleccionados, ordenes de compra ni compras automaticas. Las ventanas son 7/30/90 o un rango manual de hasta 365 dias; ventas anuladas y devoluciones aplicadas no inflan la demanda.
-- Los backups son locales. No hay almacenamiento remoto, cifrado propio, programacion automatica, rotacion distribuida ni monitoreo externo.
+- Los backups locales estan verificados. Aiven informa backups administrados para
+  el MySQL existente, pero el backup/restore remoto con datos sinteticos aun no
+  fue validado; tampoco esta definido el respaldo del storage privado.
 - Los backups contienen datos sensibles y deben residir en disco cifrado o almacenamiento seguro. No enviarlos por correo o WhatsApp.
 - Local y CI conservan rate limiting en memoria. Staging y production exigen
   Redis con TLS y rechazan el arranque si no esta configurado.
@@ -514,8 +516,8 @@ No mostrar estas variables en logs ni respuestas. Nunca versionar `.env`, `.env.
 - CI GitHub Actions usa Node 20, MySQL 8 efimero, migraciones 001-024 y una
   regresion server-side serializada. No usa secretos, backups ni datos reales y
   no despliega. Los arneses browser siguen en la validacion local controlada.
-- Existe contrato de configuracion para staging, pero no infraestructura,
-  proveedor ni despliegue de este estado.
+- Existe contrato de configuracion para staging e infraestructura Render/Aiven
+  parcialmente auditada, pero no un entorno hospedado sintetico validado.
 - SAAS-A incorpora registro publico pendiente, verificacion, recuperacion de contrasena y onboarding mediante adaptador local en memoria. Aun no hay proveedor real de correo, invitaciones ni login social.
 - SAAS-C2 agrega rutas backend para planes y metodos publicos, cotizacion sin
   persistencia, creacion/listado/detalle/cancelacion tenant de solicitudes y
@@ -881,11 +883,10 @@ Este cierre no afirma medicion remota, Session Replay, activation rate, Aha ni
 retencion D1/D7/D30, y no contiene resultados de usuarios reales.
 
 Tambien quedan registrados el futuro flujo de churn sin dark patterns y
-`SEO-001` para metadata y descubrimiento publico. La eleccion entre Render,
-Aiven, R2, Resend y PostHog queda pendiente de evaluacion durante el entorno
-piloto. No se contrata infraestructura por capacidad hipotetica, no se autoriza
-gasto externo y STAGING-2B de lanzamiento sigue siendo una etapa posterior y
-mas estricta.
+`SEO-001` para metadata y descubrimiento publico. Render y Aiven ya existen y
+fueron auditados parcialmente; R2, Resend y PostHog siguen sin decision ni
+integracion. La validacion del entorno sintetico no autoriza gasto adicional ni
+un lanzamiento, y STAGING-2B sigue siendo una etapa posterior y mas estricta.
 
 Secuencia aprobada: HELP cerrado -> PRODUCT-GROWTH-0 (cerrado en alcance local) -> PILOT-READINESS ->
 revision del propietario #1 -> entorno hospedado con datos sinteticos -> pruebas
@@ -938,3 +939,24 @@ Este resultado no declara `PILOT_READY` ni equipara pruebas locales con
 validacion cloud. PostHog, analytics remoto, PRODUCT-029, `product_created`,
 `customer_created`, Session Replay y churn persistente no bloquean el primer
 piloto.
+
+### PILOT-READINESS-2 — auditoria segura de infraestructura existente
+
+El 2026-08-24 se realizo una auditoria de solo lectura, sin inspeccionar ni
+registrar valores secretos. Render tiene un unico Web Service publico con HTTPS,
+desplegado desde `main`, auto-deploy habilitado, sin health check y en plan Free
+sin disco persistente ni garantia de actividad continua; por ello no es apto
+todavia para el piloto real. Aiven tiene un unico MySQL 8.4 en ejecucion, de un
+nodo y plan gratuito de 1 GB, con TLS obligatorio, backups administrados y
+acceso publico con allowlist abierta. No se observo Redis/Valkey. Render esta en
+Oregon y Aiven en San Francisco, una observacion de latencia y arquitectura, no
+un fallo automatico.
+
+El entorno hospedado sintetico sigue en `PENDING_EXTERNAL_STAGE`. Antes de
+validarlo se debe cerrar el contrato tecnico: desplegar desde la rama autorizada
+de staging, restringir red de MySQL, disponer de Redis/Valkey TLS, definir
+storage privado persistente o confirmar que no se usa, configurar health check,
+probar backup/restore remoto con datos sinteticos, resolver limites/suspension y
+facturacion del plan Free, decidir la alineacion regional y mantener solo datos
+sinteticos. Luego siguen las pruebas cloud; el piloto real de siete dias y la
+autorizacion de datos reales permanecen posteriores.

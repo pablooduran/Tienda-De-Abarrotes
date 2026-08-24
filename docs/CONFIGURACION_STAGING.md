@@ -4,8 +4,9 @@
 
 STAGING-1 prepara el contrato de ejecucion para `local`, `ci`, `staging` y
 `production`. No crea infraestructura, no despliega, no provisiona MySQL o
-Redis y no contiene secretos. Staging sigue sin existir hasta que se aprueben
-proveedor, red, dominio y procedimiento operativo.
+Redis y no contiene secretos. La auditoria segura del 2026-08-24 confirma que
+existen recursos Render y Aiven, pero no un staging sintetico validado: falta
+cerrar su contrato tecnico, red y procedimiento operativo.
 
 Todos los entornos usan Node.js 20 o superior, igual que el workflow de CI.
 
@@ -56,6 +57,21 @@ Staging y production requieren ademas:
 suficiente y no ser un placeholder. Las URL, contrasenas, CA y secretos nunca
 se imprimen en logs ni deben aparecer en Git.
 
+## Inventario seguro de infraestructura existente (auditoria 2026-08-24)
+
+- Render: existe un unico Web Service publico con HTTPS y variables de MySQL,
+  entorno, puerto y sesion presentes por nombre. Esta desplegado desde `main`,
+  tiene auto-deploy habilitado, no tiene health check configurado y el plan Free
+  no ofrece disco persistente y puede suspenderse por inactividad; no es el
+  entorno sintetico validado.
+- Aiven: existe un unico MySQL 8.4 en ejecucion, de un nodo y plan gratuito de
+  1 GB, con TLS obligatorio y backups administrados. Su acceso es publico y la
+  allowlist de IP esta abierta. No hay Redis/Valkey visible. Render esta en
+  Oregon y Aiven en San Francisco; se evaluara latencia antes de depender de la
+  topologia.
+- Correo permanece deshabilitado. No se inspeccionaron ni registraron nombres
+  de host, usuarios, URIs, certificados ni valores secretos.
+
 ## Trust proxy
 
 Express recibe una lista de CIDR mediante `TRUST_PROXY_CIDRS`. No se acepta
@@ -80,7 +96,8 @@ comprueba MySQL, migraciones, Redis y storage privado. Un fallo responde como
 no disponible con un codigo de componente sanitizado. El cierre ordenado
 libera el cliente Redis creado por el proceso.
 
-No se ha elegido ni contratado proveedor Redis. La URL real y sus credenciales
+No hay Redis/Valkey visible en la infraestructura auditada. Antes de iniciar
+staging sintetico debe existir un servicio TLS compatible; su URL y credenciales
 deben cargarse como secretos de infraestructura, nunca en archivos versionados.
 
 ## Correo y almacenamiento
@@ -102,15 +119,18 @@ El procedimiento operativo, rollback y recuperacion local se concentra en
 [RUNBOOK_PREPROD.md](RUNBOOK_PREPROD.md). Esta lista no autoriza provisionar ni
 desplegar recursos externos.
 
-1. Elegir proveedor y topologia de red sin crear recursos desde este bloque.
-2. Confirmar dominio HTTPS y CIDR directos del reverse proxy.
-3. Provisionar MySQL y Redis exclusivos de staging, sin datos reales.
-4. Registrar secretos sinteticos de staging en el gestor del proveedor.
-5. Definir storage privado persistente, backup y restauracion.
-6. Mantener correo deshabilitado o implementar y probar un adaptador externo.
-7. Ejecutar migraciones 001-024 sobre una base vacia de staging autorizada.
+1. Cerrar la rama autorizada de despliegue, dominio HTTPS, CIDR directos y
+   topologia de los recursos Render/Aiven existentes.
+2. Restringir la red de MySQL y disponer de Redis/Valkey TLS compatible.
+3. Definir storage privado persistente para comprobantes o confirmar que no se
+   usara durante la prueba, con backup y restauracion.
+4. Configurar secretos sinteticos en el gestor autorizado sin versionarlos.
+5. Configurar y verificar health check; revisar limites, suspension y
+   facturacion del plan Free antes de depender del servicio.
+6. Mantener correo deshabilitado.
+7. Ejecutar migraciones 001-024 solo sobre una base vacia sintetica autorizada.
 8. Validar `/health/live` y `/health/ready` sin exponer diagnosticos internos.
-9. Ejecutar smoke tests con datos sinteticos y confirmar limpieza.
+9. Ejecutar smoke tests, backup/restore remoto y limpieza con datos sinteticos.
 10. Documentar rollback antes de cualquier produccion de prueba.
 
 No incorporar tiendas reales, no reutilizar secretos de local o production y
