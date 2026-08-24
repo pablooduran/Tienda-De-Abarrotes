@@ -13,9 +13,10 @@ tiendas y a un superadmin separado.
 
 Estado general verificado: producto local funcional, esquema 024, pagos de
 suscripcion manuales, CI con MySQL efimero y sin infraestructura hospedada de
-staging. El ultimo bloque publicado es BLOQUE 1 - INTEGRIDAD FUNCIONAL PRE-UX.
-El siguiente bloque conversacional indicado es BLOQUE 2 - Navegacion y
-arquitectura de interfaz, sujeto a autorizacion explicita.
+staging. BLOQUE 1 - INTEGRIDAD FUNCIONAL PRE-UX y PRODUCT-GROWTH-0 estan
+cerrados dentro de sus alcances publicados. El macroestado vigente es
+PILOT-READINESS: la auditoria PILOT-READINESS-1 local esta en PASS, pero
+PILOT_READY no esta declarado.
 
 ## 2. Stack y arquitectura
 
@@ -207,9 +208,11 @@ REGRESION GENERAL, DOCS-OPS, PRODUCTO-0, PRODUCTO-1 P1-P8, WELCOME, HELP,
 PRODUCT-GROWTH-0, CHURN-001, PILOT-GATE-ALIGNMENT, PILOT-READINESS-1 local y
 BLOQUE 1 funcional.
 
-Siguiente bloque indicado por el contexto: **BLOQUE 2 - Navegacion y
-arquitectura de interfaz**, solo con autorizacion explicita. No iniciar
-COMMERCE, SECURITY-FINAL, staging real ni otra fase por inferencia.
+El siguiente macroestado es **PILOT-READINESS**. PILOT-READINESS-1 local esta
+en PASS; no existe PILOT_READY hasta completar exactamente el entorno hospedado
+con datos sinteticos y obtener la autorizacion explicita del propietario antes
+de incorporar datos reales. No iniciar COMMERCE, SECURITY-FINAL, staging real
+ni otra fase por inferencia.
 
 ## INSTRUCCIONES PARA CONTINUAR
 
@@ -221,7 +224,8 @@ COMMERCE, SECURITY-FINAL, staging real ni otra fase por inferencia.
    migracion 024 y ausencia de 025.
 4. No modificar nada antes de validar el estado real y el alcance aprobado.
 5. Usar solo scripts existentes en `package.json`.
-6. Identificar el siguiente bloque autorizado; pedir confirmacion si falta contexto.
+6. Confirmar el alcance autorizado dentro de PILOT-READINESS; no inferir el
+   inicio del entorno hospedado ni de otra fase.
 7. No crear 025, no tocar produccion/remotos y no descartar cambios ajenos.
 8. Mantener tenant isolation, seguridad, contratos financieros e idempotencia.
 9. Antes de cerrar: pruebas proporcionales, cleanup, diff, precommit y Git.
@@ -237,6 +241,7 @@ HEAD, rama, divergencia con origin, APP_ENV=local, localhost /
 tienda_abarrotes_pruebas, migracion 024 y ausencia de migracion 025. No hagas
 cambios hasta verificar el estado real. No crees migracion 025, no toques
 produccion ni bases remotas, no descartes cambios y no inicies fases nuevas sin
-autorizacion explicita. Identifica el siguiente bloque aprobado y reporta
-bloqueos y pruebas necesarias antes de implementar.
+autorizacion explicita. PILOT-READINESS-1 local ya esta PASS; PILOT_READY sigue
+pendiente del entorno hospedado sintetico y de la autorizacion explicita antes
+de datos reales. Reporta bloqueos y pruebas necesarias antes de implementar.
 ```
