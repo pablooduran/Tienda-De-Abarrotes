@@ -128,6 +128,7 @@
     "test:saas-c-payment-request-security": "node scripts/test-saas-c-payment-request-security.js",
     "test:saas-c-payment-receipt-security": "node scripts/test-saas-c-payment-receipt-security.js",
     "test:saas-c-payment-receipts": "node scripts/test-saas-c-payment-receipts.js",
+    "test:payment-receipts-disabled": "node scripts/test-payment-receipts-disabled.js",
     "test:saas-c-payment-reviews": "node scripts/test-saas-c-payment-reviews.js",
     "test:saas-c-payment-review-security": "node scripts/test-saas-c-payment-review-security.js",
     "test:saas-c-payment-applications": "node scripts/test-saas-c-payment-applications.js",

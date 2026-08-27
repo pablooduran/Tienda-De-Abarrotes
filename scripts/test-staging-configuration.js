@@ -70,7 +70,16 @@ function testEnvironmentContracts() {
     assert.deepStrictEqual(hosted.trustProxy, ['10.40.0.0/24']);
     assert.strictEqual(hosted.rateLimitStore.type, 'redis');
     assert.strictEqual(hosted.emailDeliveryMode, 'disabled');
+    assert.strictEqual(hosted.privateStorage.enabled, true);
   }
+
+  const receiptDisabled = deploymentConfig(hostedEnvironment('staging', {
+    PAYMENT_RECEIPT_MODE: 'disabled',
+    PAYMENT_RECEIPT_STORAGE_DRIVER: undefined,
+    PAYMENT_RECEIPT_STORAGE_DIR: undefined
+  }));
+  assert.strictEqual(receiptDisabled.privateStorage.enabled, false);
+  assert.strictEqual(receiptDisabled.privateStorage.driver, 'disabled');
 
   assert.throws(() => deploymentConfig(baseEnvironment({ APP_ENV: 'staging' })), /Configuracion obligatoria/);
   assert.throws(() => deploymentConfig(baseEnvironment({ APP_ENV: 'production' })), /Configuracion obligatoria/);
@@ -89,6 +98,13 @@ function testEnvironmentContracts() {
   assert.throws(() => deploymentConfig(hostedEnvironment('staging', {
     PAYMENT_RECEIPT_STORAGE_DIR: path.join(ROOT, 'private')
   })), /fuera del repositorio/);
+  assert.throws(() => deploymentConfig(hostedEnvironment('production', {
+    PAYMENT_RECEIPT_MODE: 'disabled'
+  })), /solo se permite en staging/);
+  assert.throws(() => deploymentConfig(baseEnvironment({ PAYMENT_RECEIPT_MODE: 'disabled' })), /solo se permite en staging/);
+  assert.throws(() => deploymentConfig(hostedEnvironment('staging', {
+    PAYMENT_RECEIPT_MODE: 'temporary'
+  })), /solo admite enabled o disabled/);
   assert.throws(() => deploymentConfig(hostedEnvironment('staging', { EMAIL_DELIVERY_MODE: 'external' })), /disabled/);
   assert.throws(() => sessionSecret({ APP_ENV: 'staging', SESSION_SECRET: 'a'.repeat(64) }), /aleatorio/);
   assert.doesNotThrow(() => sessionSecret({ APP_ENV: 'staging', SESSION_SECRET: STRONG_SECRET }));
@@ -224,6 +240,21 @@ async function testReadinessDependency() {
   assert.strictEqual(privateResult.reason, 'PRIVATE_STORAGE_UNAVAILABLE');
   assert.strictEqual(privateResult.checks.rateLimitStore, 'ok');
   assert.strictEqual(privateResult.checks.privateStorage, 'unavailable');
+
+  const privateStorageDisabled = createOperationalHealthService({
+    pool: healthPool(),
+    expectedMigrations: ['001_test.sql'],
+    dependencyChecks: [
+      { name: 'rateLimitStore', check: async () => ({ status: 'ok' }) },
+      { name: 'privateStorage', status: 'disabled' }
+    ],
+    softLimitMs: 50,
+    timeoutMs: 200,
+    cacheMs: 0
+  });
+  const disabledResult = await privateStorageDisabled.readiness();
+  assert.strictEqual(disabledResult.status, 'healthy');
+  assert.strictEqual(disabledResult.checks.privateStorage, 'disabled');
 
   const timeout = createOperationalHealthService({
     pool: healthPool(),

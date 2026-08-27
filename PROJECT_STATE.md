@@ -17,8 +17,10 @@
 - Infraestructura hospedada: Render y Aiven existentes, auditados parcialmente
   el 2026-08-24; no validados aun como staging sintetico.
 - Contrato tecnico y protocolo de piloto gratuito: documentados y pendientes de
-  ejecucion. Redis solo cubre rate limit distribuido, sesiones usan MySQL y los
-  comprobantes requieren filesystem privado persistente si se incluye ese flujo.
+  ejecucion. Redis solo cubre rate limit distribuido y las sesiones usan MySQL.
+  En staging gratuito, `PAYMENT_RECEIPT_MODE=disabled` bloquea comprobantes
+  manuales sin inicializar storage; para habilitarlos se requiere filesystem
+  privado persistente con backup y restore.
 - `PILOT_READY`: no declarado; primero ejecutar pruebas hospedadas solo con
   datos sinteticos. Despues, con backup/restore remoto PASS y autorizacion
   explicita, puede iniciar un piloto de una tienda por 7-14 dias.

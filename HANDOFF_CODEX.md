@@ -217,8 +217,11 @@ El siguiente macroestado es **PILOT-READINESS**. PILOT-READINESS-1 local esta
 en PASS; el contrato tecnico y el protocolo de piloto gratuito controlado ya
 estan documentados en `docs/CONFIGURACION_STAGING.md`. El siguiente paso es
 ejecutar las pruebas hospedadas exclusivamente con datos sinteticos. Redis solo
-sirve al rate limit distribuido; las sesiones siguen en MySQL y los comprobantes
-requieren filesystem privado. Solo tras PASS sintetico, backup/restore remoto y
+sirve al rate limit distribuido y las sesiones siguen en MySQL. Para el piloto
+gratuito de staging, `PAYMENT_RECEIPT_MODE=disabled` bloquea carga, revision y
+descarga de comprobantes sin inicializar storage ni usar filesystem efimero;
+production mantiene filesystem privado obligatorio. Solo tras PASS sintetico,
+backup/restore remoto y
 autorizacion explicita puede comenzar un piloto de una tienda por siete dias,
 ampliable hasta catorce. No existe PILOT_READY hasta completar esos gates. No
 iniciar COMMERCE, SECURITY-FINAL, piloto real ni otra fase por inferencia.

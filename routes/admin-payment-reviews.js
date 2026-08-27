@@ -7,6 +7,7 @@ const {
   reviewQuery
 } = require('../config/saas-c-payment-review-contract');
 const { applicationBody } = require('../config/saas-c-payment-application-contract');
+const { respondReceiptFeatureDisabled } = require('../config/saas-c-payment-receipt-contract');
 const { createSaasCPaymentReviewService } = require('../services/saas-c-payment-review-service');
 const { createSaasCPaymentApplicationService } = require('../services/saas-c-payment-application-service');
 
@@ -22,22 +23,30 @@ function context(req) {
 }
 
 function createAdminPaymentReviewsRouter({
-  service = createSaasCPaymentReviewService(),
-  applicationService = createSaasCPaymentApplicationService()
+  service = null,
+  applicationService = null,
+  receiptsEnabled = true
 } = {}) {
+  if (typeof receiptsEnabled !== 'boolean') throw new Error('La disponibilidad de comprobantes no es valida.');
   const router = express.Router();
   router.use((req, res, next) => {
     res.setHeader('Cache-Control', 'no-store, max-age=0');
     next();
   });
+  if (!receiptsEnabled) {
+    router.use((req, res) => respondReceiptFeatureDisabled(req, res));
+    return router;
+  }
+  const activeService = service || createSaasCPaymentReviewService();
+  const activeApplicationService = applicationService || createSaasCPaymentApplicationService();
 
   router.get('/', asyncRoute(async (req, res) => {
-    res.json(await service.list({ ...context(req), query: reviewQuery(req.query) }));
+    res.json(await activeService.list({ ...context(req), query: reviewQuery(req.query) }));
   }));
 
   router.post('/:reference/aplicar', asyncRoute(async (req, res) => {
     applicationBody(req.body);
-    res.json(await applicationService.apply({
+    res.json(await activeApplicationService.apply({
       ...context(req),
       reference: requestReference(req.params.reference),
       idempotencyKey: idempotencyKey(req.get('Idempotency-Key'))
@@ -45,7 +54,7 @@ function createAdminPaymentReviewsRouter({
   }));
 
   router.get('/:reference/comprobante', asyncRoute(async (req, res) => {
-    const result = await service.download({
+    const result = await activeService.download({
       ...context(req),
       reference: requestReference(req.params.reference)
     });
@@ -59,7 +68,7 @@ function createAdminPaymentReviewsRouter({
   }));
 
   router.get('/:reference', asyncRoute(async (req, res) => {
-    res.json(await service.detail({
+    res.json(await activeService.detail({
       ...context(req),
       reference: requestReference(req.params.reference)
     }));
@@ -67,7 +76,7 @@ function createAdminPaymentReviewsRouter({
 
   for (const decision of ['observada', 'rechazada']) {
     router.post(`/:reference/${decision}`, asyncRoute(async (req, res) => {
-      res.json(await service.transition({
+      res.json(await activeService.transition({
         ...context(req),
         reference: requestReference(req.params.reference),
         decision,

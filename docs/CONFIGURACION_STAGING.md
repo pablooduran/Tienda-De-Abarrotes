@@ -49,8 +49,11 @@ Staging y production requieren ademas:
 - `RATE_LIMIT_STORE=redis`;
 - `RATE_LIMIT_REDIS_URL` con esquema `rediss://` y credencial robusta;
 - `RATE_LIMIT_REDIS_PREFIX` que identifique el entorno;
-- `PAYMENT_RECEIPT_STORAGE_DRIVER=filesystem`;
-- `PAYMENT_RECEIPT_STORAGE_DIR` absoluto y fuera del repositorio;
+- `PAYMENT_RECEIPT_MODE=enabled` (valor predeterminado) junto con
+  `PAYMENT_RECEIPT_STORAGE_DRIVER=filesystem` y
+  `PAYMENT_RECEIPT_STORAGE_DIR` absoluto y fuera del repositorio; o,
+  exclusivamente para el piloto gratuito en staging,
+  `PAYMENT_RECEIPT_MODE=disabled` sin variables de almacenamiento;
 - `EMAIL_DELIVERY_MODE=disabled` mientras no exista adaptador externo.
 
 `SESSION_SECRET` hospedado debe tener al menos 48 caracteres, diversidad
@@ -91,9 +94,12 @@ sinteticos. No declara `PILOT_READY` ni habilita datos reales.
   identifico almacenamiento persistente para imagenes, adjuntos generales o
   exportaciones; los backups son un mecanismo separado.
 - Por lo tanto, el servicio hospedado necesita storage privado persistente si
-  se probaran comprobantes. El plan actual de Render no lo aporta; no se debe
-  declarar ese flujo validado hasta resolverlo o excluirlo explicitamente del
-  smoke sintetico autorizado.
+  se probaran comprobantes. El plan actual de Render no lo aporta; para el
+  piloto gratuito se puede declarar explicitamente
+  `PAYMENT_RECEIPT_MODE=disabled` en staging. Ese modo no inicializa storage,
+  deja `privateStorage` como `disabled` en readiness y bloquea carga, revision
+  y descarga de comprobantes. No se debe declarar ese flujo validado hasta
+  resolver storage persistente, backup y restore.
 
 ### Variables por nombre
 
@@ -106,7 +112,7 @@ documento no contiene valores, URIs, certificados ni ejemplos sensibles.
 | MySQL | `DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_USER`, `DB_PASSWORD`, `DB_SSL_ENABLED`, `DB_SSL_CA` | TLS obligatorio; la base debe identificarse como staging y no puede ser local. |
 | Redis/Valkey y rate limit | `RATE_LIMIT_ENABLED`, `RATE_LIMIT_STORE`, `RATE_LIMIT_REDIS_URL`, `RATE_LIMIT_REDIS_PREFIX` | Store `redis`, URL TLS y prefijo aislado de staging. Los limites individuales son configurables y no sustituyen el store distribuido. |
 | Sesiones | `SESSION_SECRET` | Se usa con `express-session` y store MySQL; debe cumplir la validacion reforzada de hosted. |
-| Storage privado | `PAYMENT_RECEIPT_STORAGE_DRIVER`, `PAYMENT_RECEIPT_STORAGE_DIR` | Solo se admite filesystem fuera del repositorio. |
+| Storage privado | `PAYMENT_RECEIPT_MODE`, y solo si es `enabled`: `PAYMENT_RECEIPT_STORAGE_DRIVER`, `PAYMENT_RECEIPT_STORAGE_DIR` | `enabled` es el valor predeterminado y exige filesystem fuera del repositorio. `disabled` solo es valido en staging; bloquea el flujo manual de comprobantes y no admite storage efimero. Production no puede deshabilitarlo. |
 | Backup y restore local | `BACKUP_DIR`, `MYSQLDUMP_PATH`, `MYSQL_CLIENT_PATH`, `BACKUP_RESTORE_USER`, `BACKUP_RESTORE_PASSWORD`, `BACKUP_RETENTION_DAYS`, `BACKUP_RETENTION_COUNT` | Los scripts existentes son exclusivamente locales; no constituyen un procedimiento remoto. |
 | Observabilidad | `SECURITY_LOG_LEVEL`, `HEALTH_READINESS_SOFT_MS`, `HEALTH_READINESS_TIMEOUT_MS`, `HEALTH_READINESS_CACHE_MS`, `SHUTDOWN_TIMEOUT_MS`, `BACKUP_WARNING_HOURS`, `BACKUP_CRITICAL_HOURS`, `BACKUP_STATUS_CACHE_MS`, `MONITOR_WARNING_REMINDER_MS`, `MONITOR_ERROR_REMINDER_MS`, `MONITOR_CRITICAL_REMINDER_MS` | Ajustes no secretos; los valores y el receptor externo de alertas requieren decision operativa. |
 
@@ -176,8 +182,9 @@ base temporal. Tambien debe definirse el respaldo del storage privado.
 Solo puede declararse listo cuando todos estos puntos tengan evidencia: rama
 autorizada distinta del despliegue actual por defecto; HTTPS y proxy con CIDR
 exactos; MySQL TLS con red restringida; Redis/Valkey TLS en `PING`; storage
-privado disponible si el flujo de comprobantes se incluye; `/health/live` y
-`/health/ready` sanos; migraciones 001–024 en base vacia sintetica; smoke tests
+privado disponible si el flujo de comprobantes se incluye, o
+`privateStorage: disabled` si se excluye explicitamente en staging;
+`/health/live` y `/health/ready` sanos; migraciones 001–024 en base vacia sintetica; smoke tests
 PASS; backup y restore remoto sintetico PASS; limites/costo/disponibilidad del
 plan aceptados; y limpieza completa. La autorizacion para datos reales sigue
 siendo un gate separado posterior.
@@ -211,8 +218,9 @@ pagados o formalmente aprobados.
   hosted mientras `EMAIL_DELIVERY_MODE=disabled`; no se finge una entrega.
 - Subir, revisar o descargar comprobantes de pagos manuales de suscripcion solo
   se permite si el filesystem privado persistente, su backup y su restauracion
-  ya fueron validados. Sin esa evidencia el flujo queda fuera del smoke y del
-  piloto gratuito.
+  ya fueron validados. En el piloto gratuito se configura
+  `PAYMENT_RECEIPT_MODE=disabled`: las rutas de carga, revision y descarga
+  responden de forma controlada y el flujo queda fuera del smoke y del piloto.
 - Los scripts de backup y restore del repositorio son locales. El respaldo y la
   restauracion remotos necesitan un procedimiento externo probado con datos
   sinteticos antes de admitir datos reales.
@@ -310,10 +318,12 @@ limitacion y evita fingir una entrega externa. Elegir e integrar un proveedor
 de correo es requisito previo para habilitar registro, verificacion y
 recuperacion en un entorno hospedado.
 
-Los comprobantes permanecen en almacenamiento privado fuera del repositorio y
-de rutas publicas. El filesystem es suficiente para una instancia de staging;
-antes de ejecutar varias instancias debe definirse un storage privado
-compartido, retencion, backup y restauracion.
+Los comprobantes habilitados permanecen en almacenamiento privado fuera del
+repositorio y de rutas publicas. El filesystem es suficiente para una instancia
+de staging con disco persistente; antes de ejecutar varias instancias debe
+definirse un storage privado compartido, retencion, backup y restauracion. El
+piloto gratuito no usa filesystem efimero: mantiene el flujo deshabilitado con
+`PAYMENT_RECEIPT_MODE=disabled`.
 
 ## Checklist previo a STAGING-2
 
@@ -324,8 +334,9 @@ desplegar recursos externos.
 1. Cerrar la rama autorizada de despliegue, dominio HTTPS, CIDR directos y
    topologia de los recursos Render/Aiven existentes.
 2. Restringir la red de MySQL y disponer de Redis/Valkey TLS compatible.
-3. Definir storage privado persistente para comprobantes o confirmar que no se
-   usara durante la prueba, con backup y restauracion.
+3. Definir storage privado persistente para comprobantes con backup y
+   restauracion, o configurar `PAYMENT_RECEIPT_MODE=disabled` exclusivamente
+   para el piloto sintetico gratuito.
 4. Configurar secretos sinteticos en el gestor autorizado sin versionarlos.
 5. Configurar y verificar health check; revisar limites, suspension y
    facturacion del plan Free antes de depender del servicio.

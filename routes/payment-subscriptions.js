@@ -10,7 +10,8 @@ const {
   MAX_RECEIPT_BYTES,
   RECEIPT_FIELD_NAME,
   receiptError,
-  receiptReference
+  receiptReference,
+  respondReceiptFeatureDisabled
 } = require('../config/saas-c-payment-receipt-contract');
 const { createSaasCPaymentService } = require('../services/saas-c-payment-service');
 const { createSaasCPaymentReceiptService } = require('../services/saas-c-payment-receipt-service');
@@ -55,8 +56,13 @@ function uploadMiddleware(req, res, next) {
 
 function createPaymentSubscriptionsRouter({
   service = createSaasCPaymentService(),
-  receiptService = createSaasCPaymentReceiptService()
+  receiptService = null,
+  receiptsEnabled = true
 } = {}) {
+  if (typeof receiptsEnabled !== 'boolean') throw new Error('La disponibilidad de comprobantes no es valida.');
+  const activeReceiptService = receiptsEnabled
+    ? receiptService || createSaasCPaymentReceiptService()
+    : null;
   const router = express.Router();
   router.use((req, res, next) => {
     res.setHeader('Cache-Control', 'no-store, max-age=0');
@@ -98,16 +104,21 @@ function createPaymentSubscriptionsRouter({
     }));
   }));
 
+  router.use('/solicitudes/:reference/comprobantes', (req, res, next) => {
+    if (!receiptsEnabled) return respondReceiptFeatureDisabled(req, res);
+    return next();
+  });
+
   router.get('/solicitudes/:reference/comprobantes', asyncRoute(async (req, res) => {
     emptyQuery(req.query);
-    res.json(await receiptService.list({
+    res.json(await activeReceiptService.list({
       ...ownerContext(req),
       reference: requestReference(req.params.reference)
     }));
   }));
 
   router.post('/solicitudes/:reference/comprobantes', uploadMiddleware, asyncRoute(async (req, res) => {
-    const result = await receiptService.upload({
+    const result = await activeReceiptService.upload({
       ...ownerContext(req),
       reference: requestReference(req.params.reference),
       idempotencyKey: idempotencyKey(req.get('Idempotency-Key')),
@@ -118,7 +129,7 @@ function createPaymentSubscriptionsRouter({
 
   router.get('/solicitudes/:reference/comprobantes/:receiptReference', asyncRoute(async (req, res) => {
     emptyQuery(req.query);
-    const result = await receiptService.download({
+    const result = await activeReceiptService.download({
       ...ownerContext(req),
       reference: requestReference(req.params.reference),
       receiptReference: receiptReference(req.params.receiptReference)

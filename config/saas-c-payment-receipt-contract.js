@@ -20,6 +20,14 @@ function receiptError(status, message, code) {
   return error;
 }
 
+function respondReceiptFeatureDisabled(req, res) {
+  return res.status(503).json({
+    error: 'Los comprobantes manuales de suscripcion no estan disponibles en este entorno.',
+    code: 'PAYMENT_RECEIPTS_DISABLED',
+    requestId: req.requestId
+  });
+}
+
 function receiptReference(value) {
   const normalized = String(value || '').trim();
   if (!RECEIPT_REFERENCE_PATTERN.test(normalized)) {
@@ -173,6 +181,7 @@ module.exports = {
   MAX_RECEIPT_BYTES,
   RECEIPT_FIELD_NAME,
   receiptError,
+  respondReceiptFeatureDisabled,
   receiptReference,
   validateReceiptFile
 };

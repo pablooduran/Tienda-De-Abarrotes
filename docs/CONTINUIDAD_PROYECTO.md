@@ -954,11 +954,14 @@ un fallo automatico.
 
 El entorno hospedado sintetico sigue en `PENDING_EXTERNAL_STAGE`. Antes de
 validarlo se debe cerrar el contrato tecnico: desplegar desde la rama autorizada
-de staging, restringir red de MySQL, disponer de Redis/Valkey TLS, definir
-storage privado persistente o confirmar que no se usa, configurar health check,
-probar backup/restore remoto con datos sinteticos, resolver limites/suspension y
+de staging, restringir red de MySQL, disponer de Redis/Valkey TLS, configurar
+`PAYMENT_RECEIPT_MODE=disabled` para excluir comprobantes manuales del piloto
+gratuito o disponer storage privado persistente, configurar health check, probar
+backup/restore remoto con datos sinteticos, resolver limites/suspension y
 facturacion del plan Free, decidir la alineacion regional y mantener solo datos
-sinteticos. Luego siguen las pruebas cloud; el piloto real de siete dias y la
+sinteticos. El modo disabled no inicializa storage, lo reporta como disabled en
+readiness y bloquea carga, revision y descarga; production conserva storage
+obligatorio. Luego siguen las pruebas cloud; el piloto real de siete dias y la
 autorizacion de datos reales permanecen posteriores.
 
 El contrato tecnico ejecutable queda documentado en
@@ -976,8 +979,9 @@ propietario, un piloto real de siete dias ampliable hasta catorce. No es un
 lanzamiento publico ni autoriza mas tiendas. El nucleo operativo permitido
 abarca catalogo, compras, stock, ventas, credito/cobranzas, cierres, reportes y
 auditoria bajo los guards existentes. Correo hosted permanece fuera de alcance;
-los comprobantes manuales de suscripcion quedan restringidos hasta validar
-storage privado persistente, backup y restore remotos.
+en el piloto gratuito los comprobantes manuales de suscripcion se bloquean
+explicitamente con `PAYMENT_RECEIPT_MODE=disabled`, sin usar filesystem efimero.
+Su habilitacion requiere storage privado persistente, backup y restore remotos.
 
 El pase sintetico a datos reales exige tres sesiones sinteticas completas y
 consecutivas sin diferencias de dinero, stock o credito, sin duplicados,

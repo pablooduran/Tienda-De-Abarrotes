@@ -88,7 +88,17 @@ function rateLimitStoreConfig(environment, mode) {
 }
 
 function privateStorageConfig(environment, mode, cwd) {
-  if (!HOSTED_ENVIRONMENTS.has(mode)) return Object.freeze({ driver: 'local' });
+  const receiptMode = normalized(environment.PAYMENT_RECEIPT_MODE || 'enabled');
+  if (!['enabled', 'disabled'].includes(receiptMode)) {
+    throw new Error('PAYMENT_RECEIPT_MODE solo admite enabled o disabled.');
+  }
+  if (receiptMode === 'disabled') {
+    if (mode !== 'staging') {
+      throw new Error('PAYMENT_RECEIPT_MODE=disabled solo se permite en staging.');
+    }
+    return Object.freeze({ enabled: false, driver: 'disabled', root: null });
+  }
+  if (!HOSTED_ENVIRONMENTS.has(mode)) return Object.freeze({ enabled: true, driver: 'local', root: null });
   required(environment, ['PAYMENT_RECEIPT_STORAGE_DIR', 'PAYMENT_RECEIPT_STORAGE_DRIVER']);
   if (normalized(environment.PAYMENT_RECEIPT_STORAGE_DRIVER) !== 'filesystem') {
     throw new Error('El driver privado soportado actualmente es filesystem.');
@@ -101,7 +111,7 @@ function privateStorageConfig(environment, mode, cwd) {
   if (!relative || (!relative.startsWith('..') && !path.isAbsolute(relative))) {
     throw new Error('PAYMENT_RECEIPT_STORAGE_DIR debe estar fuera del repositorio.');
   }
-  return Object.freeze({ driver: 'filesystem', root });
+  return Object.freeze({ enabled: true, driver: 'filesystem', root });
 }
 
 function deploymentConfig(environment = process.env, { cwd = process.cwd() } = {}) {

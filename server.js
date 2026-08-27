@@ -88,9 +88,9 @@ administrativeAuditService.setLogger(securityLogger);
 const rateLimitStore = createRateLimitStoreBackend(appDeploymentConfig.rateLimitStore, {
   logger: securityLogger
 });
-const privateReceiptStorage = createPrivateReceiptStorage({
-  rootDirectory: appDeploymentConfig.privateStorage.root
-});
+const privateReceiptStorage = appDeploymentConfig.privateStorage.enabled
+  ? createPrivateReceiptStorage({ rootDirectory: appDeploymentConfig.privateStorage.root })
+  : null;
 const rateLimiters = createRateLimiters(appSecurityConfig.rateLimit, {
   storeFactory: rateLimitStore.storeFor,
   onLoginLimited: (req) => administrativeAuditService.recordOutcome({
@@ -121,13 +121,15 @@ const healthService = createOperationalHealthService({
   pool,
   dependencyChecks: appDeploymentConfig.hosted ? [
     { name: 'rateLimitStore', check: rateLimitStore.health },
-    {
-      name: 'privateStorage',
-      check: async () => {
-        const result = await privateReceiptStorage.health();
-        if (!result.available) throw new Error('El almacenamiento privado no esta disponible.');
+    appDeploymentConfig.privateStorage.enabled
+      ? {
+        name: 'privateStorage',
+        check: async () => {
+          const result = await privateReceiptStorage.health();
+          if (!result.available) throw new Error('El almacenamiento privado no esta disponible.');
+        }
       }
-    }
+      : { name: 'privateStorage', status: 'disabled' }
   ] : [],
   softLimitMs: appSecurityConfig.operationalHealth.softLimitMs,
   timeoutMs: appSecurityConfig.operationalHealth.timeoutMs,
@@ -240,7 +242,7 @@ app.use(
   '/api/admin/pagos-suscripcion/revision',
   requireAuth,
   requireRole('superadmin'),
-  createAdminPaymentReviewsRouter()
+  createAdminPaymentReviewsRouter({ receiptsEnabled: appDeploymentConfig.privateStorage.enabled })
 );
 app.use('/api/admin/suscripciones', requireAuth, requireRole('superadmin'), createAdminSubscriptionsRouter());
 app.use('/api/admin', requireAuth, requireRole('superadmin'), adminRoutes);
@@ -266,7 +268,7 @@ app.use(
   requireAuth,
   requireTenant,
   resolveSubscription,
-  createPaymentSubscriptionsRouter()
+  createPaymentSubscriptionsRouter({ receiptsEnabled: appDeploymentConfig.privateStorage.enabled })
 );
 app.use(
   '/onboarding',
@@ -349,7 +351,9 @@ app.use(createErrorHandler({ logger: securityLogger, production: appSecurityConf
 
 async function startServer() {
   await rateLimitStore.ready();
-  if (appDeploymentConfig.hosted) await privateReceiptStorage.health();
+  if (appDeploymentConfig.hosted && appDeploymentConfig.privateStorage.enabled) {
+    await privateReceiptStorage.health();
+  }
   if (isLocalEnvironment) logDatabaseTarget('Servidor local', appDatabaseConfig);
   const server = app.listen(PORT, () => {
     securityLogger.info('server_started', {

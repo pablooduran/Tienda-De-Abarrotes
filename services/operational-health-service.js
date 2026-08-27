@@ -99,8 +99,10 @@ function createOperationalHealthService(options) {
     ...dependencyChecks
   ];
   for (const dependency of dependencies) {
+    const declaredStatus = dependency?.status === undefined ? null : String(dependency.status);
     if (!/^[a-z][a-zA-Z0-9]{1,39}$/.test(String(dependency?.name || ''))
-      || typeof dependency?.check !== 'function') {
+      || (declaredStatus !== null && declaredStatus !== 'disabled')
+      || (declaredStatus !== 'disabled' && typeof dependency?.check !== 'function')) {
       throw new Error('Las dependencias de readiness no son validas.');
     }
   }
@@ -125,7 +127,10 @@ function createOperationalHealthService(options) {
     let databasePassed = false;
     let migrationsPassed = false;
     let slowComponent = null;
-    const dependencyStates = Object.fromEntries(dependencies.map(({ name }) => [name, 'unavailable']));
+    const dependencyStates = Object.fromEntries(dependencies.map(({ name, status }) => [
+      name,
+      status === 'disabled' ? 'disabled' : 'unavailable'
+    ]));
     let migrationRows;
     try {
       const work = (async () => {
@@ -138,6 +143,7 @@ function createOperationalHealthService(options) {
         migrationsPassed = true;
         if (!slowComponent && monotonicNow() - componentStartedAt > softLimitMs) slowComponent = 'migrations';
         for (const dependency of dependencies) {
+          if (dependency.status === 'disabled') continue;
           try {
             componentStartedAt = monotonicNow();
             await dependency.check();
@@ -279,7 +285,7 @@ function createOperationalDiagnosticService(options = {}) {
       Object.entries(readiness.checks)
         .filter(([name]) => !['database', 'migrations'].includes(name))
         .map(([name, status]) => [name, Object.freeze({
-          status: status === 'ok' ? 'ok' : status === 'slow' ? 'warning' : 'error',
+          status: status === 'ok' ? 'ok' : status === 'slow' ? 'warning' : status === 'disabled' ? 'disabled' : 'error',
           ...(readiness.reason?.startsWith(`${dependencyCode(name, '')}`)
             ? { code: readiness.reason } : {})
         })])
