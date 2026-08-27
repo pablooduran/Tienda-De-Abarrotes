@@ -971,6 +971,13 @@ delimita el storage privado de comprobantes, health, red, backup/restore y los
 criterios objetivos de `entorno hospedado sintetico listo`. Su documentacion no
 provisiona ni valida recursos externos.
 
+Para Render Free en staging existe un modo de proxy limitado:
+`TRUST_PROXY_MODE=render-cloudflare`, sin `TRUST_PROXY_CIDRS`. Mantiene Express
+sin `trust proxy`, toma la IP solo desde `CF-Connecting-IP` antes de los rate
+limits y rechaza una cabecera ausente o invalida. No acepta headers forwarded
+ni opera en local, CI o production; los demas despliegues siguen usando CIDR
+directos verificados.
+
 ### PILOT-READINESS-3 - piloto gratuito controlado
 
 Se documento el protocolo para una sola tienda en planes gratuitos: primero

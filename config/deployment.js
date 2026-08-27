@@ -3,6 +3,7 @@ const path = require('path');
 
 const HOSTED_ENVIRONMENTS = new Set(['staging', 'production']);
 const SUPPORTED_ENVIRONMENTS = new Set(['local', 'ci', 'staging', 'production', 'test']);
+const SUPPORTED_PROXY_MODES = new Set(['cidr', 'render-cloudflare']);
 const PLACEHOLDER = /(reemplazar|replace[-_ ]?me|change[-_ ]?me|placeholder|example|ejemplo)/i;
 
 function normalized(value) {
@@ -56,6 +57,32 @@ function parseProxyCidrs(value) {
     throw new Error('TRUST_PROXY_CIDRS contiene redes duplicadas.');
   }
   return Object.freeze(cidrs);
+}
+
+function proxyConfig(environment, mode) {
+  const configuredMode = normalized(environment.TRUST_PROXY_MODE || 'cidr');
+  if (!SUPPORTED_PROXY_MODES.has(configuredMode)) {
+    throw new Error('TRUST_PROXY_MODE solo admite cidr o render-cloudflare.');
+  }
+  if (!HOSTED_ENVIRONMENTS.has(mode)) {
+    if (configuredMode !== 'cidr') {
+      throw new Error('TRUST_PROXY_MODE=render-cloudflare solo se permite en staging.');
+    }
+    return Object.freeze({ mode: 'cidr', trustProxy: false });
+  }
+  if (configuredMode === 'render-cloudflare') {
+    if (mode !== 'staging') {
+      throw new Error('TRUST_PROXY_MODE=render-cloudflare solo se permite en staging.');
+    }
+    if (String(environment.TRUST_PROXY_CIDRS || '').trim()) {
+      throw new Error('TRUST_PROXY_MODE=render-cloudflare no admite TRUST_PROXY_CIDRS.');
+    }
+    return Object.freeze({ mode: 'render-cloudflare', trustProxy: false });
+  }
+  return Object.freeze({
+    mode: 'cidr',
+    trustProxy: parseProxyCidrs(environment.TRUST_PROXY_CIDRS)
+  });
 }
 
 function rateLimitStoreConfig(environment, mode) {
@@ -128,11 +155,13 @@ function deploymentConfig(environment = process.env, { cwd = process.cwd() } = {
   }
 
   if (!hosted) {
+    const proxy = proxyConfig(environment, mode);
     return Object.freeze({
       mode,
       hosted: false,
       secureCookies: false,
-      trustProxy: false,
+      trustProxy: proxy.trustProxy,
+      proxyMode: proxy.mode,
       appBaseUrl: null,
       rateLimitStore: rateLimitStoreConfig(environment, mode),
       privateStorage: privateStorageConfig(environment, mode, cwd),
@@ -150,7 +179,6 @@ function deploymentConfig(environment = process.env, { cwd = process.cwd() } = {
     'DB_ENVIRONMENT',
     'NODE_ENV',
     'TRUSTED_ORIGINS',
-    'TRUST_PROXY_CIDRS',
     'EMAIL_DELIVERY_MODE'
   ]);
   if (normalized(environment.NODE_ENV) !== 'production') {
@@ -177,11 +205,13 @@ function deploymentConfig(environment = process.env, { cwd = process.cwd() } = {
   if (!origins.includes(appBaseUrl)) {
     throw new Error('TRUSTED_ORIGINS debe incluir APP_BASE_URL.');
   }
+  const proxy = proxyConfig(environment, mode);
   return Object.freeze({
     mode,
     hosted: true,
     secureCookies: true,
-    trustProxy: parseProxyCidrs(environment.TRUST_PROXY_CIDRS),
+    trustProxy: proxy.trustProxy,
+    proxyMode: proxy.mode,
     appBaseUrl,
     rateLimitStore: rateLimitStoreConfig(environment, mode),
     privateStorage: privateStorageConfig(environment, mode, cwd),
@@ -195,6 +225,7 @@ module.exports = {
   effectiveEnvironment,
   parseHttpsUrl,
   parseProxyCidrs,
+  proxyConfig,
   privateStorageConfig,
   rateLimitStoreConfig
 };

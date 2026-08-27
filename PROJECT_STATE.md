@@ -21,6 +21,10 @@
   En staging gratuito, `PAYMENT_RECEIPT_MODE=disabled` bloquea comprobantes
   manuales sin inicializar storage; para habilitarlos se requiere filesystem
   privado persistente con backup y restore.
+- Proxy Render Free: solo `APP_ENV=staging` puede usar
+  `TRUST_PROXY_MODE=render-cloudflare` sin `TRUST_PROXY_CIDRS`; la IP para
+  rate limiting viene exclusivamente de `CF-Connecting-IP`. El resto de
+  entornos/proveedores exige CIDR directos verificados.
 - `PILOT_READY`: no declarado; primero ejecutar pruebas hospedadas solo con
   datos sinteticos. Despues, con backup/restore remoto PASS y autorizacion
   explicita, puede iniciar un piloto de una tienda por 7-14 dias.

@@ -226,6 +226,12 @@ autorizacion explicita puede comenzar un piloto de una tienda por siete dias,
 ampliable hasta catorce. No existe PILOT_READY hasta completar esos gates. No
 iniciar COMMERCE, SECURITY-FINAL, piloto real ni otra fase por inferencia.
 
+Para Render Free, solo en staging, `TRUST_PROXY_MODE=render-cloudflare` opera
+sin `TRUST_PROXY_CIDRS`: conserva Express sin confianza generica de proxy y usa
+solo `CF-Connecting-IP` antes de rate limiting. Una cabecera ausente o invalida
+se rechaza; `X-Forwarded-For` y `X-Real-IP` no influyen. Local, CI, production
+y otros proveedores mantienen CIDR directos verificados.
+
 ## INSTRUCCIONES PARA CONTINUAR
 
 1. Leer `HANDOFF_CODEX.md`, `PROJECT_STATE.md`, `AGENTS.md`,

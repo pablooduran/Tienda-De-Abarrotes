@@ -8,6 +8,7 @@ const { webSecurityConfig } = require('../config/web-security');
 const { createErrorHandler, notFoundHandler } = require('../middleware/error-handler');
 const { createRateLimiters } = require('../middleware/rate-limiters');
 const { requestContext } = require('../middleware/request-context');
+const { createRenderClientIpMiddleware } = require('../middleware/render-client-ip');
 const { mutationProtection, noStoreSensitiveResponses } = require('../middleware/request-security');
 const { permissionsPolicy, securityHeaders } = require('../middleware/security-headers');
 const { createSecurityLogger, safeValue } = require('../utils/security-logger');
@@ -47,12 +48,13 @@ function rateConfig(overrides = {}) {
   };
 }
 
-async function startFixture({ production = false, limits = {}, trustProxy = false, loginMode = 'both' } = {}) {
+async function startFixture({ production = false, limits = {}, trustProxy = false, loginMode = 'both', renderClientIp = false } = {}) {
   const app = express();
   const logger = createSecurityLogger('off');
   const rateLimiters = createRateLimiters(rateConfig(limits));
   app.set('trust proxy', trustProxy);
   app.use(requestContext(logger));
+  app.use(createRenderClientIpMiddleware({ enabled: renderClientIp }));
   app.use(securityHeaders({ production }));
   app.use(permissionsPolicy);
   app.use(noStoreSensitiveResponses);
@@ -291,6 +293,39 @@ async function testIpAndSpecificLimits() {
       ...options, headers: { 'X-Forwarded-For': '198.51.100.11' }
     });
     check('Otra IP logica conserva su propio limite', anotherIp.status === 401);
+  });
+
+  await withFixture({ limits: { loginIpMax: 2, loginIdentityMax: 100 }, renderClientIp: true, loginMode: 'ip' }, async (fixture) => {
+    const options = {
+      method: 'POST',
+      body: { usuario: 'a', password: 'x' },
+      headers: { 'CF-Connecting-IP': '198.51.100.20', 'X-Forwarded-For': '198.51.100.21', 'X-Real-IP': '198.51.100.22' }
+    };
+    await request(fixture, '/auth/login', options);
+    await request(fixture, '/auth/login', options);
+    const blocked = await request(fixture, '/auth/login', options);
+    check('Render limita por CF-Connecting-IP', blocked.status === 429);
+    const spoofedForwarded = await request(fixture, '/auth/login', {
+      ...options,
+      headers: { ...options.headers, 'X-Forwarded-For': '198.51.100.99', 'X-Real-IP': '198.51.100.98' }
+    });
+    check('Render ignora headers forwarded manipulados', spoofedForwarded.status === 429);
+    const anotherIp = await request(fixture, '/auth/login', {
+      ...options,
+      headers: { ...options.headers, 'CF-Connecting-IP': '198.51.100.23' }
+    });
+    check('Render separa limites por CF-Connecting-IP', anotherIp.status === 401);
+  });
+
+  await withFixture({ limits: { loginIpMax: 2 }, renderClientIp: true, loginMode: 'ip' }, async (fixture) => {
+    const missing = await request(fixture, '/auth/login', {
+      method: 'POST', body: { usuario: 'a', password: 'x' }
+    });
+    const malformed = await request(fixture, '/auth/login', {
+      method: 'POST', body: { usuario: 'a', password: 'x' }, headers: { 'CF-Connecting-IP': '198.51.100.24, 198.51.100.25' }
+    });
+    check('Render rechaza CF-Connecting-IP ausente', missing.status === 400 && missing.body.code === 'CLIENT_IP_UNAVAILABLE');
+    check('Render rechaza CF-Connecting-IP malformado', malformed.status === 400 && malformed.body.code === 'CLIENT_IP_UNAVAILABLE');
   });
 
   await withFixture({ limits: { apiMax: 2 } }, async (fixture) => {

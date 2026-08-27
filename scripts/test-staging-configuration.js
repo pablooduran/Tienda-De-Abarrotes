@@ -71,7 +71,15 @@ function testEnvironmentContracts() {
     assert.strictEqual(hosted.rateLimitStore.type, 'redis');
     assert.strictEqual(hosted.emailDeliveryMode, 'disabled');
     assert.strictEqual(hosted.privateStorage.enabled, true);
+    assert.strictEqual(hosted.proxyMode, 'cidr');
   }
+
+  const renderStaging = deploymentConfig(hostedEnvironment('staging', {
+    TRUST_PROXY_MODE: 'render-cloudflare',
+    TRUST_PROXY_CIDRS: ''
+  }));
+  assert.strictEqual(renderStaging.proxyMode, 'render-cloudflare');
+  assert.strictEqual(renderStaging.trustProxy, false);
 
   const receiptDisabled = deploymentConfig(hostedEnvironment('staging', {
     PAYMENT_RECEIPT_MODE: 'disabled',
@@ -106,6 +114,16 @@ function testEnvironmentContracts() {
     PAYMENT_RECEIPT_MODE: 'temporary'
   })), /solo admite enabled o disabled/);
   assert.throws(() => deploymentConfig(hostedEnvironment('staging', { EMAIL_DELIVERY_MODE: 'external' })), /disabled/);
+  assert.throws(() => deploymentConfig(hostedEnvironment('staging', {
+    TRUST_PROXY_MODE: 'render-cloudflare'
+  })), /no admite TRUST_PROXY_CIDRS/);
+  assert.throws(() => deploymentConfig(hostedEnvironment('production', {
+    TRUST_PROXY_MODE: 'render-cloudflare', TRUST_PROXY_CIDRS: ''
+  })), /solo se permite en staging/);
+  assert.throws(() => deploymentConfig(baseEnvironment({ TRUST_PROXY_MODE: 'render-cloudflare' })), /solo se permite en staging/);
+  assert.throws(() => deploymentConfig(hostedEnvironment('staging', {
+    TRUST_PROXY_MODE: 'unknown'
+  })), /TRUST_PROXY_MODE/);
   assert.throws(() => sessionSecret({ APP_ENV: 'staging', SESSION_SECRET: 'a'.repeat(64) }), /aleatorio/);
   assert.doesNotThrow(() => sessionSecret({ APP_ENV: 'staging', SESSION_SECRET: STRONG_SECRET }));
   assert.throws(() => buildDatabaseOptions({

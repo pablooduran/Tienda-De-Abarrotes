@@ -26,6 +26,7 @@ const { requireAuth } = require('./middleware/auth');
 const { createErrorHandler, notFoundHandler } = require('./middleware/error-handler');
 const { createRateLimiters } = require('./middleware/rate-limiters');
 const { requestContext } = require('./middleware/request-context');
+const { createRenderClientIpMiddleware } = require('./middleware/render-client-ip');
 const { mutationProtection, noStoreSensitiveResponses } = require('./middleware/request-security');
 const { createCommercialAuditMiddleware } = require('./middleware/administrative-audit-middleware');
 const { requireRole } = require('./middleware/roles');
@@ -181,6 +182,9 @@ sessionStore.on('error', (error) => {
 
 app.set('trust proxy', appDeploymentConfig.trustProxy);
 app.use(requestContext(securityLogger));
+app.use(createRenderClientIpMiddleware({
+  enabled: appDeploymentConfig.proxyMode === 'render-cloudflare'
+}));
 app.use(securityHeaders(appSecurityConfig));
 app.use(permissionsPolicy);
 app.use(noStoreSensitiveResponses);

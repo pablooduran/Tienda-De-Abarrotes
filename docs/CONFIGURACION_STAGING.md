@@ -22,7 +22,7 @@ legado de `.env`, pero no es valido para un despliegue controlado.
 | Base permitida | `DB_HOST=localhost` | MySQL efimero en `localhost` | Host dedicado y `DB_ENVIRONMENT=staging` | Host dedicado y `DB_ENVIRONMENT=production` |
 | TLS MySQL | Opcional | Desactivado en el servicio efimero | Obligatorio con CA inline | Obligatorio con CA inline |
 | Cookie de sesion | Sin `Secure` para HTTP local | Sin `Secure` | `Secure`, HTTPS | `Secure`, HTTPS |
-| `trust proxy` | `false` | `false` | CIDR explicitos | CIDR explicitos |
+| `trust proxy` | `false` | `false` | CIDR explicitos o modo Render documentado | CIDR explicitos |
 | Rate limit | Memoria | Memoria | Redis con TLS | Redis con TLS |
 | Storage privado | Filesystem local fuera del repo | Temporal fuera del repo | Filesystem privado absoluto | Filesystem privado absoluto |
 | Correo | Adaptador local de pruebas | Adaptador local de pruebas | Deshabilitado hasta elegir adaptador | Deshabilitado hasta elegir adaptador |
@@ -44,7 +44,7 @@ Staging y production requieren ademas:
 - `DB_SSL_ENABLED=true` y `DB_SSL_CA` con la CA PEM inline;
 - `APP_BASE_URL` como origen HTTPS exacto;
 - `TRUSTED_ORIGINS`, incluyendo `APP_BASE_URL` y sin comodines;
-- `TRUST_PROXY_CIDRS` con las redes directas y verificadas del proxy;
+- `TRUST_PROXY_MODE=cidr` (predeterminado) y `TRUST_PROXY_CIDRS` con las redes directas y verificadas del proxy; o, solo para Render Free en staging, `TRUST_PROXY_MODE=render-cloudflare` sin `TRUST_PROXY_CIDRS`;
 - `RATE_LIMIT_ENABLED=true`;
 - `RATE_LIMIT_STORE=redis`;
 - `RATE_LIMIT_REDIS_URL` con esquema `rediss://` y credencial robusta;
@@ -108,7 +108,7 @@ documento no contiene valores, URIs, certificados ni ejemplos sensibles.
 
 | Grupo | Variables requeridas para staging | Notas de contrato |
 | --- | --- | --- |
-| Aplicacion y HTTP | `APP_ENV`, `NODE_ENV`, `PORT`, `APP_BASE_URL`, `DB_ENVIRONMENT`, `TRUSTED_ORIGINS`, `TRUST_PROXY_CIDRS`, `EMAIL_DELIVERY_MODE` | `APP_ENV` y `DB_ENVIRONMENT` deben ser `staging`; origen HTTPS exacto, sin comodines; correo sigue deshabilitado. |
+| Aplicacion y HTTP | `APP_ENV`, `NODE_ENV`, `PORT`, `APP_BASE_URL`, `DB_ENVIRONMENT`, `TRUSTED_ORIGINS`, `TRUST_PROXY_MODE`, `TRUST_PROXY_CIDRS` solo para modo `cidr`, `EMAIL_DELIVERY_MODE` | `APP_ENV` y `DB_ENVIRONMENT` deben ser `staging`; origen HTTPS exacto, sin comodines; correo sigue deshabilitado. |
 | MySQL | `DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_USER`, `DB_PASSWORD`, `DB_SSL_ENABLED`, `DB_SSL_CA` | TLS obligatorio; la base debe identificarse como staging y no puede ser local. |
 | Redis/Valkey y rate limit | `RATE_LIMIT_ENABLED`, `RATE_LIMIT_STORE`, `RATE_LIMIT_REDIS_URL`, `RATE_LIMIT_REDIS_PREFIX` | Store `redis`, URL TLS y prefijo aislado de staging. Los limites individuales son configurables y no sustituyen el store distribuido. |
 | Sesiones | `SESSION_SECRET` | Se usa con `express-session` y store MySQL; debe cumplir la validacion reforzada de hosted. |
@@ -126,7 +126,7 @@ documento no contiene valores, URIs, certificados ni ejemplos sensibles.
   a estados y codigos sanitizados.
 - Antes de escuchar, el proceso valida configuracion, abre el store distribuido
   y comprueba storage privado. Cualquier variable obligatoria ausente, TLS no
-  valido, proxy sin CIDR, Redis no disponible o storage inaccesible es criterio
+  valido, proxy sin CIDR o sin modo Render valido, Redis no disponible o storage inaccesible es criterio
   objetivo de no despliegue.
 
 ### Red, datos y regiones
@@ -138,8 +138,9 @@ documento no contiene valores, URIs, certificados ni ejemplos sensibles.
    verificable de la aplicacion. La allowlist abierta observada en Aiven impide
    validar el entorno sintetico.
 3. Redis/Valkey debe usar TLS y ser alcanzable solo conforme a la topologia
-   aprobada. Sus CIDR y los CIDR directos del proxy deben ser conocidos antes de
-   configurar `TRUST_PROXY_CIDRS`.
+   aprobada. Para proveedores distintos de Render Free deben conocerse los CIDR
+   directos del proxy; Render Free staging usa exclusivamente su modo de
+   encabezado documentado.
 4. Render esta en Oregon y Aiven en San Francisco. La diferencia de region no
    bloquea por si sola, pero obliga a medir latencia y revisar costos/egreso
    durante el smoke; alinear regiones sigue siendo una decision externa.
@@ -181,7 +182,8 @@ base temporal. Tambien debe definirse el respaldo del storage privado.
 
 Solo puede declararse listo cuando todos estos puntos tengan evidencia: rama
 autorizada distinta del despliegue actual por defecto; HTTPS y proxy con CIDR
-exactos; MySQL TLS con red restringida; Redis/Valkey TLS en `PING`; storage
+exactos o modo Render valido y verificado; MySQL TLS con red restringida;
+Redis/Valkey TLS en `PING`; storage
 privado disponible si el flujo de comprobantes se incluye, o
 `privateStorage: disabled` si se excluye explicitamente en staging;
 `/health/live` y `/health/ready` sanos; migraciones 001–024 en base vacia sintetica; smoke tests
@@ -293,6 +295,24 @@ La topologia y los CIDR exactos deben obtenerse del proveedor antes de crear
 staging. Si no se conocen, el proceso falla al arrancar. En local y CI,
 `X-Forwarded-For` no cambia `req.ip`; esto evita que un cliente manipule la IP
 usada por los rate limits.
+
+### Excepcion limitada para Render Free en staging
+
+`TRUST_PROXY_MODE=render-cloudflare` existe exclusivamente para un Web Service
+publico de Render en `APP_ENV=staging`, donde el borde Cloudflare/Render
+sobrescribe `CF-Connecting-IP` pero no publica CIDR entrantes verificables.
+Este modo requiere que `TRUST_PROXY_CIDRS` este ausente; Express conserva
+`trust proxy=false` y un middleware toma la IP normalizada solo de
+`CF-Connecting-IP` antes de los rate limits. Ignora expresamente
+`X-Forwarded-For`, `X-Real-IP` y encabezados equivalentes.
+
+Una cabecera ausente, multiple o con una IP invalida produce un rechazo
+controlado `400 CLIENT_IP_UNAVAILABLE`; no hay fallback a la IP de socket ni a
+otros encabezados. El modo no es valido en local, CI o production. Production
+y cualquier otro proveedor conservan `TRUST_PROXY_MODE=cidr` y CIDR directos
+verificados. Esta excepcion depende de la garantia documentada de Render sobre
+la sobrescritura del encabezado; no autoriza usar el encabezado fuera de esa
+topologia.
 
 ## Rate limits distribuidos
 

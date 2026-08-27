@@ -5,6 +5,10 @@ function disabledLimiter(req, res, next) {
   next();
 }
 
+function clientIpKey(req) {
+  return ipKeyGenerator(req.clientIp || req.ip || req.socket?.remoteAddress || 'ip-ausente');
+}
+
 function normalizedUsername(req) {
   return String(req.body?.usuario || '').trim().toLowerCase().slice(0, 80);
 }
@@ -15,13 +19,13 @@ function normalizedRegistrationIdentity(req) {
 
 function identityKey(req) {
   const identity = normalizedUsername(req) || 'identidad-ausente';
-  const ip = ipKeyGenerator(req.ip || req.socket?.remoteAddress || 'ip-ausente');
+  const ip = clientIpKey(req);
   return crypto.createHash('sha256').update(`${ip}\0${identity}`).digest('hex').slice(0, 32);
 }
 
 function registrationKey(req) {
   const identity = normalizedRegistrationIdentity(req) || 'registro-sin-correo';
-  const ip = ipKeyGenerator(req.ip || req.socket?.remoteAddress || 'ip-ausente');
+  const ip = clientIpKey(req);
   return crypto.createHash('sha256').update(`${ip}\0${identity}`).digest('hex').slice(0, 32);
 }
 
@@ -59,7 +63,7 @@ function limiter(config, {
     legacyHeaders: false,
     ...(store ? { store } : {}),
     skipSuccessfulRequests,
-    ...(keyGenerator ? { keyGenerator } : {}),
+    keyGenerator: keyGenerator || clientIpKey,
     async handler(req, res) {
       if (!res.getHeader('Retry-After')) {
         res.setHeader('Retry-After', String(Math.ceil(config.windowMs / 1000)));
@@ -170,6 +174,7 @@ function createRateLimiters(config, { onLoginLimited = null, storeFactory = null
 
 module.exports = {
   createRateLimiters,
+  clientIpKey,
   identityKey,
   normalizedRegistrationIdentity,
   normalizedUsername,
