@@ -64,9 +64,12 @@ se realiza desde un PC Windows autorizado con
 `scripts/initialize-staging-remote.ps1`, no desde Shell ni One-Off Jobs de
 Render. Antes de toda mutacion, ejecutar su modo `-Diagnose`: solo consulta y
 devuelve `EMPTY`, `BASELINE_INITIAL`, `PARTIAL_OR_UNEXPECTED` o
-`CONNECTION_OR_CONFIGURATION_FAILURE`. Solo `EMPTY` permite solicitar una nueva
+`CONNECTION_OR_CONFIGURATION_FAILURE <CAUSE_CODE>`. Solo `EMPTY` permite solicitar una nueva
 autorizacion para inicializar; cualquier otro resultado exige detenerse y
-reportar, sin reintento ni remedio improvisado. Solo `EMPTY` termina con codigo
+reportar, sin reintento ni remedio improvisado. Los codigos sanitizados posibles
+son `PREREQUISITE_LOCAL`, `TLS_CA`, `AUTHENTICATION`,
+`NETWORK_TIMEOUT_OR_ALLOWLIST`, `DATABASE_NOT_FOUND_OR_PERMISSION`,
+`READ_FAILURE` y `UNKNOWN_SAFE_FAILURE`. Solo `EMPTY` termina con codigo
 `0`; los demas resultados terminan con `1`. El lanzador solicita la
 contrasena de forma oculta, lee la CA temporal privada proporcionada por Aiven y
 restaura las variables sensibles del proceso al finalizar; los comandos
