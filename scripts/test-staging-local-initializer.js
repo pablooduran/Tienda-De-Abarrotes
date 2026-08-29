@@ -21,9 +21,12 @@ function main() {
   assert.match(source, /Read-Host 'Contrasena MySQL de staging' -AsSecureString/);
   assert.match(source, /\$ExpectedDatabase = 'tienda_abarrotes_staging'/);
   assert.match(source, /\$RemoteStagingFlag = '--remote-staging'/);
+  assert.match(source, /\$RemoteStagingDiagnosticFlag = '--remote-staging-diagnose'/);
   assert.match(source, /\$env:DB_SSL_ENABLED = 'true'/);
   assert.match(source, /Restore-EnvironmentState -Saved \$savedEnvironment/);
   assert.match(source, /\*> \$null/);
+  assert.match(source, /STAGING_REMOTE_INITIALIZATION: \$failureCategory/);
+  assert.match(source, /db:diagnose-staging/);
   assert(!source.includes('Start-Process'), 'El lanzador no debe crear procesos desacoplados.');
   assert(!source.includes('Set-Content'), 'El lanzador no debe guardar secretos en archivos.');
 

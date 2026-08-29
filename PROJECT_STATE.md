@@ -24,6 +24,10 @@
   Render Free, la futura ejecucion autorizada se realiza una sola vez desde un
   PC Windows mediante `scripts/initialize-staging-remote.ps1`, sin Shell ni
   One-Off Jobs y sin persistir secretos en el proceso o repositorio.
+  Su modo `-Diagnose` es solo lectura y debe ejecutarse antes de una nueva
+  autorizacion de mutacion; solo `EMPTY` permite solicitarla. Baseline, estado
+  parcial/inesperado o fallo de conexion/configuracion se detienen para
+  revision sin reintentos.
   En staging gratuito, `PAYMENT_RECEIPT_MODE=disabled` bloquea comprobantes
   manuales sin inicializar storage; para habilitarlos se requiere filesystem
   privado persistente con backup y restore.

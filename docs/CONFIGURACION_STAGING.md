@@ -206,7 +206,23 @@ secretos introducidos y ejecuta ambas guardas desde un PC Windows autorizado.
 No sustituye la autorizacion explicita para abrir una conexion remota ni crea
 una configuracion permanente en Render.
 
-Con autorizacion explicita posterior, el procedimiento es:
+Antes de solicitar una mutacion remota o repetir una operacion detenida, el
+operador debe ejecutar solo lectura:
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\initialize-staging-remote.ps1 -Diagnose
+```
+
+Usa el mismo ingreso efimero de host, puerto, usuario, contrasena y CA, pero no
+solicita ni establece la confirmacion de mutacion. El resultado expone solo una
+categoria: `EMPTY`, `BASELINE_INITIAL`, `PARTIAL_OR_UNEXPECTED` o
+`CONNECTION_OR_CONFIGURATION_FAILURE`; no lista tablas, SQL, host ni salida del
+driver. Si es `EMPTY`, solicitar una nueva autorizacion antes de inicializar.
+Para las otras tres categorias, detenerse y reportar sin reintentar ni proponer
+recuperacion.
+
+Con autorizacion explicita nueva posterior a un diagnostico `EMPTY`, el
+procedimiento es:
 
 1. Confirmar que la base aislada creada por el proveedor se llama exactamente
    `tienda_abarrotes_staging` y esta vacia; no usar una base existente ni una

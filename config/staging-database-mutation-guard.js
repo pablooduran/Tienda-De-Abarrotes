@@ -1,6 +1,13 @@
 const INITIAL_STAGING_DATABASE = 'tienda_abarrotes_staging';
 const REMOTE_STAGING_ARGUMENT = '--remote-staging';
+const REMOTE_STAGING_DIAGNOSTIC_ARGUMENT = '--remote-staging-diagnose';
 const REMOTE_STAGING_CONFIRMATION = 'CONFIRM_EMPTY_STAGING_001_024';
+const STAGING_DATABASE_DIAGNOSTICS = Object.freeze({
+  EMPTY: 'EMPTY',
+  BASELINE_INITIAL: 'BASELINE_INITIAL',
+  PARTIAL_OR_UNEXPECTED: 'PARTIAL_OR_UNEXPECTED',
+  CONNECTION_OR_CONFIGURATION_FAILURE: 'CONNECTION_OR_CONFIGURATION_FAILURE'
+});
 const INITIAL_TABLES = Object.freeze([
   'administrador', 'cliente', 'proveedor', 'producto', 'venta', 'detalleVenta',
   'compra', 'detalleCompra', 'fiado', 'detalleFiado', 'pagoFiado'
@@ -20,7 +27,7 @@ function assertRemoteStagingArguments(args = []) {
   }
 }
 
-function assertRemoteStagingAuthorization(environment = process.env) {
+function assertRemoteStagingConnectionAuthorization(environment = process.env) {
   if (normalized(environment.APP_ENV) !== 'staging') {
     throw new Error('La mutacion remota solo se permite con APP_ENV=staging.');
   }
@@ -39,9 +46,25 @@ function assertRemoteStagingAuthorization(environment = process.env) {
   if (normalized(environment.DB_SSL_ENABLED) !== 'true' || !String(environment.DB_SSL_CA || '').trim()) {
     throw new Error('La mutacion remota de staging exige DB_SSL_ENABLED=true y DB_SSL_CA.');
   }
+}
+
+function assertRemoteStagingAuthorization(environment = process.env) {
+  assertRemoteStagingConnectionAuthorization(environment);
   if (String(environment.STAGING_DB_MUTATION_CONFIRMATION || '').trim() !== REMOTE_STAGING_CONFIRMATION) {
     throw new Error('Falta la confirmacion explicita STAGING_DB_MUTATION_CONFIRMATION para staging vacio.');
   }
+}
+
+function assertRemoteStagingDiagnosticArguments(args = []) {
+  if (args.length !== 1 || args[0] !== REMOTE_STAGING_DIAGNOSTIC_ARGUMENT) {
+    throw new Error(`El diagnostico remoto exige el argumento explicito ${REMOTE_STAGING_DIAGNOSTIC_ARGUMENT}.`);
+  }
+}
+
+function resolveRemoteStagingDiagnosticMode({ args = [], environment = process.env } = {}) {
+  assertRemoteStagingDiagnosticArguments(args);
+  assertRemoteStagingConnectionAuthorization(environment);
+  return Object.freeze({ type: 'remote-staging-diagnostic' });
 }
 
 function resolveDatabaseMutationMode({ args = [], environment = process.env } = {}) {
@@ -98,14 +121,33 @@ async function assertRemoteStagingMigrationBaseline(connection, database) {
   }
 }
 
+async function diagnoseRemoteStagingDatabase(connection, database) {
+  const tables = await tableNames(connection, database);
+  if (!tables.length) return STAGING_DATABASE_DIAGNOSTICS.EMPTY;
+  const expected = new Set(INITIAL_TABLES);
+  if (tables.length !== expected.size || tables.some((table) => !expected.has(table))) {
+    return STAGING_DATABASE_DIAGNOSTICS.PARTIAL_OR_UNEXPECTED;
+  }
+  for (const table of INITIAL_TABLES) {
+    const [rows] = await connection.query(`SELECT 1 AS rowExists FROM ${quotedTable(table)} LIMIT 1`);
+    if (rows.length) return STAGING_DATABASE_DIAGNOSTICS.PARTIAL_OR_UNEXPECTED;
+  }
+  return STAGING_DATABASE_DIAGNOSTICS.BASELINE_INITIAL;
+}
+
 module.exports = {
   INITIAL_STAGING_DATABASE,
   INITIAL_TABLES,
   REMOTE_STAGING_ARGUMENT,
+  REMOTE_STAGING_DIAGNOSTIC_ARGUMENT,
   REMOTE_STAGING_CONFIRMATION,
+  STAGING_DATABASE_DIAGNOSTICS,
   assertEmptyRemoteStagingDatabase,
   assertRemoteStagingMigrationBaseline,
   assertRemoteStagingAuthorization,
+  assertRemoteStagingConnectionAuthorization,
+  diagnoseRemoteStagingDatabase,
   isLocalHost,
-  resolveDatabaseMutationMode
+  resolveDatabaseMutationMode,
+  resolveRemoteStagingDiagnosticMode
 };

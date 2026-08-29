@@ -1,7 +1,8 @@
 [CmdletBinding()]
 param(
   [switch]$ValidateOnly,
-  [switch]$SimulateInvalidDatabase
+  [switch]$SimulateInvalidDatabase,
+  [switch]$Diagnose
 )
 
 Set-StrictMode -Version Latest
@@ -9,6 +10,7 @@ $ErrorActionPreference = 'Stop'
 
 $ExpectedDatabase = 'tienda_abarrotes_staging'
 $RemoteStagingFlag = '--remote-staging'
+$RemoteStagingDiagnosticFlag = '--remote-staging-diagnose'
 $RemoteStagingConfirmation = 'CONFIRM_EMPTY_STAGING_001_024'
 $EnvironmentNames = @(
   'APP_ENV', 'NODE_ENV', 'DB_ENVIRONMENT', 'DB_HOST', 'DB_PORT', 'DB_NAME',
@@ -16,13 +18,12 @@ $EnvironmentNames = @(
   'STAGING_DB_MUTATION_CONFIRMATION'
 )
 
-function Assert-RemoteStagingInputs {
+function Assert-RemoteStagingConnectionInputs {
   param(
     [Parameter(Mandatory)] [string]$DatabaseName,
     [Parameter(Mandatory)] [string]$DatabaseHost,
     [Parameter(Mandatory)] [string]$DatabasePort,
-    [Parameter(Mandatory)] [string]$CertificateAuthority,
-    [Parameter(Mandatory)] [string]$Confirmation
+    [Parameter(Mandatory)] [string]$CertificateAuthority
   )
 
   if ($DatabaseName -cne $ExpectedDatabase) {
@@ -38,6 +39,18 @@ function Assert-RemoteStagingInputs {
   if ($CertificateAuthority -notmatch '-----BEGIN CERTIFICATE-----' -or $CertificateAuthority -notmatch '-----END CERTIFICATE-----') {
     throw 'El certificado CA no tiene el formato PEM esperado.'
   }
+}
+
+function Assert-RemoteStagingMutationInputs {
+  param(
+    [Parameter(Mandatory)] [string]$DatabaseName,
+    [Parameter(Mandatory)] [string]$DatabaseHost,
+    [Parameter(Mandatory)] [string]$DatabasePort,
+    [Parameter(Mandatory)] [string]$CertificateAuthority,
+    [Parameter(Mandatory)] [string]$Confirmation
+  )
+
+  Assert-RemoteStagingConnectionInputs -DatabaseName $DatabaseName -DatabaseHost $DatabaseHost -DatabasePort $DatabasePort -CertificateAuthority $CertificateAuthority
   if ($Confirmation -cne $RemoteStagingConfirmation) {
     throw 'La confirmacion de base vacia no coincide.'
   }
@@ -95,10 +108,28 @@ function Invoke-RemoteStagingCommand {
   }
 }
 
+function Invoke-RemoteStagingDiagnostic {
+  $output = @(& npm.cmd run db:diagnose-staging -- $RemoteStagingDiagnosticFlag 2>$null)
+  $category = $output | Where-Object {
+    $_ -match '^STAGING_REMOTE_DIAGNOSTIC: (EMPTY|BASELINE_INITIAL|PARTIAL_OR_UNEXPECTED|CONNECTION_OR_CONFIGURATION_FAILURE)$'
+  } | Select-Object -Last 1
+  if ($null -ne $category) {
+    Write-Output $category
+  } else {
+    Write-Output 'STAGING_REMOTE_DIAGNOSTIC: CONNECTION_OR_CONFIGURATION_FAILURE'
+  }
+  return $LASTEXITCODE
+}
+
 function Invoke-ValidationOnly {
   $database = if ($SimulateInvalidDatabase) { 'base_no_autorizada' } else { $ExpectedDatabase }
-  Assert-RemoteStagingInputs -DatabaseName $database -DatabaseHost 'mysql.staging.invalid' -DatabasePort '3306' -CertificateAuthority "-----BEGIN CERTIFICATE-----`nsynthetic`n-----END CERTIFICATE-----" -Confirmation $RemoteStagingConfirmation
+  Assert-RemoteStagingMutationInputs -DatabaseName $database -DatabaseHost 'mysql.staging.invalid' -DatabasePort '3306' -CertificateAuthority "-----BEGIN CERTIFICATE-----`nsynthetic`n-----END CERTIFICATE-----" -Confirmation $RemoteStagingConfirmation
   Write-Output 'STAGING_LOCAL_INITIALIZER_VALIDATION_OK'
+}
+
+if ($ValidateOnly -and $Diagnose) {
+  Write-Error 'Los modos de validacion y diagnostico no se pueden combinar.'
+  exit 1
 }
 
 if ($ValidateOnly) {
@@ -115,6 +146,7 @@ $savedEnvironment = Save-EnvironmentState
 $plainPassword = $null
 $certificateAuthority = $null
 $originalLocation = Get-Location
+$failureCategory = 'PRECHECK_FAILED'
 
 try {
   $repositoryRoot = Split-Path -Parent $PSScriptRoot
@@ -134,8 +166,12 @@ try {
     throw 'El usuario MySQL de staging es obligatorio.'
   }
   $certificateAuthority = Get-TemporaryCertificateAuthority
-  $confirmation = Read-Host 'Escriba la confirmacion de base vacia indicada por el runbook'
-  Assert-RemoteStagingInputs -DatabaseName $databaseName -DatabaseHost $databaseHost -DatabasePort $databasePort -CertificateAuthority $certificateAuthority -Confirmation $confirmation
+  if ($Diagnose) {
+    Assert-RemoteStagingConnectionInputs -DatabaseName $databaseName -DatabaseHost $databaseHost -DatabasePort $databasePort -CertificateAuthority $certificateAuthority
+  } else {
+    $confirmation = Read-Host 'Escriba la confirmacion de base vacia indicada por el runbook'
+    Assert-RemoteStagingMutationInputs -DatabaseName $databaseName -DatabaseHost $databaseHost -DatabasePort $databasePort -CertificateAuthority $certificateAuthority -Confirmation $confirmation
+  }
 
   $securePassword = Read-Host 'Contrasena MySQL de staging' -AsSecureString
   $plainPassword = Convert-SecureStringToPlainText -SecureValue $securePassword
@@ -153,13 +189,22 @@ try {
   $env:DB_PASSWORD = $plainPassword
   $env:DB_SSL_ENABLED = 'true'
   $env:DB_SSL_CA = $certificateAuthority
-  $env:STAGING_DB_MUTATION_CONFIRMATION = $RemoteStagingConfirmation
+  if (-not $Diagnose) {
+    $env:STAGING_DB_MUTATION_CONFIRMATION = $RemoteStagingConfirmation
+  }
 
+  if ($Diagnose) {
+    $diagnosticExitCode = Invoke-RemoteStagingDiagnostic
+    exit $diagnosticExitCode
+  }
+
+  $failureCategory = 'INITIALIZATION_FAILED'
   Invoke-RemoteStagingCommand -NpmScript 'db:init'
+  $failureCategory = 'MIGRATION_FAILED'
   Invoke-RemoteStagingCommand -NpmScript 'db:migrate'
   Write-Output 'Inicializacion y migraciones de staging completadas.'
 } catch {
-  Write-Error 'La inicializacion remota no se completo. No se realizaron reintentos automaticos.'
+  Write-Error "STAGING_REMOTE_INITIALIZATION: $failureCategory"
   exit 1
 } finally {
   Restore-EnvironmentState -Saved $savedEnvironment

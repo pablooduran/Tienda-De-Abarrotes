@@ -220,7 +220,10 @@ remota autorizada, el lanzador local de un solo uso
 `scripts/initialize-staging-remote.ps1` exige staging TLS, destino exacto
 `tienda_abarrotes_staging`, `--remote-staging` y una confirmacion no secreta;
 tambien verifica vacio o estructura inicial sin datos y restaura las variables
-del proceso. Render Free no aporta Shell ni One-Off Jobs para esta tarea. El siguiente paso es
+del proceso. Antes de mutar, su modo `-Diagnose` solo clasifica el destino como
+vacio, baseline, parcial/inesperado o fallo de conexion/configuracion; solo un
+resultado vacio permite pedir una nueva autorizacion. Render Free no aporta
+Shell ni One-Off Jobs para esta tarea. El siguiente paso es
 ejecutar las pruebas hospedadas exclusivamente con datos sinteticos. Redis solo
 sirve al rate limit distribuido y las sesiones siguen en MySQL. Para el piloto
 gratuito de staging, `PAYMENT_RECEIPT_MODE=disabled` bloquea carga, revision y
