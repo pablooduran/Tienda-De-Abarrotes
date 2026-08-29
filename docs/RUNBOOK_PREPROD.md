@@ -51,11 +51,17 @@ URLs con credenciales y rutas fisicas no se registran en logs.
 
 ## Migraciones 001-024
 
-Las migraciones son solo hacia adelante. En una base nueva y autorizada, el
-operador debe usar los scripts publicados `db:init` y `db:migrate` para llegar
-a `001-024`; no ejecutar SQL manual alternativo. En una base existente se debe
-leer primero `schema_migrations`, hacer backup y ensayar la misma secuencia en
-una copia aislada.
+Las migraciones son solo hacia adelante. En local/CI, `db:init` y `db:migrate`
+solo usan `APP_ENV=local` y `DB_HOST=localhost`. Una futura base remota exige
+ademas el contrato fail-closed de `CONFIGURACION_STAGING.md`: staging explicito,
+TLS MySQL, base exacta `tienda_abarrotes_staging`, flag `--remote-staging` y
+confirmacion no secreta de base vacia. `db:init` rechaza tablas existentes y
+`db:migrate` rechaza datos, tablas inesperadas o migraciones registradas antes
+de mutar. No ejecutar SQL manual alternativo ni reintentar un destino parcial.
+
+La ejecucion remota requiere autorizacion explicita posterior. En una base
+existente se debe leer primero `schema_migrations`, hacer backup y ensayar la
+misma secuencia en una copia aislada.
 
 No existe rollback automatico de esquema. Si falla una migracion, detener el
 despliegue, conservar evidencia sanitizada y restaurar o redirigir hacia la

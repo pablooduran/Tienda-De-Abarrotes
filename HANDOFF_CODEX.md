@@ -215,7 +215,10 @@ BLOQUE 1 funcional.
 
 El siguiente macroestado es **PILOT-READINESS**. PILOT-READINESS-1 local esta
 en PASS; el contrato tecnico y el protocolo de piloto gratuito controlado ya
-estan documentados en `docs/CONFIGURACION_STAGING.md`. El siguiente paso es
+estan documentados en `docs/CONFIGURACION_STAGING.md`. Antes de una ejecucion
+remota autorizada, `db:init` y `db:migrate` exigen staging TLS, destino exacto
+`tienda_abarrotes_staging`, `--remote-staging` y una confirmacion no secreta;
+tambien verifican vacio o estructura inicial sin datos. El siguiente paso es
 ejecutar las pruebas hospedadas exclusivamente con datos sinteticos. Redis solo
 sirve al rate limit distribuido y las sesiones siguen en MySQL. Para el piloto
 gratuito de staging, `PAYMENT_RECEIPT_MODE=disabled` bloquea carga, revision y

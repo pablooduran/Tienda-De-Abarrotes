@@ -971,6 +971,14 @@ delimita el storage privado de comprobantes, health, red, backup/restore y los
 criterios objetivos de `entorno hospedado sintetico listo`. Su documentacion no
 provisiona ni valida recursos externos.
 
+Como precondicion adicional para una futura base remota vacia, `db:init` y
+`db:migrate` quedaron cerrados por defecto fuera de localhost. Solo aceptan
+staging con TLS y destino exacto `tienda_abarrotes_staging` cuando se usa el
+flag `--remote-staging` junto a una confirmacion no secreta documentada. El
+inicializador comprueba que no existan tablas; el migrador comprueba la base
+inicial sin datos antes de aplicar 001–024. Esto no autoriza conexiones ni
+migraciones remotas en esta fase, y la migracion 025 sigue ausente.
+
 Para Render Free en staging existe un modo de proxy limitado:
 `TRUST_PROXY_MODE=render-cloudflare`, sin `TRUST_PROXY_CIDRS`. Mantiene Express
 sin `trust proxy`, toma la IP solo desde `CF-Connecting-IP` antes de los rate

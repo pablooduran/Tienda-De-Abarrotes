@@ -18,6 +18,9 @@
   el 2026-08-24; no validados aun como staging sintetico.
 - Contrato tecnico y protocolo de piloto gratuito: documentados y pendientes de
   ejecucion. Redis solo cubre rate limit distribuido y las sesiones usan MySQL.
+  Las herramientas remotas de esquema fallan cerradas salvo staging TLS en la
+  base exacta `tienda_abarrotes_staging`, `--remote-staging` y confirmacion no
+  secreta; validan vacio o estructura inicial sin datos antes de mutar.
   En staging gratuito, `PAYMENT_RECEIPT_MODE=disabled` bloquea comprobantes
   manuales sin inicializar storage; para habilitarlos se requiere filesystem
   privado persistente con backup y restore.

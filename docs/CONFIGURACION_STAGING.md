@@ -113,6 +113,7 @@ documento no contiene valores, URIs, certificados ni ejemplos sensibles.
 | Redis/Valkey y rate limit | `RATE_LIMIT_ENABLED`, `RATE_LIMIT_STORE`, `RATE_LIMIT_REDIS_URL`, `RATE_LIMIT_REDIS_PREFIX` | Store `redis`, URL TLS y prefijo aislado de staging. Los limites individuales son configurables y no sustituyen el store distribuido. |
 | Sesiones | `SESSION_SECRET` | Se usa con `express-session` y store MySQL; debe cumplir la validacion reforzada de hosted. |
 | Storage privado | `PAYMENT_RECEIPT_MODE`, y solo si es `enabled`: `PAYMENT_RECEIPT_STORAGE_DRIVER`, `PAYMENT_RECEIPT_STORAGE_DIR` | `enabled` es el valor predeterminado y exige filesystem fuera del repositorio. `disabled` solo es valido en staging; bloquea el flujo manual de comprobantes y no admite storage efimero. Production no puede deshabilitarlo. |
+| Mutacion remota puntual | `STAGING_DB_MUTATION_CONFIRMATION` | No es secreto. Solo se usa con `--remote-staging` y el valor exacto documentado para una base staging vacia; no autoriza por si sola ninguna ejecucion. |
 | Backup y restore local | `BACKUP_DIR`, `MYSQLDUMP_PATH`, `MYSQL_CLIENT_PATH`, `BACKUP_RESTORE_USER`, `BACKUP_RESTORE_PASSWORD`, `BACKUP_RETENTION_DAYS`, `BACKUP_RETENTION_COUNT` | Los scripts existentes son exclusivamente locales; no constituyen un procedimiento remoto. |
 | Observabilidad | `SECURITY_LOG_LEVEL`, `HEALTH_READINESS_SOFT_MS`, `HEALTH_READINESS_TIMEOUT_MS`, `HEALTH_READINESS_CACHE_MS`, `SHUTDOWN_TIMEOUT_MS`, `BACKUP_WARNING_HOURS`, `BACKUP_CRITICAL_HOURS`, `BACKUP_STATUS_CACHE_MS`, `MONITOR_WARNING_REMINDER_MS`, `MONITOR_ERROR_REMINDER_MS`, `MONITOR_CRITICAL_REMINDER_MS` | Ajustes no secretos; los valores y el receptor externo de alertas requieren decision operativa. |
 
@@ -155,8 +156,10 @@ documento no contiene valores, URIs, certificados ni ejemplos sensibles.
    MySQL; decidir y disponer Redis/Valkey TLS y storage privado persistente.
 3. Cargar secretos sinteticos por nombre en el gestor autorizado, sin archivos
    versionados ni reutilizacion de secretos locales.
-4. Construir con Node 20 y dependencias bloqueadas; aplicar solamente las
-   migraciones existentes 001–024 sobre la base vacia autorizada.
+4. Construir con Node 20 y dependencias bloqueadas. La inicializacion remota
+   exige autorizacion separada del responsable y las guardas descritas en
+   "Inicializacion remota protegida"; aplicar solamente las migraciones
+   existentes 001–024 sobre la base vacia autorizada.
 5. Arrancar con fail-fast, configurar health check sobre `/health/ready` y
    validar tambien `/health/live`.
 6. Ejecutar smoke tests sinteticos: sesion, tenant, venta, inventario,
@@ -177,6 +180,41 @@ frecuencia, retencion y ubicacion del respaldo; como evidencia minima se exige
 un backup administrado verificable, su politica visible, una restauracion en
 base sintetica aislada, migraciones 001–024 y FKs comprobadas, y limpieza de la
 base temporal. Tambien debe definirse el respaldo del storage privado.
+
+### Inicializacion remota protegida
+
+Los comandos `db:init` y `db:migrate` conservan su uso local/CI con
+`APP_ENV=local` y `DB_HOST=localhost`. Fuera de localhost fallan cerrados salvo
+para una preparacion futura de staging que cumpla todos estos requisitos a la
+vez: `APP_ENV=staging`, `NODE_ENV=production`, `DB_ENVIRONMENT=staging`,
+`DB_NAME=tienda_abarrotes_staging`, host no local, `DB_SSL_ENABLED=true`,
+`DB_SSL_CA` presente, el argumento exacto `--remote-staging` y
+`STAGING_DB_MUTATION_CONFIRMATION=CONFIRM_EMPTY_STAGING_001_024`.
+
+La confirmacion no es un secreto ni reemplaza una autorizacion operativa. No
+debe versionarse en archivos de entorno del repositorio ni compartirse junto a
+credenciales. Antes de crear tablas, `db:init` consulta el catalogo de MySQL y
+rechaza cualquier base que ya tenga tablas. Antes de aplicar migraciones,
+`db:migrate` exige exclusivamente la estructura inicial conocida, sin
+`schema_migrations`, sin tablas adicionales y sin filas. Una ejecucion parcial
+queda bloqueada para revision manual; no se intenta adoptar ni reparar el
+destino de forma automatica.
+
+Con autorizacion explicita posterior y secretos cargados solo en el gestor de
+staging, el procedimiento es:
+
+1. Confirmar que la base aislada creada por el proveedor se llama exactamente
+   `tienda_abarrotes_staging` y esta vacia; no usar una base existente ni una
+   base con datos reales.
+2. Ejecutar `npm.cmd run db:init -- --remote-staging`. El script verifica el
+   vacio antes de mutar.
+3. Ejecutar `npm.cmd run db:migrate -- --remote-staging`. El script valida que
+   solo exista la estructura inicial sin datos y aplica unicamente 001–024.
+4. Si cualquiera de los pasos falla, detenerse sin reintentos automaticos,
+   conservar evidencia sanitizada y solicitar autorizacion para la revision.
+
+Este documento no autoriza conexiones remotas ni la ejecucion de esos comandos.
+No existe ni se ejecuta una migracion 025.
 
 ### Criterio objetivo de entorno hospedado sintetico listo
 

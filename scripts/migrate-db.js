@@ -1,6 +1,10 @@
 const fs = require('fs');
 const path = require('path');
-const { logDatabaseTarget, requireLocalhostDatabase } = require('../config/env');
+const { databaseConfig, logDatabaseTarget, requireLocalhostDatabase } = require('../config/env');
+const {
+  assertRemoteStagingMigrationBaseline,
+  resolveDatabaseMutationMode
+} = require('../config/staging-database-mutation-guard');
 const { formatLocalDateTime } = require('../utils/local-datetime');
 const {
   createConnection,
@@ -39,9 +43,8 @@ const {
 
 const MIGRATION_LOCAL_DATETIME_TOKEN = '__MIGRATION_LOCAL_DATETIME__';
 
-function selectedMigration(files) {
-  const args = process.argv.slice(2);
-  if (args.length === 0) return null;
+function selectedMigration(files, args = process.argv.slice(2)) {
+  if (args.length === 0 || (args.length === 1 && args[0] === '--remote-staging')) return null;
   if (args.length !== 2 || args[0] !== '--only') {
     throw new Error('Uso: npm.cmd run db:migrate -- --only <migracion.sql>');
   }
@@ -3828,9 +3831,15 @@ function isExistingStructureError(error) {
 }
 
 async function main() {
-  logDatabaseTarget('Aplicacion de migraciones');
+  const args = process.argv.slice(2);
+  const mode = resolveDatabaseMutationMode({ args });
+  const config = databaseConfig();
+  logDatabaseTarget('Aplicacion de migraciones', config);
   const connection = await createConnection();
   try {
+    if (mode.type === 'remote-staging') {
+      await assertRemoteStagingMigrationBaseline(connection, config.database);
+    }
     await connection.query(`
       CREATE TABLE IF NOT EXISTS schema_migrations (
         nombre VARCHAR(255) PRIMARY KEY,
@@ -3840,7 +3849,7 @@ async function main() {
 
     const migrationsDir = path.join(__dirname, '..', 'database', 'migrations');
     const allFiles = fs.readdirSync(migrationsDir).filter((file) => file.endsWith('.sql')).sort();
-    const target = selectedMigration(allFiles);
+    const target = selectedMigration(allFiles, args);
     if (target) await validateExactMigrationContext(connection, allFiles, target);
     const files = target ? [target] : allFiles;
 

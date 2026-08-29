@@ -1,5 +1,9 @@
 const { createDatabaseConnection } = require('../config/database-connection');
 const { databaseConfig, logDatabaseTarget } = require('../config/env');
+const {
+  assertEmptyRemoteStagingDatabase,
+  resolveDatabaseMutationMode
+} = require('../config/staging-database-mutation-guard');
 
 const requiredColumns = {
   administrador: ['idAdministrador', 'usuario', 'password'],
@@ -199,10 +203,14 @@ async function verifyStructure(connection) {
 }
 
 async function main() {
+  const mode = resolveDatabaseMutationMode({ args: process.argv.slice(2) });
   const config = databaseConfig({ decimalNumbers: true });
   logDatabaseTarget('Inicializacion de estructura', config);
   const connection = await createDatabaseConnection(config);
   try {
+    if (mode.type === 'remote-staging') {
+      await assertEmptyRemoteStagingDatabase(connection, config.database);
+    }
     await createBaseTables(connection);
     await verifyStructure(connection);
     console.log('Estructura inicial verificada. No se modificaron datos ni se ejecutaron migraciones.');
