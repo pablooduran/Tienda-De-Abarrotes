@@ -109,6 +109,8 @@ function Invoke-RemoteStagingCommand {
 }
 
 function Invoke-RemoteStagingDiagnostic {
+  param([Parameter(Mandatory)] [ref]$ExitCode)
+
   $output = @(& npm.cmd run db:diagnose-staging -- $RemoteStagingDiagnosticFlag 2>$null)
   $category = $output | Where-Object {
     $_ -match '^STAGING_REMOTE_DIAGNOSTIC: (EMPTY|BASELINE_INITIAL|PARTIAL_OR_UNEXPECTED|CONNECTION_OR_CONFIGURATION_FAILURE)$'
@@ -118,7 +120,7 @@ function Invoke-RemoteStagingDiagnostic {
   } else {
     Write-Output 'STAGING_REMOTE_DIAGNOSTIC: CONNECTION_OR_CONFIGURATION_FAILURE'
   }
-  return $LASTEXITCODE
+  $ExitCode.Value = $LASTEXITCODE
 }
 
 function Invoke-ValidationOnly {
@@ -194,7 +196,8 @@ try {
   }
 
   if ($Diagnose) {
-    $diagnosticExitCode = Invoke-RemoteStagingDiagnostic
+    $diagnosticExitCode = 1
+    Invoke-RemoteStagingDiagnostic -ExitCode ([ref]$diagnosticExitCode)
     exit $diagnosticExitCode
   }
 

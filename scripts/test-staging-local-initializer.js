@@ -27,6 +27,8 @@ function main() {
   assert.match(source, /\*> \$null/);
   assert.match(source, /STAGING_REMOTE_INITIALIZATION: \$failureCategory/);
   assert.match(source, /db:diagnose-staging/);
+  assert.match(source, /Invoke-RemoteStagingDiagnostic -ExitCode \(\[ref\]\$diagnosticExitCode\)/);
+  assert(!source.includes('$diagnosticExitCode = Invoke-RemoteStagingDiagnostic'), 'La categoria no debe quedar capturada con el codigo de salida.');
   assert(!source.includes('Start-Process'), 'El lanzador no debe crear procesos desacoplados.');
   assert(!source.includes('Set-Content'), 'El lanzador no debe guardar secretos en archivos.');
 
