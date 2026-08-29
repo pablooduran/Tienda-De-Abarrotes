@@ -200,21 +200,43 @@ rechaza cualquier base que ya tenga tablas. Antes de aplicar migraciones,
 queda bloqueada para revision manual; no se intenta adoptar ni reparar el
 destino de forma automatica.
 
-Con autorizacion explicita posterior y secretos cargados solo en el gestor de
-staging, el procedimiento es:
+Render Free no ofrece Shell ni One-Off Jobs para ejecutar estas mutaciones. Por
+ello existe un lanzador local de un solo uso, versionado, que no persiste los
+secretos introducidos y ejecuta ambas guardas desde un PC Windows autorizado.
+No sustituye la autorizacion explicita para abrir una conexion remota ni crea
+una configuracion permanente en Render.
+
+Con autorizacion explicita posterior, el procedimiento es:
 
 1. Confirmar que la base aislada creada por el proveedor se llama exactamente
    `tienda_abarrotes_staging` y esta vacia; no usar una base existente ni una
    base con datos reales.
-2. Ejecutar `npm.cmd run db:init -- --remote-staging`. El script verifica el
-   vacio antes de mutar.
-3. Ejecutar `npm.cmd run db:migrate -- --remote-staging`. El script valida que
-   solo exista la estructura inicial sin datos y aplica unicamente 001–024.
-4. Si cualquiera de los pasos falla, detenerse sin reintentos automaticos,
+2. Descargar la CA de Aiven en una ubicacion temporal privada, fuera del
+   repositorio y sin copiarla a chat, Git ni historial de comandos.
+3. Desde la raiz del commit autorizado, ejecutar solamente:
+
+   ```powershell
+   powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\initialize-staging-remote.ps1
+   ```
+
+   El lanzador solicita de forma interactiva el nombre de base, host, puerto,
+   usuario, CA temporal, confirmacion exacta y contrasena oculta. Rechaza otro
+   destino, host local, TLS ausente, CA no PEM o confirmacion incorrecta; fija
+   `APP_ENV=staging`, `NODE_ENV=production`, `DB_ENVIRONMENT=staging`, TLS y
+   `--remote-staging` solo para sus dos procesos hijos. No muestra salida de
+   esos procesos, URI, host, usuario, contrasena ni CA, y restaura las variables
+   del proceso al finalizar.
+4. El lanzador ejecuta primero `db:init -- --remote-staging`, que verifica el
+   vacio, y despues `db:migrate -- --remote-staging`, que valida la estructura
+   inicial sin datos y aplica unicamente 001–024. No ejecutar esos comandos por
+   separado ni usar SQL manual alternativo.
+5. Borrar la copia temporal privada de la CA cuando finalice la operacion.
+6. Si cualquiera de los pasos falla, detenerse sin reintentos automaticos,
    conservar evidencia sanitizada y solicitar autorizacion para la revision.
 
-Este documento no autoriza conexiones remotas ni la ejecucion de esos comandos.
-No existe ni se ejecuta una migracion 025.
+El lanzador no se ejecuta durante pruebas ni despliegues y este documento no
+autoriza una conexion remota por si mismo. No existe ni se ejecuta una
+migracion 025.
 
 ### Criterio objetivo de entorno hospedado sintetico listo
 

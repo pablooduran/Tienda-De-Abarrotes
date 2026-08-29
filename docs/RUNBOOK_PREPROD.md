@@ -59,9 +59,16 @@ confirmacion no secreta de base vacia. `db:init` rechaza tablas existentes y
 `db:migrate` rechaza datos, tablas inesperadas o migraciones registradas antes
 de mutar. No ejecutar SQL manual alternativo ni reintentar un destino parcial.
 
-La ejecucion remota requiere autorizacion explicita posterior. En una base
-existente se debe leer primero `schema_migrations`, hacer backup y ensayar la
-misma secuencia en una copia aislada.
+La ejecucion remota requiere autorizacion explicita posterior. Para Render Free
+se realiza desde un PC Windows autorizado con
+`scripts/initialize-staging-remote.ps1`, no desde Shell ni One-Off Jobs de
+Render. El lanzador solicita la contrasena de forma oculta, lee la CA temporal
+privada proporcionada por Aiven y restaura las variables sensibles del proceso
+al finalizar; el unico comando operativo es el documentado en
+`CONFIGURACION_STAGING.md`. No guardar secretos, CA ni valores de conexion en
+PowerShell, Git, chat o archivos del repositorio. En una base existente se debe
+leer primero `schema_migrations`, hacer backup y ensayar la misma secuencia en
+una copia aislada.
 
 No existe rollback automatico de esquema. Si falla una migracion, detener el
 despliegue, conservar evidencia sanitizada y restaurar o redirigir hacia la

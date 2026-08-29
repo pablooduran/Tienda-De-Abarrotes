@@ -20,7 +20,10 @@
   ejecucion. Redis solo cubre rate limit distribuido y las sesiones usan MySQL.
   Las herramientas remotas de esquema fallan cerradas salvo staging TLS en la
   base exacta `tienda_abarrotes_staging`, `--remote-staging` y confirmacion no
-  secreta; validan vacio o estructura inicial sin datos antes de mutar.
+  secreta; validan vacio o estructura inicial sin datos antes de mutar. Para
+  Render Free, la futura ejecucion autorizada se realiza una sola vez desde un
+  PC Windows mediante `scripts/initialize-staging-remote.ps1`, sin Shell ni
+  One-Off Jobs y sin persistir secretos en el proceso o repositorio.
   En staging gratuito, `PAYMENT_RECEIPT_MODE=disabled` bloquea comprobantes
   manuales sin inicializar storage; para habilitarlos se requiere filesystem
   privado persistente con backup y restore.

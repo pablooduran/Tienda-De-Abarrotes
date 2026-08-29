@@ -60,6 +60,7 @@
     "test:local-startup": "node scripts/test-local-startup.js",
     "test:staging-configuration": "node scripts/test-staging-configuration.js",
     "test:staging-database-mutation-guard": "node scripts/test-staging-database-mutation-guard.js",
+    "test:staging-local-initializer": "node scripts/test-staging-local-initializer.js",
     "test:operational-health": "node scripts/test-operational-health.js",
     "test:operational-backup-health": "node scripts/test-operational-backup-health.js",
     "test:operational-monitoring": "node scripts/test-operational-monitoring.js",
