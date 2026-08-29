@@ -11,6 +11,10 @@ const {
   resolveRemoteStagingDiagnosticMode
 } = require('../config/staging-database-mutation-guard');
 
+function expectedExitCode(category) {
+  return category === STAGING_DATABASE_DIAGNOSTICS.EMPTY ? 0 : 1;
+}
+
 function stagingEnvironment(extra = {}) {
   return {
     APP_ENV: 'staging', NODE_ENV: 'production', DB_ENVIRONMENT: 'staging',
@@ -35,6 +39,7 @@ function fakeConnection({ tables = [], rowsByTable = {} } = {}) {
 async function main() {
   const diagnosticSource = fs.readFileSync(path.join(__dirname, 'diagnose-staging-remote.js'), 'utf8');
   assert(!/\b(?:CREATE|ALTER|INSERT|UPDATE|DELETE|DROP)\b/i.test(diagnosticSource), 'El diagnostico no debe contener mutaciones SQL.');
+  assert.match(diagnosticSource, /if \(category !== STAGING_DATABASE_DIAGNOSTICS\.EMPTY\) process\.exitCode = 1/);
   assert.deepStrictEqual(resolveRemoteStagingDiagnosticMode({
     args: [REMOTE_STAGING_DIAGNOSTIC_ARGUMENT], environment: stagingEnvironment()
   }), { type: 'remote-staging-diagnostic' });
@@ -56,6 +61,10 @@ async function main() {
   assert.strictEqual(await diagnoseRemoteStagingDatabase(
     fakeConnection({ tables: INITIAL_TABLES, rowsByTable: { venta: true } }), INITIAL_STAGING_DATABASE
   ), STAGING_DATABASE_DIAGNOSTICS.PARTIAL_OR_UNEXPECTED);
+  assert.strictEqual(expectedExitCode(STAGING_DATABASE_DIAGNOSTICS.EMPTY), 0);
+  assert.strictEqual(expectedExitCode(STAGING_DATABASE_DIAGNOSTICS.BASELINE_INITIAL), 1);
+  assert.strictEqual(expectedExitCode(STAGING_DATABASE_DIAGNOSTICS.PARTIAL_OR_UNEXPECTED), 1);
+  assert.strictEqual(expectedExitCode(STAGING_DATABASE_DIAGNOSTICS.CONNECTION_OR_CONFIGURATION_FAILURE), 1);
 
   const sentinelHost = 'mysql-do-not-connect.staging.invalid';
   const result = spawnSync(process.execPath, [

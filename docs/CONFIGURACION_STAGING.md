@@ -219,7 +219,8 @@ categoria: `EMPTY`, `BASELINE_INITIAL`, `PARTIAL_OR_UNEXPECTED` o
 `CONNECTION_OR_CONFIGURATION_FAILURE`; no lista tablas, SQL, host ni salida del
 driver. Si es `EMPTY`, solicitar una nueva autorizacion antes de inicializar.
 Para las otras tres categorias, detenerse y reportar sin reintentar ni proponer
-recuperacion.
+recuperacion. Solo `EMPTY` devuelve codigo de salida `0`; los demas resultados
+devuelven `1` para impedir que una automatizacion los trate como aptos.
 
 Con autorizacion explicita nueva posterior a un diagnostico `EMPTY`, el
 procedimiento es:

@@ -23,7 +23,9 @@ async function main() {
     });
     const config = databaseConfig();
     connection = await mysql.createConnection(config);
-    writeDiagnostic(await diagnoseRemoteStagingDatabase(connection, config.database));
+    const category = await diagnoseRemoteStagingDatabase(connection, config.database);
+    writeDiagnostic(category);
+    if (category !== STAGING_DATABASE_DIAGNOSTICS.EMPTY) process.exitCode = 1;
   } catch {
     writeDiagnostic(STAGING_DATABASE_DIAGNOSTICS.CONNECTION_OR_CONFIGURATION_FAILURE);
     process.exitCode = 1;

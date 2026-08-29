@@ -66,7 +66,8 @@ Render. Antes de toda mutacion, ejecutar su modo `-Diagnose`: solo consulta y
 devuelve `EMPTY`, `BASELINE_INITIAL`, `PARTIAL_OR_UNEXPECTED` o
 `CONNECTION_OR_CONFIGURATION_FAILURE`. Solo `EMPTY` permite solicitar una nueva
 autorizacion para inicializar; cualquier otro resultado exige detenerse y
-reportar, sin reintento ni remedio improvisado. El lanzador solicita la
+reportar, sin reintento ni remedio improvisado. Solo `EMPTY` termina con codigo
+`0`; los demas resultados terminan con `1`. El lanzador solicita la
 contrasena de forma oculta, lee la CA temporal privada proporcionada por Aiven y
 restaura las variables sensibles del proceso al finalizar; los comandos
 operativos son los documentados en `CONFIGURACION_STAGING.md`. No guardar
