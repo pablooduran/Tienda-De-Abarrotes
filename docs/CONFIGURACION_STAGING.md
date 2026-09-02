@@ -225,6 +225,24 @@ Para las otras tres categorias, detenerse y reportar sin reintentar ni proponer
 recuperacion. Solo `EMPTY` devuelve codigo de salida `0`; los demas resultados
 devuelven `1` para impedir que una automatizacion los trate como aptos.
 
+Si se necesita aislar conectividad TLS antes del diagnostico de estructura, el
+operador puede ejecutar una unica prueba de conexion, tambien solo con
+autorizacion explicita y desde un PC Windows autorizado:
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\probe-staging-mysql-tls.ps1
+```
+
+Solicita de forma efimera la base exacta, host, puerto, usuario, ruta local de
+la CA temporal y contrasena oculta. No usa la configuracion de la aplicacion,
+no persiste entradas, fuerza TLS con CA, abre una sola conexion y ejecuta solo
+una comprobacion de lectura. Expone exclusivamente `STAGING_TLS_PROBE: PASS` o
+`STAGING_TLS_PROBE: FAIL <CAUSE_CODE>`, donde el codigo es uno de
+`PREREQUISITE_LOCAL`, `TLS_CA`, `AUTHENTICATION`,
+`NETWORK_TIMEOUT_OR_ALLOWLIST`, `DATABASE_NOT_FOUND_OR_PERMISSION` o
+`UNKNOWN_SAFE_FAILURE`. Todo fallo devuelve `1`, no reintenta y no autoriza
+`db:init` ni `db:migrate`.
+
 Con autorizacion explicita nueva posterior a un diagnostico `EMPTY`, el
 procedimiento es:
 

@@ -78,6 +78,14 @@ secretos, CA ni valores de conexion en PowerShell, Git, chat o archivos del
 repositorio. En una base existente se debe leer primero `schema_migrations`,
 hacer backup y ensayar la misma secuencia en una copia aislada.
 
+Cuando un problema de conexion de staging necesite separarse del diagnostico de
+estructura, usar solo con autorizacion explicita
+`scripts/probe-staging-mysql-tls.ps1`. El lanzador usa `mysql2` directamente,
+fuerza TLS con la CA temporal y ejecuta una unica lectura. Su unica salida es
+`STAGING_TLS_PROBE: PASS` o `STAGING_TLS_PROBE: FAIL <CAUSE_CODE>`; no muestra
+valores de conexion, SQL, errores crudos ni stack. Un resultado distinto de
+`PASS` exige detenerse; no autoriza inicializacion ni migracion.
+
 No existe rollback automatico de esquema. Si falla una migracion, detener el
 despliegue, conservar evidencia sanitizada y restaurar o redirigir hacia la
 base anterior solo mediante un procedimiento aprobado. Nunca aplicar una
