@@ -67,9 +67,16 @@ async function main() {
   assert.strictEqual(expectedExitCode(STAGING_DATABASE_DIAGNOSTICS.PARTIAL_OR_UNEXPECTED), 1);
   assert.strictEqual(expectedExitCode(STAGING_DATABASE_DIAGNOSTICS.CONNECTION_OR_CONFIGURATION_FAILURE), 1);
   assert.strictEqual(classifyDiagnosticFailure({ code: 'HANDSHAKE_SSL_ERROR' }, 'connect'), DIAGNOSTIC_CAUSES.TLS_CA);
+  assert.strictEqual(classifyDiagnosticFailure({ code: 'ERR_TLS_CERT_ALTNAME_INVALID' }, 'connect'), DIAGNOSTIC_CAUSES.TLS_CA);
+  assert.strictEqual(classifyDiagnosticFailure({ code: 'ER_SSL_CONNECTION_ERROR' }, 'connect'), DIAGNOSTIC_CAUSES.TLS_CA);
   assert.strictEqual(classifyDiagnosticFailure({ code: 'ER_ACCESS_DENIED_ERROR' }, 'connect'), DIAGNOSTIC_CAUSES.AUTHENTICATION);
   assert.strictEqual(classifyDiagnosticFailure({ code: 'ETIMEDOUT' }, 'connect'), DIAGNOSTIC_CAUSES.NETWORK_TIMEOUT_OR_ALLOWLIST);
+  assert.strictEqual(classifyDiagnosticFailure({ code: 'ECONNABORTED' }, 'connect'), DIAGNOSTIC_CAUSES.NETWORK_TIMEOUT_OR_ALLOWLIST);
+  assert.strictEqual(classifyDiagnosticFailure({ code: 'EPIPE' }, 'connect'), DIAGNOSTIC_CAUSES.NETWORK_TIMEOUT_OR_ALLOWLIST);
+  assert.strictEqual(classifyDiagnosticFailure({ code: 'EHOSTUNREACH' }, 'connect'), DIAGNOSTIC_CAUSES.NETWORK_TIMEOUT_OR_ALLOWLIST);
   assert.strictEqual(classifyDiagnosticFailure({ code: 'ER_BAD_DB_ERROR' }, 'connect'), DIAGNOSTIC_CAUSES.DATABASE_NOT_FOUND_OR_PERMISSION);
+  assert.strictEqual(classifyDiagnosticFailure({ code: 'ER_HOST_NOT_PRIVILEGED' }, 'connect'), DIAGNOSTIC_CAUSES.DATABASE_NOT_FOUND_OR_PERMISSION);
+  assert.strictEqual(classifyDiagnosticFailure({ code: 'ER_SPECIFIC_ACCESS_DENIED_ERROR' }, 'connect'), DIAGNOSTIC_CAUSES.DATABASE_NOT_FOUND_OR_PERMISSION);
   assert.strictEqual(classifyDiagnosticFailure({ code: 'STAGING_PREREQUISITE' }, 'connect'), DIAGNOSTIC_CAUSES.PREREQUISITE_LOCAL);
   assert.strictEqual(classifyDiagnosticFailure(new Error('guard rejection'), 'prerequisite'), DIAGNOSTIC_CAUSES.PREREQUISITE_LOCAL);
   assert.strictEqual(classifyDiagnosticFailure({ code: 'SOMETHING_UNMAPPED' }, 'read'), DIAGNOSTIC_CAUSES.READ_FAILURE);
