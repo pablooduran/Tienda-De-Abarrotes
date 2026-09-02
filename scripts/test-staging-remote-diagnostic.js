@@ -81,6 +81,9 @@ async function main() {
   assert.strictEqual(classifyDiagnosticFailure(new Error('guard rejection'), 'prerequisite'), DIAGNOSTIC_CAUSES.PREREQUISITE_LOCAL);
   assert.strictEqual(classifyDiagnosticFailure({ code: 'SOMETHING_UNMAPPED' }, 'read'), DIAGNOSTIC_CAUSES.READ_FAILURE);
   assert.strictEqual(classifyDiagnosticFailure({ code: 'SOMETHING_UNMAPPED' }, 'connect'), DIAGNOSTIC_CAUSES.UNKNOWN_SAFE_FAILURE);
+  assert.strictEqual(classifyDiagnosticFailure(new Error('configuracion invalida'), 'configuration'), DIAGNOSTIC_CAUSES.PREREQUISITE_LOCAL);
+  assert.strictEqual(classifyDiagnosticFailure({ cause: { code: 'ER_SSL_CONNECTION_ERROR' } }, 'connect'), DIAGNOSTIC_CAUSES.TLS_CA);
+  assert.strictEqual(classifyDiagnosticFailure({ cause: { code: 'ER_HOST_NOT_PRIVILEGED' } }, 'connect'), DIAGNOSTIC_CAUSES.DATABASE_NOT_FOUND_OR_PERMISSION);
 
   const sentinelHost = 'mysql-do-not-connect.staging.invalid';
   const result = spawnSync(process.execPath, [

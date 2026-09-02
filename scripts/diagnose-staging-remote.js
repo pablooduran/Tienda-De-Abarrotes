@@ -1,5 +1,4 @@
 const mysql = require('mysql2/promise');
-const { databaseConfig } = require('../config/env');
 const {
   REMOTE_STAGING_DIAGNOSTIC_ARGUMENT,
   STAGING_DATABASE_DIAGNOSTICS,
@@ -42,11 +41,16 @@ const CAUSE_BY_ERROR_CODE = new Map([
 ]);
 
 function classifyDiagnosticFailure(error, phase = 'read') {
-  const code = typeof error?.code === 'string' ? error.code : '';
-  if (phase === 'prerequisite') return DIAGNOSTIC_CAUSES.PREREQUISITE_LOCAL;
-  if (code === 'STAGING_PREREQUISITE') return DIAGNOSTIC_CAUSES.PREREQUISITE_LOCAL;
-  return CAUSE_BY_ERROR_CODE.get(code)
-    || (phase === 'read' ? DIAGNOSTIC_CAUSES.READ_FAILURE : DIAGNOSTIC_CAUSES.UNKNOWN_SAFE_FAILURE);
+  if (phase === 'prerequisite' || phase === 'configuration') return DIAGNOSTIC_CAUSES.PREREQUISITE_LOCAL;
+  let current = error;
+  for (let depth = 0; depth < 3 && current; depth += 1) {
+    const code = typeof current.code === 'string' ? current.code : '';
+    if (code === 'STAGING_PREREQUISITE') return DIAGNOSTIC_CAUSES.PREREQUISITE_LOCAL;
+    const mapped = CAUSE_BY_ERROR_CODE.get(code);
+    if (mapped) return mapped;
+    current = current.cause;
+  }
+  return phase === 'read' ? DIAGNOSTIC_CAUSES.READ_FAILURE : DIAGNOSTIC_CAUSES.UNKNOWN_SAFE_FAILURE;
 }
 
 function writeDiagnostic(category, cause = DIAGNOSTIC_CAUSES.UNKNOWN_SAFE_FAILURE) {
@@ -70,6 +74,8 @@ async function main() {
     resolveRemoteStagingDiagnosticMode({
       args: process.argv.slice(2), environment: process.env
     });
+    phase = 'configuration';
+    const { databaseConfig } = require('../config/env');
     const config = databaseConfig();
     phase = 'connect';
     connection = await mysql.createConnection(config);
