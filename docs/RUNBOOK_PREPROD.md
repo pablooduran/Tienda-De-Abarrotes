@@ -86,6 +86,16 @@ fuerza TLS con la CA temporal y ejecuta una unica lectura. Su unica salida es
 valores de conexion, SQL, errores crudos ni stack. Un resultado distinto de
 `PASS` exige detenerse; no autoriza inicializacion ni migracion.
 
+Si `db:init` se detuvo, no volver a ejecutarlo. Con autorizacion explicita, el
+operador puede ejecutar `scripts/inspect-staging-schema.ps1` para una sola
+conexion TLS de solo lectura. El inspector consulta exclusivamente
+`information_schema.TABLES` y devuelve solo `EMPTY`, `BASELINE_INITIAL`,
+`PARTIAL_OR_UNEXPECTED` o `FAIL <CAUSE_CODE>`, sin nombres de tabla, conteos,
+datos, SQL ni detalles de conexion. `BASELINE_INITIAL` exige exactamente las
+11 tablas iniciales y ausencia de `schema_migrations`; cualquier conjunto
+incompleto o adicional es `PARTIAL_OR_UNEXPECTED`. Un resultado distinto de
+`EMPTY` exige detenerse y reportar.
+
 No existe rollback automatico de esquema. Si falla una migracion, detener el
 despliegue, conservar evidencia sanitizada y restaurar o redirigir hacia la
 base anterior solo mediante un procedimiento aprobado. Nunca aplicar una

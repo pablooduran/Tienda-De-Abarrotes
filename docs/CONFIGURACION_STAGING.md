@@ -243,6 +243,23 @@ una comprobacion de lectura. Expone exclusivamente `STAGING_TLS_PROBE: PASS` o
 `UNKNOWN_SAFE_FAILURE`. Todo fallo devuelve `1`, no reintenta y no autoriza
 `db:init` ni `db:migrate`.
 
+Si `db:init` se detuvo y se necesita conocer el estado de estructura sin leer
+datos de negocio, el operador puede ejecutar solo con autorizacion explicita:
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\inspect-staging-schema.ps1
+```
+
+El inspector conecta una vez con TLS/CA y consulta exclusivamente
+`information_schema.TABLES`. No lee filas ni metadatos de tablas comerciales,
+no crea ni modifica estructura, y siempre cierra la conexion. Solo expone
+`STAGING_SCHEMA_INSPECTION: EMPTY`, `BASELINE_INITIAL`,
+`PARTIAL_OR_UNEXPECTED` o `FAIL <CAUSE_CODE>`. `BASELINE_INITIAL` significa
+exactamente las 11 tablas base de `db:init`, sin tablas adicionales ni
+`schema_migrations`; `EMPTY` significa cero tablas; todo otro conjunto es
+`PARTIAL_OR_UNEXPECTED`. Solo `EMPTY` devuelve `0`; cualquier otro resultado
+detiene el procedimiento y no autoriza reintentos ni migraciones.
+
 Con autorizacion explicita nueva posterior a un diagnostico `EMPTY`, el
 procedimiento es:
 
