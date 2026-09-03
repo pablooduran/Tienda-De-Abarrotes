@@ -2,7 +2,8 @@
 param(
   [switch]$ValidateOnly,
   [switch]$SimulateInvalidDatabase,
-  [switch]$Diagnose
+  [switch]$Diagnose,
+  [switch]$Preflight
 )
 
 Set-StrictMode -Version Latest
@@ -11,11 +12,13 @@ $ErrorActionPreference = 'Stop'
 $ExpectedDatabase = 'tienda_abarrotes_staging'
 $RemoteStagingFlag = '--remote-staging'
 $RemoteStagingDiagnosticFlag = '--remote-staging-diagnose'
+$RemoteStagingPreflightFlag = '--remote-staging-preflight'
 $RemoteStagingConfirmation = 'CONFIRM_EMPTY_STAGING_001_024'
+$RemoteStagingPreflightConfirmation = 'PREFLIGHT_STAGING_TLS_AND_SCHEMA_ONLY'
 $EnvironmentNames = @(
   'APP_ENV', 'NODE_ENV', 'DB_ENVIRONMENT', 'DB_HOST', 'DB_PORT', 'DB_NAME',
   'DB_USER', 'DB_PASSWORD', 'DB_SSL_ENABLED', 'DB_SSL_CA',
-  'STAGING_DB_MUTATION_CONFIRMATION'
+  'STAGING_DB_MUTATION_CONFIRMATION', 'STAGING_REMOTE_PREFLIGHT_CONFIRMATION'
 )
 
 function Assert-RemoteStagingConnectionInputs {
@@ -123,14 +126,30 @@ function Invoke-RemoteStagingDiagnostic {
   $ExitCode.Value = $LASTEXITCODE
 }
 
+function Invoke-RemoteStagingPreflight {
+  param([Parameter(Mandatory)] [ref]$ExitCode)
+
+  $env:STAGING_REMOTE_PREFLIGHT_CONFIRMATION = $RemoteStagingPreflightConfirmation
+  $output = @(& npm.cmd run db:preflight-staging -- $RemoteStagingPreflightFlag 2>$null)
+  $result = $output | Where-Object {
+    $_ -match '^STAGING_REMOTE_PREFLIGHT: (?:PASS|FAIL (?:PREREQUISITE_LOCAL|TLS_CA|AUTHENTICATION|NETWORK_TIMEOUT_OR_ALLOWLIST|DATABASE_NOT_FOUND_OR_PERMISSION|SESSION_TIME_ZONE_FAILED|SCHEMA_CREATE_PRIVILEGE_MISSING|UNKNOWN_SAFE_FAILURE))$'
+  } | Select-Object -Last 1
+  if ($null -ne $result) {
+    Write-Output $result
+  } else {
+    Write-Output 'STAGING_REMOTE_PREFLIGHT: FAIL UNKNOWN_SAFE_FAILURE'
+  }
+  $ExitCode.Value = $LASTEXITCODE
+}
+
 function Invoke-ValidationOnly {
   $database = if ($SimulateInvalidDatabase) { 'base_no_autorizada' } else { $ExpectedDatabase }
   Assert-RemoteStagingMutationInputs -DatabaseName $database -DatabaseHost 'mysql.staging.invalid' -DatabasePort '3306' -CertificateAuthority "-----BEGIN CERTIFICATE-----`nsynthetic`n-----END CERTIFICATE-----" -Confirmation $RemoteStagingConfirmation
   Write-Output 'STAGING_LOCAL_INITIALIZER_VALIDATION_OK'
 }
 
-if ($ValidateOnly -and $Diagnose) {
-  Write-Error 'Los modos de validacion y diagnostico no se pueden combinar.'
+if (($ValidateOnly -and ($Diagnose -or $Preflight)) -or ($Diagnose -and $Preflight)) {
+  Write-Error 'Los modos de validacion, diagnostico y preflight no se pueden combinar.'
   exit 1
 }
 
@@ -168,7 +187,7 @@ try {
     throw 'El usuario MySQL de staging es obligatorio.'
   }
   $certificateAuthority = Get-TemporaryCertificateAuthority
-  if ($Diagnose) {
+  if ($Diagnose -or $Preflight) {
     Assert-RemoteStagingConnectionInputs -DatabaseName $databaseName -DatabaseHost $databaseHost -DatabasePort $databasePort -CertificateAuthority $certificateAuthority
   } else {
     $confirmation = Read-Host 'Escriba la confirmacion de base vacia indicada por el runbook'
@@ -191,7 +210,7 @@ try {
   $env:DB_PASSWORD = $plainPassword
   $env:DB_SSL_ENABLED = 'true'
   $env:DB_SSL_CA = $certificateAuthority
-  if (-not $Diagnose) {
+  if (-not ($Diagnose -or $Preflight)) {
     $env:STAGING_DB_MUTATION_CONFIRMATION = $RemoteStagingConfirmation
   }
 
@@ -201,9 +220,22 @@ try {
     exit $diagnosticExitCode
   }
 
-  $failureCategory = 'INITIALIZATION_FAILED'
+  if ($Preflight) {
+    $preflightExitCode = 1
+    Invoke-RemoteStagingPreflight -ExitCode ([ref]$preflightExitCode)
+    exit $preflightExitCode
+  }
+
+  $preflightExitCode = 1
+  Invoke-RemoteStagingPreflight -ExitCode ([ref]$preflightExitCode)
+  if ($preflightExitCode -ne 0) {
+    $failureCategory = 'PREFLIGHT_FAILED'
+    throw 'El preflight remoto no autorizo mutaciones.'
+  }
+
+  $failureCategory = 'INITIALIZATION_FAILED_AFTER_PREFLIGHT'
   Invoke-RemoteStagingCommand -NpmScript 'db:init'
-  $failureCategory = 'MIGRATION_FAILED'
+  $failureCategory = 'MIGRATION_FAILED_AFTER_PREFLIGHT'
   Invoke-RemoteStagingCommand -NpmScript 'db:migrate'
   Write-Output 'Inicializacion y migraciones de staging completadas.'
 } catch {

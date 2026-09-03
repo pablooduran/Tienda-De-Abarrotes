@@ -78,6 +78,15 @@ secretos, CA ni valores de conexion en PowerShell, Git, chat o archivos del
 repositorio. En una base existente se debe leer primero `schema_migrations`,
 hacer backup y ensayar la misma secuencia en una copia aislada.
 
+Con resultado `EMPTY` y una autorizacion nueva para avanzar, ejecutar antes de
+la mutacion `scripts/initialize-staging-remote.ps1 -Preflight`. El preflight
+solo prueba TLS/CA, `SET time_zone = '-04:00'` para su propia sesion y la
+capacidad efectiva de `CREATE` mediante grants no mostrados. No crea ni altera
+tablas ni datos. Solo `STAGING_REMOTE_PREFLIGHT: PASS` permite que el lanzador
+intente `db:init`; sus fallos sanitizados detienen el procedimiento sin
+reintentos. El propio lanzador repite este preflight justo antes de `db:init`,
+por lo que un resultado anterior no puede usarse para saltar la validacion.
+
 Cuando un problema de conexion de staging necesite separarse del diagnostico de
 estructura, usar solo con autorizacion explicita
 `scripts/probe-staging-mysql-tls.ps1`. El lanzador usa `mysql2` directamente,

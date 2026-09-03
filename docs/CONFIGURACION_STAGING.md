@@ -225,6 +225,24 @@ Para las otras tres categorias, detenerse y reportar sin reintentar ni proponer
 recuperacion. Solo `EMPTY` devuelve codigo de salida `0`; los demas resultados
 devuelven `1` para impedir que una automatizacion los trate como aptos.
 
+Despues de un diagnostico `EMPTY` y antes de autorizar una mutacion, el
+operador debe ejecutar el preflight independiente:
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\initialize-staging-remote.ps1 -Preflight
+```
+
+El preflight vuelve a exigir destino exacto, TLS y CA, abre una sola conexion,
+aplica `SET time_zone = '-04:00'` solo a esa sesion y consulta los grants
+efectivos sin mostrarlos ni persistirlos. No ejecuta DDL ni DML. Su unica salida
+es `STAGING_REMOTE_PREFLIGHT: PASS` o `STAGING_REMOTE_PREFLIGHT: FAIL
+<CAUSE_CODE>`, donde el codigo posible es `PREREQUISITE_LOCAL`, `TLS_CA`,
+`AUTHENTICATION`, `NETWORK_TIMEOUT_OR_ALLOWLIST`,
+`DATABASE_NOT_FOUND_OR_PERMISSION`, `SESSION_TIME_ZONE_FAILED`,
+`SCHEMA_CREATE_PRIVILEGE_MISSING` o `UNKNOWN_SAFE_FAILURE`. Solo `PASS`
+termina con codigo `0`; cualquier fallo termina con `1` y exige detenerse.
+El preflight no autoriza por si mismo `db:init` ni `db:migrate`.
+
 Si se necesita aislar conectividad TLS antes del diagnostico de estructura, el
 operador puede ejecutar una unica prueba de conexion, tambien solo con
 autorizacion explicita y desde un PC Windows autorizado:
@@ -281,10 +299,13 @@ procedimiento es:
    `--remote-staging` solo para sus dos procesos hijos. No muestra salida de
    esos procesos, URI, host, usuario, contrasena ni CA, y restaura las variables
    del proceso al finalizar.
-4. El lanzador ejecuta primero `db:init -- --remote-staging`, que verifica el
-   vacio, y despues `db:migrate -- --remote-staging`, que valida la estructura
-   inicial sin datos y aplica unicamente 001–024. No ejecutar esos comandos por
-   separado ni usar SQL manual alternativo.
+4. El lanzador ejecuta el mismo preflight inmediatamente antes de toda
+   mutacion. Solo tras `STAGING_REMOTE_PREFLIGHT: PASS` ejecuta `db:init --
+   --remote-staging`, que verifica el vacio, y despues `db:migrate --
+   --remote-staging`, que valida la estructura inicial sin datos y aplica
+   unicamente 001–024. No ejecutar esos comandos por separado ni usar SQL
+   manual alternativo. Si una fase posterior falla, el lanzador informa solo
+   `INITIALIZATION_FAILED_AFTER_PREFLIGHT` o `MIGRATION_FAILED_AFTER_PREFLIGHT`.
 5. Borrar la copia temporal privada de la CA cuando finalice la operacion.
 6. Si cualquiera de los pasos falla, detenerse sin reintentos automaticos,
    conservar evidencia sanitizada y solicitar autorizacion para la revision.
