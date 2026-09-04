@@ -5,6 +5,10 @@ const {
   assertRemoteStagingMigrationBaseline,
   resolveDatabaseMutationMode
 } = require('../config/staging-database-mutation-guard');
+const {
+  classifyRemoteOperationFailure,
+  remoteOperationStatus
+} = require('../config/staging-remote-operation-status');
 const { formatLocalDateTime } = require('../utils/local-datetime');
 const {
   createConnection,
@@ -3832,14 +3836,20 @@ function isExistingStructureError(error) {
 
 async function main() {
   const args = process.argv.slice(2);
-  const mode = resolveDatabaseMutationMode({ args });
-  const config = databaseConfig();
-  logDatabaseTarget('Aplicacion de migraciones', config);
-  const connection = await createConnection();
+  const remoteRequested = args.includes('--remote-staging');
+  let phase = 'AUTHORIZATION';
+  let connection;
   try {
+    const mode = resolveDatabaseMutationMode({ args });
+    phase = 'CONFIGURATION';
+    const config = databaseConfig();
+    logDatabaseTarget('Aplicacion de migraciones', config);
+    connection = await createConnection({ onPhase: (nextPhase) => { phase = nextPhase; } });
     if (mode.type === 'remote-staging') {
+      phase = 'MIGRATION_BASELINE';
       await assertRemoteStagingMigrationBaseline(connection, config.database);
     }
+    phase = 'MIGRATION_REGISTRY';
     await connection.query(`
       CREATE TABLE IF NOT EXISTS schema_migrations (
         nombre VARCHAR(255) PRIMARY KEY,
@@ -3853,6 +3863,7 @@ async function main() {
     if (target) await validateExactMigrationContext(connection, allFiles, target);
     const files = target ? [target] : allFiles;
 
+    phase = 'MIGRATION_APPLY';
     for (const file of files) {
       if (isLegacyMigration(file)) {
         const initialState = await inspectLegacyMigration(connection, file, {
@@ -4154,8 +4165,22 @@ async function main() {
     }
 
     console.log('Migraciones completadas. No se cargaron datos de demostracion.');
+    if (mode.type === 'remote-staging') {
+      console.log(remoteOperationStatus('MIGRATE', { passed: true }));
+    }
+  } catch (error) {
+    if (remoteRequested) {
+      console.log(remoteOperationStatus('MIGRATE', {
+        passed: false,
+        phase,
+        cause: classifyRemoteOperationFailure(error, phase)
+      }));
+      process.exitCode = 1;
+      return;
+    }
+    throw error;
   } finally {
-    await connection.end();
+    if (connection) await connection.end();
   }
 }
 

@@ -51,7 +51,7 @@ function assertScriptFailsBeforeRemoteConnection(script) {
   });
   const output = `${result.stdout || ''}\n${result.stderr || ''}`;
   assert.notStrictEqual(result.status, 0, `${script} debio bloquear staging incompleto.`);
-  assert.match(output, /STAGING_DB_MUTATION_CONFIRMATION/);
+  assert.match(output, /STAGING_REMOTE_DB_(?:INIT|MIGRATE): FAIL AUTHORIZATION PREREQUISITE_LOCAL/);
   assert(!output.includes(remoteHostSentinel), `${script} no debe revelar ni usar el host remoto.`);
 }
 

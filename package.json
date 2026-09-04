@@ -67,6 +67,7 @@
     "test:staging-local-initializer": "node scripts/test-staging-local-initializer.js",
     "test:staging-remote-diagnostic": "node scripts/test-staging-remote-diagnostic.js",
     "test:staging-remote-preflight": "node scripts/test-staging-remote-preflight.js",
+    "test:staging-remote-operation-status": "node scripts/test-staging-remote-operation-status.js",
     "test:staging-mysql-tls-probe": "node scripts/test-staging-mysql-tls-probe.js",
     "test:staging-mysql-tls-probe-launcher": "node scripts/test-staging-mysql-tls-probe-launcher.js",
     "test:staging-schema-inspection": "node scripts/test-staging-schema-inspection.js",

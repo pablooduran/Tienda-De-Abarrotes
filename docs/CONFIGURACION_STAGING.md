@@ -304,8 +304,12 @@ procedimiento es:
    --remote-staging`, que verifica el vacio, y despues `db:migrate --
    --remote-staging`, que valida la estructura inicial sin datos y aplica
    unicamente 001–024. No ejecutar esos comandos por separado ni usar SQL
-   manual alternativo. Si una fase posterior falla, el lanzador informa solo
-   `INITIALIZATION_FAILED_AFTER_PREFLIGHT` o `MIGRATION_FAILED_AFTER_PREFLIGHT`.
+   manual alternativo. Si una fase posterior falla, el lanzador conserva el
+   preflight `PASS` y expone una unica linea `STAGING_REMOTE_DB_INIT` o
+   `STAGING_REMOTE_DB_MIGRATE` con fase y causa sanitizadas. Las fases posibles
+   son autorizacion/configuracion, conexion, zona de sesion, vacio/estructura
+   base, verificacion, baseline, registro o aplicacion de migraciones; nunca se
+   muestran SQL, host, usuario, contrasena, CA, stack ni salida cruda del motor.
 5. Borrar la copia temporal privada de la CA cuando finalice la operacion.
 6. Si cualquiera de los pasos falla, detenerse sin reintentos automaticos,
    conservar evidencia sanitizada y solicitar autorizacion para la revision.

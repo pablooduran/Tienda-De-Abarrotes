@@ -86,6 +86,11 @@ tablas ni datos. Solo `STAGING_REMOTE_PREFLIGHT: PASS` permite que el lanzador
 intente `db:init`; sus fallos sanitizados detienen el procedimiento sin
 reintentos. El propio lanzador repite este preflight justo antes de `db:init`,
 por lo que un resultado anterior no puede usarse para saltar la validacion.
+Si `db:init` o `db:migrate` se detiene despues del preflight, el lanzador
+informa una unica linea `STAGING_REMOTE_DB_INIT` o `STAGING_REMOTE_DB_MIGRATE`
+con fase y causa sanitizadas. Esa evidencia identifica si la detencion fue en
+autorizacion, conexion, zona de sesion, estructura inicial o migraciones sin
+mostrar SQL, secretos ni detalles de infraestructura.
 
 Cuando un problema de conexion de staging necesite separarse del diagnostico de
 estructura, usar solo con autorizacion explicita

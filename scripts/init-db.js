@@ -4,6 +4,10 @@ const {
   assertEmptyRemoteStagingDatabase,
   resolveDatabaseMutationMode
 } = require('../config/staging-database-mutation-guard');
+const {
+  classifyRemoteOperationFailure,
+  remoteOperationStatus
+} = require('../config/staging-remote-operation-status');
 
 const requiredColumns = {
   administrador: ['idAdministrador', 'usuario', 'password'],
@@ -202,25 +206,63 @@ async function verifyStructure(connection) {
   }
 }
 
-async function main() {
-  const mode = resolveDatabaseMutationMode({ args: process.argv.slice(2) });
-  const config = databaseConfig({ decimalNumbers: true });
-  logDatabaseTarget('Inicializacion de estructura', config);
-  const connection = await createDatabaseConnection(config);
+async function runInitialization({
+  args = process.argv.slice(2),
+  resolveMode = resolveDatabaseMutationMode,
+  buildConfig = databaseConfig,
+  connect = createDatabaseConnection,
+  logTarget = logDatabaseTarget,
+  assertEmpty = assertEmptyRemoteStagingDatabase
+} = {}) {
+  const remoteRequested = args.includes('--remote-staging');
+  let phase = 'AUTHORIZATION';
+  let connection;
   try {
+    const mode = resolveMode({ args });
+    phase = 'CONFIGURATION';
+    const config = buildConfig({ decimalNumbers: true });
+    logTarget('Inicializacion de estructura', config);
+    connection = await connect(config, { onPhase: (nextPhase) => { phase = nextPhase; } });
     if (mode.type === 'remote-staging') {
-      await assertEmptyRemoteStagingDatabase(connection, config.database);
+      phase = 'EMPTY_DATABASE';
+      await assertEmpty(connection, config.database);
     }
+    phase = 'BASE_SCHEMA';
     await createBaseTables(connection);
+    phase = 'STRUCTURE_VERIFICATION';
     await verifyStructure(connection);
-    console.log('Estructura inicial verificada. No se modificaron datos ni se ejecutaron migraciones.');
+    return { remote: mode.type === 'remote-staging', passed: true };
+  } catch (error) {
+    if (remoteRequested) {
+      return {
+        remote: true,
+        passed: false,
+        phase,
+        cause: classifyRemoteOperationFailure(error, phase)
+      };
+    }
+    throw error;
   } finally {
-    await connection.end();
+    if (connection) await connection.end();
   }
 }
 
-main().catch((error) => {
-  console.error('No se pudo inicializar la estructura de la base de datos.');
-  console.error(error.message);
-  process.exit(1);
-});
+async function main() {
+  const result = await runInitialization();
+  if (result.remote) {
+    console.log(remoteOperationStatus('INIT', result));
+    if (!result.passed) process.exitCode = 1;
+    return;
+  }
+  console.log('Estructura inicial verificada. No se modificaron datos ni se ejecutaron migraciones.');
+}
+
+if (require.main === module) {
+  main().catch((error) => {
+    console.error('No se pudo inicializar la estructura de la base de datos.');
+    console.error(error.message);
+    process.exit(1);
+  });
+}
+
+module.exports = { createBaseTables, runInitialization, verifyStructure };

@@ -105,8 +105,18 @@ function Restore-EnvironmentState {
 function Invoke-RemoteStagingCommand {
   param([Parameter(Mandatory)] [string]$NpmScript)
 
-  & npm.cmd run $NpmScript -- $RemoteStagingFlag *> $null
-  if ($LASTEXITCODE -ne 0) {
+  $operation = if ($NpmScript -eq 'db:init') { 'INIT' } elseif ($NpmScript -eq 'db:migrate') { 'MIGRATE' } else { throw 'Operacion de staging no permitida.' }
+  $output = @(& npm.cmd run $NpmScript -- $RemoteStagingFlag 2>$null)
+  $commandExitCode = $LASTEXITCODE
+  $result = $output | Where-Object {
+    $_ -match "^STAGING_REMOTE_DB_${operation}: (?:PASS|FAIL (?:AUTHORIZATION|CONFIGURATION|CONNECTION|SESSION_TIME_ZONE|EMPTY_DATABASE|BASE_SCHEMA|STRUCTURE_VERIFICATION|MIGRATION_BASELINE|MIGRATION_REGISTRY|MIGRATION_APPLY) (?:PREREQUISITE_LOCAL|TLS_CA|AUTHENTICATION|NETWORK_TIMEOUT_OR_ALLOWLIST|DATABASE_NOT_FOUND_OR_PERMISSION|SESSION_TIME_ZONE_FAILED|SCHEMA_CREATE_PRIVILEGE_MISSING|BASE_SCHEMA_DDL_FAILED|STRUCTURE_VERIFICATION_FAILED|MIGRATION_REGISTRY_FAILED|MIGRATION_APPLY_FAILED|UNKNOWN_SAFE_FAILURE))$"
+  } | Select-Object -Last 1
+  if ($null -ne $result) {
+    Write-Output $result
+  } else {
+    Write-Output "STAGING_REMOTE_DB_${operation}: FAIL UNKNOWN_SAFE_FAILURE UNKNOWN_SAFE_FAILURE"
+  }
+  if ($commandExitCode -ne 0 -or $null -eq $result) {
     throw 'La operacion remota se detuvo sin completar el paso actual. No reintente ni comparta valores; revise el destino con la autorizacion correspondiente.'
   }
 }
