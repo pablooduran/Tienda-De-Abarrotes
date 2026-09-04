@@ -9,6 +9,7 @@ const {
   classifyRemoteOperationFailure,
   remoteOperationStatus
 } = require('../config/staging-remote-operation-status');
+const { buildRemoteStagingDatabaseOptions } = require('../config/staging-remote-database-options');
 const { formatLocalDateTime } = require('../utils/local-datetime');
 const {
   createConnection,
@@ -3842,9 +3843,11 @@ async function main() {
   try {
     const mode = resolveDatabaseMutationMode({ args });
     phase = 'CONFIGURATION';
-    const config = databaseConfig();
+    const config = mode.type === 'remote-staging'
+      ? buildRemoteStagingDatabaseOptions()
+      : databaseConfig();
     logDatabaseTarget('Aplicacion de migraciones', config);
-    connection = await createConnection({ onPhase: (nextPhase) => { phase = nextPhase; } });
+    connection = await createConnection(config, { onPhase: (nextPhase) => { phase = nextPhase; } });
     if (mode.type === 'remote-staging') {
       phase = 'MIGRATION_BASELINE';
       await assertRemoteStagingMigrationBaseline(connection, config.database);

@@ -91,6 +91,9 @@ informa una unica linea `STAGING_REMOTE_DB_INIT` o `STAGING_REMOTE_DB_MIGRATE`
 con fase y causa sanitizadas. Esa evidencia identifica si la detencion fue en
 autorizacion, conexion, zona de sesion, estructura inicial o migraciones sin
 mostrar SQL, secretos ni detalles de infraestructura.
+El preflight y ambas mutaciones usan exactamente el mismo constructor de
+opciones TLS MySQL, para que un PASS de preflight no valide una ruta de
+conexion distinta de la que usaran `db:init` y `db:migrate`.
 
 Cuando un problema de conexion de staging necesite separarse del diagnostico de
 estructura, usar solo con autorizacion explicita

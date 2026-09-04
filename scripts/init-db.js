@@ -8,6 +8,7 @@ const {
   classifyRemoteOperationFailure,
   remoteOperationStatus
 } = require('../config/staging-remote-operation-status');
+const { buildRemoteStagingDatabaseOptions } = require('../config/staging-remote-database-options');
 
 const requiredColumns = {
   administrador: ['idAdministrador', 'usuario', 'password'],
@@ -210,6 +211,7 @@ async function runInitialization({
   args = process.argv.slice(2),
   resolveMode = resolveDatabaseMutationMode,
   buildConfig = databaseConfig,
+  buildRemoteConfig = buildRemoteStagingDatabaseOptions,
   connect = createDatabaseConnection,
   logTarget = logDatabaseTarget,
   assertEmpty = assertEmptyRemoteStagingDatabase
@@ -220,7 +222,9 @@ async function runInitialization({
   try {
     const mode = resolveMode({ args });
     phase = 'CONFIGURATION';
-    const config = buildConfig({ decimalNumbers: true });
+    const config = mode.type === 'remote-staging'
+      ? buildRemoteConfig(process.env, { decimalNumbers: true })
+      : buildConfig({ decimalNumbers: true });
     logTarget('Inicializacion de estructura', config);
     connection = await connect(config, { onPhase: (nextPhase) => { phase = nextPhase; } });
     if (mode.type === 'remote-staging') {

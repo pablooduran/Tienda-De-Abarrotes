@@ -40,6 +40,7 @@ async function main() {
     args: ['--remote-staging'],
     resolveMode: remoteMode,
     buildConfig: remoteConfiguration,
+    buildRemoteConfig: remoteConfiguration,
     logTarget: () => {},
     assertEmpty: async () => {},
     connect: async () => ({
@@ -62,6 +63,7 @@ async function main() {
     args: ['--remote-staging'],
     resolveMode: remoteMode,
     buildConfig: remoteConfiguration,
+    buildRemoteConfig: remoteConfiguration,
     logTarget: () => {},
     assertEmpty: async () => {},
     connect: async (_config, { onPhase }) => {

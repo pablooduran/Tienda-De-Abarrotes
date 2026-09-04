@@ -1,8 +1,8 @@
 const fs = require('fs');
 const { createDatabaseConnection } = require('../config/database-connection');
 
-async function createConnection(options = {}) {
-  return createDatabaseConnection(undefined, options);
+async function createConnection(config = undefined, options = {}) {
+  return createDatabaseConnection(config, options);
 }
 
 function readSqlStatements(filePath) {

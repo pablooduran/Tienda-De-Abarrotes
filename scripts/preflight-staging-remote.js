@@ -1,4 +1,5 @@
 const mysql = require('mysql2/promise');
+const { buildRemoteStagingDatabaseOptions } = require('../config/staging-remote-database-options');
 
 const EXPECTED_DATABASE = 'tienda_abarrotes_staging';
 const PREFLIGHT_ARGUMENT = '--remote-staging-preflight';
@@ -74,14 +75,7 @@ function buildPreflightOptions(environment = process.env, args = process.argv.sl
     || !ca.includes('-----BEGIN CERTIFICATE-----') || !ca.includes('-----END CERTIFICATE-----')) {
     throw prerequisiteFailure();
   }
-  return Object.freeze({
-    host: normalized(environment.DB_HOST),
-    user: normalized(environment.DB_USER),
-    password: String(environment.DB_PASSWORD),
-    database: EXPECTED_DATABASE,
-    port,
-    ssl: { ca, rejectUnauthorized: true }
-  });
+  return buildRemoteStagingDatabaseOptions(environment);
 }
 
 function classifyPreflightFailure(error, phase = 'connection') {

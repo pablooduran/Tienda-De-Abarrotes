@@ -310,6 +310,9 @@ procedimiento es:
    son autorizacion/configuracion, conexion, zona de sesion, vacio/estructura
    base, verificacion, baseline, registro o aplicacion de migraciones; nunca se
    muestran SQL, host, usuario, contrasena, CA, stack ni salida cruda del motor.
+   El preflight, `db:init` y `db:migrate` derivan sus opciones de la misma
+   construccion versionada de TLS MySQL; no mantienen configuraciones de
+   conexion paralelas.
 5. Borrar la copia temporal privada de la CA cuando finalice la operacion.
 6. Si cualquiera de los pasos falla, detenerse sin reintentos automaticos,
    conservar evidencia sanitizada y solicitar autorizacion para la revision.
