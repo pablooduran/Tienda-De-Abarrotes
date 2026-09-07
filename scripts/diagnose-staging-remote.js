@@ -5,6 +5,14 @@ const {
   diagnoseRemoteStagingDatabase,
   resolveRemoteStagingDiagnosticMode
 } = require('../config/staging-database-mutation-guard');
+const { buildRemoteStagingDatabaseOptions } = require('../config/staging-remote-database-options');
+
+const DIAGNOSTIC_PHASES = Object.freeze({
+  AUTHORIZATION: 'AUTHORIZATION',
+  CONFIGURATION: 'CONFIGURATION',
+  CONNECTION: 'CONNECTION',
+  READ: 'READ'
+});
 
 const DIAGNOSTIC_CAUSES = Object.freeze({
   PREREQUISITE_LOCAL: 'PREREQUISITE_LOCAL',
@@ -40,8 +48,10 @@ const CAUSE_BY_ERROR_CODE = new Map([
   ['ER_SPECIFIC_ACCESS_DENIED_ERROR', DIAGNOSTIC_CAUSES.DATABASE_NOT_FOUND_OR_PERMISSION]
 ]);
 
-function classifyDiagnosticFailure(error, phase = 'read') {
-  if (phase === 'prerequisite' || phase === 'configuration') return DIAGNOSTIC_CAUSES.PREREQUISITE_LOCAL;
+function classifyDiagnosticFailure(error, phase = DIAGNOSTIC_PHASES.READ) {
+  if ([DIAGNOSTIC_PHASES.AUTHORIZATION, DIAGNOSTIC_PHASES.CONFIGURATION].includes(phase)) {
+    return DIAGNOSTIC_CAUSES.PREREQUISITE_LOCAL;
+  }
   let current = error;
   for (let depth = 0; depth < 3 && current; depth += 1) {
     const code = typeof current.code === 'string' ? current.code : '';
@@ -50,50 +60,69 @@ function classifyDiagnosticFailure(error, phase = 'read') {
     if (mapped) return mapped;
     current = current.cause;
   }
-  return phase === 'read' ? DIAGNOSTIC_CAUSES.READ_FAILURE : DIAGNOSTIC_CAUSES.UNKNOWN_SAFE_FAILURE;
+  return phase === DIAGNOSTIC_PHASES.READ
+    ? DIAGNOSTIC_CAUSES.READ_FAILURE
+    : DIAGNOSTIC_CAUSES.UNKNOWN_SAFE_FAILURE;
 }
 
-function writeDiagnostic(category, cause = DIAGNOSTIC_CAUSES.UNKNOWN_SAFE_FAILURE) {
+function writeDiagnostic(category, phase, cause = DIAGNOSTIC_CAUSES.UNKNOWN_SAFE_FAILURE) {
   const allowed = new Set(Object.values(STAGING_DATABASE_DIAGNOSTICS));
   const result = allowed.has(category)
     ? category
     : STAGING_DATABASE_DIAGNOSTICS.CONNECTION_OR_CONFIGURATION_FAILURE;
   if (result === STAGING_DATABASE_DIAGNOSTICS.CONNECTION_OR_CONFIGURATION_FAILURE) {
+    const safePhase = Object.values(DIAGNOSTIC_PHASES).includes(phase)
+      ? phase : DIAGNOSTIC_PHASES.CONNECTION;
     const safeCause = Object.values(DIAGNOSTIC_CAUSES).includes(cause)
       ? cause : DIAGNOSTIC_CAUSES.UNKNOWN_SAFE_FAILURE;
-    console.log(`STAGING_REMOTE_DIAGNOSTIC: ${result} ${safeCause}`);
+    console.log(`STAGING_REMOTE_DIAGNOSTIC: ${result} ${safePhase} ${safeCause}`);
     return;
   }
   console.log(`STAGING_REMOTE_DIAGNOSTIC: ${result}`);
 }
 
-async function main() {
+async function runDiagnostic({
+  environment = process.env,
+  args = process.argv.slice(2),
+  buildConfig = buildRemoteStagingDatabaseOptions,
+  createConnection = mysql.createConnection
+} = {}) {
   let connection;
-  let phase = 'prerequisite';
+  let phase = DIAGNOSTIC_PHASES.AUTHORIZATION;
   try {
     resolveRemoteStagingDiagnosticMode({
-      args: process.argv.slice(2), environment: process.env
+      args, environment
     });
-    phase = 'configuration';
-    const { databaseConfig } = require('../config/env');
-    const config = databaseConfig();
-    phase = 'connect';
-    connection = await mysql.createConnection(config);
-    phase = 'read';
+    phase = DIAGNOSTIC_PHASES.CONFIGURATION;
+    const config = buildConfig(environment);
+    phase = DIAGNOSTIC_PHASES.CONNECTION;
+    connection = await createConnection(config);
+    phase = DIAGNOSTIC_PHASES.READ;
     const category = await diagnoseRemoteStagingDatabase(connection, config.database);
-    writeDiagnostic(category);
-    if (category !== STAGING_DATABASE_DIAGNOSTICS.EMPTY) process.exitCode = 1;
+    return { category, phase: null, cause: null };
   } catch (error) {
-    writeDiagnostic(
-      STAGING_DATABASE_DIAGNOSTICS.CONNECTION_OR_CONFIGURATION_FAILURE,
-      classifyDiagnosticFailure(error, phase)
-    );
-    process.exitCode = 1;
+    return {
+      category: STAGING_DATABASE_DIAGNOSTICS.CONNECTION_OR_CONFIGURATION_FAILURE,
+      phase,
+      cause: classifyDiagnosticFailure(error, phase)
+    };
   } finally {
     if (connection) await connection.end().catch(() => {});
   }
 }
 
+async function main() {
+  const result = await runDiagnostic();
+  writeDiagnostic(result.category, result.phase, result.cause);
+  if (result.category !== STAGING_DATABASE_DIAGNOSTICS.EMPTY) process.exitCode = 1;
+}
+
 if (require.main === module) void main();
 
-module.exports = { DIAGNOSTIC_CAUSES, classifyDiagnosticFailure, writeDiagnostic };
+module.exports = {
+  DIAGNOSTIC_CAUSES,
+  DIAGNOSTIC_PHASES,
+  classifyDiagnosticFailure,
+  runDiagnostic,
+  writeDiagnostic
+};

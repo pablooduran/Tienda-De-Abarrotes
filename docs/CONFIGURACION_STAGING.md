@@ -216,11 +216,13 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\initialize-sta
 Usa el mismo ingreso efimero de host, puerto, usuario, contrasena y CA, pero no
 solicita ni establece la confirmacion de mutacion. El resultado expone solo una
 categoria: `EMPTY`, `BASELINE_INITIAL`, `PARTIAL_OR_UNEXPECTED` o
-`CONNECTION_OR_CONFIGURATION_FAILURE` con un codigo sanitizado. Los codigos
-posibles son `PREREQUISITE_LOCAL`, `TLS_CA`, `AUTHENTICATION`,
+`CONNECTION_OR_CONFIGURATION_FAILURE <FASE> <CAUSE_CODE>`. Las fases posibles
+son `AUTHORIZATION`, `CONFIGURATION`, `CONNECTION` y `READ`. Los codigos
+sanitizados posibles son `PREREQUISITE_LOCAL`, `TLS_CA`, `AUTHENTICATION`,
 `NETWORK_TIMEOUT_OR_ALLOWLIST`, `DATABASE_NOT_FOUND_OR_PERMISSION`,
 `READ_FAILURE` y `UNKNOWN_SAFE_FAILURE`. No lista tablas, SQL, host ni salida
-del driver. Si es `EMPTY`, solicitar una nueva autorizacion antes de inicializar.
+del driver. Diagnostico, preflight e inicializacion usan el mismo constructor de
+opciones TLS MySQL. Si es `EMPTY`, solicitar una nueva autorizacion antes de inicializar.
 Para las otras tres categorias, detenerse y reportar sin reintentar ni proponer
 recuperacion. Solo `EMPTY` devuelve codigo de salida `0`; los demas resultados
 devuelven `1` para impedir que una automatizacion los trate como aptos.

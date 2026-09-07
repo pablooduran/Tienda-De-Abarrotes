@@ -37,6 +37,7 @@ function main() {
   assert.throws(() => buildRemoteStagingDatabaseOptions(environment({ DB_SSL_ENABLED: 'false' })));
   assert.match(source('init-db.js'), /buildRemoteStagingDatabaseOptions/);
   assert.match(source('migrate-db.js'), /buildRemoteStagingDatabaseOptions/);
+  assert.match(source('diagnose-staging-remote.js'), /buildRemoteStagingDatabaseOptions/);
   assert.match(source('migrate-db.js'), /createConnection\(config, \{ onPhase:/);
   console.log(JSON.stringify({
     resultado: 'ok',

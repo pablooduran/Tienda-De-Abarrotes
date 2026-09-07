@@ -66,6 +66,7 @@
     "test:staging-database-mutation-guard": "node scripts/test-staging-database-mutation-guard.js",
     "test:staging-local-initializer": "node scripts/test-staging-local-initializer.js",
     "test:staging-remote-diagnostic": "node scripts/test-staging-remote-diagnostic.js",
+    "test:staging-diagnostic-launcher": "node scripts/test-staging-diagnostic-launcher.js",
     "test:staging-remote-preflight": "node scripts/test-staging-remote-preflight.js",
     "test:staging-remote-connection-contract": "node scripts/test-staging-remote-connection-contract.js",
     "test:staging-remote-operation-status": "node scripts/test-staging-remote-operation-status.js",

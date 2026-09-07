@@ -64,7 +64,7 @@ se realiza desde un PC Windows autorizado con
 `scripts/initialize-staging-remote.ps1`, no desde Shell ni One-Off Jobs de
 Render. Antes de toda mutacion, ejecutar su modo `-Diagnose`: solo consulta y
 devuelve `EMPTY`, `BASELINE_INITIAL`, `PARTIAL_OR_UNEXPECTED` o
-`CONNECTION_OR_CONFIGURATION_FAILURE <CAUSE_CODE>`. Solo `EMPTY` permite solicitar una nueva
+`CONNECTION_OR_CONFIGURATION_FAILURE <FASE> <CAUSE_CODE>`. Solo `EMPTY` permite solicitar una nueva
 autorizacion para inicializar; cualquier otro resultado exige detenerse y
 reportar, sin reintento ni remedio improvisado. Los codigos sanitizados posibles
 son `PREREQUISITE_LOCAL`, `TLS_CA`, `AUTHENTICATION`,
@@ -73,7 +73,10 @@ son `PREREQUISITE_LOCAL`, `TLS_CA`, `AUTHENTICATION`,
 `0`; los demas resultados terminan con `1`. El lanzador solicita la
 contrasena de forma oculta, lee la CA temporal privada proporcionada por Aiven y
 restaura las variables sensibles del proceso al finalizar; los comandos
-operativos son los documentados en `CONFIGURACION_STAGING.md`. No guardar
+operativos son los documentados en `CONFIGURACION_STAGING.md`. Las fases
+sanitizadas son `AUTHORIZATION`, `CONFIGURATION`, `CONNECTION` y `READ`;
+diagnostico, preflight e inicializacion comparten el constructor de opciones
+TLS MySQL. No guardar
 secretos, CA ni valores de conexion en PowerShell, Git, chat o archivos del
 repositorio. En una base existente se debe leer primero `schema_migrations`,
 hacer backup y ensayar la misma secuencia en una copia aislada.

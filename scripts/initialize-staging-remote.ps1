@@ -125,15 +125,16 @@ function Invoke-RemoteStagingDiagnostic {
   param([Parameter(Mandatory)] [ref]$ExitCode)
 
   $output = @(& npm.cmd run db:diagnose-staging -- $RemoteStagingDiagnosticFlag 2>$null)
+  $commandExitCode = $LASTEXITCODE
   $category = $output | Where-Object {
-    $_ -match '^STAGING_REMOTE_DIAGNOSTIC: (EMPTY|BASELINE_INITIAL|PARTIAL_OR_UNEXPECTED|CONNECTION_OR_CONFIGURATION_FAILURE(?: (?:PREREQUISITE_LOCAL|TLS_CA|AUTHENTICATION|NETWORK_TIMEOUT_OR_ALLOWLIST|DATABASE_NOT_FOUND_OR_PERMISSION|READ_FAILURE|UNKNOWN_SAFE_FAILURE))?)$'
+    $_ -match '^STAGING_REMOTE_DIAGNOSTIC: (EMPTY|BASELINE_INITIAL|PARTIAL_OR_UNEXPECTED|CONNECTION_OR_CONFIGURATION_FAILURE(?: (?:AUTHORIZATION|CONFIGURATION|CONNECTION|READ) (?:PREREQUISITE_LOCAL|TLS_CA|AUTHENTICATION|NETWORK_TIMEOUT_OR_ALLOWLIST|DATABASE_NOT_FOUND_OR_PERMISSION|READ_FAILURE|UNKNOWN_SAFE_FAILURE))?)$'
   } | Select-Object -Last 1
   if ($null -ne $category) {
     Write-Output $category
   } else {
-    Write-Output 'STAGING_REMOTE_DIAGNOSTIC: CONNECTION_OR_CONFIGURATION_FAILURE UNKNOWN_SAFE_FAILURE'
+    Write-Output 'STAGING_REMOTE_DIAGNOSTIC: CONNECTION_OR_CONFIGURATION_FAILURE CONNECTION UNKNOWN_SAFE_FAILURE'
   }
-  $ExitCode.Value = $LASTEXITCODE
+  $ExitCode.Value = $commandExitCode
 }
 
 function Invoke-RemoteStagingPreflight {
@@ -141,6 +142,7 @@ function Invoke-RemoteStagingPreflight {
 
   $env:STAGING_REMOTE_PREFLIGHT_CONFIRMATION = $RemoteStagingPreflightConfirmation
   $output = @(& npm.cmd run db:preflight-staging -- $RemoteStagingPreflightFlag 2>$null)
+  $commandExitCode = $LASTEXITCODE
   $result = $output | Where-Object {
     $_ -match '^STAGING_REMOTE_PREFLIGHT: (?:PASS|FAIL (?:PREREQUISITE_LOCAL|TLS_CA|AUTHENTICATION|NETWORK_TIMEOUT_OR_ALLOWLIST|DATABASE_NOT_FOUND_OR_PERMISSION|SESSION_TIME_ZONE_FAILED|SCHEMA_CREATE_PRIVILEGE_MISSING|UNKNOWN_SAFE_FAILURE))$'
   } | Select-Object -Last 1
@@ -149,7 +151,7 @@ function Invoke-RemoteStagingPreflight {
   } else {
     Write-Output 'STAGING_REMOTE_PREFLIGHT: FAIL UNKNOWN_SAFE_FAILURE'
   }
-  $ExitCode.Value = $LASTEXITCODE
+  $ExitCode.Value = $commandExitCode
 }
 
 function Invoke-ValidationOnly {

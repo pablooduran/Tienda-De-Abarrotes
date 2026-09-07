@@ -40,6 +40,9 @@ function main() {
   'El preflight debe ejecutarse antes de db:init.');
   assert.match(source, /PREREQUISITE_LOCAL\|TLS_CA\|AUTHENTICATION\|NETWORK_TIMEOUT_OR_ALLOWLIST/);
   assert.match(source, /Invoke-RemoteStagingDiagnostic -ExitCode \(\[ref\]\$diagnosticExitCode\)/);
+  assert.match(source, /CONNECTION_OR_CONFIGURATION_FAILURE\(\?: \(\?:AUTHORIZATION\|CONFIGURATION\|CONNECTION\|READ\)/);
+  assert.match(source, /\$commandExitCode = \$LASTEXITCODE/);
+  assert.match(source, /\$ExitCode\.Value = \$commandExitCode/);
   assert(!source.includes('$diagnosticExitCode = Invoke-RemoteStagingDiagnostic'), 'La categoria no debe quedar capturada con el codigo de salida.');
   assert(!source.includes('Start-Process'), 'El lanzador no debe crear procesos desacoplados.');
   assert(!source.includes('Set-Content'), 'El lanzador no debe guardar secretos en archivos.');
