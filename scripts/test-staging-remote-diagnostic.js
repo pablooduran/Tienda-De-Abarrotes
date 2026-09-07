@@ -106,7 +106,8 @@ async function main() {
   assert.deepStrictEqual(connectionFailure, {
     category: STAGING_DATABASE_DIAGNOSTICS.CONNECTION_OR_CONFIGURATION_FAILURE,
     phase: DIAGNOSTIC_PHASES.CONNECTION,
-    cause: DIAGNOSTIC_CAUSES.NETWORK_TIMEOUT_OR_ALLOWLIST
+    cause: DIAGNOSTIC_CAUSES.NETWORK_TIMEOUT_OR_ALLOWLIST,
+    reason: 'ETIMEDOUT'
   });
 
   const sentinelHost = 'mysql-do-not-connect.staging.invalid';
@@ -119,7 +120,7 @@ async function main() {
   });
   const output = `${result.stdout || ''}\n${result.stderr || ''}`;
   assert.notStrictEqual(result.status, 0, 'La configuracion invalida debe detener el diagnostico antes de conectar.');
-  assert.match(output, /^STAGING_REMOTE_DIAGNOSTIC: CONNECTION_OR_CONFIGURATION_FAILURE (?:AUTHORIZATION|CONFIGURATION|CONNECTION|READ) (?:[A-Z_]+)$/m);
+  assert.match(output, /^STAGING_REMOTE_DIAGNOSTIC: CONNECTION_OR_CONFIGURATION_FAILURE AUTHORIZATION PREREQUISITE_LOCAL PRECONDITION_REJECTED$/m);
   assert(!output.includes(sentinelHost), 'El diagnostico no debe exponer el host remoto.');
   assert(!/SELECT|TABLE_NAME|schema_migrations/i.test(output), 'El diagnostico no debe exponer SQL ni estructura.');
 

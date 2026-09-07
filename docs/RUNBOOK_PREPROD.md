@@ -64,7 +64,7 @@ se realiza desde un PC Windows autorizado con
 `scripts/initialize-staging-remote.ps1`, no desde Shell ni One-Off Jobs de
 Render. Antes de toda mutacion, ejecutar su modo `-Diagnose`: solo consulta y
 devuelve `EMPTY`, `BASELINE_INITIAL`, `PARTIAL_OR_UNEXPECTED` o
-`CONNECTION_OR_CONFIGURATION_FAILURE <FASE> <CAUSE_CODE>`. Solo `EMPTY` permite solicitar una nueva
+`CONNECTION_OR_CONFIGURATION_FAILURE <FASE> <CAUSE_CODE> <REASON_CODE>`. Solo `EMPTY` permite solicitar una nueva
 autorizacion para inicializar; cualquier otro resultado exige detenerse y
 reportar, sin reintento ni remedio improvisado. Los codigos sanitizados posibles
 son `PREREQUISITE_LOCAL`, `TLS_CA`, `AUTHENTICATION`,
@@ -74,31 +74,59 @@ son `PREREQUISITE_LOCAL`, `TLS_CA`, `AUTHENTICATION`,
 contrasena de forma oculta, lee la CA temporal privada proporcionada por Aiven y
 restaura las variables sensibles del proceso al finalizar; los comandos
 operativos son los documentados en `CONFIGURACION_STAGING.md`. Las fases
-sanitizadas son `AUTHORIZATION`, `CONFIGURATION`, `CONNECTION` y `READ`;
-diagnostico, preflight e inicializacion comparten el constructor de opciones
-TLS MySQL. No guardar
+sanitizadas son `AUTHORIZATION`, `CONFIGURATION`, `CONNECTION`, `READ`, `CLOSE`
+y `LAUNCHER`; diagnostico, preflight, inicializacion y migracion comparten el
+constructor de opciones TLS MySQL. Los flags remotos no cargan archivos `.env`:
+solo usan el contexto efimero explicito. No guardar
 secretos, CA ni valores de conexion en PowerShell, Git, chat o archivos del
 repositorio. En una base existente se debe leer primero `schema_migrations`,
 hacer backup y ensayar la misma secuencia en una copia aislada.
 
-Con resultado `EMPTY` y una autorizacion nueva para avanzar, ejecutar antes de
-la mutacion `scripts/initialize-staging-remote.ps1 -Preflight`. El preflight
+Secuencia canonica: CI del commit aprobado en PASS y autorizacion para lectura;
+ejecutar una vez `scripts/initialize-staging-remote.ps1 -Diagnose`; solo si es
+`EMPTY`, solicitar autorizacion nueva para inicializar y ejecutar el lanzador
+sin switch. No ejecutar `db:init` ni `db:migrate` por separado. El preflight
 solo prueba TLS/CA, `SET time_zone = '-04:00'` para su propia sesion y la
 capacidad efectiva de `CREATE` mediante grants no mostrados. No crea ni altera
 tablas ni datos. Solo `STAGING_REMOTE_PREFLIGHT: PASS` permite que el lanzador
 intente `db:init`; sus fallos sanitizados detienen el procedimiento sin
-reintentos. El propio lanzador repite este preflight justo antes de `db:init`,
-por lo que un resultado anterior no puede usarse para saltar la validacion.
+reintentos. El propio lanzador ejecuta el preflight justo antes de `db:init`;
+no hace falta una ejecucion independiente adicional. `-Preflight` queda para
+comprobaciones especificas autorizadas, sin permitir saltar ninguna guarda.
 Si `db:init` o `db:migrate` se detiene despues del preflight, el lanzador
 informa una unica linea `STAGING_REMOTE_DB_INIT` o `STAGING_REMOTE_DB_MIGRATE`
-con fase y causa sanitizadas. Esa evidencia identifica si la detencion fue en
+con fase, causa y razon sanitizadas. Esa evidencia identifica si la detencion fue en
 autorizacion, conexion, zona de sesion, estructura inicial o migraciones sin
 mostrar SQL, secretos ni detalles de infraestructura.
 El preflight y ambas mutaciones usan exactamente el mismo constructor de
 opciones TLS MySQL, para que un PASS de preflight no valide una ruta de
 conexion distinta de la que usaran `db:init` y `db:migrate`.
 
-Cuando un problema de conexion de staging necesite separarse del diagnostico de
+La causa y la razon solo admiten tokens de
+`config/staging-remote-status-contract.json`; nunca se clasifican por mensajes,
+SQL o stack. Un error ambiguo mantiene `UNKNOWN_SAFE_FAILURE`. Ejemplos de
+lectura segura y accion posterior, siempre sin reintentar automaticamente:
+
+| Evidencia sanitizada | Interpretacion y siguiente accion |
+| --- | --- |
+| `PREREQUISITE_LOCAL / LOCAL_TYPE_ERROR` | Excepcion local de tipo; reportar el commit y la fase para revisar codigo. No cambiar credenciales, TLS ni red por deduccion. |
+| `TLS_CA` con un codigo TLS permitido | Verificar privadamente vigencia, formato y origen de la CA; nunca omitir validacion del certificado. |
+| `AUTHENTICATION / ER_ACCESS_DENIED_ERROR` | Revisar credenciales y acceso en el panel privado; no copiarlos al reporte. |
+| `NETWORK_TIMEOUT_OR_ALLOWLIST / ENOTFOUND` o `ETIMEDOUT` | Revisar respectivamente resolucion o alcance de red. No demuestra por si mismo bloqueo por allowlist; no abrirla globalmente. |
+| `DATABASE_NOT_FOUND_OR_PERMISSION` | Verificar privadamente existencia de la base exacta y permisos; no crear ni conceder acceso sin autorizacion. |
+| `READ_FAILURE` o fase `CLOSE` | No hay resultado de estructura confirmado; detenerse y reportar fase/causa/razon. |
+| `LAUNCHER / PREREQUISITE_LOCAL / CHILD_PROTOCOL_INVALID` o `CHILD_EXIT_INCONSISTENT` | Respuesta del hijo no valida o contradictoria; no considerar PASS ni continuar a otra operacion. |
+| `UNKNOWN_SAFE_FAILURE` | Evidencia insuficiente; conservar solo los tokens y solicitar revision. No inferir una causa remota. |
+
+El defecto reproducido localmente con `mysql2` 3.22.5 consistia en entregar
+`ssl` congelado a un constructor que lo modifica antes de abrir la conexion.
+La politica sigue inmutable y estricta; el driver recibe ahora una copia mutable.
+La regresion prueba el normalizador instalado y el recorrido real
+PowerShell/npm/Node con transporte bloqueado y datos sinteticos. No es evidencia
+de conectividad con Aiven ni de una inicializacion remota completa.
+
+Los probes auxiliares siguientes no sustituyen esa secuencia ni deben encadenarse
+para buscar un PASS tras un fallo. Cuando una investigacion especifica de conexion necesite separarse del diagnostico de
 estructura, usar solo con autorizacion explicita
 `scripts/probe-staging-mysql-tls.ps1`. El lanzador usa `mysql2` directamente,
 fuerza TLS con la CA temporal y ejecuta una unica lectura. Su unica salida es

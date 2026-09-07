@@ -216,19 +216,22 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\initialize-sta
 Usa el mismo ingreso efimero de host, puerto, usuario, contrasena y CA, pero no
 solicita ni establece la confirmacion de mutacion. El resultado expone solo una
 categoria: `EMPTY`, `BASELINE_INITIAL`, `PARTIAL_OR_UNEXPECTED` o
-`CONNECTION_OR_CONFIGURATION_FAILURE <FASE> <CAUSE_CODE>`. Las fases posibles
-son `AUTHORIZATION`, `CONFIGURATION`, `CONNECTION` y `READ`. Los codigos
+`CONNECTION_OR_CONFIGURATION_FAILURE <FASE> <CAUSE_CODE> <REASON_CODE>`. Las fases posibles
+son `AUTHORIZATION`, `CONFIGURATION`, `CONNECTION`, `READ`, `CLOSE` y `LAUNCHER`. Los codigos
 sanitizados posibles son `PREREQUISITE_LOCAL`, `TLS_CA`, `AUTHENTICATION`,
 `NETWORK_TIMEOUT_OR_ALLOWLIST`, `DATABASE_NOT_FOUND_OR_PERMISSION`,
 `READ_FAILURE` y `UNKNOWN_SAFE_FAILURE`. No lista tablas, SQL, host ni salida
-del driver. Diagnostico, preflight e inicializacion usan el mismo constructor de
-opciones TLS MySQL. Si es `EMPTY`, solicitar una nueva autorizacion antes de inicializar.
+del driver. `REASON_CODE` es un token de la allowlist compartida en
+`config/staging-remote-status-contract.json`, nunca texto del error. Diagnostico,
+preflight, inicializacion y migracion usan el mismo constructor de opciones TLS
+MySQL. Si es `EMPTY`, solicitar una nueva autorizacion antes de inicializar.
 Para las otras tres categorias, detenerse y reportar sin reintentar ni proponer
 recuperacion. Solo `EMPTY` devuelve codigo de salida `0`; los demas resultados
 devuelven `1` para impedir que una automatizacion los trate como aptos.
 
-Despues de un diagnostico `EMPTY` y antes de autorizar una mutacion, el
-operador debe ejecutar el preflight independiente:
+El procedimiento normal no exige otra conexion de preflight independiente: el
+lanzador lo ejecuta obligatoriamente justo antes de inicializar. El modo
+independiente queda disponible solo para una comprobacion especifica autorizada:
 
 ```powershell
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\initialize-staging-remote.ps1 -Preflight
@@ -238,15 +241,32 @@ El preflight vuelve a exigir destino exacto, TLS y CA, abre una sola conexion,
 aplica `SET time_zone = '-04:00'` solo a esa sesion y consulta los grants
 efectivos sin mostrarlos ni persistirlos. No ejecuta DDL ni DML. Su unica salida
 es `STAGING_REMOTE_PREFLIGHT: PASS` o `STAGING_REMOTE_PREFLIGHT: FAIL
-<CAUSE_CODE>`, donde el codigo posible es `PREREQUISITE_LOCAL`, `TLS_CA`,
+<FASE> <CAUSE_CODE> <REASON_CODE>`, donde el codigo posible es `PREREQUISITE_LOCAL`, `TLS_CA`,
 `AUTHENTICATION`, `NETWORK_TIMEOUT_OR_ALLOWLIST`,
 `DATABASE_NOT_FOUND_OR_PERMISSION`, `SESSION_TIME_ZONE_FAILED`,
 `SCHEMA_CREATE_PRIVILEGE_MISSING` o `UNKNOWN_SAFE_FAILURE`. Solo `PASS`
 termina con codigo `0`; cualquier fallo termina con `1` y exige detenerse.
 El preflight no autoriza por si mismo `db:init` ni `db:migrate`.
 
-Si se necesita aislar conectividad TLS antes del diagnostico de estructura, el
-operador puede ejecutar una unica prueba de conexion, tambien solo con
+Los cuatro comandos reciben variables efimeras del mismo lanzador; los flags
+remotos explicitos impiden cargar archivos `.env` para completar o reemplazar
+entradas. El lanzador elimina la fuente heredada `DB_SSL_CA_PATH` y la
+confirmacion de mutacion antes de establecer el contexto correspondiente;
+restaura el entorno anterior al terminar. TLS conserva CA validada y
+`rejectUnauthorized=true`. La politica validada es inmutable, pero se entrega
+una copia mutable a `mysql2`, cuyo constructor normaliza las opciones SSL.
+El lanzador exige una sola respuesta del protocolo, con salida y codigo de
+proceso concordantes; rechaza respuestas ausentes, duplicadas o desconocidas.
+
+Para interpretar un fallo sin revelar datos, consultar la tabla del
+[runbook](RUNBOOK_PREPROD.md#migraciones-001-024). Un codigo de red no prueba
+por si solo una allowlist incorrecta; un codigo local no autoriza cambiar TLS.
+No se imprimen mensajes, SQL, stacks, host, puerto, usuario, CA ni credenciales.
+
+Los probes TLS y de esquema siguientes son herramientas auxiliares anteriores,
+no alternativas al procedimiento canonico ni pasos automaticos ante un fallo.
+Un PASS suyo no demuestra que `db:init` pueda terminar. Si una investigacion
+especifica necesita aislar conectividad, puede ejecutar una unica prueba solo con
 autorizacion explicita y desde un PC Windows autorizado:
 
 ```powershell
@@ -298,8 +318,8 @@ procedimiento es:
    usuario, CA temporal, confirmacion exacta y contrasena oculta. Rechaza otro
    destino, host local, TLS ausente, CA no PEM o confirmacion incorrecta; fija
    `APP_ENV=staging`, `NODE_ENV=production`, `DB_ENVIRONMENT=staging`, TLS y
-   `--remote-staging` solo para sus dos procesos hijos. No muestra salida de
-   esos procesos, URI, host, usuario, contrasena ni CA, y restaura las variables
+   los flags explicitos solo para los procesos hijos correspondientes. No muestra
+   salida cruda de esos procesos, URI, host, usuario, contrasena ni CA, y restaura las variables
    del proceso al finalizar.
 4. El lanzador ejecuta el mismo preflight inmediatamente antes de toda
    mutacion. Solo tras `STAGING_REMOTE_PREFLIGHT: PASS` ejecuta `db:init --
@@ -308,9 +328,10 @@ procedimiento es:
    unicamente 001–024. No ejecutar esos comandos por separado ni usar SQL
    manual alternativo. Si una fase posterior falla, el lanzador conserva el
    preflight `PASS` y expone una unica linea `STAGING_REMOTE_DB_INIT` o
-   `STAGING_REMOTE_DB_MIGRATE` con fase y causa sanitizadas. Las fases posibles
+   `STAGING_REMOTE_DB_MIGRATE` con fase, causa y razon sanitizadas. Las fases posibles
    son autorizacion/configuracion, conexion, zona de sesion, vacio/estructura
-   base, verificacion, baseline, registro o aplicacion de migraciones; nunca se
+   base, verificacion, baseline, registro o aplicacion de migraciones, cierre o
+   protocolo del lanzador; nunca se
    muestran SQL, host, usuario, contrasena, CA, stack ni salida cruda del motor.
    El preflight, `db:init` y `db:migrate` derivan sus opciones de la misma
    construccion versionada de TLS MySQL; no mantienen configuraciones de

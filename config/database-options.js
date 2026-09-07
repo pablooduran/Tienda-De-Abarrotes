@@ -102,7 +102,8 @@ function buildDatabaseOptions(environment = process.env, extra = {}) {
     timezone: MYSQL_SESSION_TIME_ZONE
   };
   const ssl = sslOptions(environment);
-  if (ssl) options.ssl = ssl;
+  // mysql2 normalizes ssl in place; keep the validated policy separate from its mutable input.
+  if (ssl) options.ssl = { ...ssl };
   else delete options.ssl;
   return options;
 }

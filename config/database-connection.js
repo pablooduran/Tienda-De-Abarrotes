@@ -6,7 +6,12 @@ async function createDatabaseConnection(options = databaseConfig(), { onPhase } 
   onPhase?.('CONNECTION');
   const connection = await mysql.createConnection(options);
   onPhase?.('SESSION_TIME_ZONE');
-  return setBusinessSessionTimeZone(connection);
+  try {
+    return await setBusinessSessionTimeZone(connection);
+  } catch (error) {
+    connection.destroy();
+    throw error;
+  }
 }
 
 module.exports = { createDatabaseConnection };

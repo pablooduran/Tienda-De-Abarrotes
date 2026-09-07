@@ -14,7 +14,12 @@ const environmentWarning = missingEnvironmentWarning(activeEnvironment);
 
 if (environmentWarning) console.warn(environmentWarning);
 
-dotenv.config({ path: path.join(__dirname, '..', environmentFile) });
+// Explicit staging tools receive a complete ephemeral environment from the launcher.
+// Never supplement that environment from a file before authorization runs.
+const explicitStagingTool = process.argv.slice(2).some((arg) => [
+  '--remote-staging', '--remote-staging-diagnose', '--remote-staging-preflight'
+].includes(arg));
+if (!explicitStagingTool) dotenv.config({ path: path.join(__dirname, '..', environmentFile) });
 
 function requireEnvironment(names, environment = process.env) {
   const missing = names.filter((name) => !String(environment[name] || '').trim());

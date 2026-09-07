@@ -17,7 +17,7 @@ $RemoteStagingConfirmation = 'CONFIRM_EMPTY_STAGING_001_024'
 $RemoteStagingPreflightConfirmation = 'PREFLIGHT_STAGING_TLS_AND_SCHEMA_ONLY'
 $EnvironmentNames = @(
   'APP_ENV', 'NODE_ENV', 'DB_ENVIRONMENT', 'DB_HOST', 'DB_PORT', 'DB_NAME',
-  'DB_USER', 'DB_PASSWORD', 'DB_SSL_ENABLED', 'DB_SSL_CA',
+  'DB_USER', 'DB_PASSWORD', 'DB_SSL_ENABLED', 'DB_SSL_CA', 'DB_SSL_CA_PATH',
   'STAGING_DB_MUTATION_CONFIRMATION', 'STAGING_REMOTE_PREFLIGHT_CONFIRMATION'
 )
 
@@ -102,56 +102,53 @@ function Restore-EnvironmentState {
   }
 }
 
+function Invoke-RemoteStagingProcess {
+  param([Parameter(Mandatory)] [ValidateSet('DIAGNOSTIC', 'PREFLIGHT', 'INIT', 'MIGRATE')] [string]$Operation)
+
+  $scriptName = @{ DIAGNOSTIC = 'db:diagnose-staging'; PREFLIGHT = 'db:preflight-staging'; INIT = 'db:init'; MIGRATE = 'db:migrate' }[$Operation]
+  $argument = if ($Operation -eq 'DIAGNOSTIC') { $RemoteStagingDiagnosticFlag } elseif ($Operation -eq 'PREFLIGHT') { $RemoteStagingPreflightFlag } else { $RemoteStagingFlag }
+  $prefix = if ($Operation -in @('INIT', 'MIGRATE')) { "STAGING_REMOTE_DB_${Operation}:" } else { "STAGING_REMOTE_${Operation}:" }
+  $success = if ($Operation -eq 'DIAGNOSTIC') { 'EMPTY' } else { 'PASS' }
+  $failure = if ($Operation -eq 'DIAGNOSTIC') { 'CONNECTION_OR_CONFIGURATION_FAILURE' } else { 'FAIL' }
+  $allowed = if ($Operation -eq 'DIAGNOSTIC') { "(?:EMPTY|BASELINE_INITIAL|PARTIAL_OR_UNEXPECTED|$failure $FailurePattern)" } else { "(?:PASS|FAIL $FailurePattern)" }
+  $output = @(& npm.cmd run $scriptName -- $argument 2>$null)
+  $commandExitCode = $LASTEXITCODE
+  $lines = @($output | Where-Object { $_ -cmatch '^STAGING_REMOTE_' })
+  if ($lines.Count -ne 1 -or $lines[0] -cnotmatch "^$prefix $allowed$") {
+    return @{ Line = "$prefix $failure LAUNCHER PREREQUISITE_LOCAL CHILD_PROTOCOL_INVALID"; ExitCode = 1 }
+  }
+  $line = [string]$lines[0]
+  $isSuccess = $line -ceq "$prefix $success"
+  if (($isSuccess -and $commandExitCode -ne 0) -or (-not $isSuccess -and $commandExitCode -eq 0)) {
+    return @{ Line = "$prefix $failure LAUNCHER PREREQUISITE_LOCAL CHILD_EXIT_INCONSISTENT"; ExitCode = 1 }
+  }
+  return @{ Line = $line; ExitCode = $(if ($isSuccess) { 0 } else { 1 }) }
+}
+
 function Invoke-RemoteStagingCommand {
   param([Parameter(Mandatory)] [string]$NpmScript)
 
   $operation = if ($NpmScript -eq 'db:init') { 'INIT' } elseif ($NpmScript -eq 'db:migrate') { 'MIGRATE' } else { throw 'Operacion de staging no permitida.' }
-  $output = @(& npm.cmd run $NpmScript -- $RemoteStagingFlag 2>$null)
-  $commandExitCode = $LASTEXITCODE
-  $result = $output | Where-Object {
-    $_ -match "^STAGING_REMOTE_DB_${operation}: (?:PASS|FAIL (?:AUTHORIZATION|CONFIGURATION|CONNECTION|SESSION_TIME_ZONE|EMPTY_DATABASE|BASE_SCHEMA|STRUCTURE_VERIFICATION|MIGRATION_BASELINE|MIGRATION_REGISTRY|MIGRATION_APPLY) (?:PREREQUISITE_LOCAL|TLS_CA|AUTHENTICATION|NETWORK_TIMEOUT_OR_ALLOWLIST|DATABASE_NOT_FOUND_OR_PERMISSION|SESSION_TIME_ZONE_FAILED|SCHEMA_CREATE_PRIVILEGE_MISSING|BASE_SCHEMA_DDL_FAILED|STRUCTURE_VERIFICATION_FAILED|MIGRATION_REGISTRY_FAILED|MIGRATION_APPLY_FAILED|UNKNOWN_SAFE_FAILURE))$"
-  } | Select-Object -Last 1
-  if ($null -ne $result) {
-    Write-Output $result
-  } else {
-    Write-Output "STAGING_REMOTE_DB_${operation}: FAIL UNKNOWN_SAFE_FAILURE UNKNOWN_SAFE_FAILURE"
-  }
-  if ($commandExitCode -ne 0 -or $null -eq $result) {
-    throw 'La operacion remota se detuvo sin completar el paso actual. No reintente ni comparta valores; revise el destino con la autorizacion correspondiente.'
-  }
+  $result = Invoke-RemoteStagingProcess -Operation $operation
+  Write-Output $result.Line
+  if ($result.ExitCode -ne 0) { throw 'La operacion remota se detuvo sin reintentos.' }
 }
 
 function Invoke-RemoteStagingDiagnostic {
   param([Parameter(Mandatory)] [ref]$ExitCode)
 
-  $output = @(& npm.cmd run db:diagnose-staging -- $RemoteStagingDiagnosticFlag 2>$null)
-  $commandExitCode = $LASTEXITCODE
-  $category = $output | Where-Object {
-    $_ -match '^STAGING_REMOTE_DIAGNOSTIC: (EMPTY|BASELINE_INITIAL|PARTIAL_OR_UNEXPECTED|CONNECTION_OR_CONFIGURATION_FAILURE(?: (?:AUTHORIZATION|CONFIGURATION|CONNECTION|READ) (?:PREREQUISITE_LOCAL|TLS_CA|AUTHENTICATION|NETWORK_TIMEOUT_OR_ALLOWLIST|DATABASE_NOT_FOUND_OR_PERMISSION|READ_FAILURE|UNKNOWN_SAFE_FAILURE))?)$'
-  } | Select-Object -Last 1
-  if ($null -ne $category) {
-    Write-Output $category
-  } else {
-    Write-Output 'STAGING_REMOTE_DIAGNOSTIC: CONNECTION_OR_CONFIGURATION_FAILURE CONNECTION UNKNOWN_SAFE_FAILURE'
-  }
-  $ExitCode.Value = $commandExitCode
+  $result = Invoke-RemoteStagingProcess -Operation 'DIAGNOSTIC'
+  Write-Output $result.Line
+  $ExitCode.Value = $result.ExitCode
 }
 
 function Invoke-RemoteStagingPreflight {
   param([Parameter(Mandatory)] [ref]$ExitCode)
 
   $env:STAGING_REMOTE_PREFLIGHT_CONFIRMATION = $RemoteStagingPreflightConfirmation
-  $output = @(& npm.cmd run db:preflight-staging -- $RemoteStagingPreflightFlag 2>$null)
-  $commandExitCode = $LASTEXITCODE
-  $result = $output | Where-Object {
-    $_ -match '^STAGING_REMOTE_PREFLIGHT: (?:PASS|FAIL (?:PREREQUISITE_LOCAL|TLS_CA|AUTHENTICATION|NETWORK_TIMEOUT_OR_ALLOWLIST|DATABASE_NOT_FOUND_OR_PERMISSION|SESSION_TIME_ZONE_FAILED|SCHEMA_CREATE_PRIVILEGE_MISSING|UNKNOWN_SAFE_FAILURE))$'
-  } | Select-Object -Last 1
-  if ($null -ne $result) {
-    Write-Output $result
-  } else {
-    Write-Output 'STAGING_REMOTE_PREFLIGHT: FAIL UNKNOWN_SAFE_FAILURE'
-  }
-  $ExitCode.Value = $commandExitCode
+  $result = Invoke-RemoteStagingProcess -Operation 'PREFLIGHT'
+  Write-Output $result.Line
+  $ExitCode.Value = $result.ExitCode
 }
 
 function Invoke-ValidationOnly {
@@ -190,6 +187,12 @@ try {
     throw 'No se encontro npm.cmd para ejecutar las guardas versionadas.'
   }
 
+  $contract = Get-Content -Raw -LiteralPath (Join-Path $repositoryRoot 'config/staging-remote-status-contract.json') | ConvertFrom-Json
+  $phasePattern = (@($contract.phases | ForEach-Object { [regex]::Escape($_) }) -join '|')
+  $causePattern = (@($contract.causes | ForEach-Object { [regex]::Escape($_) }) -join '|')
+  $reasons = @($contract.fallbackReasons) + @($contract.errorCauses.PSObject.Properties.Name)
+  $reasonPattern = (@($reasons | ForEach-Object { [regex]::Escape($_) }) -join '|')
+  $FailurePattern = "(?:$phasePattern) (?:$causePattern) (?:$reasonPattern)"
   Push-Location $repositoryRoot
   $databaseName = Read-Host 'Escriba el nombre exacto de la base de staging'
   $databaseHost = Read-Host 'Host MySQL de staging'
@@ -222,6 +225,8 @@ try {
   $env:DB_PASSWORD = $plainPassword
   $env:DB_SSL_ENABLED = 'true'
   $env:DB_SSL_CA = $certificateAuthority
+  Remove-Item -Path Env:DB_SSL_CA_PATH -ErrorAction SilentlyContinue
+  Remove-Item -Path Env:STAGING_DB_MUTATION_CONFIRMATION -ErrorAction SilentlyContinue
   if (-not ($Diagnose -or $Preflight)) {
     $env:STAGING_DB_MUTATION_CONFIRMATION = $RemoteStagingConfirmation
   }
@@ -251,7 +256,13 @@ try {
   Invoke-RemoteStagingCommand -NpmScript 'db:migrate'
   Write-Output 'Inicializacion y migraciones de staging completadas.'
 } catch {
-  Write-Error "STAGING_REMOTE_INITIALIZATION: $failureCategory"
+  if ($Diagnose) {
+    Write-Output 'STAGING_REMOTE_DIAGNOSTIC: CONNECTION_OR_CONFIGURATION_FAILURE LAUNCHER PREREQUISITE_LOCAL PRECONDITION_REJECTED'
+  } elseif ($Preflight) {
+    Write-Output 'STAGING_REMOTE_PREFLIGHT: FAIL LAUNCHER PREREQUISITE_LOCAL PRECONDITION_REJECTED'
+  } else {
+    Write-Output "STAGING_REMOTE_INITIALIZATION: $failureCategory"
+  }
   exit 1
 } finally {
   Restore-EnvironmentState -Saved $savedEnvironment

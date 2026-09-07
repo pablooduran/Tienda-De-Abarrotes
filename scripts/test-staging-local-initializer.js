@@ -25,24 +25,23 @@ function main() {
   assert.match(source, /\$RemoteStagingPreflightFlag = '--remote-staging-preflight'/);
   assert.match(source, /\$env:DB_SSL_ENABLED = 'true'/);
   assert.match(source, /Restore-EnvironmentState -Saved \$savedEnvironment/);
-  assert.match(source, /\$output = @\(& npm\.cmd run \$NpmScript -- \$RemoteStagingFlag 2>\$null\)/);
+  assert.match(source, /\$output = @\(& npm\.cmd run \$scriptName -- \$argument 2>\$null\)/);
   assert.match(source, /STAGING_REMOTE_INITIALIZATION: \$failureCategory/);
   assert.match(source, /db:diagnose-staging/);
   assert.match(source, /db:preflight-staging/);
-  assert.match(source, /STAGING_REMOTE_PREFLIGHT: \(\?:PASS\|FAIL/);
   assert.match(source, /INITIALIZATION_FAILED_AFTER_PREFLIGHT/);
   assert.match(source, /MIGRATION_FAILED_AFTER_PREFLIGHT/);
-  assert.match(source, /STAGING_REMOTE_DB_\$\{operation\}: \(\?:PASS\|FAIL/);
   assert.match(source, /INITIALIZATION_FAILED_AFTER_PREFLIGHT/);
   assert.match(source, /MIGRATION_FAILED_AFTER_PREFLIGHT/);
   assert(source.indexOf("Invoke-RemoteStagingPreflight -ExitCode ([ref]$preflightExitCode)")
     < source.indexOf("Invoke-RemoteStagingCommand -NpmScript 'db:init'"),
   'El preflight debe ejecutarse antes de db:init.');
-  assert.match(source, /PREREQUISITE_LOCAL\|TLS_CA\|AUTHENTICATION\|NETWORK_TIMEOUT_OR_ALLOWLIST/);
+  assert.match(source, /staging-remote-status-contract\.json/);
   assert.match(source, /Invoke-RemoteStagingDiagnostic -ExitCode \(\[ref\]\$diagnosticExitCode\)/);
-  assert.match(source, /CONNECTION_OR_CONFIGURATION_FAILURE\(\?: \(\?:AUTHORIZATION\|CONFIGURATION\|CONNECTION\|READ\)/);
+  assert.match(source, /CHILD_PROTOCOL_INVALID/);
+  assert.match(source, /CHILD_EXIT_INCONSISTENT/);
   assert.match(source, /\$commandExitCode = \$LASTEXITCODE/);
-  assert.match(source, /\$ExitCode\.Value = \$commandExitCode/);
+  assert.match(source, /\$ExitCode\.Value = \$result\.ExitCode/);
   assert(!source.includes('$diagnosticExitCode = Invoke-RemoteStagingDiagnostic'), 'La categoria no debe quedar capturada con el codigo de salida.');
   assert(!source.includes('Start-Process'), 'El lanzador no debe crear procesos desacoplados.');
   assert(!source.includes('Set-Content'), 'El lanzador no debe guardar secretos en archivos.');

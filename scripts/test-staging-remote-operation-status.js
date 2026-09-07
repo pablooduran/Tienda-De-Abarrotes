@@ -29,7 +29,7 @@ async function main() {
   );
   assert.strictEqual(
     remoteOperationStatus('INIT', { passed: false, phase: 'BASE_SCHEMA', cause: REMOTE_OPERATION_CAUSES.SCHEMA_CREATE_PRIVILEGE_MISSING }),
-    'STAGING_REMOTE_DB_INIT: FAIL BASE_SCHEMA SCHEMA_CREATE_PRIVILEGE_MISSING'
+    'STAGING_REMOTE_DB_INIT: FAIL BASE_SCHEMA SCHEMA_CREATE_PRIVILEGE_MISSING UNCLASSIFIED_ERROR'
   );
   assert.strictEqual(
     remoteOperationStatus('MIGRATE', { passed: true }),
@@ -49,14 +49,16 @@ async function main() {
         error.code = 'ER_TABLEACCESS_DENIED_ERROR';
         throw error;
       },
-      end: async () => {}
+      end: async () => {},
+      destroy() {}
     })
   });
   assert.deepStrictEqual(denied, {
     remote: true,
     passed: false,
     phase: 'BASE_SCHEMA',
-    cause: REMOTE_OPERATION_CAUSES.SCHEMA_CREATE_PRIVILEGE_MISSING
+    cause: REMOTE_OPERATION_CAUSES.SCHEMA_CREATE_PRIVILEGE_MISSING,
+    reason: 'ER_TABLEACCESS_DENIED_ERROR'
   });
 
   const timezoneFailure = await runInitialization({
@@ -76,7 +78,8 @@ async function main() {
     remote: true,
     passed: false,
     phase: 'SESSION_TIME_ZONE',
-    cause: REMOTE_OPERATION_CAUSES.SESSION_TIME_ZONE_FAILED
+    cause: REMOTE_OPERATION_CAUSES.SESSION_TIME_ZONE_FAILED,
+    reason: 'SESSION_SETUP_FAILED'
   });
 
   console.log(JSON.stringify({ resultado: 'ok', remoteConnections: 0, mutations: 0, errorsSanitized: true }, null, 2));

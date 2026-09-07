@@ -979,6 +979,25 @@ inicializador comprueba que no existan tablas; el migrador comprueba la base
 inicial sin datos antes de aplicar 001–024. Esto no autoriza conexiones ni
 migraciones remotas en esta fase, y la migracion 025 sigue ausente.
 
+El 2026-09-06 se reprodujo sin red un defecto local de la conexion: `mysql2`
+3.22.5 intenta normalizar `ssl.rejectUnauthorized` sobre el objeto congelado
+entregado por la configuracion, generando `TypeError` sin codigo antes del
+transporte. Los probes iniciales usaban un objeto mutable; su PASS previo no
+validaba esta ruta. La correccion conserva la politica TLS inmutable y entrega
+una copia mutable al driver. Diagnostico, preflight, inicializacion y migracion
+comparten opciones y clasificacion sanitizada de fase/causa/razon, sin cargar
+archivos `.env` en los modos remotos explicitos.
+
+La prueba del lanzador recorre PowerShell, npm y Node reales y el normalizador
+instalado, con transporte interceptado, consultas simuladas y entradas sinteticas;
+no realiza conexiones remotas. Verifica igualdad de configuracion, 26 casos de
+salida/cierre/errores y rechaza respuestas del hijo ambiguas. La simulacion de
+migracion se detiene en la guarda del baseline antes de DDL: no declara una
+migracion remota completa. El siguiente paso remoto sigue siendo un unico
+`-Diagnose`, solo despues de CI del commit aprobado en PASS y autorizacion nueva.
+No hay reintentos ni mutacion autorizados por este registro; el entorno hospedado
+continua pendiente y no se declara `PILOT_READY`.
+
 Para Render Free en staging existe un modo de proxy limitado:
 `TRUST_PROXY_MODE=render-cloudflare`, sin `TRUST_PROXY_CIDRS`. Mantiene Express
 sin `trust proxy`, toma la IP solo desde `CF-Connecting-IP` antes de los rate

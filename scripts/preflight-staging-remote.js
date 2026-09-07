@@ -1,4 +1,5 @@
 const mysql = require('mysql2/promise');
+const { classifyRemoteFailure, sanitizeRemoteFailure } = require('../config/staging-remote-failure');
 const { buildRemoteStagingDatabaseOptions } = require('../config/staging-remote-database-options');
 
 const EXPECTED_DATABASE = 'tienda_abarrotes_staging';
@@ -15,30 +16,6 @@ const PREFLIGHT_CAUSES = Object.freeze({
   SCHEMA_CREATE_PRIVILEGE_MISSING: 'SCHEMA_CREATE_PRIVILEGE_MISSING',
   UNKNOWN_SAFE_FAILURE: 'UNKNOWN_SAFE_FAILURE'
 });
-
-const CAUSE_BY_ERROR_CODE = new Map([
-  ['HANDSHAKE_SSL_ERROR', PREFLIGHT_CAUSES.TLS_CA],
-  ['CERT_HAS_EXPIRED', PREFLIGHT_CAUSES.TLS_CA],
-  ['UNABLE_TO_VERIFY_LEAF_SIGNATURE', PREFLIGHT_CAUSES.TLS_CA],
-  ['DEPTH_ZERO_SELF_SIGNED_CERT', PREFLIGHT_CAUSES.TLS_CA],
-  ['ERR_TLS_CERT_ALTNAME_INVALID', PREFLIGHT_CAUSES.TLS_CA],
-  ['ER_SSL_CONNECTION_ERROR', PREFLIGHT_CAUSES.TLS_CA],
-  ['ER_ACCESS_DENIED_ERROR', PREFLIGHT_CAUSES.AUTHENTICATION],
-  ['ER_DBACCESS_DENIED_ERROR', PREFLIGHT_CAUSES.DATABASE_NOT_FOUND_OR_PERMISSION],
-  ['ER_BAD_DB_ERROR', PREFLIGHT_CAUSES.DATABASE_NOT_FOUND_OR_PERMISSION],
-  ['ER_HOST_NOT_PRIVILEGED', PREFLIGHT_CAUSES.DATABASE_NOT_FOUND_OR_PERMISSION],
-  ['ER_SPECIFIC_ACCESS_DENIED_ERROR', PREFLIGHT_CAUSES.DATABASE_NOT_FOUND_OR_PERMISSION],
-  ['ECONNREFUSED', PREFLIGHT_CAUSES.NETWORK_TIMEOUT_OR_ALLOWLIST],
-  ['ECONNRESET', PREFLIGHT_CAUSES.NETWORK_TIMEOUT_OR_ALLOWLIST],
-  ['ECONNABORTED', PREFLIGHT_CAUSES.NETWORK_TIMEOUT_OR_ALLOWLIST],
-  ['EPIPE', PREFLIGHT_CAUSES.NETWORK_TIMEOUT_OR_ALLOWLIST],
-  ['EHOSTUNREACH', PREFLIGHT_CAUSES.NETWORK_TIMEOUT_OR_ALLOWLIST],
-  ['ENETUNREACH', PREFLIGHT_CAUSES.NETWORK_TIMEOUT_OR_ALLOWLIST],
-  ['ENOTFOUND', PREFLIGHT_CAUSES.NETWORK_TIMEOUT_OR_ALLOWLIST],
-  ['EAI_AGAIN', PREFLIGHT_CAUSES.NETWORK_TIMEOUT_OR_ALLOWLIST],
-  ['ETIMEDOUT', PREFLIGHT_CAUSES.NETWORK_TIMEOUT_OR_ALLOWLIST],
-  ['PROTOCOL_CONNECTION_LOST', PREFLIGHT_CAUSES.NETWORK_TIMEOUT_OR_ALLOWLIST]
-]);
 
 function normalized(value) {
   return String(value || '').trim();
@@ -79,17 +56,9 @@ function buildPreflightOptions(environment = process.env, args = process.argv.sl
 }
 
 function classifyPreflightFailure(error, phase = 'connection') {
-  if (phase === 'prerequisite') return PREFLIGHT_CAUSES.PREREQUISITE_LOCAL;
-  if (phase === 'session-time-zone') return PREFLIGHT_CAUSES.SESSION_TIME_ZONE_FAILED;
-  let current = error;
-  for (let depth = 0; depth < 3 && current; depth += 1) {
-    const code = typeof current.code === 'string' ? current.code : '';
-    if (code === 'STAGING_REMOTE_PREFLIGHT_PREREQUISITE') return PREFLIGHT_CAUSES.PREREQUISITE_LOCAL;
-    const cause = CAUSE_BY_ERROR_CODE.get(code);
-    if (cause) return cause;
-    current = current.cause;
-  }
-  return PREFLIGHT_CAUSES.UNKNOWN_SAFE_FAILURE;
+  const canonicalPhase = { prerequisite: 'AUTHORIZATION', 'session-time-zone': 'SESSION_TIME_ZONE' }[phase]
+    || phase.toUpperCase();
+  return classifyRemoteFailure(error, canonicalPhase).cause;
 }
 
 function grantAllowsCreate(value) {
@@ -113,29 +82,33 @@ async function runPreflight({
   args = process.argv.slice(2)
 } = {}) {
   let connection;
-  let phase = 'prerequisite';
+  let phase = 'AUTHORIZATION';
   try {
     const options = buildPreflightOptions(environment, args);
-    phase = 'connection';
+    phase = 'CONNECTION';
     connection = await createConnection(options);
-    phase = 'session-time-zone';
+    phase = 'SESSION_TIME_ZONE';
     await connection.query('SET time_zone = ?', [MYSQL_SESSION_TIME_ZONE]);
-    phase = 'create-privilege';
+    phase = 'CREATE_PRIVILEGE';
     const [rows] = await connection.query('SHOW GRANTS');
-    if (!grantsAllowCreate(rows)) return { passed: false, cause: PREFLIGHT_CAUSES.SCHEMA_CREATE_PRIVILEGE_MISSING };
+    if (!grantsAllowCreate(rows)) return { passed: false, ...classifyRemoteFailure(null, phase) };
+    phase = 'CLOSE';
+    await connection.end();
+    connection = null;
     return { passed: true };
   } catch (error) {
-    return { passed: false, cause: classifyPreflightFailure(error, phase) };
+    return { passed: false, ...classifyRemoteFailure(error, phase) };
   } finally {
-    if (connection) await connection.end().catch(() => {});
+    if (connection) connection.destroy();
   }
 }
 
 async function main() {
   const result = await runPreflight();
+  const safe = sanitizeRemoteFailure(result);
   console.log(result.passed
     ? 'STAGING_REMOTE_PREFLIGHT: PASS'
-    : `STAGING_REMOTE_PREFLIGHT: FAIL ${result.cause}`);
+    : `STAGING_REMOTE_PREFLIGHT: FAIL ${safe.phase} ${safe.cause} ${safe.reason}`);
   if (!result.passed) process.exitCode = 1;
 }
 

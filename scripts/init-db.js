@@ -5,9 +5,9 @@ const {
   resolveDatabaseMutationMode
 } = require('../config/staging-database-mutation-guard');
 const {
-  classifyRemoteOperationFailure,
   remoteOperationStatus
 } = require('../config/staging-remote-operation-status');
+const { classifyRemoteFailure } = require('../config/staging-remote-failure');
 const { buildRemoteStagingDatabaseOptions } = require('../config/staging-remote-database-options');
 
 const requiredColumns = {
@@ -235,19 +235,21 @@ async function runInitialization({
     await createBaseTables(connection);
     phase = 'STRUCTURE_VERIFICATION';
     await verifyStructure(connection);
+    phase = 'CLOSE';
+    await connection.end();
+    connection = null;
     return { remote: mode.type === 'remote-staging', passed: true };
   } catch (error) {
     if (remoteRequested) {
       return {
         remote: true,
         passed: false,
-        phase,
-        cause: classifyRemoteOperationFailure(error, phase)
+        ...classifyRemoteFailure(error, phase)
       };
     }
     throw error;
   } finally {
-    if (connection) await connection.end();
+    if (connection) connection.destroy();
   }
 }
 

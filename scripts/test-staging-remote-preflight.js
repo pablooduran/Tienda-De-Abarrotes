@@ -1,6 +1,7 @@
 const assert = require('assert/strict');
 const fs = require('fs');
 const path = require('path');
+const tls = require('tls');
 const {
   EXPECTED_DATABASE,
   PREFLIGHT_ARGUMENT,
@@ -17,7 +18,7 @@ function environment(extra = {}) {
     APP_ENV: 'staging', NODE_ENV: 'production', DB_ENVIRONMENT: 'staging',
     DB_HOST: 'mysql.staging.invalid', DB_PORT: '3306', DB_NAME: EXPECTED_DATABASE,
     DB_USER: 'synthetic-user', DB_PASSWORD: 'synthetic-password',
-    DB_SSL_ENABLED: 'true', DB_SSL_CA: '-----BEGIN CERTIFICATE-----\\nsynthetic\\n-----END CERTIFICATE-----',
+    DB_SSL_ENABLED: 'true', DB_SSL_CA: tls.rootCertificates[0],
     STAGING_REMOTE_PREFLIGHT_CONFIRMATION: PREFLIGHT_CONFIRMATION,
     ...extra
   };
@@ -75,21 +76,24 @@ async function main() {
       query: async (sql) => (sql === 'SHOW GRANTS'
         ? grants('GRANT SELECT ON `tienda_abarrotes_staging`.* TO `synthetic`@`%`')
         : [[]]),
-      end: async () => {}
+      end: async () => {},
+      destroy() {}
     })
   });
   assert.deepStrictEqual(missingPrivilege, {
-    passed: false, cause: PREFLIGHT_CAUSES.SCHEMA_CREATE_PRIVILEGE_MISSING
+    passed: false, phase: 'CREATE_PRIVILEGE', cause: PREFLIGHT_CAUSES.SCHEMA_CREATE_PRIVILEGE_MISSING,
+    reason: 'CREATE_PRIVILEGE_NOT_GRANTED'
   });
 
   const timezoneFailure = await runPreflight({
     environment: environment(), args,
     createConnection: async () => ({
-      query: async () => { throw new Error('hidden'); }, end: async () => {}
+      query: async () => { throw new Error('hidden'); }, end: async () => {}, destroy() {}
     })
   });
   assert.deepStrictEqual(timezoneFailure, {
-    passed: false, cause: PREFLIGHT_CAUSES.SESSION_TIME_ZONE_FAILED
+    passed: false, phase: 'SESSION_TIME_ZONE', cause: PREFLIGHT_CAUSES.SESSION_TIME_ZONE_FAILED,
+    reason: 'SESSION_SETUP_FAILED'
   });
 
   const connectionFailure = await runPreflight({
@@ -97,7 +101,8 @@ async function main() {
     createConnection: async () => { const error = new Error('hidden'); error.code = 'ECONNREFUSED'; throw error; }
   });
   assert.deepStrictEqual(connectionFailure, {
-    passed: false, cause: PREFLIGHT_CAUSES.NETWORK_TIMEOUT_OR_ALLOWLIST
+    passed: false, phase: 'CONNECTION', cause: PREFLIGHT_CAUSES.NETWORK_TIMEOUT_OR_ALLOWLIST,
+    reason: 'ECONNREFUSED'
   });
 
   console.log(JSON.stringify({ resultado: 'ok', remoteConnections: 0, mutations: 0, grantsExposed: false }, null, 2));

@@ -6,9 +6,9 @@ const {
   resolveDatabaseMutationMode
 } = require('../config/staging-database-mutation-guard');
 const {
-  classifyRemoteOperationFailure,
   remoteOperationStatus
 } = require('../config/staging-remote-operation-status');
+const { classifyRemoteFailure } = require('../config/staging-remote-failure');
 const { buildRemoteStagingDatabaseOptions } = require('../config/staging-remote-database-options');
 const { formatLocalDateTime } = require('../utils/local-datetime');
 const {
@@ -4167,6 +4167,9 @@ async function main() {
       console.log(`Migracion aplicada: ${file}`);
     }
 
+    phase = 'CLOSE';
+    await connection.end();
+    connection = null;
     console.log('Migraciones completadas. No se cargaron datos de demostracion.');
     if (mode.type === 'remote-staging') {
       console.log(remoteOperationStatus('MIGRATE', { passed: true }));
@@ -4175,15 +4178,14 @@ async function main() {
     if (remoteRequested) {
       console.log(remoteOperationStatus('MIGRATE', {
         passed: false,
-        phase,
-        cause: classifyRemoteOperationFailure(error, phase)
+        ...classifyRemoteFailure(error, phase)
       }));
       process.exitCode = 1;
       return;
     }
     throw error;
   } finally {
-    if (connection) await connection.end();
+    if (connection) connection.destroy();
   }
 }
 
