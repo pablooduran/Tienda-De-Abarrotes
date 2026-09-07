@@ -6,7 +6,7 @@ const {
   resolveRemoteStagingDiagnosticMode
 } = require('../config/staging-database-mutation-guard');
 const { buildRemoteStagingDatabaseOptions } = require('../config/staging-remote-database-options');
-const { classifyRemoteFailure, sanitizeRemoteFailure } = require('../config/staging-remote-failure');
+const { classifyRemoteFailure } = require('../config/staging-remote-failure');
 
 const DIAGNOSTIC_PHASES = Object.freeze({
   AUTHORIZATION: 'AUTHORIZATION',
@@ -30,14 +30,19 @@ function classifyDiagnosticFailure(error, phase = DIAGNOSTIC_PHASES.READ) {
   return classifyRemoteFailure(error, phase).cause;
 }
 
-function writeDiagnostic(category, phase, cause, reason) {
+function normalizedDiagnosticCause(cause) {
+  return Object.values(DIAGNOSTIC_CAUSES).includes(cause)
+    ? cause
+    : DIAGNOSTIC_CAUSES.UNKNOWN_SAFE_FAILURE;
+}
+
+function writeDiagnostic(category, cause) {
   const allowed = new Set(Object.values(STAGING_DATABASE_DIAGNOSTICS));
   const result = allowed.has(category)
     ? category
     : STAGING_DATABASE_DIAGNOSTICS.CONNECTION_OR_CONFIGURATION_FAILURE;
   if (result === STAGING_DATABASE_DIAGNOSTICS.CONNECTION_OR_CONFIGURATION_FAILURE) {
-    const safe = sanitizeRemoteFailure({ phase, cause, reason });
-    console.log(`STAGING_REMOTE_DIAGNOSTIC: ${result} ${safe.phase} ${safe.cause} ${safe.reason}`);
+    console.log(`STAGING_REMOTE_DIAGNOSTIC: ${result} ${normalizedDiagnosticCause(cause)}`);
     return;
   }
   console.log(`STAGING_REMOTE_DIAGNOSTIC: ${result}`);
@@ -64,11 +69,11 @@ async function runDiagnostic({
     phase = DIAGNOSTIC_PHASES.CLOSE;
     await connection.end();
     connection = null;
-    return { category, phase: null, cause: null };
+    return { category, cause: null };
   } catch (error) {
     return {
       category: STAGING_DATABASE_DIAGNOSTICS.CONNECTION_OR_CONFIGURATION_FAILURE,
-      ...classifyRemoteFailure(error, phase)
+      cause: classifyDiagnosticFailure(error, phase)
     };
   } finally {
     if (connection) connection.destroy();
@@ -77,7 +82,7 @@ async function runDiagnostic({
 
 async function main() {
   const result = await runDiagnostic();
-  writeDiagnostic(result.category, result.phase, result.cause, result.reason);
+  writeDiagnostic(result.category, result.cause);
   if (result.category !== STAGING_DATABASE_DIAGNOSTICS.EMPTY) process.exitCode = 1;
 }
 
@@ -87,6 +92,7 @@ module.exports = {
   DIAGNOSTIC_CAUSES,
   DIAGNOSTIC_PHASES,
   classifyDiagnosticFailure,
+  normalizedDiagnosticCause,
   runDiagnostic,
   writeDiagnostic
 };

@@ -37,6 +37,8 @@ function main() {
     < source.indexOf("Invoke-RemoteStagingCommand -NpmScript 'db:init'"),
   'El preflight debe ejecutarse antes de db:init.');
   assert.match(source, /staging-remote-status-contract\.json/);
+  assert.match(source, /\$DiagnosticFailurePattern/);
+  assert.match(source, /CONNECTION_OR_CONFIGURATION_FAILURE PREREQUISITE_LOCAL/);
   assert.match(source, /Invoke-RemoteStagingDiagnostic -ExitCode \(\[ref\]\$diagnosticExitCode\)/);
   assert.match(source, /CHILD_PROTOCOL_INVALID/);
   assert.match(source, /CHILD_EXIT_INCONSISTENT/);

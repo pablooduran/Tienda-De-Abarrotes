@@ -64,7 +64,7 @@ se realiza desde un PC Windows autorizado con
 `scripts/initialize-staging-remote.ps1`, no desde Shell ni One-Off Jobs de
 Render. Antes de toda mutacion, ejecutar su modo `-Diagnose`: solo consulta y
 devuelve `EMPTY`, `BASELINE_INITIAL`, `PARTIAL_OR_UNEXPECTED` o
-`CONNECTION_OR_CONFIGURATION_FAILURE <FASE> <CAUSE_CODE> <REASON_CODE>`. Solo `EMPTY` permite solicitar una nueva
+`CONNECTION_OR_CONFIGURATION_FAILURE <CAUSE_CODE>`. Solo `EMPTY` permite solicitar una nueva
 autorizacion para inicializar; cualquier otro resultado exige detenerse y
 reportar, sin reintento ni remedio improvisado. Los codigos sanitizados posibles
 son `PREREQUISITE_LOCAL`, `TLS_CA`, `AUTHENTICATION`,
@@ -73,10 +73,10 @@ son `PREREQUISITE_LOCAL`, `TLS_CA`, `AUTHENTICATION`,
 `0`; los demas resultados terminan con `1`. El lanzador solicita la
 contrasena de forma oculta, lee la CA temporal privada proporcionada por Aiven y
 restaura las variables sensibles del proceso al finalizar; los comandos
-operativos son los documentados en `CONFIGURACION_STAGING.md`. Las fases
-sanitizadas son `AUTHORIZATION`, `CONFIGURATION`, `CONNECTION`, `READ`, `CLOSE`
-y `LAUNCHER`; diagnostico, preflight, inicializacion y migracion comparten el
-constructor de opciones TLS MySQL. Los flags remotos no cargan archivos `.env`:
+operativos son los documentados en `CONFIGURACION_STAGING.md`. El diagnostico
+no muestra fase, codigo tecnico ni error crudo; preflight, inicializacion y
+migracion conservan su contrato sanitizado detallado. Los cuatro comandos
+comparten el constructor de opciones TLS MySQL. Los flags remotos no cargan archivos `.env`:
 solo usan el contexto efimero explicito. No guardar
 secretos, CA ni valores de conexion en PowerShell, Git, chat o archivos del
 repositorio. En una base existente se debe leer primero `schema_migrations`,

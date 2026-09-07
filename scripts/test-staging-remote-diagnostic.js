@@ -14,6 +14,7 @@ const {
   DIAGNOSTIC_CAUSES,
   DIAGNOSTIC_PHASES,
   classifyDiagnosticFailure,
+  normalizedDiagnosticCause,
   runDiagnostic
 } = require('./diagnose-staging-remote');
 
@@ -90,6 +91,8 @@ async function main() {
   assert.strictEqual(classifyDiagnosticFailure(new Error('configuracion invalida'), DIAGNOSTIC_PHASES.CONFIGURATION), DIAGNOSTIC_CAUSES.PREREQUISITE_LOCAL);
   assert.strictEqual(classifyDiagnosticFailure({ cause: { code: 'ER_SSL_CONNECTION_ERROR' } }, DIAGNOSTIC_PHASES.CONNECTION), DIAGNOSTIC_CAUSES.TLS_CA);
   assert.strictEqual(classifyDiagnosticFailure({ cause: { code: 'ER_HOST_NOT_PRIVILEGED' } }, DIAGNOSTIC_PHASES.CONNECTION), DIAGNOSTIC_CAUSES.DATABASE_NOT_FOUND_OR_PERMISSION);
+  assert.strictEqual(normalizedDiagnosticCause('AUTHENTICATION'), DIAGNOSTIC_CAUSES.AUTHENTICATION);
+  assert.strictEqual(normalizedDiagnosticCause('UNLISTED_CAUSE'), DIAGNOSTIC_CAUSES.UNKNOWN_SAFE_FAILURE);
 
   const canonicalOptions = { database: INITIAL_STAGING_DATABASE };
   const connectionFailure = await runDiagnostic({
@@ -105,9 +108,7 @@ async function main() {
   });
   assert.deepStrictEqual(connectionFailure, {
     category: STAGING_DATABASE_DIAGNOSTICS.CONNECTION_OR_CONFIGURATION_FAILURE,
-    phase: DIAGNOSTIC_PHASES.CONNECTION,
-    cause: DIAGNOSTIC_CAUSES.NETWORK_TIMEOUT_OR_ALLOWLIST,
-    reason: 'ETIMEDOUT'
+    cause: DIAGNOSTIC_CAUSES.NETWORK_TIMEOUT_OR_ALLOWLIST
   });
 
   const sentinelHost = 'mysql-do-not-connect.staging.invalid';
@@ -120,7 +121,8 @@ async function main() {
   });
   const output = `${result.stdout || ''}\n${result.stderr || ''}`;
   assert.notStrictEqual(result.status, 0, 'La configuracion invalida debe detener el diagnostico antes de conectar.');
-  assert.match(output, /^STAGING_REMOTE_DIAGNOSTIC: CONNECTION_OR_CONFIGURATION_FAILURE AUTHORIZATION PREREQUISITE_LOCAL PRECONDITION_REJECTED$/m);
+  assert.match(output, /^STAGING_REMOTE_DIAGNOSTIC: CONNECTION_OR_CONFIGURATION_FAILURE PREREQUISITE_LOCAL$/m);
+  assert(!/AUTHORIZATION|PRECONDITION_REJECTED/.test(output), 'La salida no debe exponer fase ni razon tecnica.');
   assert(!output.includes(sentinelHost), 'El diagnostico no debe exponer el host remoto.');
   assert(!/SELECT|TABLE_NAME|schema_migrations/i.test(output), 'El diagnostico no debe exponer SQL ni estructura.');
 
