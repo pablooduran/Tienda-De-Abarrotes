@@ -58,6 +58,10 @@ async function startFixture({ production = false, limits = {}, trustProxy = fals
   app.use(securityHeaders({ production }));
   app.use(permissionsPolicy);
   app.use(noStoreSensitiveResponses);
+  app.head('/health/live', rateLimiters.health, (req, res) => res.status(200).end());
+  app.get('/health/live', rateLimiters.health, (req, res) => res.json({ status: 'healthy' }));
+  app.head('/health/ready', rateLimiters.health, (req, res) => res.status(200).end());
+  app.get('/health/ready', rateLimiters.health, (req, res) => res.json({ status: 'healthy' }));
   app.use(express.json());
   app.use(mutationProtection([TRUSTED_ORIGIN]));
 
@@ -326,6 +330,32 @@ async function testIpAndSpecificLimits() {
     });
     check('Render rechaza CF-Connecting-IP ausente', missing.status === 400 && missing.body.code === 'CLIENT_IP_UNAVAILABLE');
     check('Render rechaza CF-Connecting-IP malformado', malformed.status === 400 && malformed.body.code === 'CLIENT_IP_UNAVAILABLE');
+  });
+
+  await withFixture({ limits: { healthMax: 4 }, renderClientIp: true }, async (fixture) => {
+    const live = await request(fixture, '/health/live');
+    const liveHead = await request(fixture, '/health/live', { method: 'HEAD' });
+    const ready = await request(fixture, '/health/ready');
+    const readyHead = await request(fixture, '/health/ready', { method: 'HEAD' });
+    const limited = await request(fixture, '/health/live');
+    const malformed = await request(fixture, '/health/live', {
+      headers: { 'CF-Connecting-IP': '198.51.100.24, 198.51.100.25' }
+    });
+    const commercial = await request(fixture, '/api/read');
+    const nonExactHealth = await request(fixture, '/health/other');
+    const mutation = await request(fixture, '/health/live', { method: 'POST' });
+    check('Render permite health interno exacto sin CF-Connecting-IP', live.status === 200
+      && liveHead.status === 200 && ready.status === 200 && readyHead.status === 200);
+    check('Health interno de Render conserva rate limit', limited.status === 429
+      && limited.body.code === 'HEALTH_RATE_LIMIT_EXCEEDED');
+    check('Render rechaza header malformado incluso en health', malformed.status === 400
+      && malformed.body.code === 'CLIENT_IP_UNAVAILABLE');
+    check('Render conserva proteccion de ruta comercial', commercial.status === 400
+      && commercial.body.code === 'CLIENT_IP_UNAVAILABLE');
+    check('Render exige ruta health exacta', nonExactHealth.status === 400
+      && nonExactHealth.body.code === 'CLIENT_IP_UNAVAILABLE');
+    check('Render exige metodo health de lectura', mutation.status === 400
+      && mutation.body.code === 'CLIENT_IP_UNAVAILABLE');
   });
 
   await withFixture({ limits: { apiMax: 2 } }, async (fixture) => {

@@ -156,6 +156,12 @@ migracion 025 inexistente ni editar una migracion aplicada.
 storage privado cuando el entorno es hospedado. Las respuestas son `no-store` y
 no muestran host, puertos, SQL, secretos ni rutas.
 
+En `TRUST_PROXY_MODE=render-cloudflare`, el monitor interno de Render puede
+consultar exclusivamente esas dos rutas sin `CF-Connecting-IP`. La excepcion
+solo cubre `GET|HEAD`, exige coincidencia exacta de ruta y conserva un bucket
+fijo del rate limit de health. Una cabecera presente pero invalida, cualquier
+otro metodo o cualquier otra ruta siguen fallando cerrados.
+
 Despues de un despliegue autorizado, validar en este orden:
 
 1. liveness 200 y readiness saludable;

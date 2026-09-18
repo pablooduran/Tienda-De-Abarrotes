@@ -470,13 +470,16 @@ Este modo requiere que `TRUST_PROXY_CIDRS` este ausente; Express conserva
 `CF-Connecting-IP` antes de los rate limits. Ignora expresamente
 `X-Forwarded-For`, `X-Real-IP` y encabezados equivalentes.
 
-Una cabecera ausente, multiple o con una IP invalida produce un rechazo
-controlado `400 CLIENT_IP_UNAVAILABLE`; no hay fallback a la IP de socket ni a
-otros encabezados. El modo no es valido en local, CI o production. Production
-y cualquier otro proveedor conservan `TRUST_PROXY_MODE=cidr` y CIDR directos
-verificados. Esta excepcion depende de la garantia documentada de Render sobre
-la sobrescritura del encabezado; no autoriza usar el encabezado fuera de esa
-topologia.
+Una cabecera multiple o con una IP invalida produce un rechazo controlado
+`400 CLIENT_IP_UNAVAILABLE`; no hay fallback a la IP de socket ni a otros
+encabezados. La ausencia de la cabecera solo se admite para el monitor interno
+de Render en `GET|HEAD /health/live` y `GET|HEAD /health/ready`: las rutas deben
+coincidir exactamente y comparten un bucket fijo del rate limit de health. En
+cualquier otra ruta o metodo, la cabecera ausente tambien se rechaza. El modo
+no es valido en local, CI o production. Production y cualquier otro proveedor
+conservan `TRUST_PROXY_MODE=cidr` y CIDR directos verificados. Esta excepcion
+depende de la garantia documentada de Render sobre la sobrescritura del
+encabezado; no autoriza usarlo fuera de esa topologia.
 
 ## Rate limits distribuidos
 

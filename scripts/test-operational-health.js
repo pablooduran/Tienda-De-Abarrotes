@@ -6,6 +6,7 @@ const express = require('express');
 const { buildDatabaseOptions } = require('../config/database-options');
 const { createErrorHandler } = require('../middleware/error-handler');
 const { createRateLimiters } = require('../middleware/rate-limiters');
+const { createRenderClientIpMiddleware } = require('../middleware/render-client-ip');
 const { requestContext } = require('../middleware/request-context');
 const { noStoreSensitiveResponses } = require('../middleware/request-security');
 const { createHealthRouter } = require('../routes/health');
@@ -88,10 +89,15 @@ function rateConfig(healthMax = 100) {
   };
 }
 
-async function startFixture(healthService, { healthMax = 100, logger = loggerCapture() } = {}) {
+async function startFixture(healthService, {
+  healthMax = 100,
+  logger = loggerCapture(),
+  renderClientIp = false
+} = {}) {
   const app = express();
   const limiters = createRateLimiters(rateConfig(healthMax));
   app.use(requestContext(logger));
+  app.use(createRenderClientIpMiddleware({ enabled: renderClientIp }));
   app.use(noStoreSensitiveResponses);
   app.use('/health', limiters.health, createHealthRouter({ healthService, logger }));
   app.use(createErrorHandler({ logger, production: true }));
@@ -245,6 +251,38 @@ async function testHttpContractsAndRateLimit() {
     assert.match(readyHead.headers.get('cache-control') || '', /no-store/);
   } finally {
     await fixture.close();
+  }
+
+  const dependencyCalls = { rateLimitStore: 0, privateStorage: 0 };
+  const hostedPool = healthyPool();
+  const hostedFixture = await startFixture(service(hostedPool, {
+    dependencyChecks: [
+      {
+        name: 'rateLimitStore',
+        check: async () => { dependencyCalls.rateLimitStore += 1; }
+      },
+      {
+        name: 'privateStorage',
+        check: async () => { dependencyCalls.privateStorage += 1; }
+      }
+    ]
+  }), { renderClientIp: true });
+  try {
+    const response = await fetch(`${hostedFixture.baseUrl}/health/ready`);
+    const responseBody = await body(response);
+    assert.strictEqual(response.status, 200);
+    assert.deepStrictEqual(responseBody.checks, {
+      database: 'ok',
+      migrations: 'ok',
+      rateLimitStore: 'ok',
+      privateStorage: 'ok'
+    });
+    assert.strictEqual(hostedPool.queries.length, 2,
+      'Readiness de Render debe comprobar MySQL y migraciones.');
+    assert.deepStrictEqual(dependencyCalls, { rateLimitStore: 1, privateStorage: 1 },
+      'Readiness de Render debe comprobar Valkey y storage configurado.');
+  } finally {
+    await hostedFixture.close();
   }
 
   const failedLogger = loggerCapture();

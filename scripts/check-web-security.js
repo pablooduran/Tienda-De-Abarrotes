@@ -11,6 +11,7 @@ const files = {
   headers: read('middleware/security-headers.js'),
   requestSecurity: read('middleware/request-security.js'),
   rateLimits: read('middleware/rate-limiters.js'),
+  renderClientIp: read('middleware/render-client-ip.js'),
   requestContext: read('middleware/request-context.js'),
   errorHandler: read('middleware/error-handler.js'),
   logger: read('utils/security-logger.js'),
@@ -133,6 +134,10 @@ check('rateLimitComprobantesDedicado', files.server.includes('rateLimiters.recei
   && files.rateLimits.includes("identifier: 'payment-receipt-upload'")
   && files.webConfig.includes('RECEIPT_UPLOAD_RATE_LIMIT_MAX'));
 check('rateLimitHealth', files.server.includes("app.use('/health', rateLimiters.health"));
+check('healthRenderInternoLimitado', files.renderClientIp.includes("new Set(['/health/live', '/health/ready'])")
+  && files.renderClientIp.includes("req.method === 'GET' || req.method === 'HEAD'")
+  && files.rateLimits.includes("if (isRenderInternalHealthCheck(req)) return 'render-internal-health'")
+  && files.rateLimits.includes('keyGenerator: healthClientIpKey'));
 check('healthInternoProtegido', files.server.includes(
   "app.use('/api/admin/health', requireAuth, requireRole('superadmin'), adminHealthRoutes)"
 ));

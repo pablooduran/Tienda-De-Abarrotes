@@ -1,5 +1,6 @@
 const crypto = require('crypto');
 const { ipKeyGenerator, rateLimit } = require('express-rate-limit');
+const { isRenderInternalHealthCheck } = require('./render-client-ip');
 
 function disabledLimiter(req, res, next) {
   next();
@@ -7,6 +8,11 @@ function disabledLimiter(req, res, next) {
 
 function clientIpKey(req) {
   return ipKeyGenerator(req.clientIp || req.ip || req.socket?.remoteAddress || 'ip-ausente');
+}
+
+function healthClientIpKey(req) {
+  if (isRenderInternalHealthCheck(req)) return 'render-internal-health';
+  return clientIpKey(req);
 }
 
 function normalizedUsername(req) {
@@ -116,7 +122,8 @@ function createRateLimiters(config, { onLoginLimited = null, storeFactory = null
     }),
     health: limiter(config, {
       identifier: 'health-public', limit: config.healthMax,
-      code: 'HEALTH_RATE_LIMIT_EXCEEDED', message: commonMessage, store: store('health-public')
+      code: 'HEALTH_RATE_LIMIT_EXCEEDED', message: commonMessage,
+      keyGenerator: healthClientIpKey, store: store('health-public')
     }),
     loginIp: limiter(config, {
       identifier: 'login-ip', limit: config.loginIpMax,
@@ -175,6 +182,7 @@ function createRateLimiters(config, { onLoginLimited = null, storeFactory = null
 module.exports = {
   createRateLimiters,
   clientIpKey,
+  healthClientIpKey,
   identityKey,
   normalizedRegistrationIdentity,
   normalizedUsername,
