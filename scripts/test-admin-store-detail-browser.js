@@ -10,6 +10,11 @@ const store = {
   estado: 'activa', planNombre: 'Basic', estadoSuscripcionEfectivo: 'activa',
   cantidadPropietarios: 0, cantidadProductos: 0, cantidadClientes: 0
 };
+const suspendedStore = {
+  idTienda: 2, nombre: 'Mercado sintético', slug: 'mercado-sintetico', activo: 0,
+  estado: 'suspendida', planNombre: 'Standard', estadoSuscripcionEfectivo: 'vencida',
+  cantidadPropietarios: 0, cantidadProductos: 0, cantidadClientes: 0
+};
 
 function browserPath() {
   const candidates = [process.env.BROWSER_EXECUTABLE_PATH,
@@ -30,7 +35,7 @@ function fixture() {
     const pathname = new URL(request.url, 'http://127.0.0.1').pathname;
     if (pathname === '/auth/status') return json(response, { authenticated: true, admin: { rol: 'superadmin', usuario: 'admin_sintetico' } });
     if (pathname === '/api/admin/planes') return json(response, []);
-    if (pathname === '/api/admin/tiendas') return json(response, [store]);
+    if (pathname === '/api/admin/tiendas') return json(response, [store, suspendedStore]);
     if (pathname === '/api/admin/tiendas/1') return json(response, store);
     if (pathname === '/api/admin/tiendas/1/propietarios') return json(response, []);
     if (pathname === '/api/admin/tiendas/1/suscripciones') return json(response, []);
@@ -55,8 +60,9 @@ async function verify(browser, baseUrl, width) {
   page.on('console', (message) => { if (message.type() === 'error') errors.push(message.text()); });
   try {
     await page.goto(`${baseUrl}/admin.html#tiendas`);
-    const detailButton = page.locator('#storesTableBody .table-action');
+    const detailButton = page.locator('#storesTableBody .table-action').first();
     await detailButton.waitFor();
+    assert.strictEqual(await page.locator('#storesTableBody tr').count(), 2);
     const before = await page.locator('.admin-main').evaluate((node) => node.scrollTop);
     await detailButton.click();
     await page.locator('#storeDetail[open]').waitFor();
@@ -71,6 +77,27 @@ async function verify(browser, baseUrl, width) {
     await detailButton.click();
     await page.locator('#closeStoreDetail').click();
     assert.strictEqual(await page.locator('#storeDetail').evaluate((node) => node.open), false);
+    const filterButton = page.locator('#openStoreFilters');
+    await filterButton.click();
+    await page.locator('#storeFilterDialog[open]').waitFor();
+    assert.strictEqual(await page.locator('#storeFilterDialog').evaluate((node) => node.matches(':modal')), true);
+    await page.locator('#storeFilters select[name="estado"]').selectOption('suspendida');
+    await page.keyboard.press('Escape');
+    await page.waitForFunction(() => document.querySelector('#storeFilters select[name="estado"]').value === '');
+    assert.strictEqual(await page.locator('#storesTableBody tr').count(), 2, 'Cerrar no debe aplicar filtros.');
+    assert.strictEqual(await filterButton.evaluate((node) => document.activeElement === node), true);
+    await filterButton.click();
+    await page.locator('#storeFilters select[name="estado"]').selectOption('suspendida');
+    await page.locator('#storeFilters select[name="suscripcion"]').selectOption('vencida');
+    await page.locator('#storeFilters button[type="submit"]').click();
+    await page.waitForFunction(() => document.activeElement?.id === 'openStoreFilters');
+    assert.strictEqual(await filterButton.textContent(), 'Filtros (2)');
+    assert.strictEqual(await page.locator('#storesTableBody tr').count(), 1);
+    assert.match(await page.locator('#storesTableBody').textContent(), /Mercado sintético/);
+    await page.locator('#storeSearch').fill('tienda');
+    assert.strictEqual(await page.locator('#storesTableBody tr').count(), 0, 'La búsqueda visible debe combinarse con los filtros.');
+    await page.locator('#storeSearch').fill('');
+    assert.strictEqual(await page.locator('#storesTableBody tr').count(), 1);
     await page.locator('.admin-sidebar a[href="#catalogo"]').click();
     assert.strictEqual(await page.locator('#catalogo').isVisible(), true);
     assert.strictEqual(await page.locator('#tiendas').isVisible(), false);
@@ -88,6 +115,7 @@ async function main() {
   try {
     const baseUrl = `http://127.0.0.1:${server.address().port}`;
     await verify(browser, baseUrl, 360);
+    await verify(browser, baseUrl, 768);
     await verify(browser, baseUrl, 1366);
     console.log('test:admin-store-detail-browser OK');
   } finally {

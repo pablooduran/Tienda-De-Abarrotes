@@ -181,11 +181,25 @@
             <h2 id="storesHeading">Directorio de tiendas</h2>
             <p>Selecciona una tienda para revisar su estado y propietarios.</p>
           </div>
-          <label class="search-field">
-            <span>Buscar</span>
-            <input id="storeSearch" type="search" placeholder="Nombre o slug" autocomplete="off">
-          </label>
+          <div class="button-row">
+            <label class="search-field">
+              <span>Buscar</span>
+              <input id="storeSearch" type="search" placeholder="Nombre o slug" autocomplete="off">
+            </label>
+            <button id="openStoreFilters" class="button button-secondary" type="button">Filtros</button>
+          </div>
         </div>
+
+        <dialog id="storeFilterDialog" class="admin-filter-dialog" aria-labelledby="storeFilterTitle">
+          <div class="section-heading"><div><p class="eyebrow">Directorio de tiendas</p><h3 id="storeFilterTitle">Filtrar resultados</h3></div><button id="closeStoreFilters" class="button button-quiet" type="button">Cerrar</button></div>
+          <form id="storeFilters">
+            <div class="saas-filter-grid">
+              <label class="search-field"><span>Estado de tienda</span><select name="estado"><option value="">Todos</option><option value="activa">Activa</option><option value="suspendida">Suspendida</option><option value="inactiva">Inactiva</option></select></label>
+              <label class="search-field"><span>Suscripción</span><select name="suscripcion"><option value="">Todas</option><option value="activa">Activa</option><option value="pendiente">Pendiente</option><option value="vencida">Vencida</option><option value="suspendida">Suspendida</option><option value="cancelada">Cancelada</option><option value="sin_suscripcion">Sin suscripción</option></select></label>
+            </div>
+            <div class="admin-filter-actions"><button class="button button-primary" type="submit">Aplicar filtros</button></div>
+          </form>
+        </dialog>
 
         <div class="table-wrap">
           <table>
@@ -204,7 +218,7 @@
             </thead>
             <tbody id="storesTableBody"></tbody>
           </table>
-          <p id="emptyStores" class="empty-state" hidden>No hay tiendas que coincidan con la búsqueda.</p>
+          <p id="emptyStores" class="empty-state" hidden>No hay tiendas que coincidan con la búsqueda o los filtros.</p>
         </div>
       </section>
 

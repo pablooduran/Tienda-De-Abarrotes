@@ -1,5 +1,6 @@
 const state = {
   stores: [],
+  storeFilters: { estado: '', suscripcion: '' },
   selectedStore: null,
   owners: [],
   subscriptions: [],
@@ -23,6 +24,9 @@ const elements = {
   inactiveStoreCount: document.getElementById('inactiveStoreCount'),
   ownerCount: document.getElementById('ownerCount'),
   storeSearch: document.getElementById('storeSearch'),
+  storeFilterButton: document.getElementById('openStoreFilters'),
+  storeFilterDialog: document.getElementById('storeFilterDialog'),
+  storeFilterForm: document.getElementById('storeFilters'),
   storesTableBody: document.getElementById('storesTableBody'),
   emptyStores: document.getElementById('emptyStores'),
   storeDetail: document.getElementById('storeDetail'),
@@ -187,8 +191,11 @@ function tableCell(content, className = '') {
 function renderStores() {
   const search = elements.storeSearch.value.trim().toLocaleLowerCase('es');
   const stores = state.stores.filter((store) => (
-    store.nombre.toLocaleLowerCase('es').includes(search)
-      || store.slug.toLocaleLowerCase('es').includes(search)
+    (store.nombre.toLocaleLowerCase('es').includes(search)
+      || store.slug.toLocaleLowerCase('es').includes(search))
+    && (!state.storeFilters.estado || store.estado === state.storeFilters.estado)
+    && (!state.storeFilters.suscripcion
+      || (store.estadoSuscripcionEfectivo || 'sin_suscripcion') === state.storeFilters.suscripcion)
   ));
   elements.storesTableBody.replaceChildren();
   elements.emptyStores.hidden = stores.length > 0;
@@ -1007,6 +1014,29 @@ document.querySelectorAll('[data-close-dialog]').forEach((button) => {
   button.addEventListener('click', () => elements.formDialog.close());
 });
 elements.storeSearch.addEventListener('input', renderStores);
+elements.storeFilterButton.addEventListener('click', () => {
+  elements.storeFilterDialog.showModal();
+  elements.storeFilterForm.elements.estado.focus();
+});
+document.getElementById('closeStoreFilters').addEventListener('click', () => elements.storeFilterDialog.close());
+elements.storeFilterDialog.addEventListener('close', () => {
+  elements.storeFilterForm.elements.estado.value = state.storeFilters.estado;
+  elements.storeFilterForm.elements.suscripcion.value = state.storeFilters.suscripcion;
+  const target = document.querySelector('.admin-main')?.dataset.activeView === 'tiendas'
+    ? elements.storeFilterButton : document.querySelector('.admin-sidebar .nav-link.active');
+  target?.focus();
+});
+elements.storeFilterForm.addEventListener('submit', (event) => {
+  event.preventDefault();
+  state.storeFilters = {
+    estado: elements.storeFilterForm.elements.estado.value,
+    suscripcion: elements.storeFilterForm.elements.suscripcion.value
+  };
+  const count = Number(Boolean(state.storeFilters.estado)) + Number(Boolean(state.storeFilters.suscripcion));
+  elements.storeFilterButton.textContent = count ? `Filtros (${count})` : 'Filtros';
+  renderStores();
+  elements.storeFilterDialog.close();
+});
 document.getElementById('createStoreButton').addEventListener('click', createStore);
 document.getElementById('editStoreButton').addEventListener('click', editStore);
 document.getElementById('manageSubscriptionButton').addEventListener('click', manageSubscription);
@@ -1045,6 +1075,7 @@ function loadAuditView() {
 }
 window.addEventListener('admin:viewchange', (event) => {
   if (event.detail !== 'tiendas' && elements.storeDetail.open) elements.storeDetail.close();
+  if (event.detail !== 'tiendas' && elements.storeFilterDialog.open) elements.storeFilterDialog.close();
   if (event.detail === 'auditoria') loadAuditView();
 });
 if (window.location.hash === '#auditoria') loadAuditView();
