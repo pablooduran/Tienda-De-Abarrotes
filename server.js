@@ -197,6 +197,7 @@ app.use(session({
   secret: appSessionSecret,
   resave: false,
   saveUninitialized: false,
+  proxy: appDeploymentConfig.sessionProxy,
   cookie: {
     httpOnly: true,
     sameSite: 'lax',

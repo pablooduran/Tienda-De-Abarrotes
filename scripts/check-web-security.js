@@ -158,6 +158,8 @@ check('trustedOriginsObligatorioProduccion', files.webConfig.includes('En stagin
 check('sameSiteLax', /sameSite:\s*['"]lax['"]/.test(files.server));
 check('cookieHttpOnly', /httpOnly:\s*true/.test(files.server));
 check('cookieSecureProduccion', /secure:\s*appDeploymentConfig\.secureCookies/.test(files.server));
+check('cookieSecureRenderProxyLimitado', /proxy:\s*appDeploymentConfig\.sessionProxy/.test(files.server)
+  && files.deployment.includes("sessionProxy: proxy.mode === 'render-cloudflare'"));
 check('secretoSesionProduccionEndurecido', files.env.includes('SESSION_SECRET de staging/production debe ser largo, aleatorio')
   && files.env.includes('value.length < 48'));
 check('trustProxyExplicito', files.server.includes("app.set('trust proxy', appDeploymentConfig.trustProxy)")

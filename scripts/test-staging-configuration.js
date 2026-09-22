@@ -56,6 +56,7 @@ function testEnvironmentContracts() {
   assert.strictEqual(local.trustProxy, false);
   assert.strictEqual(local.rateLimitStore.type, 'memory');
   assert.strictEqual(local.secureCookies, false);
+  assert.strictEqual(local.sessionProxy, false);
 
   const ciEnvironment = baseEnvironment({ CI: 'true' });
   const ci = deploymentConfig(ciEnvironment);
@@ -67,6 +68,7 @@ function testEnvironmentContracts() {
     const hosted = deploymentConfig(hostedEnvironment(mode));
     assert.strictEqual(hosted.mode, mode);
     assert.strictEqual(hosted.secureCookies, true);
+    assert.strictEqual(hosted.sessionProxy, false);
     assert.deepStrictEqual(hosted.trustProxy, ['10.40.0.0/24']);
     assert.strictEqual(hosted.rateLimitStore.type, 'redis');
     assert.strictEqual(hosted.emailDeliveryMode, 'disabled');
@@ -81,6 +83,7 @@ function testEnvironmentContracts() {
   }));
   assert.strictEqual(renderStaging.proxyMode, 'render-cloudflare');
   assert.strictEqual(renderStaging.trustProxy, false);
+  assert.strictEqual(renderStaging.sessionProxy, true);
 
   const receiptDisabled = deploymentConfig(hostedEnvironment('staging', {
     PAYMENT_RECEIPT_MODE: 'disabled',

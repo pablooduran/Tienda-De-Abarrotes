@@ -165,6 +165,7 @@ function deploymentConfig(environment = process.env, {
       mode,
       hosted: false,
       secureCookies: false,
+      sessionProxy: false,
       trustProxy: proxy.trustProxy,
       proxyMode: proxy.mode,
       appBaseUrl: null,
@@ -213,6 +214,11 @@ function deploymentConfig(environment = process.env, {
     mode,
     hosted: true,
     secureCookies: true,
+    // Render terminates TLS before Node. In render-cloudflare mode we keep the
+    // global proxy trust disabled (client IP is handled separately), but let
+    // express-session recognise the forwarded HTTPS protocol to issue its
+    // Secure cookie.
+    sessionProxy: proxy.mode === 'render-cloudflare',
     trustProxy: proxy.trustProxy,
     proxyMode: proxy.mode,
     appBaseUrl,
