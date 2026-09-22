@@ -3,6 +3,7 @@
   if (!root || !global.SecurityHttp) return;
 
   const state = { page: 1, pages: 1, reference: null, loaded: false, processing: false };
+  let detailReturnFocus = null;
   const byId = (id) => document.getElementById(id);
   const elements = {
     link: byId('saasSubscriptionsLink'), filters: byId('saasSubscriptionFilters'),
@@ -164,7 +165,7 @@
     return controls;
   }
 
-  function renderDetail(data) {
+  function renderDetail(data, returnFocus) {
     state.reference = data.referencia;
     state.detailData = data;
     elements.detailTitle.textContent = data.tienda;
@@ -222,12 +223,20 @@
       elements.audit.appendChild(row);
     }
     elements.actions.replaceChildren(groupedActions(data));
-    elements.detail.hidden = false;
-    elements.detail.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    if (!elements.detail.open) {
+      detailReturnFocus = returnFocus;
+      elements.detail.hidden = false;
+      elements.detail.showModal();
+      document.body.classList.add('admin-detail-open');
+      byId('closeSaasDetail').focus();
+    }
   }
 
   async function loadDetail(reference) {
-    renderDetail(await request(`/api/admin/suscripciones/${encodeURIComponent(reference)}`));
+    const returnFocus = document.activeElement;
+    const data = await request(`/api/admin/suscripciones/${encodeURIComponent(reference)}`);
+    if (document.querySelector('.admin-main')?.dataset.activeView !== 'suscripciones-saas') return;
+    renderDetail(data, returnFocus);
   }
 
   function selectField(name, labelText, options) {
@@ -315,6 +324,18 @@
   elements.previous.addEventListener('click', () => { if (state.page > 1) { state.page -= 1; loadList(); } });
   elements.next.addEventListener('click', () => { if (state.page < state.pages) { state.page += 1; loadList(); } });
   byId('refreshSaasSubscriptions').addEventListener('click', () => loadList());
+  byId('closeSaasDetail').addEventListener('click', () => elements.detail.close());
+  elements.detail.addEventListener('close', () => {
+    elements.detail.hidden = true;
+    document.body.classList.remove('admin-detail-open');
+    const target = detailReturnFocus?.isConnected && detailReturnFocus.getClientRects().length
+      ? detailReturnFocus : elements.link;
+    target.focus();
+    detailReturnFocus = null;
+  });
+  global.addEventListener('admin:viewchange', (event) => {
+    if (event.detail !== 'suscripciones-saas' && elements.detail.open) elements.detail.close();
+  });
   byId('closeSaasAction').addEventListener('click', () => elements.dialog.close());
   byId('cancelSaasAction').addEventListener('click', () => elements.dialog.close());
   elements.link.addEventListener('click', () => { if (!state.loaded) loadList(); });

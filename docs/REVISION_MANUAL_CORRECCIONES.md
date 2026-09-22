@@ -9,7 +9,7 @@ equivale a una validación del entorno hospedado.
 | Fase | Estado comprobado | Trabajo que sigue |
 | --- | --- | --- |
 | 1. Integridad funcional P0 | Implementada localmente: lectura de configuración en solo lectura, planes públicos Basic/Standard/Pro con límites 1/500/25/15 y 3/1200/70/50, Avanzado legado oculto, pago mixto ocasional saldado, vencimiento original y promesa separados, suspensión consultable. Lotes tienen distribución inicial y FEFO/FIFO. Evidencia: `docs/CONTINUIDAD_PROYECTO.md`, servicios y pruebas de cada dominio. | Confirmar Configuración y reglas P0 con cuenta sintética en staging; decidir integración de lotes dentro de Compras. No crear migración 025. |
-| 2. Navegación y arquitectura | Acordeón exclusivo y vistas independientes de superadmin. Inicio/Clientes/Mi plan son accesos directos. Detalle de Tiendas abre en ventana con retorno de foco; las subnavegaciones repetidas de Ventas e Inventario se ocultan en escritorio y permanecen en móvil. | Revisar las otras pestañas internas duplicadas y el detalle de Suscripciones que desplaza la página. |
+| 2. Navegación y arquitectura | Acordeón exclusivo y vistas independientes de superadmin. Inicio/Clientes/Mi plan son accesos directos. Detalles de Tiendas y Suscripciones abren en ventana con retorno de foco; las subnavegaciones repetidas de Ventas e Inventario se ocultan en escritorio y permanecen en móvil. | Revisar otras pestañas internas duplicadas y el detalle de Pagos que aún desplaza la página. |
 | 3. Modales, filtros y acciones | Hay patrones compartidos y varios filtros compactos; no existe todavía una convención aplicada a todos los módulos enumerados. | Unificar Filtros → Aplicar → cerrar y detalles contextuales por módulo; conservar búsquedas principales de POS y Compras. |
 | 4. Acciones y lenguaje | Varias etiquetas fueron simplificadas en PRODUCTO-1; sigue habiendo lenguaje heredado y acciones repetidas. | Auditoría de texto y duplicaciones con lista concreta. Ocultar “Ya tengo un código de verificación” hasta solicitar o recibir un código. |
 | 5. POS, cobranza, compras y devoluciones | POS tiene cliente ocasional y búsqueda paginada; pago mixto saldado y promesas están implementados. | Validar recorrido hospedado sintético y simplificar acciones de compras, devolución y ficha cliente. |
@@ -23,7 +23,7 @@ equivale a una validación del entorno hospedado.
 
 ## Siguiente secuencia de bloques
 
-1. Cerrar pendientes de navegación: otras pestañas duplicadas y detalle de Suscripciones que hace perder contexto.
+1. Cerrar pendientes de navegación: otras pestañas duplicadas y detalle de Pagos que hace perder contexto.
 2. Unificar filtros y modales en las vistas de mayor uso.
 3. Pulir POS, cobranza, compras y devoluciones; luego catálogo e inventario avanzado.
 4. Rediseño visual y regresión hospedada sintética.

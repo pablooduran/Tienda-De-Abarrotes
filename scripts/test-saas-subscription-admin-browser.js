@@ -141,18 +141,43 @@ async function main() {
           .map((element) => `${element.closest('section')?.id || 'none'}:${element.tagName.toLowerCase()}#${element.id}.${element.className}`)
       }));
       assert.strictEqual(overflow.document, false, `Overflow en ${viewport.width} ${JSON.stringify(overflow.sizes)}: ${overflow.elements.join(', ')}`);
-      await page.locator('#saasSubscriptionsTableBody .table-action').click();
-      await page.locator('#saasSubscriptionDetail:not([hidden])').waitFor();
+      const detailButton = page.locator('#saasSubscriptionsTableBody .table-action');
+      await detailButton.evaluate((node) => node.addEventListener('click', () => {
+        window.__scrollAtDetailClick = document.querySelector('.admin-main').scrollTop;
+      }, { capture: true, once: true }));
+      await detailButton.click();
+      await page.locator('#saasSubscriptionDetail[open]').waitFor();
+      assert.strictEqual(await page.locator('#saasSubscriptionDetail').evaluate((node) => node.matches(':modal')), true);
+      assert.strictEqual(await page.locator('.admin-main').evaluate((node) => node.scrollTop),
+        await page.evaluate(() => window.__scrollAtDetailClick),
+        'Gestionar no debe desplazar la lista.');
+      assert.strictEqual(await page.evaluate(() => document.activeElement.id), 'closeSaasDetail');
       assert.strictEqual(await page.locator('.saas-limit-exceeded').isVisible(), true);
+      assert.strictEqual(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth + 1), true,
+        'El detalle no debe provocar desborde horizontal.');
+      await page.keyboard.press('Escape');
+      await page.locator('#saasSubscriptionDetail[open]').waitFor({ state: 'detached' });
+      assert.strictEqual(await detailButton.evaluate((node) => document.activeElement === node), true,
+        'El foco debe volver al boton Gestionar.');
+      await detailButton.click();
+      await page.locator('#closeSaasDetail').click();
+      assert.strictEqual(await page.locator('#saasSubscriptionDetail').evaluate((node) => node.open), false);
+      await detailButton.click();
+      await page.locator('#saasSubscriptionDetail[open]').waitFor();
       await page.keyboard.press('Tab');
-      const outline = await page.evaluate(() => getComputedStyle(document.activeElement).outlineStyle);
-      assert.notStrictEqual(outline, 'none');
+      const focused = await page.evaluate(() => ({
+        id: document.activeElement.id,
+        tag: document.activeElement.tagName,
+        outline: getComputedStyle(document.activeElement).outlineStyle
+      }));
+      assert.notStrictEqual(focused.outline, 'none', JSON.stringify(focused));
       assert.deepStrictEqual(errors, []);
       await page.close();
     }
     const page = await browser.newPage({ viewport: { width: 1366, height: 768 } });
     await page.goto(`${baseUrl}/admin.html#suscripciones-saas`);
     await page.locator('#saasSubscriptionsTableBody .table-action').click();
+    await page.locator('#saasSubscriptionDetail[open]').waitFor();
     await page.locator('#saasDetailActions .saas-more-actions summary').click();
     await page.locator('#saasDetailActions button', { hasText: 'Suspender' }).click();
     await page.locator('#saasSubscriptionActionDialog[open]').waitFor();
@@ -160,6 +185,9 @@ async function main() {
       page.waitForResponse((response) => response.url().endsWith('/suspender')),
       page.locator('#submitSaasAction').click()
     ]);
+    await page.locator('#saasSubscriptionActionDialog[open]').waitFor({ state: 'detached' });
+    assert.strictEqual(await page.locator('#saasSubscriptionDetail').evaluate((node) => node.open), true,
+      'Tras guardar, el detalle debe permanecer abierto.');
     assert.strictEqual(fixture.mutations.length, 1);
     assert.deepStrictEqual(fixture.mutations[0].body, { motivo: 'falta_pago' });
     assert(/^saas-admin:[0-9a-f-]{36}$/.test(fixture.mutations[0].key));

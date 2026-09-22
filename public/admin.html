@@ -146,10 +146,10 @@
           <button id="saasNextPage" class="button button-secondary" type="button">Siguiente</button>
         </div>
 
-        <section id="saasSubscriptionDetail" class="saas-detail" aria-labelledby="saasDetailTitle" hidden>
+        <dialog id="saasSubscriptionDetail" class="saas-detail" aria-labelledby="saasDetailTitle" hidden>
           <div class="section-heading detail-heading">
             <div><p class="eyebrow">Detalle de suscripcion</p><h3 id="saasDetailTitle"></h3><p id="saasDetailMessage"></p></div>
-            <div id="saasDetailActions" class="button-row"></div>
+            <div class="button-row"><button id="closeSaasDetail" class="button button-quiet" type="button">Cerrar detalle</button><div id="saasDetailActions" class="button-row"></div></div>
           </div>
           <div id="saasDetailFacts" class="detail-facts"></div>
           <div class="saas-detail-grid">
@@ -160,7 +160,7 @@
           <div id="saasHistory" class="saas-history"></div>
           <div class="owners-heading subscription-heading"><div><h3>Acciones administrativas</h3><p>Ultimas operaciones manuales auditadas.</p></div></div>
           <div id="saasAuditActions" class="saas-history"></div>
-        </section>
+        </dialog>
       </section>
 
       <section class="content-section" data-admin-view="tiendas" aria-labelledby="storesHeading">

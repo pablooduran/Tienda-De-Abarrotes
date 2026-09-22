@@ -150,7 +150,8 @@ button {
 .admin-main[data-active-view="tiendas"] > .summary-grid[data-admin-view="tiendas"] { display: grid; }
 .admin-main[data-active-view="tiendas"] > .page-header[data-admin-view="tiendas"] { display: flex; }
 body.admin-detail-open .admin-main { overflow: hidden; }
-#storeDetail[open] {
+#storeDetail[open],
+#saasSubscriptionDetail[open] {
   position: fixed;
   inset: 0;
   width: min(900px, calc(100vw - 28px));
@@ -160,7 +161,9 @@ body.admin-detail-open .admin-main { overflow: hidden; }
   overflow-y: auto;
   box-shadow: 0 24px 64px #102d3559;
 }
-#storeDetail::backdrop { background: #102d35b3; }
+#storeDetail::backdrop,
+#saasSubscriptionDetail::backdrop { background: #102d35b3; }
+#saasSubscriptionDetail[open] { margin-top: auto; border-top: 0; }
 
 .page-header,
 .section-heading,
@@ -1087,7 +1090,7 @@ textarea {
     padding: 24px 16px 48px;
     overflow: visible;
   }
-  #storeDetail[open] { padding: 16px; }
+  #storeDetail[open], #saasSubscriptionDetail[open] { padding: 16px; }
 
   .page-header,
   .section-heading,
