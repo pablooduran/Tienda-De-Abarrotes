@@ -246,6 +246,37 @@ async function main() {
       'Se ejecuto contenido dinamico del historial.');
     console.log('OK: navegacion e historial seguro.');
 
+    const filtersButton = page.locator('[data-compensation-open-filters]');
+    await filtersButton.click();
+    await page.locator('[data-compensation-filter-form] [name="cliente"]').fill('Cliente prueba');
+    await page.keyboard.press('Escape');
+    assert(await filtersButton.evaluate((node) => document.activeElement === node),
+      'El foco no regreso a Filtros.');
+    assert((await page.locator('[data-compensation-filter-count]').textContent()) === 'Sin filtros',
+      'Cerrar el filtro aplico cambios no confirmados.');
+    await filtersButton.click();
+    await page.locator('[data-compensation-filter-form] [name="cliente"]').fill('Cliente prueba');
+    const filteredResponse = page.waitForResponse((response) =>
+      response.url().includes('/api/compensaciones?')
+      && response.url().includes('cliente=Cliente+prueba'));
+    await page.locator('[data-compensation-filter-form] button[type="submit"]').click();
+    await filteredResponse;
+    assert((await page.locator('[data-compensation-filter-count]').textContent()) === '1 filtro activo',
+      'No se marco el filtro aplicado.');
+    await filtersButton.click();
+    await page.locator('[data-compensation-filter-clear]').click();
+    assert(await page.locator('[data-compensation-filter-form] [name="cliente"]').inputValue() === '',
+      'Limpiar no vacio el borrador.');
+    await page.locator('[data-modal-cancel]').click();
+    await filtersButton.click();
+    assert(await page.locator('[data-compensation-filter-form] [name="cliente"]').inputValue() === 'Cliente prueba',
+      'Cancelar descarto el filtro aplicado.');
+    await page.locator('[data-compensation-filter-clear]').click();
+    await page.locator('[data-compensation-filter-form] button[type="submit"]').click();
+    assert((await page.locator('[data-compensation-filter-count]').textContent()) === 'Sin filtros',
+      'Limpiar y aplicar no restauro el historial.');
+    console.log('OK: filtros aislados, Aplicar, Limpiar, Escape y foco.');
+
     const detailButton = page.locator('[data-operation-detail]').first();
     await detailButton.focus();
     await detailButton.click();
@@ -270,6 +301,8 @@ async function main() {
     console.log('OK: comprobante imprimible y XSS bloqueado.');
 
     await page.locator('[data-compensation-tab="ventas"]').click();
+    assert(await page.locator('[data-history-filters]').isHidden(),
+      'Los filtros del historial siguen visibles en Ventas.');
     await page.locator('[data-sale-search] input').fill('31');
     await page.locator('[data-sale-search]').press('Enter');
     await page.locator('[data-sale-return]').waitFor();
@@ -318,8 +351,11 @@ async function main() {
       { width: 1366, height: 768 }
     ]) {
       await page.setViewportSize(viewport);
+      await page.locator('[data-compensation-tab="historial"]').click();
+      await page.locator('[data-compensation-open-filters]').click();
       const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
       assert(overflow <= 2, `Overflow global en ${viewport.width}x${viewport.height}: ${overflow}px.`);
+      await page.keyboard.press('Escape');
     }
     console.log('OK: responsive 360x800, 768x1024 y 1366x768.');
 

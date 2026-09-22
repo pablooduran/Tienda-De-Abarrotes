@@ -1827,6 +1827,16 @@ summary:focus-visible { outline: 3px solid rgba(40, 106, 89, .45); outline-offse
   gap: 10px;
   align-items: end;
 }
+.compensation-filter-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+.compensation-filter-toolbar[hidden] { display: none; }
+.compensation-filter-toolbar span { color: var(--muted); }
+.compensation-filter-actions { grid-column: 1 / -1; }
+body:has([data-compensation-filter-form]) { overflow: hidden; }
 .compensation-summary { margin-bottom: 14px; }
 .compensation-summary .card span { color: var(--muted); }
 .compensation-table td small { display: block; margin-top: 4px; color: var(--muted); }

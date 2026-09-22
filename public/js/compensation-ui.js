@@ -42,6 +42,10 @@
     const badge = (value) =>
       `<span class="compensation-status status-${e(value || 'unknown')}">${e(label(value || 'sin estado'))}</span>`;
     const readOnly = () => Boolean(getState().context?.soloLectura);
+    const filterSummary = () => {
+      const count = Object.keys(ui.filters).length;
+      return count ? `${count} ${count === 1 ? 'filtro activo' : 'filtros activos'}` : 'Sin filtros';
+    };
 
     function closeModal(returnFocus = ui.returnFocus) {
       modalRoot.innerHTML = '';
@@ -654,6 +658,7 @@
       ui.request += 1;
       ui.tab = tab;
       ui.page = 1;
+      view.querySelector('[data-history-filters]').hidden = tab !== 'historial';
       view.querySelectorAll('[data-compensation-tab]').forEach((button) => {
         const active = button.dataset.compensationTab === tab;
         button.classList.toggle('active', active);
@@ -663,6 +668,36 @@
       if (tab === 'pendientes') return renderPending();
       if (tab === 'exportaciones') return renderExports();
       return renderHistory();
+    }
+
+    function openHistoryFilters(trigger) {
+      openDialog('Filtrar historial', `<form class="compensation-filters" data-compensation-filter-form>
+        <label>Desde<input name="fechaDesde" type="date" value="${e(ui.filters.fechaDesde || '')}"></label>
+        <label>Hasta<input name="fechaHasta" type="date" value="${e(ui.filters.fechaHasta || '')}"></label>
+        <label>Tipo<select name="tipo"><option value="">Todos</option>${ui.options.tipos.map((value) => option(value, label(value), ui.filters.tipo)).join('')}</select></label>
+        <label>Estado<select name="estado"><option value="">Todos</option>${ui.options.estados.map((value) => option(value, label(value), ui.filters.estado)).join('')}</select></label>
+        <label>Responsable<input name="usuario" value="${e(ui.filters.usuario || '')}" maxlength="80"></label>
+        <label>Cliente<input name="cliente" value="${e(ui.filters.cliente || '')}" maxlength="120"></label>
+        <label>Venta<input name="venta" type="number" min="1" value="${e(ui.filters.venta || '')}"></label>
+        <div class="modal-actions compensation-filter-actions">
+          <button type="button" class="secondary" data-compensation-filter-clear>Limpiar</button>
+          <button type="button" class="secondary" data-modal-cancel>Cancelar</button>
+          <button type="submit">Aplicar</button>
+        </div>
+      </form>`, trigger);
+      const form = modalRoot.querySelector('[data-compensation-filter-form]');
+      form.querySelector('[data-compensation-filter-clear]').addEventListener('click', () => {
+        form.querySelectorAll('input, select').forEach((control) => { control.value = ''; });
+        form.elements.fechaDesde.focus();
+      });
+      form.addEventListener('submit', (event) => {
+        event.preventDefault();
+        ui.filters = Object.fromEntries([...new FormData(form).entries()].filter(([, value]) => value !== ''));
+        ui.page = 1;
+        closeModal(trigger);
+        view.querySelector('[data-compensation-filter-count]').textContent = filterSummary();
+        renderHistory();
+      });
     }
 
     async function render() {
@@ -678,34 +713,13 @@
           .map(([value, text]) => `<button type="button" role="tab" data-compensation-tab="${value}"
             aria-selected="${ui.tab === value}" class="${ui.tab === value ? 'active' : ''}">${text}</button>`).join('')}
       </div>
-      <section class="panel compensation-filter-panel" ${ui.tab === 'historial' ? '' : 'hidden'} data-history-filters>
-        <form class="compensation-filters">
-          <label>Desde<input name="fechaDesde" type="date" value="${e(ui.filters.fechaDesde || '')}"></label>
-          <label>Hasta<input name="fechaHasta" type="date" value="${e(ui.filters.fechaHasta || '')}"></label>
-          <label>Tipo<select name="tipo"><option value="">Todos</option>${ui.options.tipos.map((value) => option(value, label(value), ui.filters.tipo)).join('')}</select></label>
-          <label>Estado<select name="estado"><option value="">Todos</option>${ui.options.estados.map((value) => option(value, label(value), ui.filters.estado)).join('')}</select></label>
-          <label>Responsable<input name="usuario" value="${e(ui.filters.usuario || '')}" maxlength="80"></label>
-          <label>Cliente<input name="cliente" value="${e(ui.filters.cliente || '')}" maxlength="120"></label>
-          <label>Venta<input name="venta" type="number" min="1" value="${e(ui.filters.venta || '')}"></label>
-          <div class="credit-filter-actions"><button type="submit">Aplicar</button><button type="reset" class="secondary">Limpiar</button></div>
-        </form>
-      </section>
+      <div class="compensation-filter-toolbar" data-history-filters>
+        <button type="button" class="secondary" data-compensation-open-filters>Filtros</button>
+        <span data-compensation-filter-count>${filterSummary()}</span>
+      </div>
       <div data-compensation-content aria-live="polite"></div>`;
       view.querySelectorAll('[data-compensation-tab]').forEach((button) => button.addEventListener('click', () => switchTab(button.dataset.compensationTab)));
-      const filterPanel = view.querySelector('[data-history-filters]');
-      filterPanel.querySelector('form').addEventListener('submit', (event) => {
-        event.preventDefault();
-        ui.filters = Object.fromEntries([...new FormData(event.currentTarget).entries()].filter(([, value]) => value !== ''));
-        ui.page = 1;
-        renderHistory();
-      });
-      filterPanel.querySelector('form').addEventListener('reset', () => {
-        setTimeout(() => {
-          ui.filters = {};
-          ui.page = 1;
-          renderHistory();
-        }, 0);
-      });
+      view.querySelector('[data-compensation-open-filters]').addEventListener('click', (event) => openHistoryFilters(event.currentTarget));
       await switchTab(ui.tab);
     }
 
