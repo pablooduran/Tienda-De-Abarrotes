@@ -2,11 +2,13 @@
   const root = document.getElementById('suscripciones-saas');
   if (!root || !global.SecurityHttp) return;
 
-  const state = { page: 1, pages: 1, reference: null, loaded: false, processing: false };
+  const state = { page: 1, pages: 1, reference: null, loaded: false, processing: false, filterApplying: false, appliedFilters: null };
   let detailReturnFocus = null;
   const byId = (id) => document.getElementById(id);
   const elements = {
     link: byId('saasSubscriptionsLink'), filters: byId('saasSubscriptionFilters'),
+    filterButton: byId('openSaasFilters'), filterDialog: byId('saasSubscriptionFilterDialog'),
+    filterError: byId('saasFilterError'),
     body: byId('saasSubscriptionsTableBody'), empty: byId('emptySaasSubscriptions'),
     previous: byId('saasPreviousPage'), next: byId('saasNextPage'), page: byId('saasPageLabel'),
     detail: byId('saasSubscriptionDetail'), detailTitle: byId('saasDetailTitle'),
@@ -57,14 +59,30 @@
     return span;
   }
 
-  function filters() {
+  function formFilters() {
     const data = new FormData(elements.filters);
-    const params = new URLSearchParams({ pagina: String(state.page), limite: '20' });
+    const params = new URLSearchParams();
     for (const [key, value] of data.entries()) if (String(value).trim()) params.set(key, String(value));
     if (elements.filters.elements.excedidos.checked) params.set('excedidos', 'true');
     if (elements.filters.elements.downgrade.checked) params.set('downgrade', 'true');
     return params;
   }
+
+  function filters() {
+    const params = new URLSearchParams({ pagina: String(state.page), limite: '20' });
+    for (const [key, value] of (state.appliedFilters || formFilters())) params.set(key, value);
+    return params;
+  }
+
+  function restoreFilterDraft() {
+    const applied = state.appliedFilters || formFilters();
+    for (const field of elements.filters.querySelectorAll('input, select')) {
+      if (field.type === 'checkbox') field.checked = applied.has(field.name);
+      else field.value = applied.get(field.name) || '';
+    }
+  }
+
+  state.appliedFilters = formFilters();
 
   function renderSummary(summary) {
     byId('saasTotalCount').textContent = summary.total;
@@ -317,10 +335,50 @@
     }
   });
 
-  elements.filters.addEventListener('submit', (event) => {
+  elements.filterButton.addEventListener('click', () => {
+    elements.filterError.hidden = true;
+    elements.filterDialog.showModal();
+    elements.filters.elements.texto.focus();
+  });
+  byId('closeSaasFilters').addEventListener('click', () => {
+    if (!state.filterApplying) elements.filterDialog.close();
+  });
+  elements.filterDialog.addEventListener('cancel', (event) => {
+    if (state.filterApplying) event.preventDefault();
+  });
+  elements.filterDialog.addEventListener('close', () => {
+    restoreFilterDraft();
+    const target = document.querySelector('.admin-main')?.dataset.activeView === 'suscripciones-saas'
+      ? elements.filterButton : document.querySelector('.admin-sidebar .nav-link.active');
+    target?.focus();
+  });
+  elements.filters.addEventListener('submit', async (event) => {
     event.preventDefault();
+    if (state.filterApplying) return;
+    state.filterApplying = true;
+    const previousFilters = state.appliedFilters;
+    const previousPage = state.page;
+    const submit = elements.filters.querySelector('[type="submit"]');
+    submit.disabled = true;
+    elements.filters.setAttribute('aria-busy', 'true');
+    state.appliedFilters = formFilters();
     state.page = 1;
-    loadList().catch((error) => { elements.empty.textContent = error.message; elements.empty.hidden = false; });
+    elements.filterError.hidden = true;
+    try {
+      await loadList();
+      const activeCount = Array.from(state.appliedFilters.keys()).filter((key) => key !== 'orden').length;
+      elements.filterButton.textContent = activeCount ? `Filtros (${activeCount})` : 'Filtros';
+      elements.filterDialog.close();
+    } catch (error) {
+      state.appliedFilters = previousFilters;
+      state.page = previousPage;
+      elements.filterError.textContent = error.message;
+      elements.filterError.hidden = false;
+    } finally {
+      state.filterApplying = false;
+      submit.disabled = false;
+      elements.filters.removeAttribute('aria-busy');
+    }
   });
   elements.previous.addEventListener('click', () => { if (state.page > 1) { state.page -= 1; loadList(); } });
   elements.next.addEventListener('click', () => { if (state.page < state.pages) { state.page += 1; loadList(); } });
@@ -338,6 +396,7 @@
   });
   global.addEventListener('admin:viewchange', (event) => {
     if (event.detail !== 'suscripciones-saas' && elements.detail.open) elements.detail.close();
+    if (event.detail !== 'suscripciones-saas' && elements.filterDialog.open) elements.filterDialog.close();
   });
   byId('closeSaasAction').addEventListener('click', () => elements.dialog.close());
   byId('cancelSaasAction').addEventListener('click', () => elements.dialog.close());

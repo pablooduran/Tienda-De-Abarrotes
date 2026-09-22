@@ -108,7 +108,7 @@
             <h2 id="saasSubscriptionsHeading">Suscripciones</h2>
             <p>Consulta vigencia, uso y cambios administrativos sin registrar pagos.</p>
           </div>
-          <button id="refreshSaasSubscriptions" class="button button-secondary" type="button">Actualizar</button>
+          <div class="button-row"><button id="openSaasFilters" class="button button-secondary" type="button">Filtros</button><button id="refreshSaasSubscriptions" class="button button-secondary" type="button">Actualizar</button></div>
         </div>
 
         <div class="summary-grid saas-summary" aria-label="Resumen global de suscripciones">
@@ -121,17 +121,23 @@
         </div>
         <p id="saasSummaryBreakdown" class="saas-summary-breakdown"></p>
 
-        <form id="saasSubscriptionFilters" class="saas-filter-grid">
-          <label class="search-field"><span>Buscar tienda</span><input name="texto" type="search" autocomplete="off"></label>
-          <label class="search-field"><span>Estado</span><select name="estado"><option value="">Todos</option><option value="activa">Activa</option><option value="gracia">Gracia</option><option value="suspendida">Suspendida</option><option value="cancelada">Cancelada</option></select></label>
-          <label class="search-field"><span>Acceso</span><select name="acceso"><option value="">Todos</option><option value="completo">Completo</option><option value="solo_lectura">Solo lectura</option><option value="restringido">Restringido</option></select></label>
-          <label class="search-field"><span>Tipo</span><select name="tipo"><option value="">Todos</option><option value="prueba">Prueba</option><option value="pagada">Pagada</option><option value="cortesia">Cortesia</option></select></label>
-          <label class="search-field"><span>Plan</span><select name="plan"><option value="">Todos</option></select></label>
-          <label class="search-field"><span>Orden</span><select name="orden"><option value="vencimiento">Vencimiento</option><option value="tienda">Tienda</option><option value="estado">Estado</option><option value="plan">Plan</option></select></label>
-          <label class="saas-check"><input name="excedidos" type="checkbox"> Solo con limites excedidos</label>
-          <label class="saas-check"><input name="downgrade" type="checkbox"> Solo con downgrade programado</label>
-          <button class="button button-primary" type="submit">Aplicar filtros</button>
-        </form>
+        <dialog id="saasSubscriptionFilterDialog" class="admin-filter-dialog" aria-labelledby="saasFilterTitle">
+          <div class="section-heading"><div><p class="eyebrow">Suscripciones</p><h3 id="saasFilterTitle">Filtrar resultados</h3></div><button id="closeSaasFilters" class="button button-quiet" type="button">Cerrar</button></div>
+          <form id="saasSubscriptionFilters">
+            <div class="saas-filter-grid">
+              <label class="search-field"><span>Buscar tienda</span><input name="texto" type="search" autocomplete="off"></label>
+              <label class="search-field"><span>Estado</span><select name="estado"><option value="">Todos</option><option value="activa">Activa</option><option value="gracia">Gracia</option><option value="suspendida">Suspendida</option><option value="cancelada">Cancelada</option></select></label>
+              <label class="search-field"><span>Acceso</span><select name="acceso"><option value="">Todos</option><option value="completo">Completo</option><option value="solo_lectura">Solo lectura</option><option value="restringido">Restringido</option></select></label>
+              <label class="search-field"><span>Tipo</span><select name="tipo"><option value="">Todos</option><option value="prueba">Prueba</option><option value="pagada">Pagada</option><option value="cortesia">Cortesia</option></select></label>
+              <label class="search-field"><span>Plan</span><select name="plan"><option value="">Todos</option></select></label>
+              <label class="search-field"><span>Orden</span><select name="orden"><option value="vencimiento">Vencimiento</option><option value="tienda">Tienda</option><option value="estado">Estado</option><option value="plan">Plan</option></select></label>
+              <label class="saas-check"><input name="excedidos" type="checkbox"> Solo con limites excedidos</label>
+              <label class="saas-check"><input name="downgrade" type="checkbox"> Solo con downgrade programado</label>
+            </div>
+            <p id="saasFilterError" class="form-error" role="alert" hidden></p>
+            <div class="admin-filter-actions"><button class="button button-primary" type="submit">Aplicar filtros</button></div>
+          </form>
+        </dialog>
 
         <div class="table-wrap">
           <table>

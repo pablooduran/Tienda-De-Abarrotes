@@ -519,8 +519,22 @@ tbody tr:hover {
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 12px;
   align-items: end;
-  margin-bottom: 20px;
 }
+.admin-filter-dialog[open] {
+  position: fixed;
+  inset: 0;
+  width: min(760px, calc(100vw - 28px));
+  max-width: none;
+  max-height: calc(100vh - 28px);
+  margin: auto;
+  padding: 24px;
+  overflow-y: auto;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  box-shadow: 0 24px 64px #102d3559;
+}
+.admin-filter-dialog::backdrop { background: #102d35b3; }
+.admin-filter-actions { display: flex; justify-content: flex-end; margin-top: 18px; }
 
 .saas-check {
   display: flex;
@@ -1092,7 +1106,7 @@ textarea {
     padding: 24px 16px 48px;
     overflow: visible;
   }
-  #storeDetail[open], #saasSubscriptionDetail[open], #paymentReviewDetail[open] { padding: 16px; }
+  #storeDetail[open], #saasSubscriptionDetail[open], #paymentReviewDetail[open], .admin-filter-dialog[open] { padding: 16px; }
 
   .page-header,
   .section-heading,

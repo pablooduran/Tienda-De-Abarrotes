@@ -52,6 +52,7 @@ function detail() {
 
 function fixtureServer() {
   const mutations = [];
+  const queries = [];
   const server = http.createServer((request, response) => {
     const url = new URL(request.url, 'http://127.0.0.1');
     if (url.pathname === '/admin.html' || url.pathname === '/') {
@@ -74,7 +75,11 @@ function fixtureServer() {
       total: 1, activas: 0, gracia: 1, suspendidas: 0, canceladas: 0, limitesExcedidos: 1
     });
     if (url.pathname === '/api/admin/suscripciones/tienda-browser' && request.method === 'GET') return json(response, 200, detail());
-    if (url.pathname === '/api/admin/suscripciones' && request.method === 'GET') return json(response, 200, list());
+    if (url.pathname === '/api/admin/suscripciones' && request.method === 'GET') {
+      queries.push(url.searchParams.toString());
+      if (url.searchParams.get('estado') === 'cancelada') return json(response, 503, { error: 'Servicio temporalmente no disponible.' });
+      return json(response, 200, list());
+    }
     if (/^\/api\/admin\/suscripciones\/tienda-browser\/(suspender|reactivar|renovar|cancelar|upgrade|downgrade)$/.test(url.pathname)) {
       let body = '';
       request.on('data', (chunk) => { body += chunk; });
@@ -92,7 +97,7 @@ function fixtureServer() {
     if (url.pathname === '/favicon.ico') { response.writeHead(204); return response.end(); }
     return json(response, 404, { error: 'No encontrado.' });
   });
-  return { server, mutations };
+  return { server, mutations, queries };
 }
 
 async function main() {
@@ -141,6 +146,52 @@ async function main() {
           .map((element) => `${element.closest('section')?.id || 'none'}:${element.tagName.toLowerCase()}#${element.id}.${element.className}`)
       }));
       assert.strictEqual(overflow.document, false, `Overflow en ${viewport.width} ${JSON.stringify(overflow.sizes)}: ${overflow.elements.join(', ')}`);
+      await page.locator('#openSaasFilters').click();
+      await page.locator('#saasSubscriptionFilterDialog[open]').waitFor();
+      assert.strictEqual(await page.locator('#saasSubscriptionFilterDialog').evaluate((node) => node.matches(':modal')), true);
+      assert.strictEqual(await page.evaluate(() => document.activeElement.name), 'texto');
+      assert.strictEqual(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth + 1), true);
+      await page.locator('#saasSubscriptionFilters select[name="estado"]').selectOption('activa');
+      await page.keyboard.press('Escape');
+      await page.locator('#saasSubscriptionFilterDialog[open]').waitFor({ state: 'detached' });
+      assert.strictEqual(await page.evaluate(() => document.activeElement.id), 'openSaasFilters');
+      await Promise.all([
+        page.waitForResponse((response) => response.url().includes('/api/admin/suscripciones?')),
+        page.locator('#refreshSaasSubscriptions').click()
+      ]);
+      assert.strictEqual(new URLSearchParams(fixture.queries.at(-1)).has('estado'), false,
+        'Cerrar filtros sin aplicar no debe cambiar la lista.');
+      await page.locator('#openSaasFilters').click();
+      assert.strictEqual(await page.locator('#saasSubscriptionFilters select[name="estado"]').inputValue(), '');
+      await page.locator('#saasSubscriptionFilters select[name="estado"]').selectOption('suspendida');
+      await page.locator('#saasSubscriptionFilters button[type="submit"]').click();
+      await page.locator('#saasSubscriptionFilterDialog[open]').waitFor({ state: 'detached' });
+      assert.strictEqual(new URLSearchParams(fixture.queries.at(-1)).get('estado'), 'suspendida');
+      assert.strictEqual(await page.locator('#openSaasFilters').textContent(), 'Filtros (1)');
+      await page.locator('#openSaasFilters').click();
+      await page.locator('#saasSubscriptionFilters select[name="estado"]').selectOption('activa');
+      await page.locator('#closeSaasFilters').click();
+      await Promise.all([
+        page.waitForResponse((response) => response.url().includes('/api/admin/suscripciones?')),
+        page.locator('#refreshSaasSubscriptions').click()
+      ]);
+      assert.strictEqual(new URLSearchParams(fixture.queries.at(-1)).get('estado'), 'suspendida');
+      await page.locator('#openSaasFilters').click();
+      await page.locator('#saasSubscriptionFilters select[name="estado"]').selectOption('cancelada');
+      await page.locator('#saasSubscriptionFilters button[type="submit"]').click();
+      await page.locator('#saasFilterError:not([hidden])').waitFor();
+      assert.deepStrictEqual(errors.splice(0), [
+        'Failed to load resource: the server responded with a status of 503 (Service Unavailable)'
+      ], 'Solo se espera el error de red simulado para esta prueba.');
+      assert.strictEqual(await page.locator('#saasSubscriptionFilterDialog').evaluate((node) => node.open), true,
+        'Un error al aplicar debe dejar abierto el formulario.');
+      await page.locator('#closeSaasFilters').click();
+      await Promise.all([
+        page.waitForResponse((response) => response.url().includes('/api/admin/suscripciones?')),
+        page.locator('#refreshSaasSubscriptions').click()
+      ]);
+      assert.strictEqual(new URLSearchParams(fixture.queries.at(-1)).get('estado'), 'suspendida',
+        'Un filtro fallido no debe reemplazar el ultimo filtro aplicado.');
       const detailButton = page.locator('#saasSubscriptionsTableBody .table-action');
       await detailButton.evaluate((node) => node.addEventListener('click', () => {
         window.__scrollAtDetailClick = document.querySelector('.admin-main').scrollTop;
