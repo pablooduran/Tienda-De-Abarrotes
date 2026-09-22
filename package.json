@@ -93,6 +93,7 @@
     "test:inventory-adjustments-browser": "node scripts/test-inventory-adjustments-browser.js",
     "test:public-registration": "node scripts/test-public-registration.js",
     "test:email-verification": "node scripts/test-email-verification.js",
+    "test:email-delivery": "node scripts/test-email-delivery.js",
     "test:password-recovery": "node scripts/test-password-recovery.js",
     "test:store-configuration": "node scripts/test-store-configuration.js",
     "test:subscription-lifecycle-schema": "node scripts/test-subscription-lifecycle-schema.js",

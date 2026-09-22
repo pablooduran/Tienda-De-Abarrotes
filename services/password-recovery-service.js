@@ -1,7 +1,7 @@
 const bcrypt = require('bcryptjs');
 const pool = require('../config/db');
 const { administrativeAuditService } = require('./administrative-audit-service');
-const { localVerificationMailAdapter } = require('./local-verification-mail-adapter');
+const { mailDeliveryAdapter } = require('./mail-delivery-adapter');
 const { formatLocalDateTime } = require('../utils/local-datetime');
 const {
   PASSWORD_RECOVERY_TYPE,
@@ -31,7 +31,7 @@ function invalidRecoveryError() {
 function createPasswordRecoveryService({
   database = pool,
   auditService = administrativeAuditService,
-  mailAdapter = localVerificationMailAdapter,
+  mailAdapter = mailDeliveryAdapter,
   bcryptLib = bcrypt,
   clock = () => new Date(),
   tokenFactory = createVerificationToken,

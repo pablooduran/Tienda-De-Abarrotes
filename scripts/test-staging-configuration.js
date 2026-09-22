@@ -70,6 +70,7 @@ function testEnvironmentContracts() {
     assert.deepStrictEqual(hosted.trustProxy, ['10.40.0.0/24']);
     assert.strictEqual(hosted.rateLimitStore.type, 'redis');
     assert.strictEqual(hosted.emailDeliveryMode, 'disabled');
+    assert.deepStrictEqual(hosted.emailDelivery, { mode: 'disabled', provider: null });
     assert.strictEqual(hosted.privateStorage.enabled, true);
     assert.strictEqual(hosted.proxyMode, 'cidr');
   }
@@ -113,7 +114,25 @@ function testEnvironmentContracts() {
   assert.throws(() => deploymentConfig(hostedEnvironment('staging', {
     PAYMENT_RECEIPT_MODE: 'temporary'
   })), /solo admite enabled o disabled/);
-  assert.throws(() => deploymentConfig(hostedEnvironment('staging', { EMAIL_DELIVERY_MODE: 'external' })), /disabled/);
+  const hostedWithoutEmailMode = hostedEnvironment('staging');
+  delete hostedWithoutEmailMode.EMAIL_DELIVERY_MODE;
+  assert.strictEqual(deploymentConfig(hostedWithoutEmailMode).emailDeliveryMode, 'disabled');
+  assert.throws(() => deploymentConfig(hostedEnvironment('staging', {
+    EMAIL_DELIVERY_MODE: 'external', EMAIL_DELIVERY_PROVIDER: 'not-integrated'
+  })), /adaptador externo registrado/);
+  assert.throws(() => deploymentConfig(hostedEnvironment('staging', {
+    EMAIL_DELIVERY_MODE: 'external', EMAIL_DELIVERY_PROVIDER: 'mailtrap-sandbox'
+  })), /MAILTRAP_API_TOKEN/);
+  const externalEmail = deploymentConfig(hostedEnvironment('staging', {
+    EMAIL_DELIVERY_MODE: 'external',
+    EMAIL_DELIVERY_PROVIDER: 'mailtrap-sandbox',
+    MAILTRAP_API_TOKEN: 'synthetic_mailtrap_token_1234567890',
+    MAILTRAP_INBOX_ID: '4015',
+    EMAIL_FROM: 'Tienda Staging <notificaciones@staging.invalid>'
+  }));
+  assert.deepStrictEqual(externalEmail.emailDelivery, {
+    mode: 'external', provider: 'mailtrap-sandbox'
+  });
   assert.throws(() => deploymentConfig(hostedEnvironment('staging', {
     TRUST_PROXY_MODE: 'render-cloudflare'
   })), /no admite TRUST_PROXY_CIDRS/);

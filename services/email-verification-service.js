@@ -1,6 +1,6 @@
 const pool = require('../config/db');
 const { administrativeAuditService } = require('./administrative-audit-service');
-const { localVerificationMailAdapter } = require('./local-verification-mail-adapter');
+const { mailDeliveryAdapter } = require('./mail-delivery-adapter');
 const { formatLocalDateTime } = require('../utils/local-datetime');
 const { businessAnalytics } = require('./product-analytics');
 const {
@@ -35,7 +35,7 @@ function verificationFailure() {
 function createEmailVerificationService({
   database = pool,
   auditService = administrativeAuditService,
-  mailAdapter = localVerificationMailAdapter,
+  mailAdapter = mailDeliveryAdapter,
   analytics = businessAnalytics,
   clock = () => new Date(),
   tokenFactory = createVerificationToken,

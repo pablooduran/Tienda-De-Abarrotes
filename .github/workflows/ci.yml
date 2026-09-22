@@ -59,7 +59,9 @@ jobs:
       - name: Check workflow contract
         run: npm run check:ci-workflow
       - name: Validate hosted configuration contract
-        run: npm run test:staging-configuration
+        run: |
+          npm run test:staging-configuration
+          npm run test:email-delivery
       - name: Validate JavaScript syntax
         run: |
           node --check server.js

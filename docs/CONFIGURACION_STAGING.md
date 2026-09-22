@@ -54,7 +54,9 @@ Staging y production requieren ademas:
   `PAYMENT_RECEIPT_STORAGE_DIR` absoluto y fuera del repositorio; o,
   exclusivamente para el piloto gratuito en staging,
   `PAYMENT_RECEIPT_MODE=disabled` sin variables de almacenamiento;
-- `EMAIL_DELIVERY_MODE=disabled` mientras no exista adaptador externo.
+- `EMAIL_DELIVERY_MODE=disabled` como valor seguro predeterminado; para probar
+  correo exclusivamente dentro de Mailtrap Sandbox se permite el contrato
+  explicito descrito en "Correo y almacenamiento".
 
 `SESSION_SECRET` hospedado debe tener al menos 48 caracteres, diversidad
 suficiente y no ser un placeholder. Las URL, contrasenas, CA y secretos nunca
@@ -108,7 +110,8 @@ documento no contiene valores, URIs, certificados ni ejemplos sensibles.
 
 | Grupo | Variables requeridas para staging | Notas de contrato |
 | --- | --- | --- |
-| Aplicacion y HTTP | `APP_ENV`, `NODE_ENV`, `PORT`, `APP_BASE_URL`, `DB_ENVIRONMENT`, `TRUSTED_ORIGINS`, `TRUST_PROXY_MODE`, `TRUST_PROXY_CIDRS` solo para modo `cidr`, `EMAIL_DELIVERY_MODE` | `APP_ENV` y `DB_ENVIRONMENT` deben ser `staging`; origen HTTPS exacto, sin comodines; correo sigue deshabilitado. |
+| Aplicacion y HTTP | `APP_ENV`, `NODE_ENV`, `PORT`, `APP_BASE_URL`, `DB_ENVIRONMENT`, `TRUSTED_ORIGINS`, `TRUST_PROXY_MODE`, `TRUST_PROXY_CIDRS` solo para modo `cidr`; `EMAIL_DELIVERY_MODE` es opcional | `APP_ENV` y `DB_ENVIRONMENT` deben ser `staging`; origen HTTPS exacto, sin comodines; correo usa `disabled` al omitir el modo. |
+| Correo de prueba | Solo al seleccionar Mailtrap Sandbox: `EMAIL_DELIVERY_PROVIDER`, `MAILTRAP_API_TOKEN`, `MAILTRAP_INBOX_ID`, `EMAIL_FROM`; `EMAIL_DELIVERY_TIMEOUT_MS` es opcional | `EMAIL_DELIVERY_PROVIDER=mailtrap-sandbox`; token solo en secretos de Render, inbox numerico positivo, remitente valido y timeout entre 1000 y 30000 ms. El sandbox captura mensajes de prueba y no habilita correo real. |
 | MySQL | `DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_USER`, `DB_PASSWORD`, `DB_SSL_ENABLED`, `DB_SSL_CA` | TLS obligatorio; la base debe identificarse como staging y no puede ser local. |
 | Redis/Valkey y rate limit | `RATE_LIMIT_ENABLED`, `RATE_LIMIT_STORE`, `RATE_LIMIT_REDIS_URL`, `RATE_LIMIT_REDIS_PREFIX` | Store `redis`, URL TLS y prefijo aislado de staging. Los limites individuales son configurables y no sustituyen el store distribuido. |
 | Sesiones | `SESSION_SECRET` | Se usa con `express-session` y store MySQL; debe cumplir la validacion reforzada de hosted. |
@@ -381,7 +384,9 @@ pagados o formalmente aprobados.
 ### Funcionalidades restringidas o bloqueadas
 
 - El registro publico, verificacion y recuperacion por correo no se prueban en
-  hosted mientras `EMAIL_DELIVERY_MODE=disabled`; no se finge una entrega.
+  hosted mientras `EMAIL_DELIVERY_MODE=disabled`; no se finge una entrega. Si
+  se habilita `mailtrap-sandbox`, se usan exclusivamente cuentas y destinatarios
+  sinteticos y los mensajes quedan capturados en el inbox de prueba.
 - Subir, revisar o descargar comprobantes de pagos manuales de suscripcion solo
   se permite si el filesystem privado persistente, su backup y su restauracion
   ya fueron validados. En el piloto gratuito se configura
@@ -499,11 +504,29 @@ deben cargarse como secretos de infraestructura, nunca en archivos versionados.
 
 ## Correo y almacenamiento
 
-El adaptador de correo actual es solo local y en memoria. En staging o
-production rechaza su uso; `EMAIL_DELIVERY_MODE=disabled` hace visible esta
-limitacion y evita fingir una entrega externa. Elegir e integrar un proveedor
-de correo es requisito previo para habilitar registro, verificacion y
-recuperacion en un entorno hospedado.
+La aplicacion expone una interfaz comun para verificacion y recuperacion.
+`EMAIL_DELIVERY_MODE` es opcional en hosted y su valor seguro predeterminado es
+`disabled`; en ese modo ambos tipos de entrega fallan de forma controlada y no
+realizan red. `EMAIL_DELIVERY_PROVIDER` debe estar ausente.
+
+El unico proveedor externo registrado es `mailtrap-sandbox`, reservado
+exclusivamente para pruebas de staging. En Render se configura, sin copiar
+valores a Git, chat o logs:
+
+- `EMAIL_DELIVERY_MODE=external`;
+- `EMAIL_DELIVERY_PROVIDER=mailtrap-sandbox`;
+- `MAILTRAP_API_TOKEN` como secreto robusto obtenido del panel de Mailtrap;
+- `MAILTRAP_INBOX_ID` con el identificador numerico del inbox de Sandbox;
+- `EMAIL_FROM` con un remitente sintetico valido, opcionalmente con nombre;
+- `EMAIL_DELIVERY_TIMEOUT_MS` opcional, entero entre 1000 y 30000; por defecto
+  usa 8000 ms.
+
+La integracion usa HTTPS, el header `Api-Token`, timeout con aborto y errores
+sanitizados. No registra token, destinatario, contenido, codigo de verificacion,
+enlace ni headers. Sus pruebas inyectan `fetch` y no hacen red. Mailtrap Sandbox
+es solo captura de pruebas: no autoriza destinatarios reales, correo productivo
+ni el proveedor transaccional de Mailtrap. Production conserva `disabled` y
+rechaza `external` antes del arranque.
 
 Los comprobantes habilitados permanecen en almacenamiento privado fuera del
 repositorio y de rutas publicas. El filesystem es suficiente para una instancia

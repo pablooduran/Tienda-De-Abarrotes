@@ -1,5 +1,6 @@
 const net = require('net');
 const path = require('path');
+const { REGISTERED_EMAIL_PROVIDERS, emailDeliveryConfig } = require('./email-delivery');
 
 const HOSTED_ENVIRONMENTS = new Set(['staging', 'production']);
 const SUPPORTED_ENVIRONMENTS = new Set(['local', 'ci', 'staging', 'production', 'test']);
@@ -141,7 +142,10 @@ function privateStorageConfig(environment, mode, cwd) {
   return Object.freeze({ enabled: true, driver: 'filesystem', root });
 }
 
-function deploymentConfig(environment = process.env, { cwd = process.cwd() } = {}) {
+function deploymentConfig(environment = process.env, {
+  cwd = process.cwd(),
+  emailProviders = REGISTERED_EMAIL_PROVIDERS
+} = {}) {
   const mode = effectiveEnvironment(environment);
   const hosted = HOSTED_ENVIRONMENTS.has(mode);
   required(environment, ['DB_HOST', 'DB_NAME', 'SESSION_SECRET']);
@@ -156,6 +160,7 @@ function deploymentConfig(environment = process.env, { cwd = process.cwd() } = {
 
   if (!hosted) {
     const proxy = proxyConfig(environment, mode);
+    const emailDelivery = emailDeliveryConfig(environment, { registeredProviders: emailProviders });
     return Object.freeze({
       mode,
       hosted: false,
@@ -165,7 +170,8 @@ function deploymentConfig(environment = process.env, { cwd = process.cwd() } = {
       appBaseUrl: null,
       rateLimitStore: rateLimitStoreConfig(environment, mode),
       privateStorage: privateStorageConfig(environment, mode, cwd),
-      emailDeliveryMode: 'local'
+      emailDelivery,
+      emailDeliveryMode: emailDelivery.mode
     });
   }
 
@@ -178,8 +184,7 @@ function deploymentConfig(environment = process.env, { cwd = process.cwd() } = {
     'DB_SSL_CA',
     'DB_ENVIRONMENT',
     'NODE_ENV',
-    'TRUSTED_ORIGINS',
-    'EMAIL_DELIVERY_MODE'
+    'TRUSTED_ORIGINS'
   ]);
   if (normalized(environment.NODE_ENV) !== 'production') {
     throw new Error('Staging/production exige NODE_ENV=production.');
@@ -196,9 +201,7 @@ function deploymentConfig(environment = process.env, { cwd = process.cwd() } = {
   if (host === 'localhost' || host === '127.0.0.1' || host === '::1') {
     throw new Error('Staging/production no puede usar la base local.');
   }
-  if (normalized(environment.EMAIL_DELIVERY_MODE) !== 'disabled') {
-    throw new Error('Staging/production exige EMAIL_DELIVERY_MODE=disabled hasta configurar un adaptador externo.');
-  }
+  const emailDelivery = emailDeliveryConfig(environment, { registeredProviders: emailProviders });
   const appBaseUrl = parseHttpsUrl(environment.APP_BASE_URL, 'APP_BASE_URL');
   const origins = String(environment.TRUSTED_ORIGINS).split(',')
     .map((item) => parseHttpsUrl(item, 'TRUSTED_ORIGINS'));
@@ -215,7 +218,8 @@ function deploymentConfig(environment = process.env, { cwd = process.cwd() } = {
     appBaseUrl,
     rateLimitStore: rateLimitStoreConfig(environment, mode),
     privateStorage: privateStorageConfig(environment, mode, cwd),
-    emailDeliveryMode: 'disabled'
+    emailDelivery,
+    emailDeliveryMode: emailDelivery.mode
   });
 }
 

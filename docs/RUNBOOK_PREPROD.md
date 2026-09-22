@@ -24,8 +24,9 @@ secretos del entorno, nunca en Git:
 - `APP_BASE_URL`, `TRUSTED_ORIGINS` y los CIDR directos del proxy;
 - Redis TLS, prefijo exclusivo y almacenamiento privado absoluto fuera del
   repositorio;
-- `EMAIL_DELIVERY_MODE=disabled` hasta disponer de un adaptador externo
-  aprobado.
+- `EMAIL_DELIVERY_MODE=disabled` como valor predeterminado hasta disponer de un
+  adaptador externo aprobado y registrado; omitir la variable tambien mantiene
+  el modo deshabilitado.
 
 El arranque debe fallar si falta una variable, se usa un placeholder, la base
 no identifica el entorno, falta TLS, Redis no usa `rediss://`, el storage no es
@@ -48,6 +49,21 @@ URLs con credenciales y rutas fisicas no se registran en logs.
 7. Preparar el artefacto versionado y conservar disponible el artefacto previo.
 8. Registrar responsable, ventana, SHA, version, hash del backup y criterio de
    abortar. No usar datos ni cuentas reales en staging.
+
+No configurar credenciales genericas de correo. El unico modo externo registrado
+es `mailtrap-sandbox` y solo puede activarse en staging con
+`EMAIL_DELIVERY_MODE=external`, `EMAIL_DELIVERY_PROVIDER=mailtrap-sandbox`,
+`MAILTRAP_API_TOKEN`, `MAILTRAP_INBOX_ID` y `EMAIL_FROM`. El token se guarda como
+secreto de Render y nunca se pega en Git, chat, comandos o logs; el inbox se
+toma del panel de Email Sandbox. `EMAIL_DELIVERY_TIMEOUT_MS` es opcional y debe
+estar entre 1000 y 30000 ms.
+
+Antes del smoke, usar un destinatario sintetico y comprobar en el inbox de
+Sandbox una verificacion y una recuperacion. No probar con personas reales ni
+confundir el PASS del sandbox con entrega externa. Ante timeout o rechazo, no
+copiar respuestas crudas del proveedor: conservar solo el codigo sanitizado de
+la aplicacion. Production permanece con correo deshabilitado y rechaza el modo
+externo.
 
 ## Migraciones 001-024
 
