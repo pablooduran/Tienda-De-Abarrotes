@@ -19,7 +19,7 @@ function summary(ref, state = 'pendiente_comprobante') { return { referencia: re
 function detail(ref, state, withReceipt = false) { return { referencia: ref, planActual: { codigo: 'basico', nombre: 'Basic' }, planObjetivo: { codigo: 'basico', nombre: 'Basic' }, operacion: 'renovacion', periodo: 'mensual', meses: 1, precioBase: { moneda: 'USD', monto: '3.00' }, conversion: { valor: '7.00000000', fuente: 'Tasa de prueba', fechaEfectiva: '2026-08-12 08:00:00' }, montoCobro: { moneda: 'BOB', monto: '21.00' }, metodo: { codigo: 'qr_manual', nombre: 'QR manual', instrucciones: 'Usa el QR configurado y sube el comprobante.' }, limites: {}, funcionalidades: [], estado: state, creadaEn: '2026-08-12 08:00:00', venceEn: '2026-08-15 08:00:00', historial: [{ evento: state === 'observada' ? 'observada' : 'creada', fecha: '2026-08-12 08:00:00' }], siguienteAccion: 'cargar_comprobante', comprobante: withReceipt ? { referencia: 'receipt-browser-safe-reference-01', activo: true } : null }; }
 
 function serverFixture() {
-  const state = { created: false, uploaded: false, cancelCount: 0, mutations: [], rate: null, review: 'pendiente_revision' };
+  const state = { created: false, uploaded: false, cancelCount: 0, mutations: [], rate: null, review: 'pendiente_revision', reviewQueries: [] };
   const server = http.createServer(async (request, response) => {
     const url = new URL(request.url, 'http://127.0.0.1');
     if (url.pathname === '/suscripcion.html' || url.pathname === '/') { response.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' }); return response.end(fs.readFileSync(path.join(PUBLIC, 'subscription.html'))); }
@@ -55,7 +55,7 @@ function serverFixture() {
     if (url.pathname === '/api/admin/pagos-suscripcion/tipos-cambio' && request.method === 'POST') { state.rate = { valor: '7.00000000', fuente: 'Fuente browser', vigenteDesde: '2026-08-12 08:00:00' }; state.mutations.push({ kind: 'rate', key: request.headers['idempotency-key'] }); return json(response, 201, state.rate); }
     if (url.pathname === '/api/admin/pagos-suscripcion/metodos' && request.method === 'GET') return json(response, 200, { metodos: [{ referencia: 'qr_manual', nombre: 'QR manual', activo: true, visiblePropietario: true, instrucciones: 'Instrucciones.', requiereComprobante: true, soloAdministracion: false }, { referencia: 'efectivo_administrativo', nombre: 'Efectivo administrativo', activo: true, visiblePropietario: false, instrucciones: 'Solo interno.', requiereComprobante: false, soloAdministracion: true }] });
     if (/^\/api\/admin\/pagos-suscripcion\/metodos\//.test(url.pathname) && request.method === 'PATCH') { state.mutations.push({ kind: 'method', key: request.headers['idempotency-key'] }); return json(response, 200, {}); }
-    if (url.pathname === '/api/admin/pagos-suscripcion/revision' && request.method === 'GET') return json(response, 200, { resultados: [{ referencia: reference, tienda: 'Tienda Browser', operacion: 'renovacion', plan: { nombre: 'Basic' }, monto: { moneda: 'BOB', valor: '21.00' }, metodo: 'QR manual', estado: state.review, comprobanteDisponible: true }], paginacion: { paginas: 1 } });
+    if (url.pathname === '/api/admin/pagos-suscripcion/revision' && request.method === 'GET') { state.reviewQueries.push(url.searchParams.toString()); return json(response, 200, { resultados: [{ referencia: reference, tienda: 'Tienda Browser', operacion: 'renovacion', plan: { nombre: 'Basic' }, monto: { moneda: 'BOB', valor: '21.00' }, metodo: 'QR manual', estado: state.review, comprobanteDisponible: true }], paginacion: { paginas: 1 } }); }
     if (url.pathname === `/api/admin/pagos-suscripcion/revision/${reference}` && request.method === 'GET') return json(response, 200, { referencia: reference, tienda: 'Tienda Browser', operacion: 'renovacion', plan: { nombre: 'Basic' }, planActual: { nombre: 'Basic' }, monto: { moneda: 'BOB', valor: '21.00' }, metodo: 'QR manual', estado: state.review, creadaEn: '2026-08-12 08:00:00', venceEn: '2026-08-15 08:00:00', tipoCambio: { valor: '7.00000000', fuente: 'Fuente browser' }, snapshot: { periodo: 'mensual', meses: 1, precioUSD: '3.00', monedaBase: 'USD' }, comprobante: { nombre: 'comprobante.pdf' }, historial: [], revisiones: [] });
     if (new RegExp(`^/api/admin/pagos-suscripcion/revision/${reference}/(observada|rechazada|aplicar)$`).test(url.pathname)) { const action = url.pathname.split('/').at(-1); state.review = action === 'aplicar' ? 'aplicada' : action; state.mutations.push({ kind: action, key: request.headers['idempotency-key'] }); return json(response, 200, { estado: state.review }); }
     if (url.pathname === '/favicon.ico') { response.writeHead(204); return response.end(); }
@@ -64,7 +64,7 @@ function serverFixture() {
   return { server, state };
 }
 
-async function assertViewport(browser, baseUrl, url, selector) {
+async function assertViewport(browser, baseUrl, url, selector, fixtureState) {
   for (const viewport of [{ width: 360, height: 800 }, { width: 768, height: 1024 }, { width: 1366, height: 768 }]) {
     const page = await browser.newPage({ viewport }); const errors = [];
     page.on('console', (message) => { if (message.type() === 'error') errors.push(message.text()); }); page.on('pageerror', (error) => errors.push(error.message));
@@ -96,6 +96,28 @@ async function assertViewport(browser, baseUrl, url, selector) {
       assert.strictEqual(await page.locator('[data-payment-detail]').evaluate((node) => node.open), false);
     }
     if (url === '/admin.html#pagos-suscripcion') {
+      const filterButton = page.locator('#openPaymentReviewFilters');
+      const queriesBeforeCancel = fixtureState.reviewQueries.length;
+      await filterButton.click();
+      await page.locator('#paymentReviewFilterDialog[open]').waitFor();
+      assert.strictEqual(await page.locator('#paymentReviewFilterDialog').evaluate((node) => node.matches(':modal')), true);
+      await page.locator('#paymentReviewFilters select[name="estado"]').selectOption('observada');
+      await page.keyboard.press('Escape');
+      await page.locator('#paymentReviewFilterDialog[open]').waitFor({ state: 'detached' });
+      await page.waitForFunction(() => document.querySelector('#paymentReviewFilters select[name="estado"]').value === '');
+      assert.strictEqual(fixtureState.reviewQueries.length, queriesBeforeCancel, 'Cerrar no debe aplicar filtros.');
+      assert.strictEqual(await page.locator('#paymentReviewFilters select[name="estado"]').inputValue(), '');
+      assert.strictEqual(await filterButton.evaluate((node) => document.activeElement === node), true);
+      await filterButton.click();
+      await page.locator('#paymentReviewFilters select[name="estado"]').selectOption('observada');
+      await page.locator('#paymentReviewFilters select[name="orden"]').selectOption('antiguas');
+      await page.locator('#paymentReviewFilters button[type="submit"]').click();
+      await page.locator('#paymentReviewFilterDialog[open]').waitFor({ state: 'detached' });
+      assert.strictEqual(await filterButton.textContent(), 'Filtros (2)');
+      assert.strictEqual(await filterButton.evaluate((node) => document.activeElement === node), true);
+      assert.strictEqual(new URLSearchParams(fixtureState.reviewQueries.at(-1)).get('estado'), 'observada');
+      assert.strictEqual(new URLSearchParams(fixtureState.reviewQueries.at(-1)).get('orden'), 'antiguas');
+      assert.strictEqual(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth + 1), true);
       const detailButton = page.locator('#paymentReviewTableBody .table-action');
       await detailButton.evaluate((node) => node.addEventListener('click', () => {
         window.__scrollAtPaymentClick = document.querySelector('.admin-main').scrollTop;
@@ -122,7 +144,20 @@ async function main() {
   const executablePath = edge(); if (!executablePath) throw new Error('No se encontró Edge local.');
   const fixture = serverFixture(); await new Promise((resolve) => fixture.server.listen(0, '127.0.0.1', resolve)); const baseUrl = `http://127.0.0.1:${fixture.server.address().port}`; const browser = await chromium.launch({ executablePath, headless: true });
   try {
-    await assertViewport(browser, baseUrl, '/suscripcion.html', '[data-payment-form]'); await assertViewport(browser, baseUrl, '/admin.html#pagos-suscripcion', '#paymentReviewTableBody tr');
+    await assertViewport(browser, baseUrl, '/suscripcion.html', '[data-payment-form]', fixture.state); await assertViewport(browser, baseUrl, '/admin.html#pagos-suscripcion', '#paymentReviewTableBody tr', fixture.state);
+    const failingFilters = await browser.newPage();
+    await failingFilters.goto(`${baseUrl}/admin.html#pagos-suscripcion`);
+    await failingFilters.locator('#paymentReviewTableBody tr').waitFor();
+    await failingFilters.route('**/api/admin/pagos-suscripcion/revision?*', (route) => route.fulfill({ status: 503, contentType: 'application/json', body: JSON.stringify({ error: 'Servicio temporalmente no disponible.' }) }));
+    await failingFilters.locator('#openPaymentReviewFilters').click();
+    await failingFilters.locator('#paymentReviewFilters select[name="estado"]').selectOption('observada');
+    await failingFilters.locator('#paymentReviewFilters button[type="submit"]').click();
+    await failingFilters.locator('#paymentReviewFilterError:not([hidden])').waitFor();
+    assert.strictEqual(await failingFilters.locator('#paymentReviewFilterDialog').evaluate((node) => node.open), true);
+    assert.strictEqual(await failingFilters.locator('#paymentReviewTableBody tr').count(), 1, 'La lista anterior debe conservarse si falla la carga.');
+    await failingFilters.locator('#closePaymentReviewFilters').click();
+    await failingFilters.waitForFunction(() => document.querySelector('#paymentReviewFilters select[name="estado"]').value === '');
+    await failingFilters.close();
     const owner = await browser.newPage({ viewport: { width: 1366, height: 768 } }); await owner.goto(`${baseUrl}/suscripcion.html`); await owner.locator('[data-payment-form]').waitFor(); await owner.getByRole('button', { name: 'Cotizar' }).click(); await owner.locator('.payment-quote').waitFor(); await owner.getByRole('button', { name: 'Crear solicitud' }).click(); await owner.locator('[data-receipt-form]').waitFor(); await owner.locator('[data-receipt-form] input').setInputFiles({ name: 'comprobante.pdf', mimeType: 'application/pdf', buffer: Buffer.from('%PDF-1.4') }); await owner.getByRole('button', { name: 'Enviar comprobante' }).click(); await owner.locator('[data-payment-detail] .payment-state[data-state="pendiente_revision"]').waitFor(); assert.strictEqual(await owner.locator('[data-payment-detail]').evaluate((node) => node.open), true); await owner.getByRole('button', { name: 'Cerrar detalle' }).click(); await owner.waitForFunction(() => document.activeElement?.dataset.requestDetail === 'payment-browser-reference-000000000001'); await owner.getByRole('button', { name: 'Ver detalle' }).first().click(); await owner.getByRole('button', { name: 'Reemplazar archivo' }).waitFor(); assert(!await owner.content().then((html) => /idTienda|idSuscripcion/.test(html))); await owner.close();
     const admin = await browser.newPage({ viewport: { width: 1366, height: 768 } });
     await admin.goto(`${baseUrl}/admin.html#pagos-suscripcion`);

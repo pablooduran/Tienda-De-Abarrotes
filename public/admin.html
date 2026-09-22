@@ -67,7 +67,7 @@
       <section id="pagos-suscripcion" data-admin-view="pagos-suscripcion" class="content-section payment-admin-section" aria-labelledby="paymentAdminHeading">
         <div class="section-heading">
           <div><p class="eyebrow">Pagos manuales</p><h2 id="paymentAdminHeading">Solicitudes de suscripción</h2><p>Revisa solicitudes y configura las condiciones manuales sin registrar cobros automáticos.</p></div>
-          <button id="refreshPaymentAdmin" class="button button-secondary" type="button">Actualizar</button>
+          <div class="button-row"><button id="openPaymentReviewFilters" class="button button-secondary" type="button">Filtros</button><button id="refreshPaymentAdmin" class="button button-secondary" type="button">Actualizar</button></div>
         </div>
         <p id="paymentAdminFeedback" class="payment-admin-feedback" role="status" aria-live="polite"></p>
         <div class="payment-admin-grid">
@@ -86,11 +86,17 @@
             <div id="paymentAdminMethods" class="payment-method-admin-list"></div>
           </section>
         </div>
-        <form id="paymentReviewFilters" class="saas-filter-grid payment-review-filters">
-          <label class="search-field"><span>Estado</span><select name="estado"><option value="">Pendientes y observadas</option><option value="pendiente_revision">Pendiente de revisión</option><option value="observada">Observada</option></select></label>
-          <label class="search-field"><span>Orden</span><select name="orden"><option value="recientes">Más recientes</option><option value="vencimiento">Vencimiento</option><option value="antiguas">Más antiguas</option></select></label>
-          <button class="button button-primary" type="submit">Aplicar filtros</button>
-        </form>
+        <dialog id="paymentReviewFilterDialog" class="admin-filter-dialog" aria-labelledby="paymentReviewFilterTitle">
+          <div class="section-heading"><div><p class="eyebrow">Solicitudes de suscripción</p><h3 id="paymentReviewFilterTitle">Filtrar resultados</h3></div><button id="closePaymentReviewFilters" class="button button-quiet" type="button">Cerrar</button></div>
+          <form id="paymentReviewFilters">
+            <div class="saas-filter-grid payment-review-filters">
+              <label class="search-field"><span>Estado</span><select name="estado"><option value="">Pendientes y observadas</option><option value="pendiente_revision">Pendiente de revisión</option><option value="observada">Observada</option></select></label>
+              <label class="search-field"><span>Orden</span><select name="orden"><option value="recientes">Más recientes</option><option value="vencimiento">Vencimiento</option><option value="antiguas">Más antiguas</option></select></label>
+            </div>
+            <p id="paymentReviewFilterError" class="form-error" role="alert" hidden></p>
+            <div class="admin-filter-actions"><button class="button button-primary" type="submit">Aplicar filtros</button></div>
+          </form>
+        </dialog>
         <div class="table-wrap"><table><thead><tr><th>Tienda</th><th>Operación</th><th>Plan</th><th>Monto</th><th>Estado</th><th>Comprobante</th><th><span class="sr-only">Acciones</span></th></tr></thead><tbody id="paymentReviewTableBody"></tbody></table><p id="emptyPaymentReviews" class="empty-state" hidden>No hay solicitudes para revisar.</p></div>
         <div class="catalog-pagination"><button id="paymentPreviousPage" class="button button-secondary" type="button">Anterior</button><span id="paymentPageLabel">Página 1</span><button id="paymentNextPage" class="button button-secondary" type="button">Siguiente</button></div>
         <dialog id="paymentReviewDetail" class="saas-detail" aria-labelledby="paymentReviewDetailTitle" hidden>

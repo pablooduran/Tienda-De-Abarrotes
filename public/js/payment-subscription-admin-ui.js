@@ -12,10 +12,10 @@
   function create() {
     const byId = (id) => global.document.getElementById(id);
     const elements = {
-      link: byId('paymentSubscriptionsLink'), refresh: byId('refreshPaymentAdmin'), feedback: byId('paymentAdminFeedback'), rateForm: byId('paymentRateForm'), rate: byId('paymentCurrentRate'), rates: byId('paymentRateHistory'), methods: byId('paymentAdminMethods'), filters: byId('paymentReviewFilters'), table: byId('paymentReviewTableBody'), empty: byId('emptyPaymentReviews'), previous: byId('paymentPreviousPage'), next: byId('paymentNextPage'), page: byId('paymentPageLabel'), detail: byId('paymentReviewDetail'), detailTitle: byId('paymentReviewDetailTitle'), detailMessage: byId('paymentReviewDetailMessage'), facts: byId('paymentReviewFacts'), snapshot: byId('paymentReviewSnapshot'), history: byId('paymentReviewHistory'), notes: byId('paymentReviewNotes'), actions: byId('paymentReviewDetailActions'), dialog: byId('paymentReviewActionDialog'), form: byId('paymentReviewActionForm'), title: byId('paymentReviewActionTitle'), fields: byId('paymentReviewActionFields'), help: byId('paymentReviewActionHelp'), error: byId('paymentReviewActionError'), close: byId('closePaymentReviewAction'), cancel: byId('cancelPaymentReviewAction'), submit: byId('submitPaymentReviewAction')
+      link: byId('paymentSubscriptionsLink'), refresh: byId('refreshPaymentAdmin'), feedback: byId('paymentAdminFeedback'), rateForm: byId('paymentRateForm'), rate: byId('paymentCurrentRate'), rates: byId('paymentRateHistory'), methods: byId('paymentAdminMethods'), filterButton: byId('openPaymentReviewFilters'), filterDialog: byId('paymentReviewFilterDialog'), filterError: byId('paymentReviewFilterError'), filters: byId('paymentReviewFilters'), table: byId('paymentReviewTableBody'), empty: byId('emptyPaymentReviews'), previous: byId('paymentPreviousPage'), next: byId('paymentNextPage'), page: byId('paymentPageLabel'), detail: byId('paymentReviewDetail'), detailTitle: byId('paymentReviewDetailTitle'), detailMessage: byId('paymentReviewDetailMessage'), facts: byId('paymentReviewFacts'), snapshot: byId('paymentReviewSnapshot'), history: byId('paymentReviewHistory'), notes: byId('paymentReviewNotes'), actions: byId('paymentReviewDetailActions'), dialog: byId('paymentReviewActionDialog'), form: byId('paymentReviewActionForm'), title: byId('paymentReviewActionTitle'), fields: byId('paymentReviewActionFields'), help: byId('paymentReviewActionHelp'), error: byId('paymentReviewActionError'), close: byId('closePaymentReviewAction'), cancel: byId('cancelPaymentReviewAction'), submit: byId('submitPaymentReviewAction')
     };
     if (!elements.link) return null;
-    const state = { page: 1, pages: 1, detail: null, processing: false, loaded: false };
+    const state = { page: 1, pages: 1, detail: null, processing: false, loaded: false, filterApplying: false, appliedFilters: null };
     let detailReturnFocus = null;
 
     async function request(url, options = {}) {
@@ -26,7 +26,12 @@
     }
     function createNode(tag, text, className) { const node = global.document.createElement(tag); node.textContent = text; if (className) node.className = className; return node; }
     function feedback(message) { if (elements.feedback) elements.feedback.textContent = message; }
-    function query() { const values = Object.fromEntries(new FormData(elements.filters).entries()); values.pagina = String(state.page); values.limite = '10'; return new URLSearchParams(Object.entries(values).filter(([, value]) => value !== '')).toString(); }
+    function formFilters() { return new URLSearchParams(new FormData(elements.filters)); }
+    function query() { const values = new URLSearchParams(state.appliedFilters); values.set('pagina', String(state.page)); values.set('limite', '10'); return values.toString(); }
+    function restoreFilterDraft() {
+      for (const field of elements.filters.querySelectorAll('select')) field.value = state.appliedFilters.get(field.name) || '';
+    }
+    state.appliedFilters = formFilters();
     function fact(name, value) { const div = global.document.createElement('div'); div.append(createNode('span', name), createNode('strong', value)); return div; }
 
     function renderRates(data) {
@@ -96,7 +101,59 @@
     }
     async function saveMethod(form, button) { const restore = global.UiPatterns?.mutation(button, 'Guardando...'); if (!restore) return; try { const body = { activo: form.elements.activo.checked, visiblePropietario: form.elements.visiblePropietario.checked, instrucciones: form.elements.instrucciones.value || null }; await request(`/api/admin/pagos-suscripcion/metodos/${encodeURIComponent(form.dataset.reference)}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json', 'Idempotency-Key': operationKey('payment-method') }, body: JSON.stringify(body) }); feedback('Metodo actualizado.'); await loadConfiguration(); } catch (error) { feedback(global.UiPatterns?.messageFor(error) || 'No se pudo actualizar el metodo.'); } finally { restore(); } }
     elements.rateForm.addEventListener('submit', async (event) => { event.preventDefault(); const button = elements.rateForm.querySelector('button'); const restore = global.UiPatterns?.mutation(button, 'Registrando...'); if (!restore) return; try { await request('/api/admin/pagos-suscripcion/tipos-cambio', { method: 'POST', headers: { 'Content-Type': 'application/json', 'Idempotency-Key': operationKey('payment-rate') }, body: JSON.stringify(Object.fromEntries(new FormData(elements.rateForm).entries())) }); elements.rateForm.reset(); feedback('Tipo de cambio registrado.'); await loadConfiguration(); } catch (error) { feedback(global.UiPatterns?.messageFor(error) || 'No se pudo registrar el tipo de cambio.'); } finally { restore(); } });
-    elements.filters.addEventListener('submit', (event) => { event.preventDefault(); state.page = 1; void loadList(); }); elements.previous.addEventListener('click', () => { if (state.page > 1) { state.page -= 1; void loadList(); } }); elements.next.addEventListener('click', () => { if (state.page < state.pages) { state.page += 1; void loadList(); } }); elements.refresh.addEventListener('click', () => { void Promise.all([loadConfiguration(), loadList()]); }); elements.link.addEventListener('click', () => { if (!state.loaded) void Promise.all([loadConfiguration(), loadList()]); }); elements.form.addEventListener('submit', submitAction); elements.close.addEventListener('click', () => elements.dialog.close()); elements.cancel.addEventListener('click', () => elements.dialog.close());
+    elements.filterButton.addEventListener('click', () => {
+      elements.filterError.hidden = true;
+      elements.filterDialog.showModal();
+      elements.filters.elements.estado.focus();
+    });
+    byId('closePaymentReviewFilters').addEventListener('click', () => {
+      if (!state.filterApplying) elements.filterDialog.close();
+    });
+    elements.filterDialog.addEventListener('cancel', (event) => {
+      if (state.filterApplying) event.preventDefault();
+    });
+    elements.filterDialog.addEventListener('close', () => {
+      restoreFilterDraft();
+      const target = global.document.querySelector('.admin-main')?.dataset.activeView === 'pagos-suscripcion'
+        ? elements.filterButton : global.document.querySelector('.admin-sidebar .nav-link.active');
+      target?.focus();
+    });
+    elements.filters.addEventListener('submit', async (event) => {
+      event.preventDefault();
+      if (state.filterApplying) return;
+      state.filterApplying = true;
+      const previousFilters = state.appliedFilters;
+      const previousPage = state.page;
+      const submit = elements.filters.querySelector('[type="submit"]');
+      submit.disabled = true;
+      elements.filters.setAttribute('aria-busy', 'true');
+      state.appliedFilters = formFilters();
+      state.page = 1;
+      elements.filterError.hidden = true;
+      try {
+        await loadList();
+        const activeCount = Number(Boolean(state.appliedFilters.get('estado')))
+          + Number(state.appliedFilters.get('orden') !== 'recientes');
+        elements.filterButton.textContent = activeCount ? `Filtros (${activeCount})` : 'Filtros';
+        elements.filterDialog.close();
+      } catch (error) {
+        state.appliedFilters = previousFilters;
+        state.page = previousPage;
+        elements.filterError.textContent = error.message;
+        elements.filterError.hidden = false;
+      } finally {
+        state.filterApplying = false;
+        submit.disabled = false;
+        elements.filters.removeAttribute('aria-busy');
+      }
+    });
+    elements.previous.addEventListener('click', () => { if (state.page > 1) { state.page -= 1; void loadList(); } });
+    elements.next.addEventListener('click', () => { if (state.page < state.pages) { state.page += 1; void loadList(); } });
+    elements.refresh.addEventListener('click', () => { void Promise.all([loadConfiguration(), loadList()]); });
+    elements.link.addEventListener('click', () => { if (!state.loaded) void Promise.all([loadConfiguration(), loadList()]); });
+    elements.form.addEventListener('submit', submitAction);
+    elements.close.addEventListener('click', () => elements.dialog.close());
+    elements.cancel.addEventListener('click', () => elements.dialog.close());
     byId('closePaymentReviewDetail').addEventListener('click', () => elements.detail.close());
     elements.detail.addEventListener('close', () => {
       elements.detail.hidden = true;
@@ -110,6 +167,7 @@
     });
     global.addEventListener('admin:viewchange', (event) => {
       if (event.detail !== 'pagos-suscripcion' && elements.detail.open) elements.detail.close();
+      if (event.detail !== 'pagos-suscripcion' && elements.filterDialog.open) elements.filterDialog.close();
     });
     if (global.location.hash === '#pagos-suscripcion') void Promise.all([loadConfiguration(), loadList()]);
     return Object.freeze({ loadConfiguration, loadList });
