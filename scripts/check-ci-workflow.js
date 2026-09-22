@@ -20,6 +20,8 @@ function checkWorkflow(source) {
     'npm run check:ci-environment',
     'npm run test:staging-configuration',
     'npm run test:email-delivery',
+    'npm run test:public-auth-ui',
+    'npm run test:public-auth-ui-browser',
     'npm run db:init',
     'npm run db:migrate',
     'npm run test:saas-c-schema',

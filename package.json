@@ -95,6 +95,8 @@
     "test:email-verification": "node scripts/test-email-verification.js",
     "test:email-delivery": "node scripts/test-email-delivery.js",
     "test:password-recovery": "node scripts/test-password-recovery.js",
+    "test:public-auth-ui": "node scripts/test-public-auth-ui.js",
+    "test:public-auth-ui-browser": "node scripts/test-public-auth-ui-browser.js",
     "test:store-configuration": "node scripts/test-store-configuration.js",
     "test:subscription-lifecycle-schema": "node scripts/test-subscription-lifecycle-schema.js",
     "test:subscription-lifecycle-engine": "node scripts/test-subscription-lifecycle-engine.js",

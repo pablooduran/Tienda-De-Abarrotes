@@ -3,23 +3,168 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Ingresar | Tienda de abarrotes</title>
+  <meta name="color-scheme" content="light">
+  <title>Acceso | Tienda de abarrotes</title>
   <link rel="stylesheet" href="/css/styles.css">
 </head>
 <body class="login-page">
-  <main class="login-box">
-    <h1>Tienda de abarrotes</h1>
-    <p>Ingreso de administrador</p>
-    <form id="loginForm">
-      <label>Usuario
-        <input name="usuario" required autocomplete="username">
-      </label>
-      <label>Contraseña
-        <input name="password" type="password" required autocomplete="current-password">
-      </label>
-      <button type="submit">Iniciar sesión</button>
-      <div id="loginMessage" class="message"></div>
-    </form>
+  <main class="auth-shell">
+    <section class="auth-welcome" aria-labelledby="auth-brand-title">
+      <div class="auth-brand">
+        <span class="auth-brand-mark" aria-hidden="true">TA</span>
+        <div>
+          <p class="auth-eyebrow">Control diario de tu negocio</p>
+          <h1 id="auth-brand-title">Tienda de abarrotes</h1>
+        </div>
+      </div>
+      <p class="auth-welcome-copy">Vende, controla existencias y lleva tus cuentas desde un solo lugar.</p>
+      <div class="auth-store-scene" aria-hidden="true">
+        <div class="auth-store-awning"><i></i><i></i><i></i><i></i><i></i></div>
+        <div class="auth-store-front">
+          <div class="auth-store-window">
+            <span></span><span></span><span></span>
+            <span></span><span></span><span></span>
+          </div>
+          <div class="auth-store-door"><span></span></div>
+        </div>
+      </div>
+      <ul class="auth-benefits" aria-label="Funciones principales">
+        <li>Ventas y caja</li>
+        <li>Inventario y compras</li>
+        <li>Crédito y cobranza</li>
+      </ul>
+    </section>
+
+    <section class="auth-workspace" aria-label="Acceso a la cuenta">
+      <div class="auth-switcher" aria-label="Elige cómo continuar">
+        <button type="button" data-auth-target="login" aria-pressed="true">Iniciar sesión</button>
+        <button type="button" data-auth-target="register" aria-pressed="false">Crear cuenta</button>
+      </div>
+
+      <section class="auth-panel" data-auth-panel="login" aria-labelledby="login-title">
+        <header class="auth-panel-heading">
+          <p class="auth-eyebrow">Bienvenido de nuevo</p>
+          <h2 id="login-title" tabindex="-1">Entra a tu tienda</h2>
+          <p>Usa el usuario y la contraseña de tu cuenta.</p>
+        </header>
+        <form id="loginForm" class="auth-form" novalidate>
+          <label for="login-user">Usuario
+            <input id="login-user" name="usuario" required maxlength="80" autocomplete="username">
+          </label>
+          <label for="login-password">Contraseña
+            <input id="login-password" name="password" type="password" required autocomplete="current-password">
+          </label>
+          <button type="submit" data-pending-label="Ingresando…">Iniciar sesión</button>
+          <p id="loginMessage" class="auth-message" role="status" aria-live="polite"></p>
+        </form>
+        <div class="auth-panel-links" aria-label="Otras opciones de acceso">
+          <button type="button" class="auth-link" data-auth-target="recovery">Olvidé mi contraseña</button>
+          <button type="button" class="auth-link" data-auth-target="verify">Ya tengo un código de verificación</button>
+        </div>
+      </section>
+
+      <section class="auth-panel" data-auth-panel="register" aria-labelledby="register-title" hidden>
+        <header class="auth-panel-heading">
+          <p class="auth-eyebrow">Primer paso</p>
+          <h2 id="register-title" tabindex="-1">Crea la cuenta de tu tienda</h2>
+          <p>Después confirmarás tu correo antes de comenzar la configuración.</p>
+        </header>
+        <form id="registrationForm" class="auth-form" novalidate>
+          <label for="register-store">Nombre de la tienda
+            <input id="register-store" name="nombreTienda" required minlength="2" maxlength="120" autocomplete="organization">
+          </label>
+          <div class="auth-form-row">
+            <label for="register-user">Usuario
+              <input id="register-user" name="usuario" required minlength="3" maxlength="50" autocomplete="username">
+            </label>
+            <label for="register-email">Correo
+              <input id="register-email" name="correo" type="email" required maxlength="160" autocomplete="email">
+            </label>
+          </div>
+          <div class="auth-form-row">
+            <label for="register-password">Contraseña
+              <input id="register-password" name="password" type="password" required minlength="12" maxlength="72" autocomplete="new-password" aria-describedby="register-password-help">
+            </label>
+            <label for="register-confirmation">Confirmar contraseña
+              <input id="register-confirmation" name="confirmacionRegistro" type="password" required minlength="12" maxlength="72" autocomplete="new-password">
+            </label>
+          </div>
+          <p id="register-password-help" class="auth-field-help">Usa al menos 12 caracteres.</p>
+          <button type="submit" data-pending-label="Creando cuenta…">Crear cuenta</button>
+          <p class="auth-message" data-auth-feedback="register" role="status" aria-live="polite"></p>
+        </form>
+      </section>
+
+      <section class="auth-panel" data-auth-panel="verify" aria-labelledby="verify-title" hidden>
+        <header class="auth-panel-heading">
+          <p class="auth-eyebrow">Confirma tu correo</p>
+          <h2 id="verify-title" tabindex="-1">Ingresa tu código de verificación</h2>
+          <p>El código se envía al correo asociado a la cuenta y solo puede usarse una vez.</p>
+        </header>
+        <form id="verificationForm" class="auth-form" novalidate>
+          <label for="verification-token">Código de verificación
+            <input id="verification-token" name="token" type="password" required minlength="43" maxlength="43" autocomplete="one-time-code" spellcheck="false">
+          </label>
+          <button type="submit" data-pending-label="Verificando…">Verificar correo</button>
+        </form>
+        <details class="auth-secondary-flow">
+          <summary>Reenviar código</summary>
+          <form id="resendVerificationForm" class="auth-form auth-form-compact" novalidate>
+            <label for="resend-email">Correo de la cuenta
+              <input id="resend-email" name="correo" type="email" required maxlength="160" autocomplete="email">
+            </label>
+            <button type="submit" class="secondary" data-pending-label="Solicitando…">Solicitar otro código</button>
+          </form>
+        </details>
+        <p class="auth-message" data-auth-feedback="verify" role="status" aria-live="polite"></p>
+        <button type="button" class="auth-link auth-back" data-auth-target="login">Volver a iniciar sesión</button>
+      </section>
+
+      <section class="auth-panel" data-auth-panel="recovery" aria-labelledby="recovery-title" hidden>
+        <header class="auth-panel-heading">
+          <p class="auth-eyebrow">Recupera el acceso</p>
+          <h2 id="recovery-title" tabindex="-1">Solicita un código de recuperación</h2>
+          <p>Por seguridad, la respuesta será la misma exista o no una cuenta asociada.</p>
+        </header>
+        <form id="recoveryRequestForm" class="auth-form" novalidate>
+          <label for="recovery-email">Correo de la cuenta
+            <input id="recovery-email" name="correo" type="email" required maxlength="160" autocomplete="email">
+          </label>
+          <button type="submit" data-pending-label="Solicitando…">Solicitar código</button>
+          <p class="auth-message" data-auth-feedback="recovery" role="status" aria-live="polite"></p>
+        </form>
+        <div class="auth-panel-links">
+          <button type="button" class="auth-link" data-auth-target="reset">Ya tengo el código</button>
+          <button type="button" class="auth-link" data-auth-target="login">Volver a iniciar sesión</button>
+        </div>
+      </section>
+
+      <section class="auth-panel" data-auth-panel="reset" aria-labelledby="reset-title" hidden>
+        <header class="auth-panel-heading">
+          <p class="auth-eyebrow">Nueva contraseña</p>
+          <h2 id="reset-title" tabindex="-1">Restablece tu contraseña</h2>
+          <p>Usa el código recibido y elige una contraseña nueva.</p>
+        </header>
+        <form id="passwordResetForm" class="auth-form" novalidate>
+          <label for="recovery-token">Código de recuperación
+            <input id="recovery-token" name="token" type="password" required minlength="43" maxlength="43" autocomplete="one-time-code" spellcheck="false">
+          </label>
+          <div class="auth-form-row">
+            <label for="new-password">Nueva contraseña
+              <input id="new-password" name="nuevaPassword" type="password" required minlength="12" maxlength="72" autocomplete="new-password">
+            </label>
+            <label for="new-password-confirmation">Confirmar contraseña
+              <input id="new-password-confirmation" name="confirmacionPassword" type="password" required minlength="12" maxlength="72" autocomplete="new-password">
+            </label>
+          </div>
+          <button type="submit" data-pending-label="Actualizando…">Guardar nueva contraseña</button>
+          <p class="auth-message" data-auth-feedback="reset" role="status" aria-live="polite"></p>
+        </form>
+        <button type="button" class="auth-link auth-back" data-auth-target="login">Volver a iniciar sesión</button>
+      </section>
+
+      <p class="auth-security-note">Tus datos se envían únicamente a esta aplicación mediante una conexión protegida.</p>
+    </section>
   </main>
   <script src="/js/http-security.js"></script>
   <script src="/js/login.js"></script>

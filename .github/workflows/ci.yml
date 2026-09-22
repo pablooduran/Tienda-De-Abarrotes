@@ -62,6 +62,7 @@ jobs:
         run: |
           npm run test:staging-configuration
           npm run test:email-delivery
+          npm run test:public-auth-ui
       - name: Validate JavaScript syntax
         run: |
           node --check server.js
@@ -112,7 +113,9 @@ jobs:
           npm run test:saas-c-payment-applications
           npm run test:saas-c-payment-application-security
       - name: Run critical browser business gate
-        run: npm run test:e2e-critical-business
+        run: |
+          npm run test:public-auth-ui-browser
+          npm run test:e2e-critical-business
       - name: Stop isolated HTTP test server
         if: always()
         shell: bash

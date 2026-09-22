@@ -249,14 +249,14 @@ async function runBrowserFlow(baseUrl, account) {
       }
     });
     await page.goto(`${baseUrl}/login.html`);
-    await page.locator('input[name="usuario"]').fill(account.usuario);
-    await page.locator('input[name="password"]').fill(account.password);
-    await page.locator('button[type="submit"]').focus();
+    await page.locator('#loginForm input[name="usuario"]').fill(account.usuario);
+    await page.locator('#loginForm input[name="password"]').fill(account.password);
+    await page.locator('#loginForm button[type="submit"]').focus();
     assert.strictEqual(
-      await page.locator('button[type="submit"]').evaluate((button) => document.activeElement === button),
+      await page.locator('#loginForm button[type="submit"]').evaluate((button) => document.activeElement === button),
       true
     );
-    await page.locator('button[type="submit"]').press('Enter');
+    await page.locator('#loginForm button[type="submit"]').press('Enter');
     await page.waitForURL('**/onboarding.html');
     await page.locator('[data-onboarding-form]').waitFor();
     await page.locator('input[name="nombreMostrado"]').fill(`${account.nombreTienda} Configurada`);

@@ -1117,6 +1117,13 @@ La migracion `013` agrega `administrador.versionSesion`. Cada peticion autentica
 
 ### Registro publico y verificacion de correo
 
+`/login.html` concentra el acceso publico: inicio de sesion, alta de tienda,
+verificacion, reenvio de codigo y recuperacion de contrasena. La interfaz usa
+los contratos de autenticacion existentes, no guarda tokens o credenciales en
+el navegador y mantiene el tenant, el plan y el rol bajo control del servidor.
+El alta exige una clave idempotente y, tras completarse, conduce a la
+verificacion de correo sin crear una sesion anticipada.
+
 `POST /auth/registro` crea una tienda, su propietario y una suscripcion de prueba
 del plan Basico por 30 dias en una unica transaccion. El servidor decide plan,
 duracion, rol y tenant; el cliente solo puede enviar nombre de tienda, slug,
