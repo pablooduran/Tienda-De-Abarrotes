@@ -188,6 +188,10 @@ async function main() {
     await page.locator('#saasSubscriptionActionDialog[open]').waitFor({ state: 'detached' });
     assert.strictEqual(await page.locator('#saasSubscriptionDetail').evaluate((node) => node.open), true,
       'Tras guardar, el detalle debe permanecer abierto.');
+    await page.locator('#closeSaasDetail').click();
+    await page.waitForFunction(() => document.activeElement === document.querySelector('#saasSubscriptionsTableBody .table-action'));
+    assert.strictEqual(await page.locator('#saasSubscriptionsTableBody .table-action').evaluate((node) => document.activeElement === node), true,
+      'Tras actualizar la lista, el foco debe volver al boton Gestionar.');
     assert.strictEqual(fixture.mutations.length, 1);
     assert.deepStrictEqual(fixture.mutations[0].body, { motivo: 'falta_pago' });
     assert(/^saas-admin:[0-9a-f-]{36}$/.test(fixture.mutations[0].key));

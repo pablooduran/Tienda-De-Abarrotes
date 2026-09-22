@@ -75,7 +75,27 @@ async function assertViewport(browser, baseUrl, url, selector) {
       elements: Array.from(document.querySelectorAll('body *')).filter((element) => element.getBoundingClientRect().right > window.innerWidth + 1).slice(0, 5).map((element) => `${element.tagName}.${element.className}`)
     }));
     assert.strictEqual(overflow.active, false, `Overflow ${viewport.width}: ${JSON.stringify(overflow)}`);
-    await page.keyboard.press('Tab'); assert.notStrictEqual(await page.evaluate(() => getComputedStyle(document.activeElement).outlineStyle), 'none'); assert.deepStrictEqual(errors, []); await page.close();
+    await page.keyboard.press('Tab'); assert.notStrictEqual(await page.evaluate(() => getComputedStyle(document.activeElement).outlineStyle), 'none');
+    if (url === '/admin.html#pagos-suscripcion') {
+      const detailButton = page.locator('#paymentReviewTableBody .table-action');
+      await detailButton.evaluate((node) => node.addEventListener('click', () => {
+        window.__scrollAtPaymentClick = document.querySelector('.admin-main').scrollTop;
+      }, { capture: true, once: true }));
+      await detailButton.click();
+      await page.locator('#paymentReviewDetail[open]').waitFor();
+      assert.strictEqual(await page.locator('#paymentReviewDetail').evaluate((node) => node.matches(':modal')), true);
+      assert.strictEqual(await page.locator('.admin-main').evaluate((node) => node.scrollTop),
+        await page.evaluate(() => window.__scrollAtPaymentClick), 'Ver detalle no debe desplazar la lista.');
+      assert.strictEqual(await page.evaluate(() => document.activeElement.id), 'closePaymentReviewDetail');
+      assert.strictEqual(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth + 1), true);
+      await page.keyboard.press('Escape');
+      await page.locator('#paymentReviewDetail[open]').waitFor({ state: 'detached' });
+      assert.strictEqual(await detailButton.evaluate((node) => document.activeElement === node), true);
+      await detailButton.click();
+      await page.locator('#closePaymentReviewDetail').click();
+      assert.strictEqual(await page.locator('#paymentReviewDetail').evaluate((node) => node.open), false);
+    }
+    assert.deepStrictEqual(errors, []); await page.close();
   }
 }
 
@@ -85,7 +105,25 @@ async function main() {
   try {
     await assertViewport(browser, baseUrl, '/suscripcion.html', '[data-payment-form]'); await assertViewport(browser, baseUrl, '/admin.html#pagos-suscripcion', '#paymentReviewTableBody tr');
     const owner = await browser.newPage({ viewport: { width: 1366, height: 768 } }); await owner.goto(`${baseUrl}/suscripcion.html`); await owner.locator('[data-payment-form]').waitFor(); await owner.getByRole('button', { name: 'Cotizar' }).click(); await owner.locator('.payment-quote').waitFor(); await owner.getByRole('button', { name: 'Crear solicitud' }).click(); await owner.locator('[data-receipt-form]').waitFor(); await owner.locator('[data-receipt-form] input').setInputFiles({ name: 'comprobante.pdf', mimeType: 'application/pdf', buffer: Buffer.from('%PDF-1.4') }); await owner.getByRole('button', { name: 'Enviar comprobante' }).click(); await owner.getByText('Pendiente de revisión').first().waitFor(); await owner.getByRole('button', { name: 'Cerrar detalle' }).click(); await owner.getByRole('button', { name: 'Ver detalle' }).first().click(); await owner.getByRole('button', { name: 'Reemplazar archivo' }).waitFor(); assert(!await owner.content().then((html) => /idTienda|idSuscripcion/.test(html))); await owner.close();
-    const admin = await browser.newPage({ viewport: { width: 1366, height: 768 } }); await admin.goto(`${baseUrl}/admin.html#pagos-suscripcion`); await admin.locator('#paymentReviewTableBody tr').waitFor(); await admin.locator('#paymentRateForm input[name="valor"]').fill('7.00000000'); await admin.locator('#paymentRateForm input[name="fuente"]').fill('Fuente browser'); await admin.getByRole('button', { name: 'Registrar tasa' }).click(); await admin.getByRole('button', { name: 'Guardar método' }).first().click(); await admin.getByRole('button', { name: 'Ver detalle' }).click(); await admin.getByRole('button', { name: 'Solicitar corrección' }).click(); await admin.locator('textarea[name="observacion"]').fill('Corrige el archivo adjunto.'); await admin.getByRole('button', { name: 'Confirmar' }).click(); assert(fixture.state.mutations.some((item) => item.kind === 'observada')); await admin.close();
+    const admin = await browser.newPage({ viewport: { width: 1366, height: 768 } });
+    await admin.goto(`${baseUrl}/admin.html#pagos-suscripcion`);
+    await admin.locator('#paymentReviewTableBody tr').waitFor();
+    await admin.locator('#paymentRateForm input[name="valor"]').fill('7.00000000');
+    await admin.locator('#paymentRateForm input[name="fuente"]').fill('Fuente browser');
+    await admin.getByRole('button', { name: 'Registrar tasa' }).click();
+    await admin.getByRole('button', { name: 'Guardar método' }).first().click();
+    await admin.getByRole('button', { name: 'Ver detalle' }).click();
+    await admin.locator('#paymentReviewDetail[open]').waitFor();
+    await admin.getByRole('button', { name: 'Solicitar corrección' }).click();
+    await admin.locator('textarea[name="observacion"]').fill('Corrige el archivo adjunto.');
+    await admin.getByRole('button', { name: 'Confirmar' }).click();
+    assert(fixture.state.mutations.some((item) => item.kind === 'observada'));
+    await admin.locator('#paymentReviewActionDialog[open]').waitFor({ state: 'detached' });
+    assert.strictEqual(await admin.locator('#paymentReviewDetail').evaluate((node) => node.open), true);
+    await admin.locator('#closePaymentReviewDetail').click();
+    await admin.waitForFunction(() => document.activeElement === document.querySelector('#paymentReviewTableBody .table-action'));
+    assert.strictEqual(await admin.locator('#paymentReviewTableBody .table-action').evaluate((node) => document.activeElement === node), true);
+    await admin.close();
     assert(fixture.state.mutations.every((item) => item.key === undefined || /:[0-9a-f-]{36}$/.test(item.key))); assert(!JSON.stringify(fixture.state.mutations).includes('idTienda')); console.log('test:saas-c-payment-browser OK');
   } finally { await browser.close(); await new Promise((resolve) => fixture.server.close(resolve)); }
 }

@@ -16,6 +16,7 @@
     };
     if (!elements.link) return null;
     const state = { page: 1, pages: 1, detail: null, processing: false, loaded: false };
+    let detailReturnFocus = null;
 
     async function request(url, options = {}) {
       const response = await global.SecurityHttp.secureFetch(url, options);
@@ -54,14 +55,14 @@
         for (const value of [item.tienda, label(item.operacion), item.plan.nombre, `${item.monto.moneda} ${item.monto.valor}`]) row.append(createNode('td', value));
         const stateCell = global.document.createElement('td'); stateCell.append(createNode('span', label(item.estado), 'payment-state')); stateCell.firstChild.dataset.state = item.estado; row.append(stateCell);
         row.append(createNode('td', item.comprobanteDisponible ? 'Disponible' : 'No disponible'));
-        const action = global.document.createElement('td'); const button = createNode('button', 'Ver detalle', 'button button-secondary table-action'); button.type = 'button'; button.addEventListener('click', () => { void loadDetail(item.referencia); }); action.append(button); row.append(action); elements.table.append(row);
+        const action = global.document.createElement('td'); const button = createNode('button', 'Ver detalle', 'button button-secondary table-action'); button.type = 'button'; button.dataset.reference = item.referencia; button.addEventListener('click', () => { void loadDetail(item.referencia); }); action.append(button); row.append(action); elements.table.append(row);
       }
       elements.empty.hidden = Boolean((data.resultados || []).length); elements.page.textContent = `Página ${state.page} de ${state.pages}`; elements.previous.disabled = state.page <= 1; elements.next.disabled = state.page >= state.pages;
     }
     async function loadList() { renderList(await request(`/api/admin/pagos-suscripcion/revision?${query()}`)); state.loaded = true; }
     async function loadConfiguration() { const [rates, methods] = await Promise.all([request('/api/admin/pagos-suscripcion/tipos-cambio'), request('/api/admin/pagos-suscripcion/metodos')]); renderRates(rates); renderMethods(methods); }
     function actionButton(action, text, style = 'button-secondary') { const button = createNode('button', text, `button ${style}`); button.type = 'button'; button.addEventListener('click', () => openAction(action)); return button; }
-    function renderDetail(data) {
+    function renderDetail(data, returnFocus) {
       state.detail = data; elements.detailTitle.textContent = `${data.tienda} · ${data.plan.nombre}`; elements.detailMessage.textContent = `${label(data.operacion)} · ${label(data.estado)}`;
       elements.facts.replaceChildren(fact('Monto', `${data.monto.moneda} ${data.monto.valor}`), fact('Método', data.metodo), fact('Creada', date(data.creadaEn)), fact('Vence', date(data.venceEn)), fact('Plan actual', data.planActual.nombre), fact('Tipo de cambio', `USD/BOB ${data.tipoCambio.valor}`));
       elements.snapshot.replaceChildren(...[ `Periodo: ${label(data.snapshot.periodo)} (${data.snapshot.meses} meses)`, `Precio: ${data.snapshot.monedaBase} ${data.snapshot.precioUSD}`, `Fuente de cambio: ${data.tipoCambio.fuente}`, `Comprobante: ${data.comprobante ? data.comprobante.nombre : 'No disponible'}` ].map((text) => createNode('p', text)));
@@ -69,9 +70,20 @@
       elements.history.replaceChildren(...(data.historial || []).map((item) => createNode('p', `${label(item.evento)} · ${date(item.fecha)}`)));
       elements.notes.replaceChildren(...(data.revisiones || []).map((item) => createNode('p', `${label(item.decision)}: ${item.observacion}`)));
       elements.actions.replaceChildren(); if (data.estado === 'pendiente_revision') elements.actions.append(actionButton('observada', 'Solicitar corrección'), actionButton('rechazada', 'Rechazar', 'button-danger'), actionButton('aplicar', 'Aprobar y aplicar', 'button-primary')); else if (data.estado === 'observada') elements.actions.append(actionButton('rechazada', 'Rechazar', 'button-danger'));
-      elements.detail.hidden = false; elements.detail.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      if (!elements.detail.open) {
+        detailReturnFocus = returnFocus;
+        elements.detail.hidden = false;
+        elements.detail.showModal();
+        global.document.body.classList.add('admin-detail-open');
+        byId('closePaymentReviewDetail').focus();
+      }
     }
-    async function loadDetail(reference) { renderDetail(await request(`/api/admin/pagos-suscripcion/revision/${encodeURIComponent(reference)}`)); }
+    async function loadDetail(reference) {
+      const returnFocus = global.document.activeElement;
+      const data = await request(`/api/admin/pagos-suscripcion/revision/${encodeURIComponent(reference)}`);
+      if (global.document.querySelector('.admin-main')?.dataset.activeView !== 'pagos-suscripcion') return;
+      renderDetail(data, returnFocus);
+    }
     function openAction(action) {
       elements.form.dataset.action = action; elements.fields.replaceChildren(); elements.error.hidden = true;
       const isApply = action === 'aplicar'; elements.title.textContent = isApply ? 'Aprobar y aplicar' : action === 'observada' ? 'Solicitar corrección' : 'Rechazar solicitud'; elements.help.textContent = isApply ? 'Esta acción aplica el pago a la suscripción usando las condiciones congeladas. No puede deshacerse desde esta pantalla.' : 'La observación o rechazo conserva el historial y el comprobante.';
@@ -85,6 +97,20 @@
     async function saveMethod(form, button) { const restore = global.UiPatterns?.mutation(button, 'Guardando...'); if (!restore) return; try { const body = { activo: form.elements.activo.checked, visiblePropietario: form.elements.visiblePropietario.checked, instrucciones: form.elements.instrucciones.value || null }; await request(`/api/admin/pagos-suscripcion/metodos/${encodeURIComponent(form.dataset.reference)}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json', 'Idempotency-Key': operationKey('payment-method') }, body: JSON.stringify(body) }); feedback('Metodo actualizado.'); await loadConfiguration(); } catch (error) { feedback(global.UiPatterns?.messageFor(error) || 'No se pudo actualizar el metodo.'); } finally { restore(); } }
     elements.rateForm.addEventListener('submit', async (event) => { event.preventDefault(); const button = elements.rateForm.querySelector('button'); const restore = global.UiPatterns?.mutation(button, 'Registrando...'); if (!restore) return; try { await request('/api/admin/pagos-suscripcion/tipos-cambio', { method: 'POST', headers: { 'Content-Type': 'application/json', 'Idempotency-Key': operationKey('payment-rate') }, body: JSON.stringify(Object.fromEntries(new FormData(elements.rateForm).entries())) }); elements.rateForm.reset(); feedback('Tipo de cambio registrado.'); await loadConfiguration(); } catch (error) { feedback(global.UiPatterns?.messageFor(error) || 'No se pudo registrar el tipo de cambio.'); } finally { restore(); } });
     elements.filters.addEventListener('submit', (event) => { event.preventDefault(); state.page = 1; void loadList(); }); elements.previous.addEventListener('click', () => { if (state.page > 1) { state.page -= 1; void loadList(); } }); elements.next.addEventListener('click', () => { if (state.page < state.pages) { state.page += 1; void loadList(); } }); elements.refresh.addEventListener('click', () => { void Promise.all([loadConfiguration(), loadList()]); }); elements.link.addEventListener('click', () => { if (!state.loaded) void Promise.all([loadConfiguration(), loadList()]); }); elements.form.addEventListener('submit', submitAction); elements.close.addEventListener('click', () => elements.dialog.close()); elements.cancel.addEventListener('click', () => elements.dialog.close());
+    byId('closePaymentReviewDetail').addEventListener('click', () => elements.detail.close());
+    elements.detail.addEventListener('close', () => {
+      elements.detail.hidden = true;
+      global.document.body.classList.remove('admin-detail-open');
+      const matchingButton = Array.from(elements.table.querySelectorAll('.table-action'))
+        .find((button) => button.dataset.reference === state.detail?.referencia);
+      const target = detailReturnFocus?.isConnected && detailReturnFocus.getClientRects().length
+        ? detailReturnFocus : matchingButton || elements.link;
+      target.focus();
+      detailReturnFocus = null;
+    });
+    global.addEventListener('admin:viewchange', (event) => {
+      if (event.detail !== 'pagos-suscripcion' && elements.detail.open) elements.detail.close();
+    });
     if (global.location.hash === '#pagos-suscripcion') void Promise.all([loadConfiguration(), loadList()]);
     return Object.freeze({ loadConfiguration, loadList });
   }

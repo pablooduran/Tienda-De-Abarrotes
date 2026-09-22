@@ -93,12 +93,12 @@
         </form>
         <div class="table-wrap"><table><thead><tr><th>Tienda</th><th>Operación</th><th>Plan</th><th>Monto</th><th>Estado</th><th>Comprobante</th><th><span class="sr-only">Acciones</span></th></tr></thead><tbody id="paymentReviewTableBody"></tbody></table><p id="emptyPaymentReviews" class="empty-state" hidden>No hay solicitudes para revisar.</p></div>
         <div class="catalog-pagination"><button id="paymentPreviousPage" class="button button-secondary" type="button">Anterior</button><span id="paymentPageLabel">Página 1</span><button id="paymentNextPage" class="button button-secondary" type="button">Siguiente</button></div>
-        <section id="paymentReviewDetail" class="saas-detail" aria-labelledby="paymentReviewDetailTitle" hidden>
-          <div class="section-heading detail-heading"><div><p class="eyebrow">Detalle de solicitud</p><h3 id="paymentReviewDetailTitle"></h3><p id="paymentReviewDetailMessage"></p></div><div id="paymentReviewDetailActions" class="button-row"></div></div>
+        <dialog id="paymentReviewDetail" class="saas-detail" aria-labelledby="paymentReviewDetailTitle" hidden>
+          <div class="section-heading detail-heading"><div><p class="eyebrow">Detalle de solicitud</p><h3 id="paymentReviewDetailTitle"></h3><p id="paymentReviewDetailMessage"></p></div><div class="button-row"><button id="closePaymentReviewDetail" class="button button-quiet" type="button">Cerrar detalle</button><div id="paymentReviewDetailActions" class="button-row"></div></div></div>
           <div id="paymentReviewFacts" class="detail-facts"></div>
           <div class="saas-detail-grid"><div><h3>Condiciones congeladas</h3><div id="paymentReviewSnapshot" class="payment-history"></div></div><div><h3>Historial</h3><div id="paymentReviewHistory" class="payment-history"></div></div></div>
           <div><h3>Revisiones</h3><div id="paymentReviewNotes" class="payment-history"></div></div>
-        </section>
+        </dialog>
       </section>
 
       <section id="suscripciones-saas" data-admin-view="suscripciones-saas" class="content-section saas-subscriptions-section" aria-labelledby="saasSubscriptionsHeading">

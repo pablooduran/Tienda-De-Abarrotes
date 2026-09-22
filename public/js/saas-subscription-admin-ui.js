@@ -85,6 +85,7 @@
       const action = document.createElement('button');
       action.type = 'button';
       action.className = 'table-action';
+      action.dataset.reference = item.referencia;
       action.textContent = 'Gestionar';
       action.addEventListener('click', () => loadDetail(item.referencia));
       const row = document.createElement('tr');
@@ -328,8 +329,10 @@
   elements.detail.addEventListener('close', () => {
     elements.detail.hidden = true;
     document.body.classList.remove('admin-detail-open');
+    const matchingButton = Array.from(elements.body.querySelectorAll('.table-action'))
+      .find((button) => button.dataset.reference === state.reference);
     const target = detailReturnFocus?.isConnected && detailReturnFocus.getClientRects().length
-      ? detailReturnFocus : elements.link;
+      ? detailReturnFocus : matchingButton || elements.link;
     target.focus();
     detailReturnFocus = null;
   });
