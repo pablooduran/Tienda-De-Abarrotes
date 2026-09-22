@@ -494,10 +494,35 @@ function renderMenu(activeView = 'inicio') {
       .filter((section) => section && sectionAllowed(section[0]));
     if (!destinations.length && !family.links?.length) return;
 
+    if (destinations.length + (family.links?.length || 0) === 1) {
+      const [id] = destinations[0] || [];
+      const item = id ? document.createElement('button') : document.createElement('a');
+      item.className = 'nav-family nav-family-single';
+      item.dataset.navigationFamily = family.id;
+      item.textContent = family.label;
+      if (id) {
+        item.type = 'button';
+        item.dataset.view = id;
+        item.classList.toggle('active', id === activeView);
+        item.addEventListener('click', () => loadView(id));
+      } else {
+        item.href = family.links[0].href;
+      }
+      menu.appendChild(item);
+      return;
+    }
+
     const group = document.createElement('details');
     group.className = 'nav-family';
+    group.name = 'main-navigation';
     group.dataset.navigationFamily = family.id;
     group.open = family.id === activeFamily;
+    group.addEventListener('toggle', () => {
+      if (!group.open) return;
+      menu.querySelectorAll('details.nav-family[open]').forEach((other) => {
+        if (other !== group) other.open = false;
+      });
+    });
 
     const summary = document.createElement('summary');
     summary.textContent = family.label;

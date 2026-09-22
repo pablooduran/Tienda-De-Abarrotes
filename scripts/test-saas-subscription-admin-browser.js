@@ -109,7 +109,22 @@ async function main() {
       page.on('console', (message) => { if (message.type() === 'error') errors.push(message.text()); });
       page.on('pageerror', (error) => errors.push(error.message));
       await page.goto(`${baseUrl}/admin.html#suscripciones-saas`);
-      await page.locator('#saasSubscriptionsTableBody tr').waitFor();
+      await page.locator('#saasSubscriptionsTableBody tr').waitFor({ state: 'attached' });
+      const viewState = await page.evaluate(() => ({
+        url: window.location.href,
+        activeView: document.querySelector('.admin-main')?.dataset.activeView,
+        sectionDisplay: getComputedStyle(document.getElementById('suscripciones-saas')).display
+      }));
+      assert.strictEqual(viewState.activeView, 'suscripciones-saas', JSON.stringify({ viewState, errors }));
+      assert.notStrictEqual(viewState.sectionDisplay, 'none', JSON.stringify({ viewState, errors }));
+      assert.strictEqual(await page.locator('.admin-sidebar nav').isVisible(), true,
+        'La navegacion administrativa debe estar disponible en movil y escritorio.');
+      await page.locator('.admin-sidebar a[href="#catalogo"]').click();
+      assert.strictEqual(await page.locator('#catalogo').isVisible(), true);
+      assert.strictEqual(await page.locator('#suscripciones-saas').isVisible(), false,
+        'El cambio de vista debe ocultar la seccion anterior.');
+      await page.locator('.admin-sidebar a[href="#suscripciones-saas"]').click();
+      assert.strictEqual(await page.locator('#suscripciones-saas').isVisible(), true);
       const overflow = await page.evaluate(() => ({
         document: document.documentElement.scrollWidth > document.documentElement.clientWidth + 1,
         sizes: {

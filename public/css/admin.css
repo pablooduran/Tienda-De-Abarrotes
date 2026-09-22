@@ -141,6 +141,14 @@ button {
   overflow-y: auto;
   overflow-x: hidden;
 }
+.admin-main[data-active-view] > [data-admin-view] { display: none; }
+.admin-main[data-active-view="tiendas"] > [data-admin-view="tiendas"]:not([hidden]),
+.admin-main[data-active-view="suscripciones-saas"] > [data-admin-view="suscripciones-saas"]:not([hidden]),
+.admin-main[data-active-view="pagos-suscripcion"] > [data-admin-view="pagos-suscripcion"]:not([hidden]),
+.admin-main[data-active-view="catalogo"] > [data-admin-view="catalogo"]:not([hidden]),
+.admin-main[data-active-view="auditoria"] > [data-admin-view="auditoria"]:not([hidden]) { display: block; }
+.admin-main[data-active-view="tiendas"] > .summary-grid[data-admin-view="tiendas"] { display: grid; }
+.admin-main[data-active-view="tiendas"] > .page-header[data-admin-view="tiendas"] { display: flex; }
 
 .page-header,
 .section-heading,
@@ -1038,8 +1046,14 @@ textarea {
   }
 
   .admin-sidebar nav {
-    display: none;
+    display: flex;
+    grid-column: 1 / -1;
+    gap: 6px;
+    overflow-x: auto;
+    white-space: nowrap;
   }
+  .admin-sidebar .admin-nav-group { display: none; }
+  .admin-sidebar .nav-link { flex: 0 0 auto; }
 
   .session-block {
     width: auto;

@@ -1013,24 +1013,22 @@ elements.masterProductSearch.addEventListener('input', () => {
 [elements.masterCategoryFilter, elements.masterBrandFilter, elements.masterStatusFilter].forEach((input) => {
   input.addEventListener('change', () => loadMasterCatalog(1).catch((error) => showToast(error.message, 'error')));
 });
-document.querySelectorAll('.admin-sidebar .nav-link').forEach((link) => {
-  link.addEventListener('click', () => {
-    document.querySelectorAll('.admin-sidebar .nav-link').forEach((item) => item.classList.remove('active'));
-    link.classList.add('active');
-    if (link.id === 'auditAdminLink') {
-      if (!state.auditUi) {
-        state.auditUi = window.AdministrativeAuditUI.create({
-          api,
-          root: document.getElementById('adminAuditRoot'),
-          mode: 'admin',
-          escapeHtml,
-          formatDate
-        });
-      }
-      state.auditUi.render().catch((error) => showToast(error.message, 'error'));
-    }
-  });
+function loadAuditView() {
+  if (!state.auditUi) {
+    state.auditUi = window.AdministrativeAuditUI.create({
+      api,
+      root: document.getElementById('adminAuditRoot'),
+      mode: 'admin',
+      escapeHtml,
+      formatDate
+    });
+  }
+  state.auditUi.render().catch((error) => showToast(error.message, 'error'));
+}
+window.addEventListener('admin:viewchange', (event) => {
+  if (event.detail === 'auditoria') loadAuditView();
 });
+if (window.location.hash === '#auditoria') loadAuditView();
 
 async function initialize() {
   try {

@@ -92,8 +92,12 @@ async function verifyViewport(browser, baseUrl, viewport, includeKeyboard) {
     const families = await page.locator('[data-navigation-family]').evaluateAll((nodes) => nodes.map((node) => node.dataset.navigationFamily));
     assert.deepStrictEqual(families, ['inicio', 'ventas', 'inventario', 'clientes', 'reportes', 'administracion', 'plan']);
     assert.strictEqual(await page.locator('[data-navigation-family="ventas"] [data-view="compensaciones"]').textContent(), 'Devoluciones y anulaciones');
-    assert.strictEqual(await page.locator('[data-navigation-family="plan"] a[href="/suscripcion.html"]').count(), 1);
+    assert.strictEqual(await page.locator('a[data-navigation-family="plan"][href="/suscripcion.html"]').count(), 1);
     assert.strictEqual(await page.locator('#subscriptionSummary').evaluate((element) => element.tagName), 'P');
+    for (const family of ['inicio', 'clientes', 'plan']) {
+      assert.strictEqual(await page.locator(`[data-navigation-family="${family}"]`).evaluate((node) => node.tagName === 'DETAILS'), false,
+        `${family} no debe mostrar un desplegable con una sola opcion.`);
+    }
 
     const sales = page.locator('[data-navigation-family="ventas"] > summary');
     if (includeKeyboard) {
@@ -103,12 +107,18 @@ async function verifyViewport(browser, baseUrl, viewport, includeKeyboard) {
       await sales.tap();
     }
     assert.strictEqual(await page.locator('[data-navigation-family="ventas"]').evaluate((node) => node.open), true);
+    await page.locator('[data-navigation-family="inventario"] > summary').click();
+    assert.strictEqual(await page.locator('[data-navigation-family="ventas"]').evaluate((node) => node.open), false,
+      'Abrir Inventario debe cerrar Ventas.');
+    await page.locator('[data-navigation-family="ventas"] > summary').click();
     await page.locator('[data-navigation-family="ventas"] [data-view="ventas"]').click();
     await page.locator('#viewTitle').waitFor({ state: 'visible' });
     assert.strictEqual(await page.locator('#viewTitle').textContent(), 'Punto de venta');
     assert.strictEqual(await page.locator('[data-navigation-family="ventas"] [data-view="ventas"]').evaluate((node) => node.classList.contains('active')), true);
 
     await page.locator('[data-navigation-family="reportes"] > summary').click();
+    assert.strictEqual(await page.locator('[data-navigation-family="ventas"]').evaluate((node) => node.open), false,
+      'Abrir Reportes debe cerrar Ventas.');
     await page.locator('[data-navigation-family="reportes"] [data-view="reportes"]').click();
     assert.strictEqual(await page.locator('#viewTitle').textContent(), 'Reportes');
     assert.deepStrictEqual(errors, [], `Consola limpia a ${viewport.width}x${viewport.height}.`);

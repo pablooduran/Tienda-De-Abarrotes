@@ -84,10 +84,25 @@ body {
 .nav-family > summary::-webkit-details-marker { display: none; }
 .nav-family > summary::after { content: '+'; color: #b8d1ca; font-size: 18px; line-height: 1; }
 .nav-family[open] > summary::after { content: '-'; }
+.sidebar .nav-family-single {
+  display: block;
+  width: 100%;
+  min-height: 44px;
+  padding: 10px 12px;
+  color: white;
+  font: inherit;
+  font-weight: 600;
+  text-align: left;
+  text-decoration: none;
+  cursor: pointer;
+}
+.sidebar .nav-family-single.active,
+.sidebar .nav-family-single:hover { background: #324550; }
 .nav-family > summary.active,
 .nav-family > summary:hover { background: #324550; }
 .nav-family > summary:focus-visible,
-.nav-destination:focus-visible { outline: 3px solid #f2c14e; outline-offset: -3px; }
+.nav-destination:focus-visible,
+.nav-family-single:focus-visible { outline: 3px solid #f2c14e; outline-offset: -3px; }
 .nav-family-items {
   display: grid;
   gap: 4px;

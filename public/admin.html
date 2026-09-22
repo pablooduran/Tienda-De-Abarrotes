@@ -35,8 +35,8 @@
       </div>
     </aside>
 
-    <main class="admin-main" id="tiendas">
-      <header class="page-header">
+    <main class="admin-main" data-active-view="tiendas">
+      <header class="page-header" id="tiendas" data-admin-view="tiendas">
         <div>
           <p class="eyebrow">Control de plataforma</p>
           <h1>Tiendas registradas</h1>
@@ -45,7 +45,7 @@
         <button id="createStoreButton" class="button button-primary" type="button">Nueva tienda</button>
       </header>
 
-      <section class="summary-grid" aria-label="Resumen de tiendas">
+      <section class="summary-grid" data-admin-view="tiendas" aria-label="Resumen de tiendas">
         <article class="summary-item">
           <span>Total de tiendas</span>
           <strong id="storeCount">0</strong>
@@ -64,7 +64,7 @@
         </article>
       </section>
 
-      <section id="pagos-suscripcion" class="content-section payment-admin-section" aria-labelledby="paymentAdminHeading">
+      <section id="pagos-suscripcion" data-admin-view="pagos-suscripcion" class="content-section payment-admin-section" aria-labelledby="paymentAdminHeading">
         <div class="section-heading">
           <div><p class="eyebrow">Pagos manuales</p><h2 id="paymentAdminHeading">Solicitudes de suscripción</h2><p>Revisa solicitudes y configura las condiciones manuales sin registrar cobros automáticos.</p></div>
           <button id="refreshPaymentAdmin" class="button button-secondary" type="button">Actualizar</button>
@@ -101,7 +101,7 @@
         </section>
       </section>
 
-      <section id="suscripciones-saas" class="content-section saas-subscriptions-section" aria-labelledby="saasSubscriptionsHeading">
+      <section id="suscripciones-saas" data-admin-view="suscripciones-saas" class="content-section saas-subscriptions-section" aria-labelledby="saasSubscriptionsHeading">
         <div class="section-heading">
           <div>
             <p class="eyebrow">Control SaaS global</p>
@@ -163,7 +163,7 @@
         </section>
       </section>
 
-      <section class="content-section" aria-labelledby="storesHeading">
+      <section class="content-section" data-admin-view="tiendas" aria-labelledby="storesHeading">
         <div class="section-heading">
           <div>
             <h2 id="storesHeading">Directorio de tiendas</h2>
@@ -196,7 +196,7 @@
         </div>
       </section>
 
-      <section id="storeDetail" class="content-section detail-section" aria-labelledby="storeDetailTitle" hidden>
+      <section id="storeDetail" class="content-section detail-section" data-admin-view="tiendas" aria-labelledby="storeDetailTitle" hidden>
         <div class="section-heading detail-heading">
           <div>
             <p class="eyebrow">Detalle de tienda</p>
@@ -268,7 +268,7 @@
         </div>
       </section>
 
-      <section id="catalogo" class="content-section catalog-section" aria-labelledby="catalogHeading">
+      <section id="catalogo" data-admin-view="catalogo" class="content-section catalog-section" aria-labelledby="catalogHeading">
         <div class="section-heading catalog-heading">
           <div>
             <p class="eyebrow">Datos globales</p>
@@ -316,7 +316,7 @@
         </div>
       </section>
 
-      <section id="auditoria" class="content-section audit-admin-section" aria-label="Auditoría administrativa">
+      <section id="auditoria" data-admin-view="auditoria" class="content-section audit-admin-section" aria-label="Auditoría administrativa">
         <div id="adminAuditRoot"></div>
       </section>
     </main>
@@ -385,6 +385,7 @@
   <script src="/js/http-security.js" defer></script>
   <script src="/js/ui-patterns.js" defer></script>
   <script src="/js/administrative-audit-ui.js" defer></script>
+  <script src="/js/admin-navigation.js" defer></script>
   <script src="/js/admin.js" defer></script>
   <script src="/js/saas-subscription-admin-ui.js" defer></script>
   <script src="/js/payment-subscription-admin-ui.js" defer></script>
