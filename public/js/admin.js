@@ -10,6 +10,8 @@ const state = {
   masterProducts: [],
   masterPage: 1,
   masterPages: 1,
+  catalogFilters: { category: '', brand: '', status: '' },
+  catalogFilterApplying: false,
   importRows: [],
   importSelection: new Set(),
   formAction: null,
@@ -64,6 +66,10 @@ Object.assign(elements, {
   masterCategoryCount: document.getElementById('masterCategoryCount'),
   masterBrandCount: document.getElementById('masterBrandCount'),
   masterProductSearch: document.getElementById('masterProductSearch'),
+  masterFilterButton: document.getElementById('openMasterCatalogFilters'),
+  masterFilterDialog: document.getElementById('masterCatalogFilterDialog'),
+  masterFilterForm: document.getElementById('masterCatalogFilters'),
+  masterFilterError: document.getElementById('masterCatalogFilterError'),
   masterCategoryFilter: document.getElementById('masterCategoryFilter'),
   masterBrandFilter: document.getElementById('masterBrandFilter'),
   masterStatusFilter: document.getElementById('masterStatusFilter'),
@@ -762,9 +768,9 @@ async function loadMasterCatalog(page = state.masterPage) {
   const query = new URLSearchParams({ page: String(page), limit: '25' });
   const filters = [
     ['q', elements.masterProductSearch.value.trim()],
-    ['idCategoriaMaestra', elements.masterCategoryFilter.value],
-    ['idMarcaMaestra', elements.masterBrandFilter.value],
-    ['activo', elements.masterStatusFilter.value]
+    ['idCategoriaMaestra', state.catalogFilters.category],
+    ['idMarcaMaestra', state.catalogFilters.brand],
+    ['activo', state.catalogFilters.status]
   ];
   filters.forEach(([key, value]) => { if (value) query.set(key, value); });
   const [summary, categories, brands, products] = await Promise.all([
@@ -1058,8 +1064,56 @@ elements.masterProductSearch.addEventListener('input', () => {
   window.clearTimeout(catalogSearchTimer);
   catalogSearchTimer = window.setTimeout(() => loadMasterCatalog(1).catch((error) => showToast(error.message, 'error')), 250);
 });
-[elements.masterCategoryFilter, elements.masterBrandFilter, elements.masterStatusFilter].forEach((input) => {
-  input.addEventListener('change', () => loadMasterCatalog(1).catch((error) => showToast(error.message, 'error')));
+function restoreCatalogFilterDraft() {
+  elements.masterCategoryFilter.value = state.catalogFilters.category;
+  elements.masterBrandFilter.value = state.catalogFilters.brand;
+  elements.masterStatusFilter.value = state.catalogFilters.status;
+}
+elements.masterFilterButton.addEventListener('click', () => {
+  elements.masterFilterError.hidden = true;
+  elements.masterFilterDialog.showModal();
+  elements.masterCategoryFilter.focus();
+});
+document.getElementById('closeMasterCatalogFilters').addEventListener('click', () => {
+  if (!state.catalogFilterApplying) elements.masterFilterDialog.close();
+});
+elements.masterFilterDialog.addEventListener('cancel', (event) => {
+  if (state.catalogFilterApplying) event.preventDefault();
+});
+elements.masterFilterDialog.addEventListener('close', () => {
+  restoreCatalogFilterDraft();
+  const target = document.querySelector('.admin-main')?.dataset.activeView === 'catalogo'
+    ? elements.masterFilterButton : document.querySelector('.admin-sidebar .nav-link.active');
+  target?.focus();
+});
+elements.masterFilterForm.addEventListener('submit', async (event) => {
+  event.preventDefault();
+  if (state.catalogFilterApplying) return;
+  state.catalogFilterApplying = true;
+  const previousFilters = state.catalogFilters;
+  const submit = elements.masterFilterForm.querySelector('[type="submit"]');
+  submit.disabled = true;
+  elements.masterFilterForm.setAttribute('aria-busy', 'true');
+  state.catalogFilters = {
+    category: elements.masterCategoryFilter.value,
+    brand: elements.masterBrandFilter.value,
+    status: elements.masterStatusFilter.value
+  };
+  elements.masterFilterError.hidden = true;
+  try {
+    await loadMasterCatalog(1);
+    const count = Object.values(state.catalogFilters).filter(Boolean).length;
+    elements.masterFilterButton.textContent = count ? `Filtros (${count})` : 'Filtros';
+    elements.masterFilterDialog.close();
+  } catch (error) {
+    state.catalogFilters = previousFilters;
+    elements.masterFilterError.textContent = error.message;
+    elements.masterFilterError.hidden = false;
+  } finally {
+    state.catalogFilterApplying = false;
+    submit.disabled = false;
+    elements.masterFilterForm.removeAttribute('aria-busy');
+  }
 });
 function loadAuditView() {
   if (!state.auditUi) {
@@ -1076,6 +1130,7 @@ function loadAuditView() {
 window.addEventListener('admin:viewchange', (event) => {
   if (event.detail !== 'tiendas' && elements.storeDetail.open) elements.storeDetail.close();
   if (event.detail !== 'tiendas' && elements.storeFilterDialog.open) elements.storeFilterDialog.close();
+  if (event.detail !== 'catalogo' && elements.masterFilterDialog.open) elements.masterFilterDialog.close();
   if (event.detail === 'auditoria') loadAuditView();
 });
 if (window.location.hash === '#auditoria') loadAuditView();

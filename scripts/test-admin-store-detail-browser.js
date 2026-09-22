@@ -30,18 +30,36 @@ function json(response, data) {
   response.end(JSON.stringify(data));
 }
 
-function fixture() {
+function fixture(catalogQueries) {
   return http.createServer((request, response) => {
-    const pathname = new URL(request.url, 'http://127.0.0.1').pathname;
+    const url = new URL(request.url, 'http://127.0.0.1');
+    const pathname = url.pathname;
     if (pathname === '/auth/status') return json(response, { authenticated: true, admin: { rol: 'superadmin', usuario: 'admin_sintetico' } });
     if (pathname === '/api/admin/planes') return json(response, []);
     if (pathname === '/api/admin/tiendas') return json(response, [store, suspendedStore]);
     if (pathname === '/api/admin/tiendas/1') return json(response, store);
     if (pathname === '/api/admin/tiendas/1/propietarios') return json(response, []);
     if (pathname === '/api/admin/tiendas/1/suscripciones') return json(response, []);
-    if (pathname === '/api/admin/catalogo/resumen') return json(response, { productos: 0, productosActivos: 0, categorias: 0, marcas: 0 });
-    if (pathname === '/api/admin/catalogo/categorias' || pathname === '/api/admin/catalogo/marcas') return json(response, []);
-    if (pathname === '/api/admin/catalogo/productos') return json(response, { rows: [], page: 1, pages: 1 });
+    if (pathname === '/api/admin/catalogo/resumen') return json(response, { productos: 2, productosActivos: 1, categorias: 2, marcas: 2 });
+    if (pathname === '/api/admin/catalogo/categorias') return json(response, [
+      { idCategoriaMaestra: 1, nombre: 'Abarrotes', activo: 1 },
+      { idCategoriaMaestra: 2, nombre: 'Bebidas', activo: 1 }
+    ]);
+    if (pathname === '/api/admin/catalogo/marcas') return json(response, [
+      { idMarcaMaestra: 1, nombre: 'Marca Uno', activo: 1 },
+      { idMarcaMaestra: 2, nombre: 'Marca Dos', activo: 1 }
+    ]);
+    if (pathname === '/api/admin/catalogo/productos') {
+      catalogQueries.push(url.searchParams.toString());
+      const rows = [
+        { idProductoMaestro: 1, nombre: 'Arroz sintético', categoria: 'Abarrotes', marca: 'Marca Uno', idCategoriaMaestra: 1, idMarcaMaestra: 1, activo: 1 },
+        { idProductoMaestro: 2, nombre: 'Jugo sintético', categoria: 'Bebidas', marca: 'Marca Dos', idCategoriaMaestra: 2, idMarcaMaestra: 2, activo: 0 }
+      ].filter((row) => (!url.searchParams.get('q') || row.nombre.toLowerCase().includes(url.searchParams.get('q').toLowerCase()))
+        && (!url.searchParams.get('idCategoriaMaestra') || String(row.idCategoriaMaestra) === url.searchParams.get('idCategoriaMaestra'))
+        && (!url.searchParams.get('idMarcaMaestra') || String(row.idMarcaMaestra) === url.searchParams.get('idMarcaMaestra'))
+        && (!url.searchParams.has('activo') || String(Boolean(row.activo)) === url.searchParams.get('activo')));
+      return json(response, { rows, page: 1, pages: 1 });
+    }
     if (pathname === '/favicon.ico') { response.writeHead(204); return response.end(); }
     const file = path.resolve(publicDir, pathname.slice(1));
     if (!file.startsWith(`${publicDir}${path.sep}`) || !fs.existsSync(file) || fs.statSync(file).isDirectory()) {
@@ -53,7 +71,7 @@ function fixture() {
   });
 }
 
-async function verify(browser, baseUrl, width) {
+async function verify(browser, baseUrl, width, catalogQueries) {
   const page = await browser.newPage({ viewport: { width, height: 800 } });
   const errors = [];
   page.on('pageerror', (error) => errors.push(error.message));
@@ -101,6 +119,34 @@ async function verify(browser, baseUrl, width) {
     await page.locator('.admin-sidebar a[href="#catalogo"]').click();
     assert.strictEqual(await page.locator('#catalogo').isVisible(), true);
     assert.strictEqual(await page.locator('#tiendas').isVisible(), false);
+    assert.strictEqual(await page.locator('#masterProductsTableBody tr').count(), 2);
+    const catalogFilterButton = page.locator('#openMasterCatalogFilters');
+    const beforeCancel = catalogQueries.length;
+    await catalogFilterButton.click();
+    await page.locator('#masterCatalogFilterDialog[open]').waitFor();
+    assert.strictEqual(await page.locator('#masterCatalogFilterDialog').evaluate((node) => node.matches(':modal')), true);
+    await page.locator('#masterCategoryFilter').selectOption('1');
+    await page.keyboard.press('Escape');
+    await page.waitForFunction(() => document.querySelector('#masterCategoryFilter').value === '');
+    assert.strictEqual(catalogQueries.length, beforeCancel, 'Cerrar no debe consultar con filtros nuevos.');
+    assert.strictEqual(await catalogFilterButton.evaluate((node) => document.activeElement === node), true);
+    await catalogFilterButton.click();
+    await page.locator('#masterCategoryFilter').selectOption('1');
+    await page.locator('#masterBrandFilter').selectOption('1');
+    await page.locator('#masterStatusFilter').selectOption('true');
+    assert.strictEqual(catalogQueries.length, beforeCancel, 'Cambiar opciones no debe recargar la lista.');
+    await page.locator('#masterCatalogFilters button[type="submit"]').click();
+    await page.waitForFunction(() => document.activeElement?.id === 'openMasterCatalogFilters');
+    assert.strictEqual(await catalogFilterButton.textContent(), 'Filtros (3)');
+    assert.strictEqual(await page.locator('#masterProductsTableBody tr').count(), 1);
+    assert.match(await page.locator('#masterProductsTableBody').textContent(), /Arroz sintético/);
+    const applied = new URLSearchParams(catalogQueries.at(-1));
+    assert.strictEqual(applied.get('idCategoriaMaestra'), '1');
+    assert.strictEqual(applied.get('idMarcaMaestra'), '1');
+    assert.strictEqual(applied.get('activo'), 'true');
+    await page.locator('#masterProductSearch').fill('Jugo');
+    await page.waitForFunction(() => document.querySelector('#emptyMasterProducts').hidden === false);
+    assert.strictEqual(await page.locator('#masterProductsTableBody tr').count(), 0, 'La búsqueda visible debe combinarse con filtros aplicados.');
     assert.strictEqual(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth + 1), true);
     assert.deepStrictEqual(errors, []);
   } finally {
@@ -108,15 +154,39 @@ async function verify(browser, baseUrl, width) {
   }
 }
 
+async function verifyCatalogFailure(browser, baseUrl) {
+  const page = await browser.newPage();
+  try {
+    await page.goto(`${baseUrl}/admin.html#catalogo`);
+    await page.locator('#masterProductsTableBody tr').first().waitFor();
+    await page.route('**/api/admin/catalogo/productos?*', (route) => route.fulfill({
+      status: 503, contentType: 'application/json', body: JSON.stringify({ error: 'Servicio temporalmente no disponible.' })
+    }));
+    await page.locator('#openMasterCatalogFilters').click();
+    await page.locator('#masterStatusFilter').selectOption('false');
+    await page.locator('#masterCatalogFilters button[type="submit"]').click();
+    await page.locator('#masterCatalogFilterError:not([hidden])').waitFor();
+    assert.strictEqual(await page.locator('#masterCatalogFilterDialog').evaluate((node) => node.open), true);
+    assert.strictEqual(await page.locator('#masterProductsTableBody tr').count(), 2,
+      'La lista anterior debe conservarse si falla la carga.');
+    await page.locator('#closeMasterCatalogFilters').click();
+    await page.waitForFunction(() => document.querySelector('#masterStatusFilter').value === '');
+  } finally {
+    await page.close();
+  }
+}
+
 async function main() {
-  const server = fixture();
+  const catalogQueries = [];
+  const server = fixture(catalogQueries);
   await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
   const browser = await chromium.launch({ executablePath: browserPath(), headless: true });
   try {
     const baseUrl = `http://127.0.0.1:${server.address().port}`;
-    await verify(browser, baseUrl, 360);
-    await verify(browser, baseUrl, 768);
-    await verify(browser, baseUrl, 1366);
+    await verify(browser, baseUrl, 360, catalogQueries);
+    await verify(browser, baseUrl, 768, catalogQueries);
+    await verify(browser, baseUrl, 1366, catalogQueries);
+    await verifyCatalogFailure(browser, baseUrl);
     console.log('test:admin-store-detail-browser OK');
   } finally {
     await browser.close();

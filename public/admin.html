@@ -319,10 +319,21 @@
 
         <div class="catalog-toolbar">
           <label class="search-field"><span>Buscar</span><input id="masterProductSearch" type="search" placeholder="Nombre, marca o código"></label>
-          <label class="search-field"><span>Categoría</span><select id="masterCategoryFilter"><option value="">Todas</option></select></label>
-          <label class="search-field"><span>Marca</span><select id="masterBrandFilter"><option value="">Todas</option></select></label>
-          <label class="search-field"><span>Estado</span><select id="masterStatusFilter"><option value="">Todos</option><option value="true">Activos</option><option value="false">Inactivos</option></select></label>
+          <button id="openMasterCatalogFilters" class="button button-secondary" type="button">Filtros</button>
         </div>
+
+        <dialog id="masterCatalogFilterDialog" class="admin-filter-dialog" aria-labelledby="masterCatalogFilterTitle">
+          <div class="section-heading"><div><p class="eyebrow">Catálogo maestro</p><h3 id="masterCatalogFilterTitle">Filtrar productos</h3></div><button id="closeMasterCatalogFilters" class="button button-quiet" type="button">Cerrar</button></div>
+          <form id="masterCatalogFilters">
+            <div class="saas-filter-grid">
+              <label class="search-field"><span>Categoría</span><select id="masterCategoryFilter"><option value="">Todas</option></select></label>
+              <label class="search-field"><span>Marca</span><select id="masterBrandFilter"><option value="">Todas</option></select></label>
+              <label class="search-field"><span>Estado</span><select id="masterStatusFilter"><option value="">Todos</option><option value="true">Activos</option><option value="false">Inactivos</option></select></label>
+            </div>
+            <p id="masterCatalogFilterError" class="form-error" role="alert" hidden></p>
+            <div class="admin-filter-actions"><button class="button button-primary" type="submit">Aplicar filtros</button></div>
+          </form>
+        </dialog>
 
         <div class="table-wrap">
           <table>
