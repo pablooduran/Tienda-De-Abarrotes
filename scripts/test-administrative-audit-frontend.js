@@ -75,7 +75,7 @@ check('Estados no dependen unicamente del color',
   && styles.includes('border: 1px solid currentColor'));
 check('Solicitudes obsoletas no reemplazan resultados actuales',
   ui.includes('const request = ++state.request')
-  && ui.includes('if (request !== state.request) return;'));
+  && ui.includes('if (request !== state.request) return false;'));
 check('Consulta protegida sin cache',
   routes.includes("res.set('Cache-Control', 'no-store')")
   && /app\.use\(\s*['"]\/api\/auditoria['"]\s*,\s*rateLimiters\.admin/.test(server));

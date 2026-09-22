@@ -34,7 +34,7 @@
     } = options;
     const e = escapeHtml;
     const endpoint = mode === 'admin' ? '/api/admin/auditoria' : '/api/auditoria';
-    const state = { page: 1, request: 0, dialog: null, trigger: null };
+    const state = { page: 1, request: 0, dialog: null, trigger: null, appliedFilters: new URLSearchParams(), filterApplying: false };
 
     function option(value, label) {
       return `<option value="${e(value)}">${e(label)}</option>`;
@@ -115,15 +115,26 @@
       </table></div><div class="audit-mobile-list">${cards}</div>`;
     }
 
-    function query() {
-      const form = root.querySelector('[data-audit-filters]');
-      const values = new URLSearchParams(new FormData(form));
+    function formFilters() {
+      const values = new URLSearchParams(new FormData(root.querySelector('[data-audit-filters]')));
       for (const [key, value] of [...values.entries()]) {
         if (!String(value).trim()) values.delete(key);
       }
+      return values;
+    }
+
+    function query() {
+      const values = new URLSearchParams(state.appliedFilters);
       values.set('page', String(state.page));
       values.set('pageSize', '25');
       return values;
+    }
+
+    function restoreFilterDraft() {
+      const form = root.querySelector('[data-audit-filters]');
+      for (const field of form.querySelectorAll('input, select')) {
+        field.value = state.appliedFilters.get(field.name) || '';
+      }
     }
 
     function wireDetails() {
@@ -132,15 +143,15 @@
       });
     }
 
-    async function load() {
+    async function load({ keepPrevious = false } = {}) {
       const request = ++state.request;
       const results = root.querySelector('[data-audit-results]');
       const pagination = root.querySelector('[data-audit-pagination]');
       results.setAttribute('aria-busy', 'true');
-      results.innerHTML = '<p class="muted" role="status">Cargando eventos...</p>';
+      if (!keepPrevious) results.innerHTML = '<p class="muted" role="status">Cargando eventos...</p>';
       try {
         const data = await api(`${endpoint}?${query()}`);
-        if (request !== state.request) return;
+        if (request !== state.request) return false;
         results.innerHTML = tableMarkup(data.resultados, mode === 'admin');
         const page = data.paginacion;
         pagination.innerHTML = `<button type="button" class="secondary" data-audit-previous ${page.hasPreviousPage ? '' : 'disabled'}>Anterior</button>
@@ -155,11 +166,19 @@
           load();
         });
         wireDetails();
+        return true;
       } catch (error) {
-        if (request !== state.request) return;
+        if (request !== state.request) return false;
+        if (keepPrevious) {
+          const message = root.querySelector('[data-audit-filter-error]');
+          message.textContent = error.message;
+          message.hidden = false;
+          return false;
+        }
         results.innerHTML = `<div class="audit-empty error" role="alert"><strong>No se pudo cargar la auditoria</strong><p>${e(error.message)}</p><button type="button" data-audit-retry>Reintentar</button></div>`;
         results.querySelector('[data-audit-retry]').addEventListener('click', load);
         pagination.innerHTML = '';
+        return false;
       } finally {
         if (request === state.request) results.setAttribute('aria-busy', 'false');
       }
@@ -221,22 +240,64 @@
         <header class="audit-heading">
           <div><p class="eyebrow">Registro inmutable</p><h2 id="auditTitle">Auditoria administrativa</h2>
           <p>Consulta acciones relevantes, rechazos y fallos sin modificar el historial.</p></div>
+          <button type="button" data-audit-open-filters>Filtros</button>
         </header>
-        ${filtersMarkup()}
+        <dialog class="audit-filter-dialog" data-audit-filter-dialog aria-labelledby="auditFilterTitle">
+          <div class="audit-dialog-heading"><h3 id="auditFilterTitle">Filtrar eventos</h3><button type="button" data-audit-close-filters>Cerrar</button></div>
+          ${filtersMarkup()}
+          <p class="audit-inline-error" data-audit-filter-error role="alert" hidden></p>
+        </dialog>
         <div data-audit-results aria-live="polite"></div>
         <nav class="audit-pagination" data-audit-pagination aria-label="Paginacion de auditoria"></nav>
       </section>`;
       const filters = root.querySelector('[data-audit-filters]');
-      filters.addEventListener('submit', (event) => {
-        event.preventDefault();
-        state.page = 1;
-        load();
+      const filterDialog = root.querySelector('[data-audit-filter-dialog]');
+      const filterButton = root.querySelector('[data-audit-open-filters]');
+      const filterError = root.querySelector('[data-audit-filter-error]');
+      restoreFilterDraft();
+      filterButton.textContent = state.appliedFilters.size
+        ? `Filtros (${state.appliedFilters.size})` : 'Filtros';
+      filterButton.addEventListener('click', () => {
+        filterError.hidden = true;
+        filterDialog.showModal();
+        filters.elements.fechaDesde.focus();
       });
-      filters.addEventListener('reset', () => {
-        window.setTimeout(() => {
-          state.page = 1;
-          load();
-        }, 0);
+      root.querySelector('[data-audit-close-filters]').addEventListener('click', () => {
+        if (!state.filterApplying) filterDialog.close();
+      });
+      filterDialog.addEventListener('cancel', (event) => {
+        if (state.filterApplying) event.preventDefault();
+      });
+      filterDialog.addEventListener('close', () => {
+        restoreFilterDraft();
+        filterButton.focus();
+      });
+      filters.addEventListener('submit', async (event) => {
+        event.preventDefault();
+        if (state.filterApplying) return;
+        state.filterApplying = true;
+        const previousFilters = state.appliedFilters;
+        const previousPage = state.page;
+        const submit = filters.querySelector('[type="submit"]');
+        submit.disabled = true;
+        filters.setAttribute('aria-busy', 'true');
+        state.appliedFilters = formFilters();
+        state.page = 1;
+        filterError.hidden = true;
+        try {
+          if (await load({ keepPrevious: true })) {
+            filterButton.textContent = state.appliedFilters.size
+              ? `Filtros (${state.appliedFilters.size})` : 'Filtros';
+            filterDialog.close();
+          } else {
+            state.appliedFilters = previousFilters;
+            state.page = previousPage;
+          }
+        } finally {
+          state.filterApplying = false;
+          submit.disabled = false;
+          filters.removeAttribute('aria-busy');
+        }
       });
       return load();
     }

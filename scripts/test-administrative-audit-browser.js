@@ -50,7 +50,7 @@ function event(id, overrides = {}) {
 function harness(mode) {
   return `<!doctype html><html lang="es"><head><meta charset="utf-8">
     <meta name="viewport" content="width=device-width,initial-scale=1">
-    <link rel="stylesheet" href="/css/styles.css"><title>Auditoria ${mode}</title></head>
+    <link rel="stylesheet" href="/css/${mode === 'admin' ? 'admin.css' : 'styles.css'}"><title>Auditoria ${mode}</title></head>
     <body><main class="content"><section id="root"></section></main>
     <script src="/js/administrative-audit-ui.js"></script><script>
       (() => {
@@ -87,9 +87,9 @@ function createServer() {
       res.writeHead(200, { 'Content-Type': 'text/javascript; charset=utf-8' });
       return fs.createReadStream(path.join(PUBLIC, 'js', 'administrative-audit-ui.js')).pipe(res);
     }
-    if (url.pathname === '/css/styles.css') {
+    if (url.pathname === '/css/styles.css' || url.pathname === '/css/admin.css') {
       res.writeHead(200, { 'Content-Type': 'text/css; charset=utf-8' });
-      return fs.createReadStream(path.join(PUBLIC, 'css', 'styles.css')).pipe(res);
+      return fs.createReadStream(path.join(PUBLIC, 'css', path.basename(url.pathname))).pipe(res);
     }
     const isAdmin = url.pathname.startsWith('/api/admin/auditoria');
     const isTenant = url.pathname.startsWith('/api/auditoria');
@@ -138,7 +138,7 @@ async function waitReady(page) {
   await page.locator('[data-audit-results]').waitFor({ state: 'visible' });
 }
 
-async function testOwner(browser, baseUrl) {
+async function testOwner(browser, baseUrl, requests) {
   const page = await browser.newPage({ viewport: { width: 1366, height: 768 } });
   await page.goto(`${baseUrl}/tenant`);
   await page.evaluate(() => window.__ready);
@@ -172,11 +172,36 @@ async function testOwner(browser, baseUrl) {
   assert((await page.locator('[data-audit-pagination]').textContent()).includes('Pagina 1 de 2'),
     'La navegacion no regreso a la primera pagina.');
 
+  const filterButton = page.locator('[data-audit-open-filters]');
+  const beforeCancel = requests.length;
+  await filterButton.click();
+  await page.locator('[data-audit-filter-dialog][open]').waitFor();
+  assert(await page.locator('[data-audit-filter-dialog]').evaluate((node) => node.matches(':modal')),
+    'Los filtros deben abrirse como ventana modal.');
+  await page.locator('select[name="categoria"]').selectOption('producto');
+  await page.keyboard.press('Escape');
+  await page.waitForFunction(() => document.querySelector('select[name="categoria"]').value === '');
+  assert(requests.length === beforeCancel, 'Cerrar sin aplicar no debe consultar de nuevo.');
+  assert(await filterButton.evaluate((node) => document.activeElement === node), 'El foco debe volver a Filtros.');
+  await filterButton.click();
   await page.locator('select[name="categoria"]').selectOption('producto');
   await page.locator('[data-audit-filters] button[type="submit"]').click();
   await page.locator('[data-audit-results]').getByText('Sin eventos').waitFor();
   assert((await page.locator('[data-audit-results]').textContent()).includes('Sin eventos'),
     'El estado vacio no se anuncio.');
+  assert(await filterButton.textContent() === 'Filtros (1)', 'Debe indicar un filtro activo.');
+  await page.evaluate(() => window.__audit.render());
+  await page.locator('[data-audit-results]').getByText('Sin eventos').waitFor();
+  assert(await filterButton.textContent() === 'Filtros (1)', 'Volver a Auditoría debe conservar el filtro activo.');
+  assert(await page.locator('select[name="categoria"]').inputValue() === 'producto',
+    'Volver a Auditoría debe restaurar los controles.');
+  await filterButton.click();
+  await page.locator('[data-audit-filters] button[type="reset"]').click();
+  assert((await page.locator('[data-audit-results]').textContent()).includes('Sin eventos'),
+    'Limpiar prepara los campos sin cambiar los resultados.');
+  await page.locator('[data-audit-filters] button[type="submit"]').click();
+  await page.locator('[data-audit-pagination]').getByText('Pagina 1 de 2').waitFor();
+  assert(await filterButton.textContent() === 'Filtros', 'La lista vuelve a mostrar todos los eventos.');
   await page.close();
   console.log('OK: dueno, filtros, paginacion, detalle, teclado y XSS.');
 }
@@ -185,6 +210,7 @@ async function testAdmin(browser, baseUrl, requests) {
   const page = await browser.newPage({ viewport: { width: 768, height: 1024 } });
   await page.goto(`${baseUrl}/admin`);
   await page.evaluate(() => window.__ready);
+  await page.locator('[data-audit-open-filters]').click();
   const store = page.locator('input[name="idTienda"]');
   assert(await store.isVisible(), 'El filtro de tienda del superadmin no esta disponible.');
   await store.fill('3');
@@ -198,15 +224,40 @@ async function testAdmin(browser, baseUrl, requests) {
   console.log('OK: superadmin global y filtro de tienda.');
 }
 
+async function testFilterFailure(browser, baseUrl) {
+  const page = await browser.newPage();
+  try {
+    await page.goto(`${baseUrl}/tenant`);
+    await page.evaluate(() => window.__ready);
+    await page.route('**/api/auditoria?*', (route) => route.fulfill({
+      status: 503, contentType: 'application/json', body: JSON.stringify({ error: 'Servicio temporalmente no disponible.' })
+    }));
+    await page.locator('[data-audit-open-filters]').click();
+    await page.locator('select[name="categoria"]').selectOption('producto');
+    await page.locator('[data-audit-filters] button[type="submit"]').click();
+    await page.locator('[data-audit-filter-error]:not([hidden])').waitFor();
+    assert(await page.locator('[data-audit-filter-dialog]').evaluate((node) => node.open),
+      'El error debe dejar abierta la ventana.');
+    assert(await page.locator('[data-audit-results] [data-audit-detail]').count() === 2,
+      'Una consulta fallida no debe reemplazar los resultados anteriores.');
+    await page.locator('[data-audit-close-filters]').click();
+    await page.waitForFunction(() => document.querySelector('select[name="categoria"]').value === '');
+  } finally {
+    await page.close();
+  }
+}
+
 async function testResponsive(browser, baseUrl) {
-  for (const viewport of [
+  for (const mode of ['tenant', 'admin']) for (const viewport of [
     { width: 360, height: 800 },
     { width: 768, height: 1024 },
     { width: 1366, height: 768 }
   ]) {
     const page = await browser.newPage({ viewport });
-    await page.goto(`${baseUrl}/tenant`);
+    await page.goto(`${baseUrl}/${mode}`);
     await page.evaluate(() => window.__ready);
+    await page.locator('[data-audit-open-filters]').click();
+    await page.locator('[data-audit-filter-dialog][open]').waitFor();
     const dimensions = await page.evaluate(() => ({
       width: document.documentElement.clientWidth,
       scrollWidth: document.documentElement.scrollWidth,
@@ -217,12 +268,13 @@ async function testResponsive(browser, baseUrl) {
       labelled: [...document.querySelectorAll('input, select')].every((control) => Boolean(control.closest('label')))
     }));
     assert(dimensions.scrollWidth <= dimensions.width + 2,
-      `Existe overflow global en ${viewport.width}x${viewport.height}.`);
+      `Existe overflow global en ${mode} ${viewport.width}x${viewport.height}.`);
     assert(dimensions.visibleButtons && dimensions.labelled,
-      `Controles inaccesibles en ${viewport.width}x${viewport.height}.`);
+      `Controles inaccesibles en ${mode} ${viewport.width}x${viewport.height}.`);
+    await page.locator('[data-audit-close-filters]').click();
     await page.close();
   }
-  console.log('OK: responsive 360x800, 768x1024 y 1366x768, con labels y controles accesibles.');
+  console.log('OK: responsive de propietario y superadmin en 360x800, 768x1024 y 1366x768.');
 }
 
 async function main() {
@@ -235,8 +287,9 @@ async function main() {
     headless: true
   });
   try {
-    await testOwner(browser, baseUrl);
+    await testOwner(browser, baseUrl, runtime.requests);
     await testAdmin(browser, baseUrl, runtime.requests);
+    await testFilterFailure(browser, baseUrl);
     await testResponsive(browser, baseUrl);
     console.log('\nPruebas reales de navegador de auditoria completadas.');
   } finally {

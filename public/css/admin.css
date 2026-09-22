@@ -877,6 +877,23 @@ textarea {
   display: grid;
   gap: 16px;
 }
+.audit-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
+.audit-filter-dialog[open] {
+  position: fixed;
+  inset: 0;
+  width: min(760px, calc(100vw - 28px));
+  max-width: none;
+  max-height: calc(100vh - 28px);
+  margin: auto;
+  padding: 24px;
+  overflow-y: auto;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  box-shadow: 0 24px 64px #102d3559;
+}
+.audit-filter-dialog::backdrop { background: #102d35b3; }
+.audit-filter-dialog .audit-filters { border: 0; padding: 0; margin-top: 18px; }
+.audit-filter-dialog .audit-dialog-heading h3 { margin: 0; }
 
 .audit-heading h2,
 .audit-heading p {
@@ -1014,6 +1031,7 @@ textarea {
 }
 
 @media (max-width: 560px) {
+  .audit-filter-dialog[open] { padding: 16px; }
   .audit-filters,
   .audit-detail-grid,
   .audit-payload { grid-template-columns: 1fr; }
