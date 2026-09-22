@@ -149,6 +149,18 @@ button {
 .admin-main[data-active-view="auditoria"] > [data-admin-view="auditoria"]:not([hidden]) { display: block; }
 .admin-main[data-active-view="tiendas"] > .summary-grid[data-admin-view="tiendas"] { display: grid; }
 .admin-main[data-active-view="tiendas"] > .page-header[data-admin-view="tiendas"] { display: flex; }
+body.admin-detail-open .admin-main { overflow: hidden; }
+#storeDetail[open] {
+  position: fixed;
+  inset: 0;
+  width: min(900px, calc(100vw - 28px));
+  max-width: none;
+  max-height: calc(100vh - 28px);
+  margin: auto;
+  overflow-y: auto;
+  box-shadow: 0 24px 64px #102d3559;
+}
+#storeDetail::backdrop { background: #102d35b3; }
 
 .page-header,
 .section-heading,
@@ -1075,6 +1087,7 @@ textarea {
     padding: 24px 16px 48px;
     overflow: visible;
   }
+  #storeDetail[open] { padding: 16px; }
 
   .page-header,
   .section-heading,

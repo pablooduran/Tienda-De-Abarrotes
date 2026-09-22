@@ -196,7 +196,7 @@
         </div>
       </section>
 
-      <section id="storeDetail" class="content-section detail-section" data-admin-view="tiendas" aria-labelledby="storeDetailTitle" hidden>
+      <dialog id="storeDetail" class="content-section detail-section" data-admin-view="tiendas" aria-labelledby="storeDetailTitle" hidden>
         <div class="section-heading detail-heading">
           <div>
             <p class="eyebrow">Detalle de tienda</p>
@@ -204,6 +204,7 @@
             <p id="storeDetailMeta"></p>
           </div>
           <div class="button-row">
+            <button id="closeStoreDetail" class="button button-quiet" type="button">Cerrar detalle</button>
             <button id="manageSubscriptionButton" class="button button-primary" type="button">Gestionar suscripción</button>
             <button id="editStoreButton" class="button button-secondary" type="button">Editar tienda</button>
             <button id="toggleStoreButton" class="button button-danger" type="button"></button>
@@ -266,7 +267,7 @@
           </table>
           <p id="emptySubscriptions" class="empty-state" hidden>No hay suscripciones registradas.</p>
         </div>
-      </section>
+      </dialog>
 
       <section id="catalogo" data-admin-view="catalogo" class="content-section catalog-section" aria-labelledby="catalogHeading">
         <div class="section-heading catalog-heading">

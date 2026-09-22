@@ -2233,6 +2233,10 @@ button.is-busy { cursor: wait; opacity: .72; }
   border: 1px solid var(--line);
 }
 .sales-workspace-nav button.active { color: #fff; background: var(--brand); border-color: var(--brand); }
+@media (min-width: 901px) {
+  .inventory-workspace-nav,
+  .sales-workspace-nav { display: none; }
+}
 .sales-section-heading { display: flex; justify-content: space-between; gap: 16px; margin: 4px 0 2px; }
 .sales-section-heading h3, .sales-section-heading p { margin: 0; }
 .sales-section-heading p { max-width: 68ch; margin-top: 5px; color: var(--muted); }

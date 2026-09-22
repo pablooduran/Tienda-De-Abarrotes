@@ -57,7 +57,7 @@ async function salesView(page, id) {
   const family = page.locator('[data-navigation-family="ventas"]');
   if (!await family.evaluate((node) => node.open)) await family.locator('> summary').click();
   await page.locator(`[data-view="${id}"]`).click();
-  await page.locator(`[data-sales-workspace="${id}"].active`).waitFor();
+  await page.locator(`[data-navigation-family="ventas"] [data-view="${id}"].active`).waitFor();
 }
 
 async function verifyViewport(browser, baseUrl, viewport) {
@@ -69,6 +69,8 @@ async function verifyViewport(browser, baseUrl, viewport) {
   try {
     await page.goto(`${baseUrl}/app.html`);
     await salesView(page, 'ventas');
+    assert.strictEqual(await page.locator('.sales-workspace-nav').isVisible(), viewport.width <= 900,
+      'La subnavegacion de ventas solo debe mostrarse cuando el menu lateral pasa arriba.');
     assert.strictEqual(await page.locator('#posClient').getAttribute('type'), 'hidden');
     assert.strictEqual(await page.locator('#posClientSearch').getAttribute('role'), 'combobox');
     await page.locator('#posClientSearch').fill('A');

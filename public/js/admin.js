@@ -307,11 +307,24 @@ async function loadStores(selectedId = state.selectedStore?.idTienda) {
     state.selectedStore = null;
     state.owners = [];
     state.subscriptions = [];
+    if (elements.storeDetail.open) elements.storeDetail.close();
     elements.storeDetail.hidden = true;
   }
 }
 
-async function selectStore(idTienda, scroll = true) {
+let storeDetailReturnFocus = null;
+elements.storeDetail.addEventListener('close', () => {
+  elements.storeDetail.hidden = true;
+  document.body.classList.remove('admin-detail-open');
+  const target = storeDetailReturnFocus?.isConnected && storeDetailReturnFocus.getClientRects().length
+    ? storeDetailReturnFocus : document.querySelector('.admin-sidebar .nav-link.active');
+  target?.focus();
+  storeDetailReturnFocus = null;
+});
+document.getElementById('closeStoreDetail').addEventListener('click', () => elements.storeDetail.close());
+
+async function selectStore(idTienda, openDetail = true) {
+  const returnFocus = document.activeElement;
   const [store, owners, subscriptions] = await Promise.all([
     api(`/api/admin/tiendas/${idTienda}`),
     api(`/api/admin/tiendas/${idTienda}/propietarios`),
@@ -334,10 +347,15 @@ async function selectStore(idTienda, scroll = true) {
   elements.detailLastActivity.textContent = formatDate(store.ultimaActividad);
   elements.toggleStoreButton.textContent = isActive(store.activo) ? 'Suspender tienda' : 'Activar tienda';
   elements.toggleStoreButton.className = `button ${isActive(store.activo) ? 'button-danger' : 'button-primary'}`;
-  elements.storeDetail.hidden = false;
   renderOwners();
   renderSubscriptions();
-  if (scroll) elements.storeDetail.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  if (openDetail && !elements.storeDetail.open) {
+    storeDetailReturnFocus = returnFocus;
+    elements.storeDetail.hidden = false;
+    elements.storeDetail.showModal();
+    document.body.classList.add('admin-detail-open');
+    document.getElementById('closeStoreDetail').focus();
+  }
 }
 
 function createField(definition) {
@@ -1026,6 +1044,7 @@ function loadAuditView() {
   state.auditUi.render().catch((error) => showToast(error.message, 'error'));
 }
 window.addEventListener('admin:viewchange', (event) => {
+  if (event.detail !== 'tiendas' && elements.storeDetail.open) elements.storeDetail.close();
   if (event.detail === 'auditoria') loadAuditView();
 });
 if (window.location.hash === '#auditoria') loadAuditView();

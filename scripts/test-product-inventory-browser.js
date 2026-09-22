@@ -44,7 +44,7 @@ async function inventoryView(page, id) {
   const inventoryFamily = page.locator('[data-navigation-family="inventario"]');
   if (!await inventoryFamily.evaluate((node) => node.open)) await inventoryFamily.locator('> summary').click();
   await page.locator(`[data-view="${id}"]`).click();
-  await page.locator(`[data-inventory-workspace="${id}"].active`).waitFor();
+  await page.locator(`[data-navigation-family="inventario"] [data-view="${id}"].active`).waitFor();
 }
 
 async function verifyViewport(browser, baseUrl, viewport) {
@@ -58,14 +58,18 @@ async function verifyViewport(browser, baseUrl, viewport) {
     await inventoryView(page, 'productos');
     assert.strictEqual(await page.locator('#addProduct').textContent(), 'Agregar producto', 'Accion primaria de Productos.');
     assert.strictEqual(await page.locator('.inventory-workspace-nav button').count() >= 5, true, 'Subnavegacion de inventario.');
+    assert.strictEqual(await page.locator('.inventory-workspace-nav').isVisible(), viewport.width <= 900,
+      'La subnavegacion solo debe mostrarse cuando el menu lateral pasa arriba.');
     assert.strictEqual(await page.locator('.row-actions > summary').first().textContent(), 'Más opciones', 'Acciones secundarias agrupadas.');
     await page.locator('.filter-disclosure > summary').click();
     assert.strictEqual(await page.locator('[data-apply-product-filters]').count(), 1, 'Aplicar filtros de Productos.');
     assert.strictEqual(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 2), true, `Overflow a ${viewport.width}px.`);
     await inventoryView(page, 'movimientosStock');
+    await page.locator('#view h3').filter({ hasText: 'Stock y movimientos' }).waitFor();
     assert.strictEqual(await page.locator('text=Stock y movimientos').count() > 0, true, 'Encabezado de movimientos.');
     assert.strictEqual(await page.locator('.filter-disclosure').count(), 1, 'Filtros compactos de movimientos.');
     await inventoryView(page, 'compras');
+    await page.locator('#view').getByText('1. Proveedor y productos').waitFor();
     assert.strictEqual(await page.locator('text=1. Proveedor y productos').count(), 1, 'Paso inicial de compra.');
     assert.strictEqual(await page.locator('text=3. Confirmación').count(), 1, 'Paso de confirmacion de compra.');
     assert.deepStrictEqual(errors, [], `Consola limpia a ${viewport.width}x${viewport.height}.`);

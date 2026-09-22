@@ -107,6 +107,7 @@
     "test:subscription-plan-browser": "node scripts/test-subscription-plan-browser.js",
     "test:product-navigation": "node scripts/test-product-navigation.js",
     "test:product-navigation-browser": "node scripts/test-product-navigation-browser.js",
+    "test:admin-store-detail-browser": "node scripts/test-admin-store-detail-browser.js",
     "test:product-ux": "node scripts/test-product-ux.js",
     "test:product-ux-browser": "node scripts/test-product-ux-browser.js",
     "test:product-design-foundation": "node scripts/test-product-design-foundation.js",
