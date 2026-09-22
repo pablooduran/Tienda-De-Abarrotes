@@ -76,6 +76,25 @@ async function assertViewport(browser, baseUrl, url, selector) {
     }));
     assert.strictEqual(overflow.active, false, `Overflow ${viewport.width}: ${JSON.stringify(overflow)}`);
     await page.keyboard.press('Tab'); assert.notStrictEqual(await page.evaluate(() => getComputedStyle(document.activeElement).outlineStyle), 'none');
+    if (url === '/suscripcion.html') {
+      const detailButton = page.locator('[data-request-detail]').first();
+      await detailButton.evaluate((node) => node.addEventListener('click', () => {
+        window.__scrollAtOwnerDetailClick = window.scrollY;
+      }, { capture: true, once: true }));
+      await detailButton.click();
+      await page.locator('[data-payment-detail][open]').waitFor();
+      assert.strictEqual(await page.locator('[data-payment-detail]').evaluate((node) => node.matches(':modal')), true);
+      assert.strictEqual(await page.evaluate(() => window.scrollY), await page.evaluate(() => window.__scrollAtOwnerDetailClick),
+        'El detalle del propietario no debe desplazar la pagina.');
+      assert.strictEqual(await page.evaluate(() => document.activeElement.hasAttribute('data-close-request')), true);
+      assert.strictEqual(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth + 1), true);
+      await page.keyboard.press('Escape');
+      await page.locator('[data-payment-detail][open]').waitFor({ state: 'detached' });
+      await page.waitForFunction(() => document.activeElement === document.querySelector('[data-request-detail]'));
+      await detailButton.click();
+      await page.locator('[data-close-request]').click();
+      assert.strictEqual(await page.locator('[data-payment-detail]').evaluate((node) => node.open), false);
+    }
     if (url === '/admin.html#pagos-suscripcion') {
       const detailButton = page.locator('#paymentReviewTableBody .table-action');
       await detailButton.evaluate((node) => node.addEventListener('click', () => {
@@ -104,7 +123,7 @@ async function main() {
   const fixture = serverFixture(); await new Promise((resolve) => fixture.server.listen(0, '127.0.0.1', resolve)); const baseUrl = `http://127.0.0.1:${fixture.server.address().port}`; const browser = await chromium.launch({ executablePath, headless: true });
   try {
     await assertViewport(browser, baseUrl, '/suscripcion.html', '[data-payment-form]'); await assertViewport(browser, baseUrl, '/admin.html#pagos-suscripcion', '#paymentReviewTableBody tr');
-    const owner = await browser.newPage({ viewport: { width: 1366, height: 768 } }); await owner.goto(`${baseUrl}/suscripcion.html`); await owner.locator('[data-payment-form]').waitFor(); await owner.getByRole('button', { name: 'Cotizar' }).click(); await owner.locator('.payment-quote').waitFor(); await owner.getByRole('button', { name: 'Crear solicitud' }).click(); await owner.locator('[data-receipt-form]').waitFor(); await owner.locator('[data-receipt-form] input').setInputFiles({ name: 'comprobante.pdf', mimeType: 'application/pdf', buffer: Buffer.from('%PDF-1.4') }); await owner.getByRole('button', { name: 'Enviar comprobante' }).click(); await owner.getByText('Pendiente de revisión').first().waitFor(); await owner.getByRole('button', { name: 'Cerrar detalle' }).click(); await owner.getByRole('button', { name: 'Ver detalle' }).first().click(); await owner.getByRole('button', { name: 'Reemplazar archivo' }).waitFor(); assert(!await owner.content().then((html) => /idTienda|idSuscripcion/.test(html))); await owner.close();
+    const owner = await browser.newPage({ viewport: { width: 1366, height: 768 } }); await owner.goto(`${baseUrl}/suscripcion.html`); await owner.locator('[data-payment-form]').waitFor(); await owner.getByRole('button', { name: 'Cotizar' }).click(); await owner.locator('.payment-quote').waitFor(); await owner.getByRole('button', { name: 'Crear solicitud' }).click(); await owner.locator('[data-receipt-form]').waitFor(); await owner.locator('[data-receipt-form] input').setInputFiles({ name: 'comprobante.pdf', mimeType: 'application/pdf', buffer: Buffer.from('%PDF-1.4') }); await owner.getByRole('button', { name: 'Enviar comprobante' }).click(); await owner.locator('[data-payment-detail] .payment-state[data-state="pendiente_revision"]').waitFor(); assert.strictEqual(await owner.locator('[data-payment-detail]').evaluate((node) => node.open), true); await owner.getByRole('button', { name: 'Cerrar detalle' }).click(); await owner.waitForFunction(() => document.activeElement?.dataset.requestDetail === 'payment-browser-reference-000000000001'); await owner.getByRole('button', { name: 'Ver detalle' }).first().click(); await owner.getByRole('button', { name: 'Reemplazar archivo' }).waitFor(); assert(!await owner.content().then((html) => /idTienda|idSuscripcion/.test(html))); await owner.close();
     const admin = await browser.newPage({ viewport: { width: 1366, height: 768 } });
     await admin.goto(`${baseUrl}/admin.html#pagos-suscripcion`);
     await admin.locator('#paymentReviewTableBody tr').waitFor();

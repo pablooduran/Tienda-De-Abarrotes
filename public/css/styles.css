@@ -2956,6 +2956,20 @@ button.is-busy { cursor: wait; opacity: .72; }
 .payment-state[data-state="cancelada"],
 .payment-state[data-state="vencida"] { border-color: #d89b96; background: #fff0ef; color: #842018 !important; }
 .payment-request-detail { padding: 16px; border: 1px solid var(--line); border-radius: 6px; background: #fff; }
+.payment-request-dialog[open] {
+  position: fixed;
+  inset: 0;
+  width: min(800px, calc(100vw - 28px));
+  max-width: none;
+  max-height: calc(100vh - 28px);
+  margin: auto;
+  padding: 0;
+  overflow-y: auto;
+  border: 0;
+  border-radius: 8px;
+  box-shadow: 0 24px 64px #102d3559;
+}
+.payment-request-dialog::backdrop { background: #102d35b3; }
 .payment-upload-form { display: flex; flex-wrap: wrap; align-items: end; gap: 12px; }
 .payment-upload-form label { flex: 1 1 260px; }
 .payment-upload-form small { color: var(--muted); font-weight: 400; }

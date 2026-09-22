@@ -33,6 +33,7 @@
   function create({ root, api = null } = {}) {
     if (!root) throw new Error('El contenedor de pagos es obligatorio.');
     const state = { plans: [], methods: [], requests: [], page: 1, pages: 1, selected: null, loading: false };
+    let detailReturnFocus = null;
 
     async function request(url, options = {}) {
       const response = api ? await api(url, options) : await global.SecurityHttp.secureFetch(url, options);
@@ -68,19 +69,26 @@
     }
 
     async function showDetail(reference) {
+      const returnFocus = global.document.activeElement;
       const [data, receipts] = await Promise.all([
         request(`/api/pagos-suscripcion/solicitudes/${encodeURIComponent(reference)}`),
         request(`/api/pagos-suscripcion/solicitudes/${encodeURIComponent(reference)}/comprobantes`)
       ]);
-      state.selected = data;
-      root.querySelector('[data-payment-detail]').innerHTML = detailMarkup(data, receipts);
       const detail = root.querySelector('[data-payment-detail]');
-      detail.querySelector('[data-close-request]').addEventListener('click', () => { detail.replaceChildren(); state.selected = null; });
+      if (!detail) return;
+      const wasOpen = detail.open;
+      state.selected = data;
+      detail.innerHTML = detailMarkup(data, receipts);
+      detail.querySelector('[data-close-request]').addEventListener('click', () => detail.close());
       const receiptForm = detail.querySelector('[data-receipt-form]');
       if (receiptForm) receiptForm.addEventListener('submit', (event) => { event.preventDefault(); void uploadReceipt(receiptForm); });
       const cancel = detail.querySelector('[data-cancel-request]');
       if (cancel) cancel.addEventListener('click', () => { if (global.confirm('La solicitud se cancelará y no podrá reactivarse.')) void cancelRequest(); });
-      detail.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      if (!wasOpen) {
+        detailReturnFocus = returnFocus;
+        detail.showModal();
+      }
+      detail.querySelector('[data-close-request]').focus();
     }
 
     async function uploadReceipt(form) {
@@ -141,7 +149,18 @@
     }
 
     function renderShell() {
-      root.innerHTML = `<div class="payment-subscription-shell"><div class="payment-section-heading"><div><p class="subscription-eyebrow">Pagos manuales</p><h2>Renovar o cambiar plan</h2><p>Crear solicitud, realizar el pago, adjuntar comprobante y esperar la revision. No hay verificacion automatica.</p></div></div><ol class="payment-flow" aria-label="Pasos del pago manual"><li>Crear solicitud</li><li>Realizar pago</li><li>Adjuntar comprobante</li><li>Esperar revision</li></ol><form data-payment-form data-payment-action="quote" class="payment-config-form"><label><span>Plan</span><select name="plan" required></select></label><label><span>Operacion</span><select name="operacion" required></select></label><label><span>Periodo</span><select name="periodo" required></select></label><label><span>Metodo</span><select name="metodo" required></select></label><p data-payment-plan-description class="payment-muted"></p><div class="payment-form-actions"><button type="submit" class="button-link payment-primary">Cotizar</button><button type="button" class="button-link secondary" data-create-payment>Crear solicitud de pago</button></div></form><div data-payment-quote></div><p data-payment-feedback role="status" aria-live="polite"></p><section class="payment-request-list" aria-labelledby="payment-request-list-title"><div class="payment-section-heading"><h3 id="payment-request-list-title">Mis solicitudes</h3><div><button type="button" class="button-link" data-payment-previous>Anterior</button><span data-payment-page></span><button type="button" class="button-link" data-payment-next>Siguiente</button></div></div><div data-payment-requests></div></section><div data-payment-detail></div></div>`;
+      root.innerHTML = `<div class="payment-subscription-shell"><div class="payment-section-heading"><div><p class="subscription-eyebrow">Pagos manuales</p><h2>Renovar o cambiar plan</h2><p>Crear solicitud, realizar el pago, adjuntar comprobante y esperar la revision. No hay verificacion automatica.</p></div></div><ol class="payment-flow" aria-label="Pasos del pago manual"><li>Crear solicitud</li><li>Realizar pago</li><li>Adjuntar comprobante</li><li>Esperar revision</li></ol><form data-payment-form data-payment-action="quote" class="payment-config-form"><label><span>Plan</span><select name="plan" required></select></label><label><span>Operacion</span><select name="operacion" required></select></label><label><span>Periodo</span><select name="periodo" required></select></label><label><span>Metodo</span><select name="metodo" required></select></label><p data-payment-plan-description class="payment-muted"></p><div class="payment-form-actions"><button type="submit" class="button-link payment-primary">Cotizar</button><button type="button" class="button-link secondary" data-create-payment>Crear solicitud de pago</button></div></form><div data-payment-quote></div><p data-payment-feedback role="status" aria-live="polite"></p><section class="payment-request-list" aria-labelledby="payment-request-list-title"><div class="payment-section-heading"><h3 id="payment-request-list-title">Mis solicitudes</h3><div><button type="button" class="button-link" data-payment-previous>Anterior</button><span data-payment-page></span><button type="button" class="button-link" data-payment-next>Siguiente</button></div></div><div data-payment-requests></div></section><dialog data-payment-detail class="payment-request-dialog" aria-labelledby="payment-request-title"></dialog></div>`;
+      const detail = root.querySelector('[data-payment-detail]');
+      detail.addEventListener('close', () => {
+        const matchingButton = Array.from(root.querySelectorAll('[data-request-detail]'))
+          .find((button) => button.dataset.requestDetail === state.selected?.referencia);
+        const target = matchingButton || (detailReturnFocus?.isConnected && detailReturnFocus.getClientRects().length
+          ? detailReturnFocus : root.querySelector('[data-create-payment]'));
+        detail.replaceChildren();
+        state.selected = null;
+        target?.focus();
+        detailReturnFocus = null;
+      });
       const planSelect = root.querySelector('[name="plan"]');
       planSelect.replaceChildren(...state.plans.map((item) => Object.assign(document.createElement('option'), { value: item.referencia, textContent: item.nombre })));
       const methodSelect = root.querySelector('[name="metodo"]');
