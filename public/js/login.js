@@ -87,6 +87,11 @@
     mutate(loginForm, 'login', async () => {
       const data = Object.fromEntries(new FormData(loginForm).entries());
       const result = await requestJson('/auth/login', data);
+      const sessionResponse = await SecurityHttp.secureFetch('/auth/status');
+      const session = sessionResponse.ok ? await sessionResponse.json().catch(() => ({})) : {};
+      if (!session.authenticated || session.admin?.rol !== result.admin?.rol) {
+        throw new Error('La contraseña fue aceptada, pero no pudimos mantener la sesión. Inténtalo nuevamente; si continúa, avísanos.');
+      }
       window.location.href = allowedDestinations.has(result.destination) ? result.destination : '/';
     });
   });

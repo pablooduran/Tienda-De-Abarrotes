@@ -38,12 +38,18 @@ async function body(request) {
 }
 
 function createFixture() {
-  const state = { requests: [] };
+  const state = { requests: [], sessionAvailable: true, statusChecks: 0 };
   const server = http.createServer(async (request, response) => {
     const url = new URL(request.url, 'http://127.0.0.1');
     if (url.pathname === '/favicon.ico') {
       response.writeHead(204);
       return response.end();
+    }
+    if (request.method === 'GET' && url.pathname === '/auth/status') {
+      state.statusChecks += 1;
+      return json(response, 200, state.sessionAvailable
+        ? { authenticated: true, admin: { rol: 'dueno_tienda' } }
+        : { authenticated: false, admin: null, code: 'AUTH_REQUIRED' });
     }
     if (request.method === 'POST' && url.pathname.startsWith('/auth/')) {
       const payload = await body(request);
@@ -70,7 +76,7 @@ function createFixture() {
         return json(response, 200, { message: 'Contraseña actualizada.' });
       }
       if (url.pathname === '/auth/login' && payload.usuario === 'propietario_demo') {
-        return json(response, 200, { destination: '/app.html' });
+        return json(response, 200, { destination: '/app.html', admin: { rol: 'dueno_tienda' } });
       }
       return json(response, 401, { error: 'Credenciales incorrectas.' });
     }
@@ -180,6 +186,7 @@ async function runFlow(browser, baseUrl, state) {
     await page.keyboard.press('Enter');
     await page.waitForURL('**/app.html');
     await page.locator('#app-loaded').waitFor();
+    assert.strictEqual(state.statusChecks, 1, 'El acceso debe confirmar la sesion antes de navegar.');
 
     assert(state.requests.every((item) => item.search === ''), 'Los tokens no deben viajar en la URL.');
     assert(state.requests.every((item) => !Object.prototype.hasOwnProperty.call(item.payload, 'idTienda')),
@@ -188,6 +195,25 @@ async function runFlow(browser, baseUrl, state) {
       'El acceso publico no debe persistir tokens ni credenciales.');
     assert.deepStrictEqual(session.errors, [], 'El recorrido publico mantiene la consola limpia.');
   } finally {
+    await session.context.close();
+  }
+}
+
+async function assertMissingSession(browser, baseUrl, state) {
+  state.sessionAvailable = false;
+  const session = await open(browser, baseUrl, { width: 1366, height: 768 });
+  try {
+    await session.page.locator('#login-user').fill('propietario_demo');
+    await session.page.locator('#login-password').fill('ClaveSegura123');
+    await session.page.locator('#loginForm button[type="submit"]').click();
+    await session.page.locator('#loginMessage').getByText(/no pudimos mantener la sesión/i).waitFor();
+    assert.strictEqual(new URL(session.page.url()).pathname, '/login.html',
+      'Una sesion ausente no debe producir un rebote silencioso de navegacion.');
+    assert.strictEqual(await session.page.locator('#loginForm').getAttribute('aria-busy'), null,
+      'El formulario debe poder reintentarse.');
+    assert.deepStrictEqual(session.errors, [], 'La sesion ausente no debe causar errores de consola.');
+  } finally {
+    state.sessionAvailable = true;
     await session.context.close();
   }
 }
@@ -234,6 +260,7 @@ async function main() {
   const baseUrl = `http://127.0.0.1:${fixture.server.address().port}`;
   try {
     await runFlow(browser, baseUrl, fixture.state);
+    await assertMissingSession(browser, baseUrl, fixture.state);
     await assertViewport(browser, baseUrl, { width: 360, height: 800 });
     await assertViewport(browser, baseUrl, { width: 768, height: 1024 });
     await assertViewport(browser, baseUrl, { width: 1366, height: 768 });

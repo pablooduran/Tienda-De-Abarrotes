@@ -19,7 +19,7 @@ equivale a una validación del entorno hospedado.
 | 9. Rediseño visual Figma | Hay guía de diseño y pulido PRODUCTO-1, además de la nueva pantalla de acceso. | Aplicar una referencia Figma concreta cuando esté disponible; ventana flotante de acceso pendiente. |
 | 10. Onboarding y ayuda | WELCOME y HELP están implementados y probados localmente. | Ajustar tutorial a la interfaz definitiva y validar hospedado. |
 | 11. Suscripciones y monetización | Motor, límites, trial, gracia, suspensión y pagos manuales implementados localmente. | Validación sintética hospedada de renovación, cambio de plan, comprobantes y lectura de cuenta suspendida. |
-| 12. Regresión y piloto | E2E local y CI de negocio constan en `docs/MAPA_PRUEBAS.md`; staging ya está disponible. | Completar pruebas hospedadas sintéticas y backup/restore. `PILOT_READY`, datos reales y piloto siguen sin autorización. |
+| 12. Regresión y piloto | E2E local y CI de negocio constan en `docs/MAPA_PRUEBAS.md`; staging ya está disponible. El login local ahora comprueba `/auth/status` antes de navegar y avisa si la sesión no se conserva; el arnés de navegador cubre ese fallo sin credenciales reales. | Confirmar con cuenta sintética por qué staging devuelve al formulario tras aceptar la contraseña; esta protección visual no demuestra que la sesión hospedada funcione. Completar pruebas hospedadas sintéticas y backup/restore. `PILOT_READY`, datos reales y piloto siguen sin autorización. |
 
 ## Siguiente secuencia de bloques
 
