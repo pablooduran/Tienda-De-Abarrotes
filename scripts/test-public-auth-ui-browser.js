@@ -75,7 +75,7 @@ function createFixture() {
       if (url.pathname === '/auth/restablecer-password') {
         return json(response, 200, { message: 'Contraseña actualizada.' });
       }
-      if (url.pathname === '/auth/login' && payload.usuario === 'propietario_demo') {
+      if (url.pathname === '/auth/login' && ['propietario_demo', 'propietario@example.test'].includes(payload.usuario)) {
         return json(response, 200, { destination: '/app.html', admin: { rol: 'dueno_tienda' } });
       }
       return json(response, 401, { error: 'Credenciales incorrectas.' });
@@ -183,12 +183,15 @@ async function runFlow(browser, baseUrl, state) {
     await page.locator('[data-auth-panel="login"]:visible').waitFor();
     assert.match(await page.locator('#loginMessage').textContent(), /contraseña actualizada/i);
 
-    await page.locator('#login-user').fill('propietario_demo');
+    await page.locator('#login-user').fill('propietario@example.test');
     await page.locator('#login-password').fill('NuevaClave1234');
     await page.locator('#loginForm button[type="submit"]').focus();
     await page.keyboard.press('Enter');
     await page.waitForURL('**/app.html');
     await page.locator('#app-loaded').waitFor();
+    assert(state.requests.some((item) => item.path === '/auth/login'
+      && item.payload.usuario === 'propietario@example.test'),
+    'El formulario debe aceptar y enviar el correo como identificador.');
     assert.strictEqual(state.statusChecks, 1, 'El acceso debe confirmar la sesion antes de navegar.');
 
     assert(state.requests.every((item) => item.search === ''), 'Los tokens no deben viajar en la URL.');

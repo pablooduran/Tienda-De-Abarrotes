@@ -17,6 +17,7 @@ const { emailVerificationService } = require('../services/email-verification-ser
 const { passwordRecoveryService } = require('../services/password-recovery-service');
 const { ownerDestination, resolveSubscriptionAccess } = require('../services/subscription-access-service');
 const { validPasswordLength } = require('../config/password-policy');
+const { normalizedVerificationIdentity } = require('../config/email-verification-contract');
 
 const router = express.Router();
 const dummyPasswordHash = bcrypt.hash(crypto.randomBytes(32).toString('hex'), 12);
@@ -68,21 +69,23 @@ function validateNewPassword(password, confirmation) {
 
 router.post('/login', async (req, res, next) => {
   try {
-    const usuario = String(req.body?.usuario || '').trim().slice(0, 80);
+    const identificador = String(req.body?.usuario || '').trim();
     const password = req.body?.password;
-    if (!usuario || !password) {
+    if (!identificador || identificador.length > 160 || !password) {
       await auditLoginRejected(req, 'LOGIN_INPUT_INVALID');
-      return res.status(400).json({ error: 'Usuario y contrasena son obligatorios.' });
+      return res.status(400).json({ error: 'Usuario o correo y contrasena son obligatorios.' });
     }
+    const correo = normalizedVerificationIdentity(identificador);
 
     const [rows] = await pool.query(
       `SELECT a.idAdministrador, a.usuario, a.password, a.rol, a.idTienda, a.activo, a.estadoAcceso, a.versionSesion,
         t.activo AS tiendaActiva, t.estado AS estadoTienda, t.estadoOnboarding
        FROM administrador a
        LEFT JOIN tienda t ON t.idTienda=a.idTienda
-       WHERE a.usuario=?
+       WHERE a.usuario=? OR (a.correoNormalizado=? AND a.correoVerificadoEn IS NOT NULL)
+       ORDER BY (a.usuario=?) DESC
        LIMIT 1`,
-      [usuario]
+      [identificador, correo, identificador]
     );
     if (rows.length === 0) {
       await bcrypt.compare(password, await dummyPasswordHash);

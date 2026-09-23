@@ -271,6 +271,17 @@ async function testHeadersCsrfErrorsAndIdentityLimit() {
       method: 'POST', body: { usuario: 'otro_usuario', password: 'incorrecta' }
     });
     check('Otro usuario no queda bloqueado por contador de identidad', otherIdentity.status === 401);
+    await request(fixture, '/auth/login', {
+      method: 'POST', body: { usuario: 'PRUEBA@EXAMPLE.TEST', password: 'incorrecta' }
+    });
+    await request(fixture, '/auth/login', {
+      method: 'POST', body: { usuario: 'prueba@example.test', password: 'incorrecta' }
+    });
+    const blockedEmail = await request(fixture, '/auth/login', {
+      method: 'POST', body: { usuario: 'Prueba@Example.Test', password: 'incorrecta' }
+    });
+    check('El correo comparte limite de intentos sin importar mayusculas', blockedEmail.status === 429
+      && blockedEmail.body.code === 'TOO_MANY_LOGIN_ATTEMPTS');
 
     const internalError = await request(fixture, '/api/error');
     check('Error 500 no expone SQL ni rutas', internalError.status === 500

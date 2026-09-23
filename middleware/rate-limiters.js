@@ -16,7 +16,7 @@ function healthClientIpKey(req) {
 }
 
 function normalizedUsername(req) {
-  return String(req.body?.usuario || '').trim().toLowerCase().slice(0, 80);
+  return String(req.body?.usuario || '').trim().toLowerCase().slice(0, 160);
 }
 
 function normalizedRegistrationIdentity(req) {

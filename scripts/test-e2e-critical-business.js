@@ -369,6 +369,36 @@ async function main() {
     await expectHttp(ownerB, '/auth/login', {
       method: 'POST', body: { usuario: storeB.body.propietario.usuario, password: storeB.password }
     }, 200, 'Login propietario B');
+    const verifiedEmail = `owner-${marker}@example.test`;
+    const pendingEmail = `pending-${marker}@example.test`;
+    await connection.query(
+      'UPDATE administrador SET correoNormalizado=?, correoVerificadoEn=NOW() WHERE usuario=?',
+      [verifiedEmail, storeA.body.propietario.usuario]
+    );
+    await connection.query(
+      'UPDATE administrador SET correoNormalizado=? WHERE usuario=?',
+      [pendingEmail, storeB.body.propietario.usuario]
+    );
+    const emailSession = new HttpSession(server.baseUrl);
+    const emailLogin = await expectHttp(emailSession, '/auth/login', {
+      method: 'POST', body: { usuario: verifiedEmail.toUpperCase(), password: storeA.password }
+    }, 200, 'Login con correo verificado');
+    ok(emailLogin.admin.usuario === storeA.body.propietario.usuario,
+      'El correo verificado conserva la identidad y el tenant del propietario.');
+    const emailStatus = await expectHttp(emailSession, '/auth/status', {}, 200,
+      'Sesion iniciada con correo verificado');
+    ok(emailStatus.authenticated && emailStatus.admin.usuario === storeA.body.propietario.usuario,
+      'La sesion por correo conserva al propietario correcto.');
+    const wrongEmailPassword = await expectHttp(new HttpSession(server.baseUrl), '/auth/login', {
+      method: 'POST', body: { usuario: verifiedEmail, password: 'clave-incorrecta' }
+    }, 401, 'Contrasena incorrecta con correo');
+    ok(wrongEmailPassword.code === 'INVALID_CREDENTIALS',
+      'La respuesta no distingue el acceso por correo del acceso por usuario.');
+    const pendingLogin = await expectHttp(new HttpSession(server.baseUrl), '/auth/login', {
+      method: 'POST', body: { usuario: pendingEmail, password: storeB.password }
+    }, 401, 'Correo no verificado rechazado');
+    ok(pendingLogin.code === 'INVALID_CREDENTIALS',
+      'El correo no verificado no revela el estado de la cuenta.');
     await expectHttp(superSession, '/api/admin/pagos-suscripcion/tipos-cambio', {
       method: 'POST',
       headers: { 'Idempotency-Key': `robot:${marker}:rate` },

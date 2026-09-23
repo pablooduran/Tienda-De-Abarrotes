@@ -27,6 +27,8 @@ for (const endpoint of endpoints) {
 assert(html.includes('Empieza') === false, 'El acceso publico no debe duplicar la guia Welcome.');
 assert(html.includes('Crear cuenta'), 'Debe existir un CTA publico para crear cuenta.');
 assert(html.includes('Olvidé mi contraseña'), 'Debe existir recuperacion visible.');
+assert(html.includes('Usuario o correo'), 'El acceso debe ofrecer usuario o correo verificado.');
+assert(html.includes('correo verificado'), 'El acceso debe aclarar que el correo debe estar verificado.');
 const loginPanel = html.split('data-auth-panel="login"')[1].split('data-auth-panel="register"')[0];
 const registerPanel = html.split('data-auth-panel="register"')[1].split('data-auth-panel="verify"')[0];
 assert(!loginPanel.includes('data-auth-target="verify"'), 'El login no debe mostrar verificacion antes de solicitar codigo.');
