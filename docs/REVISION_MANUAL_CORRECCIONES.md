@@ -21,6 +21,25 @@ equivale a una validación del entorno hospedado.
 | 11. Suscripciones y monetización | Motor, límites, trial, gracia, suspensión y pagos manuales implementados localmente. En el bloque local pendiente, la cotización y el detalle muestran el tipo de cambio aplicado y su fuente registrada, el panel administrativo los identifica con unidades, y las fechas ausentes dejan de mostrarse como “No aplica”. | Validación sintética hospedada de renovación, cambio de plan, comprobantes y lectura de cuenta suspendida. |
 | 12. Regresión y piloto | E2E local y CI de negocio constan en `docs/MAPA_PRUEBAS.md`; staging ya está disponible. El login local ahora comprueba `/auth/status` antes de navegar y avisa si la sesión no se conserva; el arnés de navegador cubre ese fallo sin credenciales reales. | Confirmar con cuenta sintética por qué staging devuelve al formulario tras aceptar la contraseña; esta protección visual no demuestra que la sesión hospedada funcione. Completar pruebas hospedadas sintéticas y backup/restore. `PILOT_READY`, datos reales y piloto siguen sin autorización. |
 
+## Validación hospedada sintética del 23 de septiembre de 2026
+
+En `Tienda Prueba Staging`, con confirmación del propietario de que el producto y
+proveedor existentes eran sintéticos, se comprobó el siguiente recorrido sin
+datos reales: compra de una unidad (stock 10 → 11), venta ocasional con Bs 10
+en efectivo y Bs 10 por QR, venta fiada de Bs 20 a un cliente ficticio sin datos
+de contacto y cobro posterior de Bs 20. El stock final quedó en 9 unidades,
+la deuda en Bs 0 y el panel mostró Bs 40 vendidos y cobrados. Historial,
+comprobantes, reportes de ventas, pagos y compras, y auditoría reflejaron los
+movimientos. Configuración cargó y Mi plan mostró Basic 1/500/25/15, prueba
+de 30 días y gracia de 7 días. La devolución parcial se inspeccionó sin
+confirmarla; no se probó una cuenta suspendida ni un pago de suscripción.
+
+Quedaron detectados y corregidos **solo localmente**, pendientes de publicación,
+los encabezados técnicos de Reportes, el aviso de fiado que pedía elegir un
+cliente ya seleccionado y el número interno del administrador en Auditoría.
+Las correcciones tienen pruebas de navegador específicas. Esta validación no
+declara `PILOT_READY`, no autoriza datos reales y no inicia el piloto.
+
 ## Siguiente secuencia de bloques
 
 1. Unificar filtros y modales en las vistas de mayor uso, empezando por Pagos, Tiendas y Catálogo.

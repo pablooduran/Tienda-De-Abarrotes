@@ -2306,13 +2306,22 @@ function renderPosPaymentFields() {
       <label>Monto por QR<input id="posQrApplied" type="number" min="0" step="0.01" value="0"></label>
       <label>Referencia QR (opcional)<input id="posQrReference" maxlength="120"></label>`;
   } else {
-    fields.innerHTML = '<p class="pos-credit-note">El total quedara pendiente. Debes seleccionar un cliente registrado.</p>';
+    fields.innerHTML = '<p class="pos-credit-note" id="posCreditNote"></p>';
   }
   fields.querySelectorAll('input').forEach((input) => input.addEventListener('input', () => {
     if (input.id === 'posCashReceived') input.dataset.autoCash = 'false';
     renderPosPaymentSummary();
   }));
   renderPosPaymentSummary();
+  updatePosCreditNote();
+}
+
+function updatePosCreditNote() {
+  const note = document.getElementById('posCreditNote');
+  if (!note) return;
+  note.textContent = document.getElementById('posClient')?.value
+    ? 'El total quedará pendiente en la cuenta del cliente seleccionado.'
+    : 'El total quedará pendiente. Selecciona un cliente registrado para continuar.';
 }
 
 function posPaymentDraft() {
@@ -2677,6 +2686,7 @@ async function ventas() {
   document.getElementById('posClient').addEventListener('change', () => {
     creditUi().resetPosCredit();
     creditUi().refreshPosCredit(posPaymentDraft().balance);
+    updatePosCreditNote();
   });
   const clientSearch = document.getElementById('posClientSearch');
   clientSearch.addEventListener('input', (event) => {
@@ -4117,6 +4127,41 @@ function reportFilters(type) {
   return '';
 }
 
+const REPORT_FIELD_LABELS = Object.freeze({
+  fecha: 'Fecha',
+  fechaPago: 'Fecha de pago',
+  fechaVenta: 'Fecha de venta',
+  fechaInicio: 'Inicio',
+  fechaVencimiento: 'Vencimiento',
+  fechaPrometidaPago: 'Promesa de pago',
+  cliente: 'Cliente',
+  proveedor: 'Proveedor',
+  nombre: 'Producto',
+  categoria: 'Categoría',
+  tipo: 'Tipo de venta',
+  total: 'Total (Bs)',
+  monto: 'Monto (Bs)',
+  totalVendido: 'Ventas (Bs)',
+  totalCosto: 'Costo (Bs)',
+  gananciaNeta: 'Ganancia (Bs)',
+  totalFiado: 'Fiado (Bs)',
+  totalPagado: 'Pagado (Bs)',
+  saldoPendiente: 'Saldo pendiente (Bs)',
+  unidadesVendidas: 'Unidades vendidas',
+  stockUnidadesTotal: 'Stock (unidades)',
+  estado: 'Estado',
+  observacion: 'Observación',
+  observacionCredito: 'Observación de crédito'
+});
+
+function reportFieldLabel(key) {
+  return REPORT_FIELD_LABELS[key] || String(key).replace(/([a-z])([A-Z])/g, '$1 $2').replace(/^./, (letter) => letter.toUpperCase());
+}
+
+function reportVisibleKeys(keys) {
+  return keys.filter((key) => !/^id(?:[A-Z]|$)/.test(key) && !['activo', 'eliminadoEn', 'cerradoEn'].includes(key));
+}
+
 async function reportes() {
   reportRequest += 1;
   view.innerHTML = `
@@ -4158,7 +4203,7 @@ async function loadReport(event) {
     const result = await api(`/api/reportes/${data.tipo}?${query.toString()}`);
     if (request !== reportRequest || activeView !== 'reportes') return;
     const rows = result.rows || [];
-    const keys = rows[0] ? Object.keys(rows[0]) : [];
+    const keys = rows[0] ? reportVisibleKeys(Object.keys(rows[0])) : [];
     const hasChart = rows.length > 0 && Array.isArray(result.chart?.labels) && result.chart.labels.length > 0
       && Array.isArray(result.chart?.values) && result.chart.values.length === result.chart.labels.length;
     chartPanel.hidden = !hasChart;
@@ -4169,7 +4214,7 @@ async function loadReport(event) {
     }
     document.getElementById('reportResult').innerHTML = rows.length ? `
       ${result.summary ? `<div class="summary-row"><strong>Vendido: Bs ${money(result.summary.totalVendido)}</strong><strong>Costo: Bs ${money(result.summary.totalCosto)}</strong><strong>Ganancia: Bs ${money(result.summary.gananciaNeta)}</strong></div>` : ''}
-      <div class="table-wrap"><table><thead><tr>${keys.map((key) => `<th>${escapeHtml(key)}</th>`).join('')}</tr></thead>
+      <div class="table-wrap"><table><thead><tr>${keys.map((key) => `<th>${escapeHtml(reportFieldLabel(key))}</th>`).join('')}</tr></thead>
       <tbody>${rows.map((row) => `<tr>${keys.map((key) => `<td>${key.toLowerCase().includes('fecha') ? formatDate(row[key]) : escapeHtml(row[key] ?? '')}</td>`).join('')}</tr>`).join('')}</tbody></table></div>` : '<p class="muted">No hay datos para mostrar.</p>';
   } catch (error) {
     if (request !== reportRequest || activeView !== 'reportes') return;

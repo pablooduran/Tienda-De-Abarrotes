@@ -77,9 +77,15 @@ function serverFor(requests) {
         periodo: period, total: 0, pagina: 1, paginas: 1, rows: []
       });
       if (url.pathname === '/api/reportes/ventasDia') return json(response, {
-        rows: [{ fecha: '2026-09-22', total: 12 }], chart: { labels: ['2026-09-22'], values: [12] }
+        rows: [{ idVenta: 31, fecha: '2026-09-22', total: 12 }], chart: { labels: ['2026-09-22'], values: [12] }
       });
       if (url.pathname === '/api/reportes/bajoStock') return json(response, { rows: [], chart: null });
+      if (url.pathname === '/api/reportes/fiados') return json(response, {
+        rows: [{ idFiado: 17, idTienda: 3, idCliente: 7, cliente: 'Ana Cliente',
+          fechaInicio: '2026-09-22', fechaVencimiento: '2026-10-22',
+          totalFiado: 20, totalPagado: 0, saldoPendiente: 20, estado: 'pendiente', activo: 1 }],
+        chart: null
+      });
       if (url.pathname === '/api/dashboard/financiero') return json(response, {
         resumen: { ventasNetas: 12, dineroCobrado: 12, descuentos: 0, cobrosFiado: 0,
           rentabilidadCompleta: true, rentabilidadExacta: true, gananciaBruta: 5,
@@ -141,8 +147,13 @@ async function verifyViewport(browser, baseUrl, viewport) {
     await page.locator('#posClientSearch').press('Enter');
     assert.strictEqual(await page.locator('#posClient').inputValue(), '7');
     assert.strictEqual(await page.locator('#posClientClear').isVisible(), true);
+    await page.locator('#posPaymentMode').selectOption('fiado');
+    assert((await page.locator('#posCreditNote').textContent()).includes('cliente seleccionado'),
+      'El mensaje de fiado reconoce al cliente seleccionado.');
     await page.locator('#posClientClear').click();
     assert.strictEqual(await page.locator('#posClient').inputValue(), '');
+    assert((await page.locator('#posCreditNote').textContent()).includes('Selecciona un cliente registrado'),
+      'El mensaje de fiado pide cliente solo cuando falta.');
     await salesView(page, 'historialVentas');
     assert.strictEqual(await page.locator('text=Historial de ventas').count() > 0, true);
     await page.locator('#view [data-detail="31"]').waitFor();
@@ -252,6 +263,8 @@ async function verifyViewport(browser, baseUrl, viewport) {
     assert.strictEqual(await page.locator('#reportChartPanel').isVisible(), false, 'El gráfico no aparece antes de consultar.');
     await page.locator('#reportForm button[type="submit"]').click();
     await page.locator('#reportResult table').waitFor();
+    assert.strictEqual(await page.locator('#reportResult th').allTextContents().then((labels) => labels.join('|')), 'Fecha|Total (Bs)',
+      'El reporte usa columnas claras y oculta el identificador interno.');
     assert.strictEqual(await page.locator('#reportChartPanel').isVisible(), true);
     assert.strictEqual((await page.locator('#reportChart').getAttribute('aria-label')).includes('12.00'), true,
       'El valor del gráfico también está disponible como texto.');
@@ -260,6 +273,12 @@ async function verifyViewport(browser, baseUrl, viewport) {
     await page.locator('#reportResult').getByText('No hay datos para mostrar.').waitFor();
     assert.strictEqual(await page.locator('#reportChartPanel').isVisible(), false,
       'Un reporte vacío no conserva el gráfico anterior.');
+    await page.locator('#reportType').selectOption('fiados');
+    await page.locator('#reportForm button[type="submit"]').click();
+    await page.locator('#reportResult table').waitFor();
+    assert.strictEqual(await page.locator('#reportResult th').allTextContents().then((labels) => labels.join('|')),
+      'Cliente|Inicio|Vencimiento|Fiado (Bs)|Pagado (Bs)|Saldo pendiente (Bs)|Estado',
+      'El reporte de fiados oculta identificadores y campos internos.');
     await page.locator('[data-view="finanzas"]').click();
     await page.locator('#financeSalesChart').waitFor();
     assert.strictEqual(await page.locator('#financeSalesChart').getAttribute('role'), 'img');

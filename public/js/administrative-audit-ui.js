@@ -69,8 +69,8 @@
     }
 
     function actorLabel(actor) {
-      if (actor?.tipo === 'administrador' && actor.idAdministrador) {
-        return `Administrador #${Number(actor.idAdministrador)}`;
+      if (actor?.tipo === 'administrador') {
+        return 'Administrador';
       }
       return actor?.tipo === 'sistema' ? 'Sistema' : 'Anonimo';
     }

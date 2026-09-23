@@ -148,6 +148,9 @@ async function testOwner(browser, baseUrl, requests) {
     'El dueno no debe elegir tienda.');
   assert(await page.evaluate(() => window.__xss) === undefined,
     'El contenido dinamico ejecuto codigo.');
+  assert((await page.locator('[data-audit-results]').textContent()).includes('Administrador')
+    && !(await page.locator('[data-audit-results]').textContent()).includes('Administrador #'),
+    'La auditoria no expone el numero interno del administrador.');
   assert(await page.locator('script').filter({ hasText: 'window.__xss=1' }).count() === 0,
     'La accion maliciosa se inserto como HTML.');
 
