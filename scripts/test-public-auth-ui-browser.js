@@ -130,6 +130,8 @@ async function runFlow(browser, baseUrl, state) {
   const session = await open(browser, baseUrl, { width: 1366, height: 768 });
   const { page } = session;
   try {
+    assert.strictEqual(await page.getByRole('button', { name: 'Ya creé mi cuenta y tengo un código' }).count(), 0,
+      'El acceso inicial no debe ofrecer verificacion antes de crear cuenta.');
     await page.getByRole('button', { name: 'Crear cuenta', exact: true }).click();
     await page.locator('#registrationForm').waitFor();
     await page.locator('#register-store').fill('Tienda Pública Sintética');
@@ -160,7 +162,8 @@ async function runFlow(browser, baseUrl, state) {
     await page.locator('[data-auth-panel="login"]:visible').waitFor();
     assert.match(await page.locator('#loginMessage').textContent(), /correo verificado/i);
 
-    await page.getByRole('button', { name: 'Ya tengo un código de verificación' }).click();
+    await page.getByRole('button', { name: 'Crear cuenta', exact: true }).click();
+    await page.getByRole('button', { name: 'Ya creé mi cuenta y tengo un código' }).click();
     await page.locator('.auth-secondary-flow summary').click();
     await page.locator('#resend-email').fill('propietario@example.test');
     await page.locator('#resendVerificationForm button[type="submit"]').click();

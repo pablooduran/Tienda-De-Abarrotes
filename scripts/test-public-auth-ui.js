@@ -27,7 +27,10 @@ for (const endpoint of endpoints) {
 assert(html.includes('Empieza') === false, 'El acceso publico no debe duplicar la guia Welcome.');
 assert(html.includes('Crear cuenta'), 'Debe existir un CTA publico para crear cuenta.');
 assert(html.includes('Olvidé mi contraseña'), 'Debe existir recuperacion visible.');
-assert(html.includes('Ya tengo un código de verificación'), 'Debe existir acceso a verificacion.');
+const loginPanel = html.split('data-auth-panel="login"')[1].split('data-auth-panel="register"')[0];
+const registerPanel = html.split('data-auth-panel="register"')[1].split('data-auth-panel="verify"')[0];
+assert(!loginPanel.includes('data-auth-target="verify"'), 'El login no debe mostrar verificacion antes de solicitar codigo.');
+assert(registerPanel.includes('data-auth-target="verify"'), 'El registro debe permitir retomar una verificacion pendiente.');
 assert(html.includes('aria-live="polite"'), 'El feedback asincrono debe anunciarse de forma accesible.');
 assert(!/<script[^>]*>[^<]/i.test(html), 'No se permite JavaScript inline en el acceso publico.');
 assert(!/\son[a-z]+\s*=/i.test(html), 'No se permiten handlers inline.');

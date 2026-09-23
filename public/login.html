@@ -59,7 +59,6 @@
         </form>
         <div class="auth-panel-links" aria-label="Otras opciones de acceso">
           <button type="button" class="auth-link" data-auth-target="recovery">Olvidé mi contraseña</button>
-          <button type="button" class="auth-link" data-auth-target="verify">Ya tengo un código de verificación</button>
         </div>
       </section>
 
@@ -93,6 +92,9 @@
           <button type="submit" data-pending-label="Creando cuenta…">Crear cuenta</button>
           <p class="auth-message" data-auth-feedback="register" role="status" aria-live="polite"></p>
         </form>
+        <div class="auth-panel-links" aria-label="Verificación pendiente">
+          <button type="button" class="auth-link" data-auth-target="verify">Ya creé mi cuenta y tengo un código</button>
+        </div>
       </section>
 
       <section class="auth-panel" data-auth-panel="verify" aria-labelledby="verify-title" hidden>
