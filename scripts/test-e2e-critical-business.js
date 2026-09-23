@@ -294,8 +294,7 @@ async function runBrowserFlow({ baseUrl, username, password, productName, custom
       'El POS muestra el comprobante interno.');
     await page.locator('[data-modal-confirm]').click();
 
-    await page.locator('[data-navigation-family="clientes"] > summary').click();
-    await page.locator('[data-navigation-family="clientes"] [data-view="clientes"]').click();
+    await page.locator('button[data-navigation-family="clientes"][data-view="clientes"]').click();
     await page.getByText(customerName, { exact: false }).first().waitFor();
     ok(true, 'El cliente sintetico aparece en Clientes.');
 
@@ -306,10 +305,9 @@ async function runBrowserFlow({ baseUrl, username, password, productName, custom
     ok(true, 'El detalle del historial conserva el producto vendido.');
     await page.locator('[data-modal-confirm]').click();
 
-    await page.locator('[data-navigation-family="plan"] > summary').click();
     await Promise.all([
       page.waitForURL('**/suscripcion.html'),
-      page.locator('[data-navigation-family="plan"] a[href="/suscripcion.html"]').click()
+      page.locator('a[data-navigation-family="plan"][href="/suscripcion.html"]').click()
     ]);
     await page.locator('[data-subscription-view]').waitFor();
     await page.locator('[data-payment-form]').waitFor();
