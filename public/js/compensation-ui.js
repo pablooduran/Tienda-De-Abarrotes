@@ -152,7 +152,7 @@
           <div><dt>Deuda actual</dt><dd>Bs ${money(sale.saldoPendiente)}</dd></div>
           <div><dt>Estado</dt><dd>${badge(sale.estadoOperacion)}</dd></div>
         </dl>
-        <p>El registro original, sus pagos y su fiado se conservan. La liquidacion financiera se resolvera mediante movimientos compensatorios.</p>
+        <p>La venta original, sus pagos y su fiado seguiran visibles. Este ajuste puede reducir la deuda o dejar un reembolso pendiente, segun el caso.</p>
       </section>`;
     }
 
@@ -228,7 +228,7 @@
           <div><dt>Reduccion maxima de deuda</dt><dd>Bs ${money(debtCents / 100)}</dd></div>
           <div><dt>Reembolso pendiente estimado</dt><dd>Bs ${money(refundCents / 100)}</dd></div>
           <div><dt>Inventario</dt><dd>${e(inventory ? label(inventory) : 'Sin seleccion')}</dd></div></dl>
-          <small>El backend vuelve a calcular y valida estos importes dentro de la transaccion.</small>`;
+          <small>Los importes son estimados. El resultado definitivo se confirma al guardar.</small>`;
       };
       form.querySelectorAll('[data-return-detail],[data-return-quantity],[data-return-treatment],select[name="tratamientoInventario"]')
         .forEach((control) => control.addEventListener('change', updateExpected));
@@ -614,14 +614,42 @@
 
     function renderSales() {
       const target = view.querySelector('[data-compensation-content]');
-      target.innerHTML = `<section class="panel"><form class="compensation-sale-search" data-sale-search>
-        <label>Numero interno de venta
-          <input name="idVenta" type="number" min="1" required inputmode="numeric">
+      const sales = Array.isArray(getState().ventas) ? getState().ventas : [];
+      target.innerHTML = `<section class="panel compensation-sale-picker">
+        <h3>Selecciona una venta</h3>
+        <p class="muted">Busca entre las últimas ventas por comprobante, cliente o fecha. Revisa el detalle antes de anular o devolver productos.</p>
+        <label>Buscar venta
+          <input type="search" data-recent-sale-search placeholder="Comprobante, cliente o fecha" autocomplete="off">
         </label>
-        <button type="submit">Consultar venta</button>
-      </form></section><div data-sale-context>
-        <div class="empty-state">Consulta una venta para revisar su historial antes de compensar.</div>
+        <div class="compact-list compensation-recent-sales" data-recent-sales></div>
+        <details class="compensation-older-sale"><summary>¿No aparece la venta? Buscar por número interno</summary>
+          <form class="compensation-sale-search" data-sale-search>
+            <label>Número interno de venta<input name="idVenta" type="number" min="1" required inputmode="numeric"></label>
+            <button type="submit">Consultar venta</button>
+          </form>
+        </details>
+      </section><div data-sale-context>
+        <div class="empty-state">Elige una venta para revisar su historial antes de continuar.</div>
       </div>`;
+      const results = target.querySelector('[data-recent-sales]');
+      const search = target.querySelector('[data-recent-sale-search]');
+      const form = target.querySelector('[data-sale-search]');
+      const renderRecent = () => {
+        const query = search.value.trim().toLocaleLowerCase();
+        const matches = sales.filter((sale) => [sale.codigoComprobante, sale.cliente, sale.fecha, sale.idVenta]
+          .some((value) => String(value || '').toLocaleLowerCase().includes(query)));
+        results.innerHTML = matches.length ? matches.slice(0, 12).map((sale) => `<div>
+          <span><strong>${e(sale.codigoComprobante || `Venta #${sale.idVenta}`)}</strong>
+            <small>${e(sale.cliente || 'Cliente ocasional')} · ${e(formatDate(sale.fecha))} · Bs ${money(sale.total)}</small></span>
+          <button type="button" class="small secondary" data-select-sale="${e(sale.idVenta)}">Seleccionar</button>
+        </div>`).join('') : '<p class="empty-state">No hay ventas recientes que coincidan. Puedes consultar una anterior por su número interno.</p>';
+        results.querySelectorAll('[data-select-sale]').forEach((button) => button.addEventListener('click', () => {
+          form.elements.idVenta.value = button.dataset.selectSale;
+          loadSale(form);
+        }));
+      };
+      search.addEventListener('input', renderRecent);
+      renderRecent();
       target.querySelector('[data-sale-search]').addEventListener('submit', (event) => {
         event.preventDefault();
         loadSale(event.currentTarget);

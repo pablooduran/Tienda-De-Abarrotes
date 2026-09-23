@@ -7,7 +7,7 @@
   }
 
   function formatDate(value) {
-    if (!value) return 'No aplica';
+    if (!value) return 'Sin fecha registrada';
     const date = new Date(`${String(value).replace(' ', 'T')}-04:00`);
     if (Number.isNaN(date.getTime())) return 'No disponible';
     return new Intl.DateTimeFormat('es-BO', {

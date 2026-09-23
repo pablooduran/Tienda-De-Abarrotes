@@ -72,6 +72,11 @@ check('Resumen previo y preservacion del original',
   ui.includes('Resumen previo')
   && ui.includes('registro original permanecera en el historial')
   && !/Eliminar (venta|pago|cobro)/i.test(ui));
+check('Devoluciones explican el ajuste sin lenguaje interno',
+  ui.includes('Este ajuste puede reducir la deuda o dejar un reembolso pendiente')
+  && ui.includes('Los importes son estimados. El resultado definitivo se confirma al guardar.')
+  && !ui.includes('El backend vuelve a calcular')
+  && !ui.includes('movimientos compensatorios.'));
 check('Motivo controlado y observacion validados',
   ui.includes("reason === 'otro_controlado'")
   && ui.includes('observacion de al menos 8 caracteres'));

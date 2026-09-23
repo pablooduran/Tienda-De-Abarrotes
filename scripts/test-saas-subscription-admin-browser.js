@@ -109,12 +109,17 @@ async function main() {
   const browser = await chromium.launch({ executablePath, headless: true });
   try {
     for (const viewport of [{ width: 360, height: 800 }, { width: 768, height: 1024 }, { width: 1366, height: 768 }]) {
-      const page = await browser.newPage({ viewport });
+      const page = await browser.newPage({ viewport, timezoneId: 'UTC' });
       const errors = [];
       page.on('console', (message) => { if (message.type() === 'error') errors.push(message.text()); });
       page.on('pageerror', (error) => errors.push(error.message));
       await page.goto(`${baseUrl}/admin.html#suscripciones-saas`);
       await page.locator('#saasSubscriptionsTableBody tr').waitFor({ state: 'attached' });
+      const expectedEnd = new Intl.DateTimeFormat('es-BO', {
+        dateStyle: 'medium', timeStyle: 'short', hour12: false, timeZone: 'America/La_Paz'
+      }).format(new Date('2026-08-01T00:00:00-04:00'));
+      assert.strictEqual(await page.locator('#saasSubscriptionsTableBody tr td').nth(5).textContent(), expectedEnd,
+        'La vigencia debe mostrarse en horario de Bolivia aunque el navegador use UTC.');
       const viewState = await page.evaluate(() => ({
         url: window.location.href,
         activeView: document.querySelector('.admin-main')?.dataset.activeView,

@@ -463,7 +463,7 @@
           <label class="check"><input name="permiteFiado" type="checkbox" ${customer.permiteFiado !== false ? 'checked' : ''}> Permitir nuevos fiados</label>
           ${advanced ? `<label>Limite de credito<input name="limiteCredito" type="number" min="0" step="0.01" value="${e(customer.limiteCredito ?? '')}" placeholder="Sin limite individual"></label><label>Dias de credito<input name="diasCreditoDefault" type="number" min="1" max="365" value="${e(customer.diasCreditoDefault ?? '')}" placeholder="Usar valor de tienda"></label>` : ''}
           <label class="check"><input name="aceptaRecordatorios" type="checkbox" ${customer.aceptaRecordatorios !== false ? 'checked' : ''}> Acepta recordatorios</label>
-        </div>${advanced ? '' : '<p class="plan-note">Los limites y plazos personalizados estan disponibles en el plan avanzado.</p>'}</section>
+        </div>${advanced ? '' : '<p class="plan-note">Tu plan actual no incluye limites ni plazos personalizados.</p>'}</section>
         <section><h4>Comunicacion</h4><div class="form-grid">
           <label>Canal preferido<select name="canalPreferido">${CHANNELS.map((item) => option(item, statusText(item), customer.canalPreferido || 'ninguno')).join('')}</select></label>
           <label>Horario preferido<input name="horarioPreferido" maxlength="120" value="${e(customer.horarioPreferido || '')}"></label>
@@ -518,13 +518,13 @@
 
     function profileTabBody(data, tab) {
       const customer = data.cliente;
-      if (tab === 'resumen') return `<div class="cards profile-summary"><article class="card"><span>Deuda total</span><strong>Bs ${money(customer.deudaActual)}</strong></article><article class="card"><span>Deuda vencida</span><strong>Bs ${money(customer.deudaVencida)}</strong></article><article class="card"><span>Limite efectivo</span><strong>${valueOrUnknown(customer.limiteEfectivo, 'Bs ')}</strong></article><article class="card"><span>Credito disponible</span><strong>${valueOrUnknown(customer.creditoDisponible, 'Bs ')}</strong></article></div><dl class="profile-details"><div><dt>Ultima compra</dt><dd>${data.compras?.[0]?.fecha ? e(formatDate(data.compras[0].fecha)) : 'Sin compras'}</dd></div><div><dt>Ultimo pago</dt><dd>${data.pagos?.[0]?.fechaPago ? e(formatDate(data.pagos[0].fechaPago)) : 'Sin pagos'}</dd></div><div><dt>Canal preferido</dt><dd>${e(statusText(customer.canalPreferido))}</dd></div><div><dt>Recordatorios</dt><dd>${customer.aceptaRecordatorios ? 'Aceptados' : 'No aceptados'}</dd></div></dl>`;
+      if (tab === 'resumen') return `<div class="cards profile-summary"><article class="card"><span>Deuda total</span><strong>Bs ${money(customer.deudaActual)}</strong></article><article class="card"><span>Deuda vencida</span><strong>Bs ${money(customer.deudaVencida)}</strong></article><article class="card"><span>Limite efectivo</span><strong>${valueOrUnknown(customer.limiteEfectivo, 'Bs ')}</strong></article><article class="card"><span>Credito disponible</span><strong>${valueOrUnknown(customer.creditoDisponible, 'Bs ')}</strong></article></div><p class="hint">El limite es el maximo que puede deber. El credito disponible es lo que queda de ese limite tras restar la deuda actual. Sin limite significa que no se configuro un tope.</p><dl class="profile-details"><div><dt>Ultima compra</dt><dd>${data.compras?.[0]?.fecha ? e(formatDate(data.compras[0].fecha)) : 'Sin compras'}</dd></div><div><dt>Ultimo pago</dt><dd>${data.pagos?.[0]?.fechaPago ? e(formatDate(data.pagos[0].fechaPago)) : 'Sin pagos'}</dd></div><div><dt>Canal preferido</dt><dd>${e(statusText(customer.canalPreferido))}</dd></div><div><dt>Recordatorios</dt><dd>${customer.aceptaRecordatorios ? 'Aceptados' : 'No aceptados'}</dd></div></dl>`;
       if (tab === 'compras') return historyNotice(data.historial?.compras) + listOrEmpty(data.compras, (row) => `<article class="timeline-row"><div><strong>${e(row.codigoComprobante || `Venta #${row.idVenta}`)}</strong><span>${e(formatDate(row.fecha))}</span></div><strong>Bs ${money(row.total)}</strong></article>`, 'No hay compras registradas.');
       if (tab === 'fiados') return historyNotice(data.historial?.fiados) + listOrEmpty(data.fiados, (row) => `<article class="timeline-row"><div><strong>Fiado #${row.idFiado}</strong><span>${e(formatDate(row.fechaInicio))} · vence ${e(dateText(row.fechaVencimiento) || 'sin fecha')} · promesa ${e(dateText(row.fechaPrometidaPago) || 'sin promesa')}</span></div><div><strong>Bs ${money(row.saldoPendiente)}</strong>${statusBadge(row.estadoCobranza || row.estado)}</div></article>`, 'No hay fiados registrados.');
       if (tab === 'pagos') return historyNotice(data.historial?.pagos) + listOrEmpty(data.pagos, (row) => `<article class="timeline-row"><div><strong>Pago a fiado #${row.idFiado}</strong><span>${e(formatDate(row.fechaPago))} · ${e(statusText(row.metodoPago))} · ${e(row.administrador || 'Sistema')}</span></div><div class="timeline-actions"><strong>Bs ${money(row.monto)}</strong>${row.idCobroFiado ? `<button type="button" class="small secondary" data-receipt-id="${e(row.idCobroFiado)}">Ver comprobante</button>` : ''}</div></article>`, 'No hay pagos registrados.');
       if (tab === 'seguimiento') return data.permisos?.seguimientoCobranza
         ? historyNotice(data.historial?.seguimientos) + listOrEmpty(data.seguimientos, (row) => `<article class="timeline-row"><div><strong>${e(statusText(row.tipo))}</strong><span>${e(formatDate(row.creadoEn))} · ${e(statusText(row.canal))} · ${e(row.administrador || 'Sistema')}</span><p>${e(row.detalle)}</p></div>${row.fechaCompromiso ? `<strong>${e(dateText(row.fechaCompromiso))}</strong>` : ''}</article>`, 'No hay seguimientos registrados.')
-        : '<div class="plan-note">El seguimiento de cobranza esta disponible en el plan avanzado.</div>';
+        : '<div class="plan-note">Tu plan actual no incluye seguimiento de cobranza.</div>';
       return '';
     }
 
@@ -580,15 +580,15 @@
     function paymentFields(debt, customer, customerId, operationKey) {
       return `<input type="hidden" name="claveOperacion" value="${e(operationKey)}"><input type="hidden" name="idCliente" value="${e(customerId || debt?.idCliente || '')}">
         <div class="payment-balance"><span>${debt ? 'Saldo actual' : 'Deuda total del cliente'}</span><strong>Bs ${money(debt?.saldoPendiente ?? customer?.deudaActual)}</strong></div>
-        ${debt ? '' : '<p class="hint">Se aplicara primero a las deudas mas antiguas.</p>'}
+        <p class="hint">${debt ? 'Este pago se aplicara solo a la deuda seleccionada.' : 'Este pago se repartira entre las deudas del cliente, empezando por las mas antiguas.'}</p>
         <div class="form-grid">
           <label>Monto<input name="monto" type="number" min="0.01" step="0.01" required ${debt ? `max="${e(debt.saldoPendiente)}"` : ''}></label>
           <label>Metodo<select name="metodoPago" required>${PAYMENT_METHODS.map((item) => option(item, statusText(item), 'efectivo')).join('')}</select></label>
           <label data-cash-received>Monto recibido<input name="montoRecibido" type="number" min="0" step="0.01"></label>
           <label>Cambio<input name="cambioVisual" readonly value="0.00"></label>
-          <label>Referencia<input name="referencia" maxlength="160"></label>
-          <label class="wide">Observacion<textarea name="observacion" maxlength="1000"></textarea></label>
-        </div><div class="payment-key-note">La operacion conserva la misma clave durante un reintento y evita cobros duplicados.</div>`;
+          <label>Referencia (opcional)<input name="referencia" maxlength="160"><small class="hint">Numero o dato para identificar el pago, por ejemplo de un QR o transferencia. Aparece en el comprobante.</small></label>
+          <label class="wide">Observacion (opcional)<textarea name="observacion" maxlength="1000"></textarea><small class="hint">Nota adicional sobre el cobro. Tambien aparece en el comprobante.</small></label>
+        </div><div class="payment-key-note">Si falla el envio, puedes intentar de nuevo desde esta ventana sin duplicar el cobro.</div>`;
     }
 
     async function openPayment({ idFiado = null, idCliente = null } = {}) {
@@ -602,7 +602,7 @@
         if (!customerId) throw new Error('Selecciona un cliente o una deuda para registrar el pago.');
         const operationKey = `cobro-ui:${newOperationKey()}`;
         const paymentResult = await openFormModal({
-          title: debt ? `Pago de fiado #${debt.idFiado}` : `Pago acumulado de ${customer.nombre}`,
+          title: debt ? 'Pagar esta deuda' : `Pagar varias deudas de ${customer.nombre}`,
           body: paymentFields(debt, customer, customerId, operationKey), wide: true, submitText: 'Registrar pago',
           onOpen: (form) => {
             const method = form.elements.metodoPago;
@@ -653,19 +653,54 @@
 
     function collectionFiltersMarkup() {
       const f = ui.collectionFilters;
+      const count = Object.entries(f).filter(([key, value]) => key !== 'busqueda' && value !== '').length;
       return `<form class="panel credit-filters collection-filters" id="collectionFilters">
-        <label>Buscar<input name="busqueda" type="search" value="${e(f.busqueda || '')}" placeholder="Cliente o telefono"></label><label>Cliente<select name="cliente"><option value="">Todos</option>${state().clientes.map((item) => option(item.idCliente, item.nombre, f.cliente)).join('')}</select></label>
-        <label>Estado<select name="estado">${['', 'vencido', 'vence_hoy', 'proximo_a_vencer', 'al_dia', 'sin_fecha', 'pagado'].map((item) => option(item, item ? statusText(item) : 'Todos', f.estado)).join('')}</select></label>
-        <label>Desde<input name="venceDesde" type="date" value="${e(f.venceDesde || '')}"></label><label>Hasta<input name="venceHasta" type="date" value="${e(f.venceHasta || '')}"></label>
-        <label>Saldo minimo<input name="saldoMinimo" type="number" min="0" step="0.01" value="${e(f.saldoMinimo || '')}"></label><label>Saldo maximo<input name="saldoMaximo" type="number" min="0" step="0.01" value="${e(f.saldoMaximo || '')}"></label>
-        <div class="credit-filter-actions"><button type="submit">Aplicar</button><button type="button" class="secondary" data-clear-collection-filters>Limpiar</button></div>
+        <label>Buscar<input name="busqueda" type="search" value="${e(f.busqueda || '')}" placeholder="Cliente o telefono"></label>
+        <div class="credit-filter-actions"><button type="submit">Buscar</button><button type="button" class="secondary" data-open-collection-filters>Filtros${count ? ` <span class="filter-count">${count}</span>` : ''}</button></div>
       </form>`;
+    }
+
+    function openCollectionFilters() {
+      const f = ui.collectionFilters;
+      const returnFocus = document.activeElement;
+      const previousOverflow = document.body.style.overflow;
+      modalRoot.innerHTML = `<div class="modal-backdrop"><form class="modal modal-wide" id="collectionAdvancedFilters" role="dialog" aria-modal="true" aria-labelledby="collectionFiltersTitle">
+        <h3 id="collectionFiltersTitle">Filtrar cobranza</h3>
+        <div class="modal-body credit-filters">
+          <label>Cliente<select name="cliente"><option value="">Todos</option>${state().clientes.map((item) => option(item.idCliente, item.nombre, f.cliente)).join('')}</select></label>
+          <label>Estado<select name="estado">${['', 'vencido', 'vence_hoy', 'proximo_a_vencer', 'al_dia', 'sin_fecha', 'pagado'].map((item) => option(item, item ? statusText(item) : 'Todos', f.estado)).join('')}</select></label>
+          <label>Desde<input name="venceDesde" type="date" value="${e(f.venceDesde || '')}"></label><label>Hasta<input name="venceHasta" type="date" value="${e(f.venceHasta || '')}"></label>
+          <label>Saldo minimo<input name="saldoMinimo" type="number" min="0" step="0.01" value="${e(f.saldoMinimo || '')}"></label><label>Saldo maximo<input name="saldoMaximo" type="number" min="0" step="0.01" value="${e(f.saldoMaximo || '')}"></label>
+        </div><div class="modal-actions"><button type="button" class="secondary" data-modal-cancel>Cerrar</button><button type="button" class="secondary" data-clear-collection-filters>Limpiar</button><button type="submit">Aplicar</button></div>
+      </form></div>`;
+      document.body.style.overflow = 'hidden';
+      const form = modalRoot.querySelector('#collectionAdvancedFilters');
+      const close = (restoreFocus = true) => {
+        modalRoot.innerHTML = '';
+        document.body.style.overflow = previousOverflow;
+        if (restoreFocus) returnFocus?.focus?.();
+      };
+      const apply = async (filters) => {
+        clearTimeout(ui.collectionSearchTimer);
+        ui.collectionFilters = { ...filters, busqueda: ui.collectionFilters.busqueda || '' };
+        ui.collectionPage = 1;
+        close(false);
+        await renderCollections();
+        view.querySelector('[data-open-collection-filters]')?.focus();
+      };
+      form.querySelector('[data-modal-cancel]').addEventListener('click', () => close());
+      form.querySelector('[data-clear-collection-filters]').addEventListener('click', () => apply({}));
+      form.addEventListener('submit', (event) => {
+        event.preventDefault();
+        apply(Object.fromEntries(new FormData(form).entries()));
+      });
+      form.querySelector('select, input')?.focus();
     }
 
     function collectionActions(row) {
       return `<div class="actions">
-        ${Number(row.saldoPendiente || 0) > 0 && !readOnly() ? `<button type="button" class="small" data-debt-pay="${row.idFiado}">Registrar pago</button>` : ''}
-        ${Number(row.saldoPendiente || 0) > 0 && !readOnly() ? `<button type="button" class="small secondary" data-customer-pay-accum="${row.idCliente}">Pago acumulado</button>` : ''}
+        ${Number(row.saldoPendiente || 0) > 0 && !readOnly() ? `<button type="button" class="small" data-debt-pay="${row.idFiado}">Pagar esta deuda</button>` : ''}
+        ${Number(row.saldoPendiente || 0) > 0 && !readOnly() ? `<button type="button" class="small secondary" data-customer-pay-accum="${row.idCliente}">Pagar varias deudas</button>` : ''}
         ${row.clienteActivo && Number(row.saldoPendiente || 0) > 0 && can('seguimiento_cobranza') && !readOnly() ? `<button type="button" class="small secondary" data-debt-promise="${row.idFiado}">Registrar promesa</button>` : ''}
         ${row.clienteActivo && can('seguimiento_cobranza') && !readOnly() ? `<button type="button" class="small secondary" data-debt-followup="${row.idFiado}" data-customer="${row.idCliente}">Seguimiento</button>` : ''}
         ${row.clienteActivo && can('recordatorios_fiado') && row.aceptaRecordatorios !== false ? `<button type="button" class="small secondary" data-debt-whatsapp="${row.idFiado}" data-customer="${row.idCliente}">WhatsApp</button>` : ''}
@@ -703,7 +738,7 @@
         const total = Number(data.total || rows.length);
         view.innerHTML = `<div class="credit-heading"><div><span class="eyebrow">Cobranza</span><h3>Deudas y compromisos en un solo lugar</h3><p>Los cobros se registran sin volver a afectar inventario.</p></div><div class="actions">${can('recordatorios_fiado') ? '<button type="button" class="secondary" data-manage-templates>Plantillas de cobranza</button>' : ''}${can('limites_credito') ? '<button type="button" class="secondary" data-credit-config>Configurar credito</button>' : ''}${can('exportacion_clientes_fiados') ? `<button type="button" class="secondary" data-export-debts ${readOnly() ? 'disabled title="La suscripcion debe estar activa para exportar."' : ''}>Exportar fiados</button>` : ''}</div></div>
           <div class="cards collection-summary-cards"><article class="card"><span>Deuda total filtrada</span><strong>Bs ${money(summary.deudaTotal || 0)}</strong></article><article class="card"><span>Vencidos filtrados</span><strong>${Number(summary.vencidos || 0)}</strong></article><article class="card"><span>Vence hoy</span><strong>${Number(summary.venceHoy || 0)}</strong></article><article class="card"><span>Proximos</span><strong>${Number(summary.proximos || 0)}</strong></article><article class="card"><span>Sin fecha</span><strong>${Number(summary.sinFecha || 0)}</strong></article></div>
-          ${advancedAlerts ? '' : '<div class="panel plan-note"><strong>Alertas y WhatsApp disponibles en plan avanzado.</strong><p>El pago y consulta de deuda existente siguen disponibles.</p></div>'}
+          ${advancedAlerts ? '' : '<div class="panel plan-note"><strong>Tu plan actual no incluye alertas ni recordatorios por WhatsApp.</strong><p>El pago y consulta de deuda existente siguen disponibles.</p></div>'}
           ${readOnly() ? '<div class="panel plan-note"><strong>Suscripcion inactiva: solo consulta.</strong><p>Puedes revisar clientes y deuda historica, pero no registrar pagos ni cambios hasta renovar.</p></div>' : ''}
           ${collectionFiltersMarkup()}<p class="hint collection-page-count">Mostrando ${rows.length} de ${total} resultados filtrados.</p><div id="collectionResults">${collectionRowsMarkup(rows)}</div>${pagerMarkup(Number(data.page || data.pagina || ui.collectionPage), Number(data.pageSize || data.limite || 20), total, 'collection')}`;
         wireCollectionView(rows);
@@ -730,7 +765,7 @@
       filterForm?.addEventListener('submit', (event) => {
         event.preventDefault();
         clearTimeout(ui.collectionSearchTimer);
-        ui.collectionFilters = Object.fromEntries(new FormData(event.currentTarget).entries());
+        ui.collectionFilters = { ...ui.collectionFilters, busqueda: filterForm.elements.busqueda.value };
         ui.collectionPage = 1;
         renderCollections();
       });
@@ -739,17 +774,12 @@
         ui.collectionRequest += 1;
         ui.collectionSearchTimer = setTimeout(() => {
           if (!view.contains(filterForm)) return;
-          ui.collectionFilters = Object.fromEntries(new FormData(filterForm).entries());
+          ui.collectionFilters = { ...ui.collectionFilters, busqueda: filterForm.elements.busqueda.value };
           ui.collectionPage = 1;
           renderCollections();
         }, 350);
       });
-      view.querySelector('[data-clear-collection-filters]')?.addEventListener('click', () => {
-        clearTimeout(ui.collectionSearchTimer);
-        ui.collectionFilters = {};
-        ui.collectionPage = 1;
-        renderCollections();
-      });
+      view.querySelector('[data-open-collection-filters]')?.addEventListener('click', openCollectionFilters);
       view.querySelectorAll('[data-collection-page]').forEach((button) => button.addEventListener('click', () => { ui.collectionPage = Number(button.dataset.collectionPage); renderCollections(); }));
       view.querySelectorAll('[data-debt-pay]').forEach((button) => button.addEventListener('click', () => openPayment({ idFiado: button.dataset.debtPay })));
       view.querySelectorAll('[data-customer-pay-accum]').forEach((button) => button.addEventListener('click', () => openPayment({ idCliente: button.dataset.customerPayAccum })));
@@ -844,7 +874,7 @@
     }
 
     async function openTemplateManager(filters = {}) {
-      if (!can('recordatorios_fiado')) return showError('Las plantillas de cobranza estan disponibles en el plan avanzado.');
+      if (!can('recordatorios_fiado')) return showError('Tu plan actual no incluye plantillas de cobranza.');
       try {
         const returnFocus = document.activeElement;
         const data = await api(`/api/plantillas-cobranza?${filterQuery(filters, { limite: 100 })}`);
@@ -897,22 +927,22 @@
     }
 
     async function openWhatsApp({ idCliente, idFiado = null, idCobroFiado = null }) {
-      if (!can('recordatorios_fiado')) return showError('Los recordatorios estan disponibles en el plan avanzado.');
+      if (!can('recordatorios_fiado')) return showError('Tu plan actual no incluye recordatorios.');
       let prepared = null;
       const templateData = await api('/api/plantillas-cobranza?activo=1&limite=100');
       const activeTemplates = templateData.plantillas || [];
       const allowedTypes = idCobroFiado ? ['confirmacion_pago'] : TEMPLATE_TYPES.filter((item) => item !== 'confirmacion_pago');
       await openFormModal({
         title: 'Preparar mensaje de WhatsApp',
-        body: `<div class="form-grid"><label>Tipo de mensaje<select name="tipoPlantilla">${allowedTypes.map((item) => option(item, statusText(item), idCobroFiado ? 'confirmacion_pago' : (idFiado ? 'recordatorio_previo' : 'estado_cuenta'))).join('')}</select></label><label>Plantilla<select name="idPlantillaCobranza"></select></label><label class="check"><input name="registrarPreparacion" type="checkbox"> Registrar que el recordatorio fue preparado</label></div><p class="hint" data-template-choice></p><div class="whatsapp-preview" data-whatsapp-preview><p class="muted">El backend preparara el texto usando una plantilla activa de esta tienda.</p></div>`,
+        body: `<div class="form-grid"><label>Tipo de mensaje<select name="tipoPlantilla">${allowedTypes.map((item) => option(item, statusText(item), idCobroFiado ? 'confirmacion_pago' : (idFiado ? 'recordatorio_previo' : 'estado_cuenta'))).join('')}</select></label><label>Plantilla<select name="idPlantillaCobranza"></select></label><label class="check"><input name="registrarPreparacion" type="checkbox"> Guardar la preparacion en el historial</label></div><p class="hint" data-template-choice></p><div class="whatsapp-preview" data-whatsapp-preview><p class="muted">El mensaje aparecera aqui cuando prepares la vista previa.</p></div>`,
         submitText: 'Preparar vista previa', wide: true,
         onOpen: (form) => {
           const sync = () => {
             const matches = activeTemplates.filter((item) => item.tipo === form.elements.tipoPlantilla.value);
-            form.elements.idPlantillaCobranza.innerHTML = `<option value="">Automatica: mas reciente o texto del sistema</option>${matches.map((item) => option(item.idPlantillaCobranza, item.nombre)).join('')}`;
+            form.elements.idPlantillaCobranza.innerHTML = `<option value="">Elegir por mi: plantilla reciente o mensaje predeterminado</option>${matches.map((item) => option(item.idPlantillaCobranza, item.nombre)).join('')}`;
             form.querySelector('[data-template-choice]').textContent = matches.length
-              ? `${matches.length} plantilla(s) activa(s) disponibles para este tipo.`
-              : 'No hay plantillas activas; se usara el texto seguro del sistema.';
+              ? `${matches.length} ${matches.length === 1 ? 'plantilla activa disponible' : 'plantillas activas disponibles'} para este tipo.`
+              : 'No hay plantillas activas; se usara un mensaje predeterminado.';
           };
           form.elements.tipoPlantilla.addEventListener('change', sync);
           sync();

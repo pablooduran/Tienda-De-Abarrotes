@@ -40,7 +40,7 @@ function serverFixture() {
     if (url.pathname === '/api/suscripcion/planes') return json(response, 200, { planes: [] });
     if (url.pathname === '/api/pagos-suscripcion/planes') return json(response, 200, plans());
     if (url.pathname === '/api/pagos-suscripcion/metodos') return json(response, 200, { disponibles: true, metodos: [{ referencia: 'qr_manual', nombre: 'QR manual', requiereComprobante: true, instrucciones: 'Instrucciones seguras.' }] });
-    if (url.pathname === '/api/pagos-suscripcion/cotizar' && request.method === 'POST') return json(response, 200, { precioBase: { moneda: 'USD', monto: '3.00' }, montoCobro: { moneda: 'BOB', monto: '21.00' }, vigenteHasta: '2026-08-15 08:00:00', efectoEsperado: { tipo: 'renovacion' } });
+    if (url.pathname === '/api/pagos-suscripcion/cotizar' && request.method === 'POST') return json(response, 200, { precioBase: { moneda: 'USD', monto: '3.00' }, conversion: { valor: '7.00000000', fuente: 'Tasa de prueba' }, montoCobro: { moneda: 'BOB', monto: '21.00' }, vigenteHasta: '2026-08-15 08:00:00', efectoEsperado: { tipo: 'renovacion' } });
     if (url.pathname === '/api/pagos-suscripcion/solicitudes' && request.method === 'GET') return json(response, 200, { resultados: [summary(observedReference, 'observada'), ...(state.created ? [summary(reference, state.uploaded ? 'pendiente_revision' : 'pendiente_comprobante')] : [])], paginacion: { paginas: 1 } });
     if (url.pathname === '/api/pagos-suscripcion/solicitudes' && request.method === 'POST') { state.created = true; state.mutations.push({ kind: 'create', key: request.headers['idempotency-key'], body: await readBody(request) }); return json(response, 201, { ...summary(reference), created: true }); }
     if (url.pathname === `/api/pagos-suscripcion/solicitudes/${reference}`) return json(response, 200, detail(reference, state.uploaded ? 'pendiente_revision' : 'pendiente_comprobante', state.uploaded));
@@ -158,7 +158,27 @@ async function main() {
     await failingFilters.locator('#closePaymentReviewFilters').click();
     await failingFilters.waitForFunction(() => document.querySelector('#paymentReviewFilters select[name="estado"]').value === '');
     await failingFilters.close();
-    const owner = await browser.newPage({ viewport: { width: 1366, height: 768 } }); await owner.goto(`${baseUrl}/suscripcion.html`); await owner.locator('[data-payment-form]').waitFor(); await owner.getByRole('button', { name: 'Cotizar' }).click(); await owner.locator('.payment-quote').waitFor(); await owner.getByRole('button', { name: 'Crear solicitud' }).click(); await owner.locator('[data-receipt-form]').waitFor(); await owner.locator('[data-receipt-form] input').setInputFiles({ name: 'comprobante.pdf', mimeType: 'application/pdf', buffer: Buffer.from('%PDF-1.4') }); await owner.getByRole('button', { name: 'Enviar comprobante' }).click(); await owner.locator('[data-payment-detail] .payment-state[data-state="pendiente_revision"]').waitFor(); assert.strictEqual(await owner.locator('[data-payment-detail]').evaluate((node) => node.open), true); await owner.getByRole('button', { name: 'Cerrar detalle' }).click(); await owner.waitForFunction(() => document.activeElement?.dataset.requestDetail === 'payment-browser-reference-000000000001'); await owner.getByRole('button', { name: 'Ver detalle' }).first().click(); await owner.getByRole('button', { name: 'Reemplazar archivo' }).waitFor(); assert(!await owner.content().then((html) => /idTienda|idSuscripcion/.test(html))); await owner.close();
+    const owner = await browser.newPage({ viewport: { width: 1366, height: 768 } });
+    await owner.goto(`${baseUrl}/suscripcion.html`);
+    await owner.locator('[data-payment-form]').waitFor();
+    await owner.getByRole('button', { name: 'Cotizar' }).click();
+    await owner.locator('.payment-quote').waitFor();
+    assert((await owner.locator('.payment-quote').textContent()).includes('1 USD = 7.00000000 BOB · Fuente registrada: Tasa de prueba'),
+      'La cotizacion debe explicar la conversion y su fuente registrada.');
+    await owner.getByRole('button', { name: 'Crear solicitud' }).click();
+    await owner.locator('[data-receipt-form]').waitFor();
+    assert((await owner.locator('[data-payment-detail]').textContent()).includes('Tipo de cambio aplicado'),
+      'El detalle debe conservar visible el tipo de cambio aplicado.');
+    await owner.locator('[data-receipt-form] input').setInputFiles({ name: 'comprobante.pdf', mimeType: 'application/pdf', buffer: Buffer.from('%PDF-1.4') });
+    await owner.getByRole('button', { name: 'Enviar comprobante' }).click();
+    await owner.locator('[data-payment-detail] .payment-state[data-state="pendiente_revision"]').waitFor();
+    assert.strictEqual(await owner.locator('[data-payment-detail]').evaluate((node) => node.open), true);
+    await owner.getByRole('button', { name: 'Cerrar detalle' }).click();
+    await owner.waitForFunction(() => document.activeElement?.dataset.requestDetail === 'payment-browser-reference-000000000001');
+    await owner.getByRole('button', { name: 'Ver detalle' }).first().click();
+    await owner.getByRole('button', { name: 'Reemplazar archivo' }).waitFor();
+    assert(!await owner.content().then((html) => /idTienda|idSuscripcion/.test(html)));
+    await owner.close();
     const admin = await browser.newPage({ viewport: { width: 1366, height: 768 } });
     await admin.goto(`${baseUrl}/admin.html#pagos-suscripcion`);
     await admin.locator('#paymentReviewTableBody tr').waitFor();
@@ -168,6 +188,8 @@ async function main() {
     await admin.getByRole('button', { name: 'Guardar método' }).first().click();
     await admin.getByRole('button', { name: 'Ver detalle' }).click();
     await admin.locator('#paymentReviewDetail[open]').waitFor();
+    assert((await admin.locator('#paymentReviewDetail').textContent()).includes('1 USD = 7.00000000 BOB'),
+      'La revision administrativa debe explicar el tipo de cambio.');
     await admin.getByRole('button', { name: 'Solicitar corrección' }).click();
     await admin.locator('textarea[name="observacion"]').fill('Corrige el archivo adjunto.');
     await admin.getByRole('button', { name: 'Confirmar' }).click();

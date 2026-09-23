@@ -40,6 +40,10 @@ check('La exportacion conserva filtros y selecciona el informe visible',
   intelligenceUi.includes('tipoExportacion') && intelligenceUi.includes('SecurityHttp.secureFetch'));
 check('Alertas legibles incluyen prioridad, tipo y explicacion',
   ['row.prioridad', 'row.tipo', 'row.mensaje'].every((value) => intelligenceUi.includes(value)));
+check('Inventario explica stock objetivo, cobertura y rotacion',
+  intelligenceUi.includes('Stock objetivo: unidades calculadas con el mínimo configurado')
+  && intelligenceUi.includes('Cobertura: días que alcanzaría el stock')
+  && intelligenceUi.includes('Rotación: ventas netas en relación con el stock promedio'));
 check('Paginacion es accesible', intelligenceUi.includes('aria-label="Paginación de inventario"'));
 check('Las tablas conservan caption accesible', (intelligenceUi.match(/caption class="sr-only"/g) || []).length >= 3);
 check('Los estados no dependen solo del color',

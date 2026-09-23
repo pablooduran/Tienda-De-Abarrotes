@@ -35,7 +35,7 @@
     function fact(name, value) { const div = global.document.createElement('div'); div.append(createNode('span', name), createNode('strong', value)); return div; }
 
     function renderRates(data) {
-      elements.rate.textContent = data.vigente ? `Vigente: 1 USD = BOB ${data.vigente.valor}. Fuente: ${data.vigente.fuente}.` : 'No hay una tasa USD/BOB vigente. Las cotizaciones no estarán disponibles.';
+      elements.rate.textContent = data.vigente ? `Tipo de cambio registrado: 1 USD = ${data.vigente.valor} BOB. Fuente registrada: ${data.vigente.fuente}.` : 'No hay un tipo de cambio vigente de USD a BOB. Las cotizaciones no estarán disponibles.';
       elements.rates.replaceChildren(...(data.historial || []).map((item) => { const row = createNode('p', ''); row.append(createNode('strong', `BOB ${item.valor}`), createNode('span', `${date(item.vigenteDesde)} · ${item.fuente}`)); return row; }));
     }
     function renderMethods(data) {
@@ -69,8 +69,8 @@
     function actionButton(action, text, style = 'button-secondary') { const button = createNode('button', text, `button ${style}`); button.type = 'button'; button.addEventListener('click', () => openAction(action)); return button; }
     function renderDetail(data, returnFocus) {
       state.detail = data; elements.detailTitle.textContent = `${data.tienda} · ${data.plan.nombre}`; elements.detailMessage.textContent = `${label(data.operacion)} · ${label(data.estado)}`;
-      elements.facts.replaceChildren(fact('Monto', `${data.monto.moneda} ${data.monto.valor}`), fact('Método', data.metodo), fact('Creada', date(data.creadaEn)), fact('Vence', date(data.venceEn)), fact('Plan actual', data.planActual.nombre), fact('Tipo de cambio', `USD/BOB ${data.tipoCambio.valor}`));
-      elements.snapshot.replaceChildren(...[ `Periodo: ${label(data.snapshot.periodo)} (${data.snapshot.meses} meses)`, `Precio: ${data.snapshot.monedaBase} ${data.snapshot.precioUSD}`, `Fuente de cambio: ${data.tipoCambio.fuente}`, `Comprobante: ${data.comprobante ? data.comprobante.nombre : 'No disponible'}` ].map((text) => createNode('p', text)));
+      elements.facts.replaceChildren(fact('Monto', `${data.monto.moneda} ${data.monto.valor}`), fact('Método', data.metodo), fact('Creada', date(data.creadaEn)), fact('Vence', date(data.venceEn)), fact('Plan actual', data.planActual.nombre), fact('Tipo de cambio aplicado', `1 USD = ${data.tipoCambio.valor} BOB`));
+      elements.snapshot.replaceChildren(...[ `Periodo: ${label(data.snapshot.periodo)} (${data.snapshot.meses} meses)`, `Precio: ${data.snapshot.monedaBase} ${data.snapshot.precioUSD}`, `Fuente registrada del tipo de cambio: ${data.tipoCambio.fuente}`, `Comprobante: ${data.comprobante ? data.comprobante.nombre : 'No disponible'}` ].map((text) => createNode('p', text)));
       if (data.comprobante) { const download = global.document.createElement('a'); download.href = `/api/admin/pagos-suscripcion/revision/${encodeURIComponent(data.referencia)}/comprobante`; download.className = 'button-link'; download.textContent = 'Descargar comprobante'; elements.snapshot.append(download); }
       elements.history.replaceChildren(...(data.historial || []).map((item) => createNode('p', `${label(item.evento)} · ${date(item.fecha)}`)));
       elements.notes.replaceChildren(...(data.revisiones || []).map((item) => createNode('p', `${label(item.decision)}: ${item.observacion}`)));

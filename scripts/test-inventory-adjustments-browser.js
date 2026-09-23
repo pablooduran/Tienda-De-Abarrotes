@@ -187,6 +187,10 @@ async function main() {
       'La interfaz no usa tabindex positivo.');
     await dialog.locator('select[name="idProducto"]').selectOption('2');
     await dialog.locator('input[name="cantidad"]').fill('2');
+    await dialog.locator('select[name="tipoAjuste"]').selectOption('negativo');
+    check((await dialog.locator('[data-adjustment-preview]').textContent()).includes('Se descontaran unidades existentes'),
+      'La vista previa de salida no afirma que crea una clasificación nueva.');
+    await dialog.locator('select[name="tipoAjuste"]').selectOption('positivo');
     await dialog.locator('input[name="confirmado"]').check();
     await dialog.locator('button[type="submit"]').evaluate((button) => {
       button.click();

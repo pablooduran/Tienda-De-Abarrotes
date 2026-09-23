@@ -32,6 +32,29 @@ check('Permisos basico y avanzado', includesAll(appJs + creditJs, [
   'clientes_basico', 'fiados_basico', 'pagos_fiado', 'recordatorios_fiado',
   'seguimiento_cobranza', 'limites_credito', 'exportacion_clientes_fiados', 'segmentacion_clientes'
 ]));
+check('Cobranza no promociona el plan avanzado legado',
+  !creditJs.includes('plan avanzado')
+  && includesAll(creditJs, [
+    'Tu plan actual no incluye limites ni plazos personalizados.',
+    'Tu plan actual no incluye seguimiento de cobranza.',
+    'Tu plan actual no incluye alertas ni recordatorios por WhatsApp.',
+    'El pago y consulta de deuda existente siguen disponibles.'
+  ]));
+check('Cobro individual y de varias deudas se distinguen sin exponer claves tecnicas',
+  includesAll(creditJs, [
+    'data-debt-pay="${row.idFiado}">Pagar esta deuda',
+    'data-customer-pay-accum="${row.idCliente}">Pagar varias deudas',
+    'Este pago se aplicara solo a la deuda seleccionada.',
+    'Este pago se repartira entre las deudas del cliente, empezando por las mas antiguas.',
+    'puedes intentar de nuevo desde esta ventana sin duplicar el cobro'
+  ]) && !creditJs.includes('La operacion conserva la misma clave durante un reintento'));
+check('Formulario y ficha aclaran referencia, observacion y credito', includesAll(creditJs, [
+  'Referencia (opcional)<input name="referencia"',
+  'Aparece en el comprobante.',
+  'Observacion (opcional)<textarea name="observacion"',
+  'Tambien aparece en el comprobante.',
+  'El credito disponible es lo que queda de ese limite tras restar la deuda actual.'
+]));
 check('Endpoint de segmentacion exige permisos basico y avanzado',
   creditRoutes.includes("'/clientes/segmentacion'")
   && creditRoutes.indexOf("requirePlanFeature('clientes_basico')", creditRoutes.indexOf("'/clientes/segmentacion'")) > 0
@@ -120,6 +143,12 @@ check('Seguimiento inmutable sin editar o borrar',
   creditJs.includes('/api/cobranza/seguimientos')
   && !creditJs.includes("method: 'DELETE'"));
 check('WhatsApp se prepara en backend', creditJs.includes('/api/cobranza/mensaje-whatsapp/preparar'));
+check('Preparacion de WhatsApp usa lenguaje claro', includesAll(creditJs, [
+  'Guardar la preparacion en el historial',
+  'El mensaje aparecera aqui cuando prepares la vista previa.',
+  'Elegir por mi: plantilla reciente o mensaje predeterminado',
+  'No hay plantillas activas; se usara un mensaje predeterminado.'
+]) && !creditJs.includes('El backend preparara el texto'));
 check('Abrir WhatsApp no marca envio',
   creditJs.includes('Abrir WhatsApp no registra el mensaje como enviado.')
   && creditJs.includes('data-mark-manual'));
@@ -190,6 +219,12 @@ check('Totales de cobranza vienen del backend',
 check('Filtros globales no se aplican sobre la pagina',
   creditJs.includes("Object.entries(ui.collectionFilters)")
   && !creditJs.includes('rows = rows.filter'));
+check('Cobranza conserva busqueda visible y aplica filtros avanzados desde modal', includesAll(creditJs, [
+  'id="collectionFilters"', 'data-open-collection-filters', 'id="collectionAdvancedFilters"',
+  'data-modal-cancel', 'data-clear-collection-filters',
+  'ui.collectionFilters = { ...filters, busqueda: ui.collectionFilters.busqueda || \'\' }',
+  'document.body.style.overflow = previousOverflow;'
+]));
 check('Busqueda reinicia pagina y usa debounce',
   creditJs.includes('ui.collectionSearchTimer = setTimeout')
   && creditJs.includes('ui.collectionPage = 1;'));

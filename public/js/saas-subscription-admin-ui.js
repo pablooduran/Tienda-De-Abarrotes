@@ -38,10 +38,12 @@
   }
 
   function date(value) {
-    if (!value) return 'No aplica';
-    const parsed = new Date(value);
-    return Number.isNaN(parsed.getTime()) ? String(value) : new Intl.DateTimeFormat('es-BO', {
-      dateStyle: 'medium', timeStyle: 'short', hour12: false
+    if (!value) return 'Sin fecha registrada';
+    const text = String(value).trim();
+    const localTime = /(?:Z|[+-]\d{2}:\d{2})$/i.test(text) ? text : `${text.replace(' ', 'T')}-04:00`;
+    const parsed = new Date(localTime);
+    return Number.isNaN(parsed.getTime()) ? 'Fecha no disponible' : new Intl.DateTimeFormat('es-BO', {
+      dateStyle: 'medium', timeStyle: 'short', hour12: false, timeZone: 'America/La_Paz'
     }).format(parsed);
   }
 

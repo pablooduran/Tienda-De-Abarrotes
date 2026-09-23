@@ -157,7 +157,7 @@
       const products = getProducts().filter((product) => Number(product.activo) === 1);
       return `<form method="dialog" class="inventory-adjustment-form" data-adjustment-form>
         <h2 id="inventoryAdjustmentTitle">Registrar ajuste manual</h2>
-        <p>El movimiento original se conserva y el ajuste queda en el historial.</p>
+        <p>Registra la diferencia, no el conteo total: si el sistema muestra 9 unidades y contaste 7, elige ajuste negativo de 2. El movimiento original se conserva.</p>
         <label>Producto<select name="idProducto" required><option value="">Seleccione</option>
           ${products.map((product) => `<option value="${e(product.idProducto)}"
             data-lots="${Number(product.controlaLotes) === 1 ? '1' : '0'}"
@@ -243,9 +243,14 @@
       function preview() {
         const product = productSelect.selectedOptions[0]?.textContent?.trim() || 'sin seleccionar';
         const direction = form.elements.tipoAjuste.value === 'positivo' ? 'aumentara' : 'reducira';
+        const positive = form.elements.tipoAjuste.value === 'positivo';
+        const controlsLots = productSelect.selectedOptions[0]?.dataset.lots === '1';
         form.querySelector('[data-adjustment-preview]').textContent =
           `${product}: el stock fisico ${direction} en ${form.elements.cantidad.value || 0} unidades. `
-          + `Tratamiento: ${form.elements.clasificacionInventario.value || 'vendible'}.`;
+          + (positive && controlsLots
+            ? `Las unidades nuevas se clasificaran como ${form.elements.clasificacionInventario.value}.`
+            : positive ? 'Las unidades nuevas quedaran disponibles para vender.'
+              : 'Se descontaran unidades existentes; no se crea una clasificacion nueva.');
       }
 
       form.addEventListener('input', preview);

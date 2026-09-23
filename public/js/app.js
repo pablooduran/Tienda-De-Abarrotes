@@ -16,7 +16,8 @@ let posClientSearchRequest = 0;
 let posClientSearchOptions = [];
 let posClientActiveIndex = -1;
 let lastBarcodeScan = { value: '', at: 0 };
-let inventoryUi = { activeTab: 'resumen', rankingMode: 'ingresos', movementClass: '', page: 1, request: 0, data: {} };
+let inventoryUi = { level: 'simple', activeTab: 'resumen', rankingMode: 'ingresos', movementClass: '', page: 1, request: 0, data: {} };
+let reportRequest = 0;
 let lotUi = { page: 1, pages: 1, activeTab: 'lotes' };
 let customerCreditUi = null;
 let compensationUi = null;
@@ -650,7 +651,7 @@ function chartTooltip(canvas) {
 function bindChartTooltip(canvas, hitAreas) {
   const tooltip = chartTooltip(canvas);
   if (!tooltip) return;
-  canvas.onmousemove = (event) => {
+  const showAt = (event) => {
     const rect = canvas.getBoundingClientRect();
     const x = event.clientX - rect.left;
     const y = event.clientY - rect.top;
@@ -669,29 +670,41 @@ function bindChartTooltip(canvas, hitAreas) {
     tooltip.innerHTML = hit.text;
     tooltip.classList.add('show');
   };
-  canvas.onmouseleave = () => tooltip.classList.remove('show');
+  canvas.onpointermove = showAt;
+  canvas.onpointerdown = showAt;
+  canvas.onpointerleave = () => tooltip.classList.remove('show');
 }
 
 function drawChart(canvas, labels, values, color = '#286a59', tooltips = []) {
   const ctx = canvas.getContext('2d');
   const ratio = devicePixelRatio || 1;
   const displayWidth = canvas.clientWidth || 320;
+  const displayHeight = 196;
   canvas.width = displayWidth * ratio;
-  canvas.height = 240 * ratio;
+  canvas.height = displayHeight * ratio;
+  canvas.style.height = `${displayHeight}px`;
+  canvas.setAttribute('role', 'img');
+  canvas.setAttribute('aria-label', labels.length
+    ? labels.map((label, index) => `${label}: ${money(values[index])}`).join(', ')
+    : 'Sin datos para graficar');
   ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
-  ctx.clearRect(0, 0, displayWidth, 240);
+  ctx.clearRect(0, 0, displayWidth, displayHeight);
   const max = Math.max(...values.map(Number), 1);
-  const chartHeight = 150;
-  const bottom = 190;
+  const chartHeight = 120;
+  const bottom = 152;
   const left = 34;
-  const gap = 10;
-  const barWidth = Math.max(18, (displayWidth - 58) / Math.max(values.length, 1) - gap);
+  const plotWidth = Math.max(40, displayWidth - left - 12);
+  const gap = Math.min(10, Math.max(2, plotWidth / Math.max(values.length, 1) / 4));
+  const barWidth = Math.min(72, Math.max(2, (plotWidth - gap * Math.max(0, values.length - 1)) / Math.max(values.length, 1)));
+  const usedWidth = values.length * barWidth + Math.max(0, values.length - 1) * gap;
+  const startX = left + Math.max(0, (plotWidth - usedWidth) / 2);
+  const labelStep = Math.max(1, Math.ceil(values.length / 6));
   const hitAreas = [];
   ctx.font = '12px "Segoe UI", Arial';
   ctx.fillStyle = '#6b7684';
   ctx.fillText('0', 8, bottom + 5);
   values.forEach((value, index) => {
-    const x = left + index * (barWidth + gap);
+    const x = startX + index * (barWidth + gap);
     const h = (Number(value) / max) * chartHeight;
     const y = bottom - h;
     ctx.fillStyle = color;
@@ -703,13 +716,15 @@ function drawChart(canvas, labels, values, color = '#286a59', tooltips = []) {
     }
     ctx.fill();
     ctx.fillStyle = '#1d2733';
-    ctx.fillText(String(Number(value).toFixed(0)), x, Math.max(18, y - 8));
-    ctx.save();
-    ctx.translate(x + 2, 216);
-    ctx.rotate(-0.35);
-    ctx.fillStyle = '#6b7684';
-    ctx.fillText(String(labels[index] || '').slice(0, 12), 0, 0);
-    ctx.restore();
+    if (values.length <= 6) ctx.fillText(String(Number(value).toFixed(0)), x, Math.max(18, y - 8));
+    if (index % labelStep === 0) {
+      ctx.save();
+      ctx.translate(x + 2, 181);
+      ctx.rotate(-0.35);
+      ctx.fillStyle = '#6b7684';
+      ctx.fillText(String(labels[index] || '').slice(0, 12), 0, 0);
+      ctx.restore();
+    }
     hitAreas.push({
       x,
       y: Math.min(y, bottom - 2),
@@ -721,12 +736,68 @@ function drawChart(canvas, labels, values, color = '#286a59', tooltips = []) {
   bindChartTooltip(canvas, hitAreas);
 }
 
+function drawLineChart(canvas, labels, values, color = '#286a59', tooltips = []) {
+  const ctx = canvas.getContext('2d');
+  const ratio = devicePixelRatio || 1;
+  const width = canvas.clientWidth || 320;
+  const height = 196;
+  canvas.width = width * ratio;
+  canvas.height = height * ratio;
+  canvas.style.height = `${height}px`;
+  canvas.setAttribute('role', 'img');
+  canvas.setAttribute('aria-label', labels.length
+    ? labels.map((label, index) => `${label}: ${money(values[index])}`).join(', ')
+    : 'Sin datos para graficar');
+  ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
+  ctx.clearRect(0, 0, width, height);
+  const numbers = values.map((value) => Number(value) || 0);
+  if (!numbers.length) return bindChartTooltip(canvas, []);
+  const left = 34;
+  const right = width - 14;
+  const top = 24;
+  const bottom = 152;
+  const min = Math.min(0, ...numbers);
+  const max = Math.max(1, ...numbers);
+  const y = (value) => bottom - ((value - min) / (max - min)) * (bottom - top);
+  const x = (index) => numbers.length === 1 ? (left + right) / 2 : left + index * (right - left) / (numbers.length - 1);
+  ctx.strokeStyle = '#dfe4ea';
+  ctx.beginPath();
+  ctx.moveTo(left, y(0));
+  ctx.lineTo(right, y(0));
+  ctx.stroke();
+  ctx.strokeStyle = color;
+  ctx.lineWidth = 2.5;
+  ctx.beginPath();
+  numbers.forEach((value, index) => index ? ctx.lineTo(x(index), y(value)) : ctx.moveTo(x(index), y(value)));
+  ctx.stroke();
+  const labelStep = Math.max(1, Math.ceil(numbers.length / 6));
+  const hitAreas = [];
+  numbers.forEach((value, index) => {
+    ctx.fillStyle = color;
+    ctx.beginPath();
+    ctx.arc(x(index), y(value), 4, 0, Math.PI * 2);
+    ctx.fill();
+    if (index % labelStep === 0) {
+      ctx.fillStyle = '#6b7684';
+      ctx.font = '11px "Segoe UI", Arial';
+      ctx.fillText(String(labels[index] || '').slice(0, 10), Math.max(2, x(index) - 18), 181);
+    }
+    hitAreas.push({ type: 'circle', x: x(index), y: y(value), r: 18,
+      text: tooltips[index] || `<strong>${escapeHtml(labels[index] || '')}</strong><br>Bs ${money(value)}` });
+  });
+  bindChartTooltip(canvas, hitAreas);
+}
+
 function drawPieChart(canvas, labels, values, colors, tooltips = []) {
   const ctx = canvas.getContext('2d');
   const ratio = devicePixelRatio || 1;
   const displayWidth = canvas.clientWidth || 320;
   canvas.width = displayWidth * ratio;
   canvas.height = 240 * ratio;
+  canvas.setAttribute('role', 'img');
+  canvas.setAttribute('aria-label', labels.length
+    ? labels.map((label, index) => `${label}: ${money(values[index])}`).join(', ')
+    : 'Sin datos para graficar');
   ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
   ctx.clearRect(0, 0, displayWidth, 240);
   const total = values.reduce((sum, value) => sum + Number(value || 0), 0);
@@ -915,7 +986,7 @@ async function inicio() {
       </div>
     </div>`;
 
-  drawChart(document.getElementById('dailyBars'), dayLabels, dayValues, '#286a59', dayTooltips);
+  drawLineChart(document.getElementById('dailyBars'), dayLabels, dayValues, '#286a59', dayTooltips);
   drawPieChart(document.getElementById('dailyPie'), dayLabels, dayValues, ['#286a59', '#5f9f8c', '#8a6500', '#b42318', '#536471'], dayTooltips);
   drawChart(document.getElementById('weekCompare'), ['Semana pasada', 'Semana actual'], [data.ventasSemanaPasada, data.ventasSemana], '#536471', [
     `<strong>Semana pasada</strong><br>Ventas: Bs ${money(data.ventasSemanaPasada)}`,
@@ -1155,11 +1226,11 @@ function suggestedLocalCategory(masterCategory) {
 }
 
 async function openMasterCatalogPicker() {
-  const picker = { page: 1, pages: 1, rows: [], categories: [], brands: [], selected: new Map() };
+  const picker = { page: 1, pages: 1, total: 0, request: 0, rows: [], categories: [], brands: [], selected: new Map() };
   modalRoot.innerHTML = `
     <div class="modal-backdrop">
-      <div class="modal modal-wide catalog-picker-modal">
-        <h3>Agregar desde catálogo</h3>
+      <div class="modal modal-wide catalog-picker-modal" role="dialog" aria-modal="true" aria-labelledby="catalogPickerTitle">
+        <h3 id="catalogPickerTitle">Agregar desde catálogo</h3>
         <div class="modal-body catalog-picker-layout">
           <section class="catalog-browser">
             <div class="catalog-picker-filters">
@@ -1167,11 +1238,12 @@ async function openMasterCatalogPicker() {
               <label>Categoría<select id="catalogPickerCategory"><option value="">Todas</option></select></label>
               <label>Marca<select id="catalogPickerBrand"><option value="">Todas</option></select></label>
             </div>
+            <p class="hint">La marca identifica el producto. El proveedor es a quien tú se lo compras y se elige a la derecha.</p>
             <div id="catalogPickerResults" class="catalog-picker-results"></div>
             <div class="catalog-picker-pagination"><button type="button" class="secondary" id="catalogPickerPrevious">Anterior</button><span id="catalogPickerPage">Página 1</span><button type="button" class="secondary" id="catalogPickerNext">Siguiente</button></div>
           </section>
           <section class="catalog-selection">
-            <div class="panel-title"><div><h4>Productos seleccionados</h4><p class="hint">Completa precio, stock y organización local.</p></div><strong id="catalogSelectedCount">0</strong></div>
+            <div class="panel-title"><div><h4>Productos seleccionados</h4><p class="hint">Puedes elegir hasta 50 productos de varias páginas. Después completa sus datos para tu tienda.</p></div><strong id="catalogSelectedCount">0 de 50</strong></div>
             <div id="catalogSelectedProducts" class="catalog-selected-products"><p class="muted">Todavía no seleccionaste productos.</p></div>
           </section>
           <p id="catalogPickerError" class="text-danger wide" hidden></p>
@@ -1212,7 +1284,7 @@ async function openMasterCatalogPicker() {
 
   const renderSelected = () => {
     captureSelectedConfiguration();
-    root.querySelector('#catalogSelectedCount').textContent = String(picker.selected.size);
+    root.querySelector('#catalogSelectedCount').textContent = `${picker.selected.size} de 50`;
     if (!picker.selected.size) {
       selectedTarget.innerHTML = '<p class="muted">Todavía no seleccionaste productos.</p>';
       return;
@@ -1261,29 +1333,37 @@ async function openMasterCatalogPicker() {
       const content = product.contenidoCantidad ? `${Number(product.contenidoCantidad)} ${product.contenidoUnidad || ''}` : '';
       return `<article class="catalog-master-result">
         <div><strong>${escapeHtml(product.nombre)}</strong><span>${escapeHtml(product.marca || 'Sin marca')} · ${escapeHtml(product.categoriaMaestra || 'Sin categoría')}</span><small>${escapeHtml([product.presentacion, content, product.codigoBarras].filter(Boolean).join(' · ') || 'Sin datos adicionales')}</small></div>
-        <button type="button" class="small ${chosen ? 'secondary' : ''}" data-select-master="${product.idProductoMaestro}" ${unavailable || chosen ? 'disabled' : ''}>${unavailable ? 'Ya agregado' : chosen ? 'Seleccionado' : 'Agregar'}</button>
+        <label class="catalog-master-choice"><input type="checkbox" data-select-master="${product.idProductoMaestro}"
+          ${chosen ? 'checked' : ''} ${unavailable || (!chosen && picker.selected.size >= 50) ? 'disabled' : ''}>
+          ${unavailable ? 'Ya está en tu tienda' : 'Seleccionar'}</label>
       </article>`;
     }).join('') : '<p class="muted">No hay coincidencias.</p>';
-    root.querySelector('#catalogPickerPage').textContent = `Página ${picker.page} de ${picker.pages}`;
+    root.querySelector('#catalogPickerPage').textContent = `Página ${picker.page} de ${picker.pages} · ${picker.total} productos`;
     root.querySelector('#catalogPickerPrevious').disabled = picker.page <= 1;
     root.querySelector('#catalogPickerNext').disabled = picker.page >= picker.pages;
-    results.querySelectorAll('[data-select-master]').forEach((button) => button.addEventListener('click', () => {
-      const product = picker.rows.find((row) => String(row.idProductoMaestro) === button.dataset.selectMaster);
-      if (product) picker.selected.set(Number(product.idProductoMaestro), product);
+    results.querySelectorAll('[data-select-master]').forEach((checkbox) => checkbox.addEventListener('change', () => {
+      const product = picker.rows.find((row) => String(row.idProductoMaestro) === checkbox.dataset.selectMaster);
+      if (!product) return;
+      if (checkbox.checked) picker.selected.set(Number(product.idProductoMaestro), product);
+      else picker.selected.delete(Number(product.idProductoMaestro));
       renderSelected();
       renderResults();
     }));
   };
 
   const loadRows = async (page = 1) => {
+    const request = ++picker.request;
     const query = new URLSearchParams({ page: String(page), limit: '20' });
     if (search.value.trim()) query.set('q', search.value.trim());
     if (category.value) query.set('idCategoriaMaestra', category.value);
     if (brand.value) query.set('idMarcaMaestra', brand.value);
     const response = await api(`/api/catalogo-maestro?${query}`);
+    if (request !== picker.request) return;
     picker.rows = response.rows;
     picker.page = response.page;
     picker.pages = response.pages;
+    picker.total = response.total;
+    showPickerError();
     renderResults();
   };
 
@@ -1799,10 +1879,10 @@ function operationView(kind) {
           ` : `
             <label>Proveedor de la compra<select name="idProveedor" id="${kind}Provider">${options(state.proveedores, 'idProveedor', 'nombre', 'Sin proveedor')}</select></label>
             <label>Categoría<select id="${kind}Category"><option value="">Todas</option>${categoryOptions()}</select></label>
-            <label class="check"><input id="showAllProducts" type="checkbox"> Mostrar otros proveedores</label>
+            <label class="check"><input id="showAllProducts" type="checkbox"> Incluir productos de otros proveedores</label>
           `}
         </div>
-        ${isSale ? '' : '<p class="hint">El proveedor de la compra se usa para registrar el abastecimiento. Si queda en "Sin proveedor", se muestran productos sin proveedor asignado.</p>'}
+        ${isSale ? '' : '<p class="hint">El proveedor elegido se registrará en esta compra. Por defecto verás solo sus productos; activa «Incluir productos de otros proveedores» si también le compras productos asociados a otro proveedor. Si no eliges proveedor, verás productos sin proveedor asignado.</p>'}
         ${autocompleteBox(kind)}
       </section>
       <aside class="panel cart-panel">
@@ -1931,13 +2011,14 @@ function addProductItem(kind, product) {
     <div class="cart-item-controls">
       <label>Presentación<select name="presentacion">${isPurchase ? purchaseOptions : saleOptions}</select></label>
       <label>Cantidad<input name="cantidad" type="number" step="1" min="1" required value="1"></label>
-      ${isPurchase ? '<label>Precio compra<input name="precioCompra" type="number" step="0.01" min="0" required></label>' : '<label>Precio<input name="precioVenta" readonly></label>'}
+      ${isPurchase ? '<label><span data-purchase-price-label>Precio de compra por unidad</span><input name="precioCompra" type="number" step="0.01" min="0" required></label>' : '<label>Precio<input name="precioVenta" readonly></label>'}
     </div>
     <div class="cart-item-footer">
       <span class="item-info muted"></span>
       <strong class="item-subtotal">Bs 0.00</strong>
       <button type="button" class="danger small">QUITAR</button>
     </div>
+    ${isPurchase ? '<small class="purchase-cost-preview" data-purchase-cost-preview aria-live="polite">Ingresa el precio para ver el costo por unidad base.</small>' : ''}
     ${isPurchase && Number(product.controlaLotes) ? `<section class="purchase-lot-editor" data-purchase-lot-editor>
       <div class="purchase-lot-heading"><div><strong>Distribución por lotes obligatoria</strong><p>${Number(product.controlaVencimiento) ? 'Cada lote requiere vencimiento.' : 'El código y vencimiento son opcionales.'}</p></div><button type="button" class="secondary small" data-add-purchase-lot>Agregar lote</button></div>
       <div class="purchase-lot-rows" data-purchase-lot-rows>${purchaseLotRow(product, 1)}</div>
@@ -1967,6 +2048,8 @@ function fillItemInfo(row, kind) {
   const product = state.productos.find((p) => String(p.idProducto) === row.dataset.product);
   const qty = Number(row.querySelector('[name="cantidad"]').value || 0);
   const presentation = row.querySelector('[name="presentacion"]').value;
+  if (kind === 'compras') row.querySelector('[data-purchase-price-label]').textContent =
+    `Precio de compra por ${presentation === 'paquete' ? 'paquete' : 'unidad'}`;
   const units = equivalentUnitsClient(product, qty, presentation, kind === 'compras');
   const unitPrice = kind === 'compras'
     ? Number(row.querySelector('[name="precioCompra"]')?.value || 0)
@@ -1979,6 +2062,9 @@ function fillItemInfo(row, kind) {
     ? `Stock insuficiente: requiere ${units}, disponible ${product.stockUnidadesTotal}`
     : `${units} unidades equivalentes`;
   row.querySelector('.item-subtotal').textContent = `Bs ${money(subtotal)}`;
+  if (kind === 'compras') row.querySelector('[data-purchase-cost-preview]').textContent = unitPrice > 0 && units > 0
+    ? `Costo por unidad base: Bs ${money(subtotal / units)} · Total de este producto: Bs ${money(subtotal)}`
+    : 'Ingresa el precio para ver el costo por unidad base.';
   row.querySelector('[data-purchase-lot-editor]')?.updateLotSummary?.();
   calculateTotal(kind);
 }
@@ -2642,7 +2728,7 @@ async function historialVentas() {
   const rows = state.ventas || [];
   view.innerHTML = `<section class="sales-section-heading"><div><h3>Historial de ventas</h3><p>Revisa comprobantes, cobros y saldos sin perder el contexto de cada venta.</p></div></section>${rows.length ? `<div class="panel table-wrap"><table>
     <thead><tr><th>Comprobante</th><th>Fecha</th><th>Cliente</th><th>Total</th><th>Pagado</th><th>Saldo</th><th>Métodos</th><th>Estado</th><th>Acciones</th></tr></thead>
-    <tbody>${rows.map((v) => `<tr><td>${escapeHtml(v.codigoComprobante || `Venta #${v.idVenta}`)}</td><td>${formatDate(v.fecha)}</td><td>${escapeHtml(v.cliente)}</td><td>Bs ${money(v.total)}</td><td>Bs ${money(v.montoPagado)}</td><td class="${Number(v.saldoActualFiado ?? v.saldoPendiente) > 0 ? 'text-danger' : 'text-ok'}">Bs ${money(v.saldoActualFiado ?? v.saldoPendiente)}</td><td>${escapeHtml(String(v.metodosPago || 'No especificado').replaceAll(',', ', '))}</td><td>${statusBadge(v.estadoPago === 'pagada' ? 'pagado' : v.estadoPago)}</td><td><button class="small secondary" data-detail="${v.idVenta}">Ver detalle</button><details class="row-actions"><summary>Más opciones</summary><button type="button" class="small" data-receipt="${v.idVenta}">Comprobante</button></details></td></tr>`).join('')}</tbody>
+    <tbody>${rows.map((v) => `<tr><td>${escapeHtml(v.codigoComprobante || `Venta #${v.idVenta}`)}</td><td>${formatDate(v.fecha)}</td><td>${escapeHtml(v.cliente)}</td><td>Bs ${money(v.total)}</td><td>Bs ${money(v.montoPagado)}</td><td class="${Number(v.saldoActualFiado ?? v.saldoPendiente) > 0 ? 'text-danger' : 'text-ok'}">Bs ${money(v.saldoActualFiado ?? v.saldoPendiente)}</td><td>${escapeHtml(String(v.metodosPago || 'No especificado').replaceAll(',', ', '))}</td><td>${statusBadge(v.estadoPago === 'pagada' ? 'pagado' : v.estadoPago)}</td><td><div class="actions"><button type="button" class="small secondary" data-detail="${v.idVenta}">Ver detalle</button><button type="button" class="small secondary" data-receipt="${v.idVenta}">Comprobante</button></div></td></tr>`).join('')}</tbody>
   </table></div>` : UiPatterns.empty('Aún no hay ventas registradas', 'Cuando completes una venta, su comprobante y estado de cobro aparecerán aquí.')}`;
   view.querySelectorAll('[data-detail]').forEach((btn) => btn.addEventListener('click', () => showSaleDetail(btn.dataset.detail)));
   view.querySelectorAll('[data-receipt]').forEach((btn) => btn.addEventListener('click', async () => {
@@ -2948,8 +3034,8 @@ async function loadFinancialDashboard() {
       <div class="panel"><h3>Compras de mercadería</h3><strong class="large-number">Bs ${money(purchaseData.total)}</strong><p>No se restan nuevamente de la ganancia neta.</p></div>
       <div class="panel"><h3>Flujo de efectivo conocido</h3><strong class="large-number">Bs ${money(summary.flujoEfectivoConocido)}</strong><p>No incluye compras sin método de pago registrado.</p></div>
     </div>`;
-  drawChart(document.getElementById('financeSalesChart'), data.ventasPorDia.map((row) => row.fecha), data.ventasPorDia.map((row) => row.ventasNetas), '#286a59');
-  drawChart(document.getElementById('financeProfitChart'), data.ventasPorDia.map((row) => row.fecha), data.ventasPorDia.map((row) => row.gananciaCalculable), '#18794e');
+  drawLineChart(document.getElementById('financeSalesChart'), data.ventasPorDia.map((row) => row.fecha), data.ventasPorDia.map((row) => row.ventasNetas), '#286a59');
+  drawLineChart(document.getElementById('financeProfitChart'), data.ventasPorDia.map((row) => row.fecha), data.ventasPorDia.map((row) => row.gananciaCalculable), '#18794e');
   drawChart(document.getElementById('financeMethodsChart'), data.metodosPago.map((row) => row.metodoPago), data.metodosPago.map((row) => row.total), '#536471');
   drawChart(document.getElementById('financeExpensesChart'), data.gastosPorCategoria.map((row) => row.categoria), data.gastosPorCategoria.map((row) => row.total), '#b42318');
 }
@@ -3043,7 +3129,7 @@ function inventoryAdvancedAvailable() {
     .some((code) => inventoryFeature(code));
 }
 
-function inventoryTabs() {
+function inventoryTabs(level = inventoryUi.level) {
   const tabs = [
     ['resumen', 'Resumen', 'inventario_resumen'],
     ['alertas', 'Alertas', 'alertas_stock'],
@@ -3054,7 +3140,26 @@ function inventoryTabs() {
     ['sinMovimiento', 'Sin movimiento', 'inventario_sin_movimiento']
   ];
   if (inventoryAdvancedAvailable()) tabs.push(['configuracion', 'Configuración', 'inventario_resumen']);
-  return tabs.filter(([, , feature]) => inventoryFeature(feature));
+  return tabs.filter(([id, , feature]) => inventoryFeature(feature)
+    && (level === 'avanzado' || id === 'resumen' || id === 'alertas'));
+}
+
+function renderInventoryTabs() {
+  const tablist = document.querySelector('.inventory-tabs');
+  if (!tablist) return;
+  const tabs = inventoryTabs();
+  tablist.innerHTML = tabs.map(([id, label]) => `<button type="button" role="tab" data-inventory-tab="${id}" aria-selected="${inventoryUi.activeTab === id}" class="${inventoryUi.activeTab === id ? 'active' : ''}">${escapeHtml(label)}</button>`).join('');
+  document.querySelectorAll('[data-inventory-level]').forEach((button) => {
+    const active = button.dataset.inventoryLevel === inventoryUi.level;
+    button.classList.toggle('active', active);
+    button.setAttribute('aria-pressed', String(active));
+  });
+  tablist.querySelectorAll('[data-inventory-tab]').forEach((button) => button.addEventListener('click', async () => {
+    inventoryUi.activeTab = button.dataset.inventoryTab;
+    inventoryUi.page = 1;
+    renderInventoryTabs();
+    await loadInventoryActiveTab();
+  }));
 }
 
 function inventoryStateBadge(value) {
@@ -3084,7 +3189,9 @@ function inventoryDate(value, empty = 'Sin registro') {
 function inventoryPeriod(period) {
   if (!period) return '';
   const note = period.limitadoPorConfiguracion ? ' · limitado por la configuración de la tienda' : '';
-  return `Período: ${inventoryDate(period.desde)} hasta ${inventoryDate(period.hastaExclusivo)}${note}`;
+  const lastDay = localDateFromInput(String(period.hastaExclusivo || '').slice(0, 10));
+  if (lastDay) lastDay.setDate(lastDay.getDate() - 1);
+  return `Período: ${inventoryDate(period.desde)} hasta ${lastDay ? inventoryDate(localDateValue(lastDay)) : 'Sin fecha'}${note}`;
 }
 
 function inventoryEmpty(text) {
@@ -3109,14 +3216,6 @@ function localDateFromInput(value) {
 
 function inventoryFilterQuery() {
   const form = document.getElementById('inventoryFilters');
-  form.elements.ventana.addEventListener('change', () => {
-    if (!form.elements.ventana.value) return;
-    form.elements.desde.value = '';
-    form.elements.hasta.value = '';
-  });
-  ['desde', 'hasta'].forEach((field) => form.elements[field].addEventListener('change', () => {
-    if (form.elements[field].value) form.elements.ventana.value = '';
-  }));
   const data = formData(form);
   const from = data.desde ? localDateFromInput(data.desde) : null;
   const until = data.hasta ? localDateFromInput(data.hasta) : null;
@@ -3134,26 +3233,49 @@ function inventoryFilterQuery() {
   return query;
 }
 
+function inventoryRenderSimpleSummary() {
+  const summary = inventoryUi.data.resumen;
+  if (!summary) return inventoryEmpty('No se pudo completar el resumen para los filtros seleccionados.');
+  const states = summary.estados || {};
+  const cards = [
+    ['Sin existencias', states.agotado || 0, 'Comprueba qué productos necesitas reponer.', 'danger'],
+    ['Se está agotando', Number(states.bajo || 0) + Number(states.en_minimo || 0), 'Revisa el mínimo antes de comprar.', 'warning'],
+    ['Stock suficiente', states.suficiente || 0, 'No requieren reposición inmediata por stock.', 'success']
+  ];
+  return `<section aria-labelledby="inventorySimpleTitle">
+    <div class="inventory-section-heading"><div><h3 id="inventorySimpleTitle">Qué revisar hoy</h3><p>${escapeHtml(inventoryPeriod(summary.periodo))}</p></div></div>
+    <p class="muted">Estado de ${escapeHtml(summary.productosActivos || 0)} productos según el stock actual y su mínimo configurado. Esto orienta la revisión; no genera compras.</p>
+    <div class="inventory-simple-grid">${cards.map(([label, value, help, tone]) => `<article class="inventory-metric metric-${tone}"><span>${escapeHtml(label)}</span><strong>${escapeHtml(value)}</strong><small>${escapeHtml(help)}</small></article>`).join('')}</div>
+    <div class="inventory-simple-links">
+      ${inventoryFeature('alertas_stock') ? '<button type="button" class="secondary" data-inventory-simple-destination="alertas">Ver productos con alertas</button>' : ''}
+      ${inventoryFeature('inventario_sin_movimiento') ? '<button type="button" class="secondary" data-inventory-simple-destination="sinMovimiento">Revisar lo que no se vende</button>' : ''}
+    </div>
+  </section>`;
+}
+
 function inventoryRenderSummary() {
+  if (inventoryUi.level === 'simple') return inventoryRenderSimpleSummary();
   const summary = inventoryUi.data.resumen;
   const valuation = inventoryUi.data.resumenValoracion?.resumen;
   const lots = inventoryUi.data.resumenLotes;
-  if (!summary || !valuation) return inventoryEmpty('No se pudo completar el resumen para los filtros seleccionados.');
+  if (!summary) return inventoryEmpty('No se pudo completar el resumen para los filtros seleccionados.');
   const cards = [
     ['Productos activos', summary.productosActivos, 'neutral'],
     ['Agotados', summary.estados?.agotado || 0, 'danger'],
     ['Stock bajo', summary.estados?.bajo || 0, 'warning'],
     ['En mínimo', summary.estados?.en_minimo || 0, 'attention'],
-    ['Stock suficiente', summary.estados?.suficiente || 0, 'success'],
+    ['Stock suficiente', summary.estados?.suficiente || 0, 'success']
+  ];
+  if (valuation) cards.push(
     ['Valor a costo conocido', `Bs ${money(valuation.valorCostoConocido)}`, 'neutral'],
     ['Valor potencial de venta', `Bs ${money(valuation.valorVenta)}`, 'neutral'],
     ['Ganancia potencial conocida', `Bs ${money(valuation.gananciaPotencialConocida)}`, 'success'],
     ['Costo desconocido', `${valuation.productosConCostoDesconocido} productos`, valuation.productosConCostoDesconocido ? 'warning' : 'success']
-  ];
+  );
   return `<section aria-labelledby="inventorySummaryTitle">
     <div class="inventory-section-heading"><div><h3 id="inventorySummaryTitle">Panorama del inventario</h3><p>${escapeHtml(inventoryPeriod(summary.periodo))}</p></div></div>
     <div class="inventory-metrics">${cards.map(([label, value, tone]) => `<article class="inventory-metric metric-${tone}"><span>${escapeHtml(label)}</span><strong>${escapeHtml(value)}</strong></article>`).join('')}</div>
-    <div class="inventory-note"><strong>Lectura responsable de costos</strong><p>${escapeHtml(`Costo conocido en ${valuation.productosConCostoConocido} productos. ${valuation.productosConCostoDesconocido ? `Falta costo en ${valuation.productosConCostoDesconocido} productos (${valuation.unidadesConCostoDesconocido} unidades).` : 'Todos los productos analizados tienen un costo conocido.'}`)}</p></div>
+    ${valuation ? `<div class="inventory-note"><strong>Lectura responsable de costos</strong><p>${escapeHtml(`Costo conocido en ${valuation.productosConCostoConocido} productos. ${valuation.productosConCostoDesconocido ? `Falta costo en ${valuation.productosConCostoDesconocido} productos (${valuation.unidadesConCostoDesconocido} unidades).` : 'Todos los productos analizados tienen un costo conocido.'}`)}</p></div>` : ''}
     ${lots ? `<div class="inventory-note"><strong>Productos controlados por lotes</strong><p>Stock general trazado: ${escapeHtml(lots.stockTrazado)} · vendible: ${escapeHtml(lots.stockVendible)} · vencido: ${escapeHtml(lots.stockVencido)} · bloqueado: ${escapeHtml(lots.stockBloqueado)}.</p><button type="button" class="secondary small" data-open-lot-dashboard>Ver lotes y vencimientos</button></div>` : ''}
   </section>`;
 }
@@ -3177,6 +3299,13 @@ function inventoryRenderAlertsLegacy() {
 function inventoryRenderAlerts() {
   const data = inventoryUi.data.alertas;
   if (!data?.rows?.length) return inventoryEmpty('No hay alertas de inventario para estos filtros.');
+  if (inventoryUi.level === 'simple') return `<div class="inventory-section-heading"><div><h3>Productos para revisar</h3><p>${escapeHtml(inventoryPeriod(data.periodo))} · ${escapeHtml(data.total)} resultados</p></div></div>
+    <div class="inventory-simple-alerts">${data.rows.map((row) => `<article class="inventory-simple-alert"><div><strong>${escapeHtml(row.nombre)}</strong><span>${escapeHtml(({
+      stock_vendible_bajo: 'Se está agotando', sin_stock_vendible: 'Sin stock para vender',
+      exceso_inventario: 'Stock de más', baja_rotacion: 'Se vende poco', sin_movimiento: 'No se vende',
+      proximo_vencimiento: 'Próximo a vencer', vencido: 'Vencido',
+      stock_no_vendible_alto: 'No vendible', conciliacion: 'Revisar conteo'
+    })[row.tipo] || 'Revisar')}</span></div><p>${escapeHtml(row.mensaje || 'Revisa este producto.')}</p><small>Disponible para vender: ${escapeHtml(row.stockVendible)} · No vendible: ${escapeHtml(row.stockNoVendible)}</small></article>`).join('')}</div>${inventoryPagination(data)}`;
   const canWrite = !state.context?.soloLectura;
   return `<div class="inventory-section-heading"><div><h3>Alertas priorizadas</h3><p>${escapeHtml(inventoryPeriod(data.periodo))} · ${escapeHtml(data.total)} resultados</p></div></div>
     <div class="table-wrap"><table class="inventory-table"><caption class="sr-only">Alertas priorizadas de inventario</caption><thead><tr><th>Prioridad</th><th>Producto</th><th>Alerta</th><th>Stock físico / vendible</th><th>Lectura</th><th>Acción</th></tr></thead><tbody>${data.rows.map((row) => `<tr><td><span class="inventory-status inventory-status-${escapeHtml(row.prioridad)}">${escapeHtml(row.prioridad)}</span></td><td><strong>${escapeHtml(row.nombre)}</strong><small>${escapeHtml(row.categoria)}</small></td><td>${escapeHtml(row.tipo)}</td><td>${escapeHtml(row.stockFisico)} / ${escapeHtml(row.stockVendible)}<small>No vendible: ${escapeHtml(row.stockNoVendible)}</small></td><td>${escapeHtml(row.mensaje)}</td><td>${canWrite ? `<button type="button" class="small secondary" data-inventory-product-config="${escapeHtml(row.idProducto)}">Configurar</button>` : '<span class="muted">Solo lectura</span>'}</td></tr>`).join('')}</tbody></table></div>${inventoryPagination(data)}`;
@@ -3233,7 +3362,7 @@ function inventoryRenderSuggestions() {
   const canWrite = !state.context?.soloLectura;
   const summary = data.resumen || {};
   return `<div class="inventory-section-heading"><div><h3>Sugerencias de compra</h3><p>${escapeHtml(inventoryPeriod(data.periodo))} · ${escapeHtml(data.total)} resultados</p></div></div>
-    <div class="inventory-note"><strong>Lectura informativa</strong><p>Urgente: sin stock o cobertura menor a la reposición. Recomendada: falta para el objetivo. Exceso: más de 150% del objetivo. No registra compras ni modifica stock.</p></div>
+    <div class="inventory-note"><strong>Cómo leer la sugerencia</strong><p>Stock objetivo: unidades calculadas con el mínimo configurado, las ventas observadas y el tiempo de reposición. Cobertura: días que alcanzaría el stock al ritmo de venta actual. Urgente: sin stock o cobertura menor a la reposición. Recomendada: falta para el objetivo. Exceso: más de 150% del objetivo. Esta vista no registra compras ni modifica stock.</p></div>
     <p class="inventory-summary-line">Urgentes: ${escapeHtml(summary.urgente || 0)} · Recomendadas: ${escapeHtml(summary.recomendada || 0)} · Suficientes: ${escapeHtml(summary.suficiente || 0)} · Exceso: ${escapeHtml(summary.exceso || 0)} · Sin datos: ${escapeHtml(summary.sin_datos || 0)}</p>
     <div class="inventory-suggestion-list">${data.rows.map((row) => `<article class="inventory-suggestion"><header><div><h4>${escapeHtml(row.nombre)}</h4><p>${escapeHtml(row.categoria)} · ${escapeHtml(row.proveedor || 'Sin proveedor')}</p></div><span class="inventory-status inventory-status-${escapeHtml(row.estadoSugerencia)}">${escapeHtml(row.estadoSugerencia)}</span></header><dl><div><dt>Físico / vendible</dt><dd>${escapeHtml(row.stockFisico)} / ${escapeHtml(row.stockVendible)}</dd></div><div><dt>No vendible</dt><dd>${escapeHtml(row.stockNoVendible)}</dd></div><div><dt>Promedio diario</dt><dd>${inventoryMetric(row.promedioDiario, 2, 'Sin datos suficientes')}</dd></div><div><dt>Cobertura</dt><dd>${row.diasRestantes === null ? 'No calculable' : `${inventoryMetric(row.diasRestantes, 1)} días`}</dd></div><div><dt>Stock objetivo</dt><dd>${escapeHtml(row.stockObjetivo)}</dd></div><div><dt>Cantidad sugerida</dt><dd><strong>${escapeHtml(row.cantidadCompraSugerida)} ${escapeHtml(row.presentacionCompraSugerida === 'paquete' ? 'paquetes' : 'unidades')}</strong></dd></div></dl><p class="inventory-reason">${escapeHtml(row.motivo)}</p>${canWrite ? `<button type="button" class="small secondary" data-inventory-product-config="${escapeHtml(row.idProducto)}">Configurar</button>` : ''}</article>`).join('')}</div>${inventoryPagination(data)}`;
 }
@@ -3249,7 +3378,7 @@ function inventoryRenderRotation() {
   const data = inventoryUi.data.rotacion;
   if (!data?.rows?.length) return inventoryEmpty('No hay productos para analizar en este período.');
   return `<div class="inventory-section-heading"><div><h3>Rotación y cobertura</h3><p>${escapeHtml(inventoryPeriod(data.periodo))}</p></div></div>
-    <div class="inventory-note"><strong>Regla</strong><p>Alta: rotación neta desde 1. Media: 0,25 a menor de 1. Baja: mayor que cero y menor de 0,25. Sin movimiento: cero unidades netas.</p></div>
+    <div class="inventory-note"><strong>Cómo leer estos datos</strong><p>Rotación: ventas netas en relación con el stock promedio durante el período. Cobertura: días que alcanzaría el stock vendible al ritmo actual. Alta: rotación desde 1; media: entre 0,25 y 1; baja: entre 0 y 0,25; sin movimiento: ninguna unidad neta vendida.</p></div>
     <div class="table-wrap"><table class="inventory-table"><caption class="sr-only">Rotación y cobertura del inventario</caption><thead><tr><th>Producto</th><th>Ventas netas</th><th>Días con venta</th><th>Frecuencia</th><th>Última venta</th><th>Físico / vendible</th><th>Rotación</th><th>Cobertura</th><th>Clasificación</th></tr></thead><tbody>${data.rows.map((row) => `<tr><td><strong>${escapeHtml(row.nombre)}</strong><small>${escapeHtml(row.categoria)}</small></td><td>${escapeHtml(row.unidadesVendidasPeriodo)} ${escapeHtml(row.unidadBase)}</td><td>${escapeHtml(row.diasConVentaPeriodo)}</td><td>${inventoryMetric(row.frecuenciaVentaDiaria, 2)}</td><td>${inventoryDate(row.ultimaVenta)}</td><td>${escapeHtml(row.stockFisico)} / ${escapeHtml(row.stockVendible)}<small>No vendible: ${escapeHtml(row.stockNoVendible)}</small></td><td>${inventoryMetric(row.rotacion, 2)}</td><td>${row.diasRestantes === null ? '<span class="muted">No calculable</span>' : `${inventoryMetric(row.diasRestantes, 1)} días`}</td><td><span class="inventory-status inventory-status-${escapeHtml(row.clasificacionRotacion)}">${escapeHtml(row.clasificacionRotacion)}</span></td></tr>`).join('')}</tbody></table></div>${inventoryPagination(data)}`;
 }
 
@@ -3300,6 +3429,14 @@ function renderInventoryActiveTab() {
   target.querySelectorAll('[data-inventory-product-config]').forEach((button) => button.addEventListener('click', () => openInventoryProductConfiguration(button.dataset.inventoryProductConfig)));
   target.querySelectorAll('[data-inventory-product-lots]').forEach((button) => button.addEventListener('click', () => openProductLotAvailability(button.dataset.inventoryProductLots)));
   target.querySelector('[data-open-lot-dashboard]')?.addEventListener('click', () => loadView('lotesVencimientos'));
+  target.querySelectorAll('[data-inventory-simple-destination]').forEach((button) => button.addEventListener('click', async () => {
+    const destination = button.dataset.inventorySimpleDestination;
+    if (destination === 'sinMovimiento') inventoryUi.level = 'avanzado';
+    inventoryUi.activeTab = destination;
+    inventoryUi.page = 1;
+    renderInventoryTabs();
+    await loadInventoryActiveTab();
+  }));
   target.querySelectorAll('[data-ranking-mode]').forEach((button) => button.addEventListener('click', () => {
     inventoryUi.rankingMode = button.dataset.rankingMode;
     renderInventoryActiveTab();
@@ -3321,17 +3458,21 @@ async function loadInventoryActiveTab(force = false) {
   const tab = inventoryUi.activeTab;
   const content = document.getElementById('inventoryContent');
   if (!content) return;
-  if (!force && inventoryUi.data[tab]) return renderInventoryActiveTab();
+  const needsAdvancedValuation = tab === 'resumen' && inventoryUi.level === 'avanzado'
+    && inventoryFeature('valor_inventario_basico') && !inventoryUi.data.resumenValoracion;
+  if (!force && inventoryUi.data[tab] && !needsAdvancedValuation) return renderInventoryActiveTab();
   content.innerHTML = inventoryLoading();
   content.setAttribute('aria-busy', 'true');
   const request = ++inventoryUi.request;
   try {
     const query = inventoryFilterQuery().toString();
     if (tab === 'resumen') {
+      const advanced = inventoryUi.level === 'avanzado';
       const [summary, valuation, lots] = await Promise.all([
         api(`/api/inventario-inteligente/resumen?${query}`),
-        api(`/api/inventario-inteligente/valoracion?${query}`),
-        hasLotOperationalAccess() ? api('/api/lotes/resumen') : Promise.resolve(null)
+        advanced && inventoryFeature('valor_inventario_basico')
+          ? api(`/api/inventario-inteligente/valoracion?${query}`) : Promise.resolve(null),
+        advanced && hasLotOperationalAccess() ? api('/api/lotes/resumen') : Promise.resolve(null)
       ]);
       inventoryUi.data.resumen = summary;
       inventoryUi.data.resumenValoracion = valuation;
@@ -3483,8 +3624,7 @@ async function downloadInventoryExport() {
 async function inventarioInteligente() {
   const today = new Date();
   const start = new Date(today.getFullYear(), today.getMonth(), today.getDate() - 29);
-  inventoryUi = { activeTab: 'resumen', rankingMode: 'ingresos', movementClass: '', page: 1, request: 0, data: {} };
-  const tabs = inventoryTabs();
+  inventoryUi = { level: 'simple', activeTab: 'resumen', rankingMode: 'ingresos', movementClass: '', page: 1, request: 0, data: {} };
   view.innerHTML = `<div class="panel inventory-filter-panel">
     <form id="inventoryFilters" class="inventory-filters">
       <label>Desde<input type="date" name="desde" value="${localDateValue(start)}"></label>
@@ -3500,12 +3640,21 @@ async function inventarioInteligente() {
       <label>Resultados<select name="limite"><option value="25">25</option><option value="50" selected>50</option><option value="100">100</option></select></label>
       <div class="inventory-filter-actions"><button type="submit">Aplicar filtros</button><button type="button" class="secondary" id="clearInventoryFilters">Limpiar</button>${inventoryFeature('exportacion_inventario') ? '<button type="button" class="secondary" id="exportInventory">Exportar inventario</button>' : ''}</div>
     </form>
-    <p class="hint">El período incluye el día “Hasta” y se procesa internamente como un rango seguro de inicio incluido y fin excluido. Máximo 365 días.</p>
+    <p class="hint">El período incluye ambos días elegidos. Máximo 365 días.</p>
   </div>
-  <div class="inventory-tabs" role="tablist" aria-label="Análisis de inventario">${tabs.map(([id, label], index) => `<button type="button" role="tab" data-inventory-tab="${id}" aria-selected="${index === 0}" class="${index === 0 ? 'active' : ''}">${escapeHtml(label)}</button>`).join('')}</div>
-  ${!inventoryAdvancedAvailable() ? '<div class="inventory-plan-note"><strong>Análisis avanzado</strong><span>Compras sugeridas, rotación, productos sin movimiento y exportación están disponibles en el plan avanzado.</span></div>' : ''}
+  <div class="inventory-level-switch" role="group" aria-label="Nivel de análisis"><button type="button" data-inventory-level="simple" aria-pressed="true">Simple</button><button type="button" data-inventory-level="avanzado" aria-pressed="false">Avanzado</button></div>
+  <div class="inventory-tabs" role="tablist" aria-label="Análisis de inventario"></div>
+  ${!inventoryAdvancedAvailable() ? '<div class="inventory-plan-note"><strong>Análisis avanzado</strong><span>Algunas funciones de análisis no están incluidas en tu plan actual.</span></div>' : ''}
   <div class="panel inventory-content" id="inventoryContent"></div>`;
   const form = document.getElementById('inventoryFilters');
+  form.elements.ventana.addEventListener('change', () => {
+    if (!form.elements.ventana.value) return;
+    form.elements.desde.value = '';
+    form.elements.hasta.value = '';
+  });
+  ['desde', 'hasta'].forEach((field) => form.elements[field].addEventListener('change', () => {
+    if (form.elements[field].value) form.elements.ventana.value = '';
+  }));
   const updateInventoryFilters = compactInventoryFilters(form,
     ['desde', 'hasta', 'ventana', 'categoria', 'proveedor', 'producto', 'estado', 'prioridad', 'tipoAlerta', 'estadoSugerencia', 'limite'],
     { desde: form.elements.desde.value, hasta: form.elements.hasta.value, estadoSugerencia: 'todos', limite: '50' });
@@ -3529,16 +3678,14 @@ async function inventarioInteligente() {
     await loadInventoryActiveTab(true);
   });
   document.getElementById('exportInventory')?.addEventListener('click', downloadInventoryExport);
-  document.querySelectorAll('[data-inventory-tab]').forEach((button) => button.addEventListener('click', async () => {
-    inventoryUi.activeTab = button.dataset.inventoryTab;
+  document.querySelectorAll('[data-inventory-level]').forEach((button) => button.addEventListener('click', async () => {
+    inventoryUi.level = button.dataset.inventoryLevel;
+    inventoryUi.activeTab = 'resumen';
     inventoryUi.page = 1;
-    document.querySelectorAll('[data-inventory-tab]').forEach((item) => {
-      const active = item === button;
-      item.classList.toggle('active', active);
-      item.setAttribute('aria-selected', String(active));
-    });
+    renderInventoryTabs();
     await loadInventoryActiveTab();
   }));
+  renderInventoryTabs();
   await loadInventoryActiveTab();
 }
 
@@ -3971,6 +4118,7 @@ function reportFilters(type) {
 }
 
 async function reportes() {
+  reportRequest += 1;
   view.innerHTML = `
     <div class="panel">
       <form class="grid" id="reportForm">
@@ -3989,7 +4137,7 @@ async function reportes() {
         <button type="submit">Consultar</button>
       </form>
     </div>
-    <div class="panel"><canvas id="reportChart"></canvas></div>
+    <div class="panel" id="reportChartPanel" hidden><h3>Tendencia y comparación</h3><canvas id="reportChart"></canvas></div>
     <div class="panel" id="reportResult"><p class="muted">Seleccione un reporte para consultar.</p></div>`;
   const type = document.getElementById('reportType');
   const updateFilters = () => { document.getElementById('dynamicFilters').innerHTML = reportFilters(type.value); };
@@ -4000,18 +4148,34 @@ async function reportes() {
 
 async function loadReport(event) {
   event.preventDefault();
+  const request = ++reportRequest;
   const data = formData(event.target);
   const query = new URLSearchParams(data);
+  const chartPanel = document.getElementById('reportChartPanel');
+  chartPanel.hidden = true;
+  document.getElementById('reportResult').innerHTML = '<p class="muted" role="status">Cargando reporte...</p>';
   try {
     const result = await api(`/api/reportes/${data.tipo}?${query.toString()}`);
+    if (request !== reportRequest || activeView !== 'reportes') return;
     const rows = result.rows || [];
     const keys = rows[0] ? Object.keys(rows[0]) : [];
-    if (result.chart && rows.length) drawChart(document.getElementById('reportChart'), result.chart.labels.map(formatDate), result.chart.values, '#286a59');
+    const hasChart = rows.length > 0 && Array.isArray(result.chart?.labels) && result.chart.labels.length > 0
+      && Array.isArray(result.chart?.values) && result.chart.values.length === result.chart.labels.length;
+    chartPanel.hidden = !hasChart;
+    if (hasChart) {
+      const labels = result.chart.labels.map(formatDate);
+      const draw = ['ventasDia', 'ventasRango', 'ganancias'].includes(data.tipo) ? drawLineChart : drawChart;
+      draw(document.getElementById('reportChart'), labels, result.chart.values, '#286a59');
+    }
     document.getElementById('reportResult').innerHTML = rows.length ? `
       ${result.summary ? `<div class="summary-row"><strong>Vendido: Bs ${money(result.summary.totalVendido)}</strong><strong>Costo: Bs ${money(result.summary.totalCosto)}</strong><strong>Ganancia: Bs ${money(result.summary.gananciaNeta)}</strong></div>` : ''}
       <div class="table-wrap"><table><thead><tr>${keys.map((key) => `<th>${escapeHtml(key)}</th>`).join('')}</tr></thead>
       <tbody>${rows.map((row) => `<tr>${keys.map((key) => `<td>${key.toLowerCase().includes('fecha') ? formatDate(row[key]) : escapeHtml(row[key] ?? '')}</td>`).join('')}</tr>`).join('')}</tbody></table></div>` : '<p class="muted">No hay datos para mostrar.</p>';
-  } catch (error) { showError(error.message); }
+  } catch (error) {
+    if (request !== reportRequest || activeView !== 'reportes') return;
+    document.getElementById('reportResult').innerHTML = '<p class="muted" role="alert">No se pudo cargar el reporte. Revisa los filtros e inténtalo de nuevo.</p>';
+    showError(error.message);
+  }
 }
 
 const readOnlyObserver = new MutationObserver(() => applyReadOnlyUi());

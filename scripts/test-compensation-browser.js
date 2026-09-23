@@ -48,7 +48,9 @@ function harness() {
           denied: []
         };
         const state = { context: { soloLectura: params.get('readonly') === '1',
-          caracteristicas: featureSets[plan] || [] } };
+          caracteristicas: featureSets[plan] || [] },
+          ventas: [{ idVenta: 31, codigoComprobante: 'V-000031', cliente: 'Cliente temporal',
+            fecha: '2026-07-26 09:00:00', total: 30 }] };
         const escapeHtml = (value) => String(value ?? '').replace(/[&<>"']/g,
           (char) => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[char]));
         const api = async (url, options={}) => {
@@ -303,9 +305,11 @@ async function main() {
     await page.locator('[data-compensation-tab="ventas"]').click();
     assert(await page.locator('[data-history-filters]').isHidden(),
       'Los filtros del historial siguen visibles en Ventas.');
-    await page.locator('[data-sale-search] input').fill('31');
-    await page.locator('[data-sale-search]').press('Enter');
+    await page.locator('[data-recent-sale-search]').fill('V-000031');
+    await page.locator('[data-select-sale="31"]').click();
     await page.locator('[data-sale-return]').waitFor();
+    assert(await page.locator('[data-sale-search] input').isHidden(),
+      'La consulta por numero interno debe quedar como alternativa para ventas anteriores.');
     await page.locator('[data-sale-return]').click();
     await page.locator('[data-return-detail]').check();
     assert((await page.locator('[data-compensation-expected]').textContent()).includes('10.00'),
@@ -382,6 +386,7 @@ async function main() {
       && (await suspended.locator('[data-compensation-content]').textContent()).includes('suscripcion debe estar activa'),
     'La suscripcion suspendida ofrecio una exportacion.');
     await suspended.locator('[data-compensation-tab="ventas"]').click();
+    await suspended.locator('.compensation-older-sale summary').click();
     await suspended.locator('[data-sale-search] input').fill('31');
     await suspended.locator('[data-sale-search]').press('Enter');
     assert(await suspended.locator('[data-sale-return]').isDisabled(),
