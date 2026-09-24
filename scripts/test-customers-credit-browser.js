@@ -579,17 +579,22 @@ async function main() {
     await clickCustomerSecondaryAction(page, '[data-customer-segmentation]');
     await page.locator('#segmentationFilters').waitFor();
     for (const segment of ['frecuentes', 'inactivos', 'con_deuda', 'vencidos', 'promesa_incumplida', 'buenos_pagadores', 'mayor_compra', 'mayor_saldo']) {
+      await page.locator('[data-open-segmentation-filters]').click();
       await page.locator('#segmentationFilters [name="segmento"]').selectOption(segment);
-      await page.locator('#segmentationFilters').waitFor();
+      const segmentResponse = page.waitForResponse((response) => response.url().includes('/api/clientes/segmentacion?') && response.url().includes(`segmento=${segment}`));
+      await page.locator('#segmentationFilters button[type="submit"]').click();
+      await segmentResponse;
+      await page.locator('#segmentationFilterDialog').waitFor({ state: 'hidden' });
       check((await page.locator('.segmentation-criteria').textContent()).includes('Criterio aplicado'), `Segmentacion explica el criterio de ${segment}.`);
     }
     let released;
     const gate = new Promise((resolve) => { released = resolve; });
     await page.route('**/api/clientes/segmentacion?**', async (route) => {
-      if (route.request().url().includes('segmento=frecuentes')) await gate;
+      if (route.request().url().includes('busqueda=LENTA')) await gate;
       await route.continue();
     });
-    await page.locator('#segmentationFilters [name="segmento"]').selectOption('frecuentes');
+    await page.locator('#segmentationSearch [name="busqueda"]').fill('LENTA');
+    await page.locator('#segmentationSearch button[type="submit"]').click();
     await openMenu(page, 'Clientes', '#customerFilters');
     released();
     await delay(300);

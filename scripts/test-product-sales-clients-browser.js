@@ -21,7 +21,7 @@ function context(plan = 'full') {
     suscripcion: { fechaFin: '2026-12-31 00:00:00', diasRestantes: 120 },
     caracteristicas: plan === 'minimal' ? ['inventario_resumen', 'alertas_stock'] : plan === 'basic' ? basicFeatures : ['punto_venta', 'clientes_basico', 'fiados_basico', 'pagos_fiado', 'anulaciones_operativas',
       'inventario_resumen', 'alertas_stock', 'ranking_productos', 'valor_inventario_basico',
-      'compras_sugeridas', 'rotacion_inventario', 'inventario_sin_movimiento', 'reportes_financieros']
+      'compras_sugeridas', 'rotacion_inventario', 'inventario_sin_movimiento', 'reportes_financieros', 'segmentacion_clientes']
   };
 }
 
@@ -99,6 +99,10 @@ function serverFor(requests) {
       if (url.pathname === '/api/fiados/17') return json(response, { fiado: { idFiado: 17, idCliente: 7, saldoPendiente: 20 } });
       if (url.pathname === '/api/clientes/7/resumen') return json(response, { cliente: { idCliente: 7, nombre: 'Ana Cliente', deudaActual: 20 } });
       if (url.pathname === '/api/fiados') return json(response, [{ idFiado: 17, idCliente: 7, cliente: 'Ana Cliente', clienteActivo: true, telefono: '70000000', saldoPendiente: 20, fechaVencimiento: null, fechaPrometidaPago: null, estadoCobranza: 'al_dia' }]);
+      if (url.pathname === '/api/clientes/segmentacion') {
+        if (url.searchParams.get('busqueda') === 'FALLO') { response.writeHead(503, { 'Content-Type': 'application/json' }); return response.end(JSON.stringify({ error: 'Consulta temporalmente no disponible' })); }
+        return json(response, { descripcion: 'Segmento sintético', criterios: 'Criterio de prueba', parametrosAplicados: { fechaDesde: '2026-01-01', fechaHasta: '2026-09-23' }, resumen: { totalClientes: 0 }, resultados: [], paginacion: { page: 1, pageSize: 20, total: 0 } });
+      }
       if (url.pathname === '/api/productos') return json(response, [purchaseProduct()]);
       if (url.pathname === '/api/proveedores') return json(response, [{ idProveedor: 2, nombre: 'Proveedor prueba' }]);
       if (['/api/clientes', '/api/categorias'].includes(url.pathname)) return json(response, []);
@@ -197,6 +201,38 @@ async function verifyViewport(browser, baseUrl, viewport) {
     await page.locator('[data-credit-modal]').waitFor();
     assert.strictEqual((await page.locator('[data-credit-modal]').textContent()).includes('Este pago se repartira entre las deudas del cliente'), true);
     await page.locator('[data-credit-modal] [data-modal-cancel]').click();
+    await page.locator('[data-view="clientes"]').click();
+    await page.locator('#customerFilters').waitFor();
+    await page.locator('.credit-heading .inventory-secondary-actions > summary').click();
+    await page.locator('[data-customer-segmentation]').click();
+    await page.locator('#segmentationResults').waitFor();
+    assert.strictEqual(await page.locator('#segmentationSearch [name="busqueda"]').isVisible(), true, 'Segmentación conserva la búsqueda visible.');
+    assert.strictEqual(await page.locator('#segmentationFilterDialog').isVisible(), false, 'Los criterios inician cerrados.');
+    await page.locator('[data-open-segmentation-filters]').click();
+    await page.locator('#segmentationFilters [name="segmento"]').selectOption('inactivos');
+    await page.locator('#segmentationFilters [name="fechaDesde"]').fill('2026-01-01');
+    assert.strictEqual(await page.locator('#segmentationFilters [name="diasSinCompra"]').count(), 1, 'Cambiar segmento muestra sus criterios sin consultar todavía.');
+    await page.locator('[data-close-segmentation-filters]').click();
+    await page.locator('[data-open-segmentation-filters]').click();
+    assert.strictEqual(await page.locator('#segmentationFilters [name="segmento"]').inputValue(), 'frecuentes', 'Cerrar descarta el segmento no aplicado.');
+    assert.strictEqual(await page.locator('#segmentationFilters [name="fechaDesde"]').inputValue(), '', 'Cerrar descarta también las fechas no aplicadas.');
+    await page.locator('#segmentationFilters [name="segmento"]').selectOption('inactivos');
+    await page.locator('#segmentationFilters button[type="submit"]').click();
+    await page.locator('#segmentationFilterDialog').waitFor({ state: 'hidden' });
+    assert.strictEqual(await page.locator('[data-open-segmentation-filters]').evaluate((element) => document.activeElement === element), true, 'Segmentación devuelve el foco a Filtros.');
+    const segmentContent = await page.locator('#segmentationResults').innerHTML();
+    await page.locator('#segmentationSearch [name="busqueda"]').fill('FALLO');
+    await page.locator('#segmentationSearch button[type="submit"]').click();
+    await page.locator('[data-segmentation-search-error]:visible').waitFor();
+    assert.strictEqual(await page.locator('#segmentationResults').innerHTML(), segmentContent, 'Un error de búsqueda conserva la segmentación previa.');
+    await page.locator('[data-open-segmentation-filters]').click();
+    await page.locator('#segmentationFilters [name="segmento"]').selectOption('mayor_saldo');
+    await page.locator('#segmentationFilters button[type="submit"]').click();
+    await page.locator('[data-segmentation-filter-error]:visible').waitFor();
+    assert.strictEqual(await page.locator('#segmentationResults').innerHTML(), segmentContent, 'Un error de filtro conserva la segmentación previa.');
+    await page.locator('[data-close-segmentation-filters]').click();
+    await page.locator('[data-back-customers]').click();
+    await page.locator('#customerFilters').waitFor();
     await salesView(page, 'compensaciones');
     await page.locator('[data-compensation-tab="ventas"]').click();
     await page.locator('[data-recent-sale-search]').fill('V-000031');
@@ -292,7 +328,8 @@ async function verifyViewport(browser, baseUrl, viewport) {
       return canvas.closest('.panel').querySelector('.chart-tooltip').classList.contains('show');
     }), true, 'Los valores del gráfico también se consultan con toque.');
     assert.strictEqual(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 2), true, `Overflow a ${viewport.width}px.`);
-    assert.deepStrictEqual(errors, [], `Consola limpia a ${viewport.width}x${viewport.height}.`);
+    assert.strictEqual(errors.filter((error) => error.includes('status of 503')).length, 2, 'Solo fallan las dos consultas sintéticas de segmentación.');
+    assert.deepStrictEqual(errors.filter((error) => !error.includes('status of 503')), [], `Consola sin errores inesperados a ${viewport.width}x${viewport.height}.`);
   } finally {
     await context.close();
   }

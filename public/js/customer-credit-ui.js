@@ -261,18 +261,23 @@
 
     function segmentationFiltersMarkup() {
       const f = ui.segmentationFilters;
-      return `<form class="panel credit-filters segmentation-filters" id="segmentationFilters">
+      return `<form class="panel movement-search" id="segmentationSearch">
+        <label>Buscar cliente<input name="busqueda" type="search" value="${e(f.busqueda || '')}" placeholder="Nombre, teléfono o documento"></label>
+        <button type="submit" class="secondary">Buscar</button><button type="button" class="secondary" data-open-segmentation-filters>Filtros</button>
+      </form><p class="form-error" data-segmentation-search-error role="alert" hidden></p>
+      <dialog class="owner-filter-dialog" id="segmentationFilterDialog" aria-labelledby="segmentationFilterTitle">
+        <div class="owner-filter-heading"><h3 id="segmentationFilterTitle">Filtrar segmentación</h3><button type="button" class="secondary" data-close-segmentation-filters>Cerrar</button></div>
+        <form class="credit-filters segmentation-filters" id="segmentationFilters">
         <label>Segmento<select name="segmento">${CUSTOMER_SEGMENTS.map(([value, label]) => option(value, label, f.segmento)).join('')}</select></label>
-        <label>Buscar<input name="busqueda" type="search" value="${e(f.busqueda || '')}" placeholder="Nombre, telefono o documento"></label>
         <label>Estado del cliente<select name="estadoCliente">${option('activos', 'Activos', f.estadoCliente)}${option('ocultos', 'Ocultos', f.estadoCliente)}${option('todos', 'Todos', f.estadoCliente)}</select></label>
         <label>Desde<input name="fechaDesde" type="date" value="${e(f.fechaDesde || '')}"></label>
         <label>Hasta<input name="fechaHasta" type="date" value="${e(f.fechaHasta || '')}"></label>
         <label>Saldo minimo<input name="saldoMinimo" type="number" min="0" step="0.01" value="${e(f.saldoMinimo || '')}"></label>
         <label>Saldo maximo<input name="saldoMaximo" type="number" min="0" step="0.01" value="${e(f.saldoMaximo || '')}"></label>
-        ${segmentationSpecificFilters(f.segmento, f)}
+        <div class="segmentation-specific-fields" data-segmentation-specific>${segmentationSpecificFilters(f.segmento, f)}</div>
         <label>Resultados por pagina<select name="pageSize">${[10, 20, 50, 100].map((value) => option(value, value, f.pageSize || 20)).join('')}</select></label>
-        <div class="credit-filter-actions"><button type="submit">Aplicar</button><button type="button" class="secondary" data-clear-segmentation-filters>Restablecer</button></div>
-      </form>`;
+        <div class="filter-actions"><button type="button" class="secondary" data-clear-segmentation-filters>Restablecer</button><button type="submit">Aplicar</button></div>
+      </form><p class="form-error" data-segmentation-filter-error role="alert" hidden></p></dialog>`;
     }
 
     function segmentationSummaryMarkup(summary = {}) {
@@ -296,49 +301,96 @@
       return desktop + mobile;
     }
 
-    async function renderSegmentation() {
+    async function renderSegmentation({ filters = ui.segmentationFilters, page: requestedPage = ui.segmentationPage, preservePrevious = false } = {}) {
       ui.collectionRequest += 1;
       const request = ++ui.segmentationRequest;
-      view.innerHTML = '<div class="panel loading-state" role="status" aria-live="polite">Calculando segmentacion...</div>';
+      if (!preservePrevious) view.innerHTML = '<div class="panel loading-state" role="status" aria-live="polite">Calculando segmentacion...</div>';
       try {
-        const query = filterQuery(ui.segmentationFilters, { page: ui.segmentationPage });
+        const query = filterQuery(filters, { page: requestedPage });
         const data = await api(`/api/clientes/segmentacion?${query}`);
-        if (request !== ui.segmentationRequest) return;
+        if (request !== ui.segmentationRequest) return false;
+        ui.segmentationFilters = filters;
+        ui.segmentationPage = requestedPage;
         const page = data.paginacion || {};
         view.innerHTML = `<div class="credit-heading"><div><span class="eyebrow">Segmentacion</span><h3>Clientes agrupados por reglas verificables</h3><p>${e(data.descripcion)}</p></div><div class="actions"><button type="button" class="secondary" data-back-customers>Volver a clientes</button></div></div>
           <div class="panel segmentation-criteria"><strong>Criterio aplicado</strong><p>${e(data.criterios)}</p><small>Periodo: ${e(data.parametrosAplicados.fechaDesde)} a ${e(data.parametrosAplicados.fechaHasta)}. Los calculos usan datos globales filtrados, no solo esta pagina.</small></div>
           ${segmentationSummaryMarkup(data.resumen)}${segmentationFiltersMarkup()}<div id="segmentationResults">${segmentationRowsMarkup(data.resultados || [])}</div>${pagerMarkup(Number(page.page || ui.segmentationPage), Number(page.pageSize || 20), Number(page.total || 0), 'segmentation')}`;
         wireSegmentationView();
+        return true;
       } catch (error) {
-        if (request !== ui.segmentationRequest) return;
-        view.innerHTML = `<div class="panel error-state" role="alert"><strong>No se pudo calcular la segmentacion.</strong><p>${e(error.message)}</p><div class="actions"><button type="button" data-retry-segmentation>Reintentar</button><button type="button" class="secondary" data-back-customers>Volver a clientes</button></div></div>`;
-        view.querySelector('[data-retry-segmentation]')?.addEventListener('click', renderSegmentation);
-        view.querySelector('[data-back-customers]')?.addEventListener('click', renderCustomers);
+        if (request !== ui.segmentationRequest) return false;
+        if (preservePrevious) {
+          const dialogError = view.querySelector('#segmentationFilterDialog[open] [data-segmentation-filter-error]');
+          const errorTarget = dialogError || view.querySelector('[data-segmentation-search-error]');
+          errorTarget.textContent = uiPatterns.messageFor(error);
+          errorTarget.hidden = false;
+        } else {
+          view.innerHTML = `<div class="panel error-state" role="alert"><strong>No se pudo calcular la segmentacion.</strong><p>${e(uiPatterns.messageFor(error))}</p><div class="actions"><button type="button" data-retry-segmentation>Reintentar</button><button type="button" class="secondary" data-back-customers>Volver a clientes</button></div></div>`;
+          view.querySelector('[data-retry-segmentation]')?.addEventListener('click', () => renderSegmentation());
+          view.querySelector('[data-back-customers]')?.addEventListener('click', renderCustomers);
+        }
+        return false;
       }
     }
 
     function wireSegmentationView() {
       view.querySelector('[data-back-customers]')?.addEventListener('click', renderCustomers);
       const form = view.querySelector('#segmentationFilters');
-      form?.addEventListener('submit', (event) => {
+      const dialog = view.querySelector('#segmentationFilterDialog');
+      const searchForm = view.querySelector('#segmentationSearch');
+      const trigger = view.querySelector('[data-open-segmentation-filters]');
+      const filterError = view.querySelector('[data-segmentation-filter-error]');
+      const searchError = view.querySelector('[data-segmentation-search-error]');
+      const restoreFilters = () => {
+        const applied = ui.segmentationFilters;
+        form.querySelector('[data-segmentation-specific]').innerHTML = segmentationSpecificFilters(applied.segmento, applied);
+        for (const control of form.elements) {
+          if (!control.name) continue;
+          const fallback = control.name === 'segmento' ? 'frecuentes'
+            : control.name === 'estadoCliente' ? 'activos'
+              : control.name === 'pageSize' ? '20'
+                : control.closest('[data-segmentation-specific]') ? control.value : '';
+          control.value = applied[control.name] ?? fallback;
+        }
+        filterError.hidden = true;
+      };
+      trigger.addEventListener('click', () => { restoreFilters(); dialog.showModal(); form.elements.segmento.focus(); });
+      view.querySelector('[data-close-segmentation-filters]').addEventListener('click', () => {
+        if (!form.querySelector('[type="submit"]').disabled) dialog.close();
+      });
+      dialog.addEventListener('cancel', (event) => {
+        if (form.querySelector('[type="submit"]').disabled) event.preventDefault();
+      });
+      dialog.addEventListener('close', () => { restoreFilters(); trigger.focus(); });
+      searchForm.addEventListener('submit', async (event) => {
         event.preventDefault();
-        ui.segmentationFilters = Object.fromEntries(new FormData(form).entries());
-        ui.segmentationPage = 1;
-        renderSegmentation();
+        searchError.hidden = true;
+        if (await renderSegmentation({ filters: { ...ui.segmentationFilters, busqueda: searchForm.elements.busqueda.value.trim() }, page: 1, preservePrevious: true })) {
+          view.querySelector('#segmentationSearch [name="busqueda"]')?.focus();
+        }
       });
       form?.elements.segmento?.addEventListener('change', () => {
-        ui.segmentationFilters = { segmento: form.elements.segmento.value, estadoCliente: form.elements.estadoCliente.value };
-        ui.segmentationPage = 1;
-        renderSegmentation();
+        form.querySelector('[data-segmentation-specific]').innerHTML = segmentationSpecificFilters(form.elements.segmento.value, {});
       });
       view.querySelector('[data-clear-segmentation-filters]')?.addEventListener('click', () => {
-        ui.segmentationFilters = { segmento: 'frecuentes', estadoCliente: 'activos' };
-        ui.segmentationPage = 1;
-        renderSegmentation();
+        for (const control of form.elements) {
+          if (control.name) control.value = control.name === 'segmento' ? 'frecuentes' : control.name === 'estadoCliente' ? 'activos' : control.name === 'pageSize' ? '20' : '';
+        }
+        form.querySelector('[data-segmentation-specific]').innerHTML = segmentationSpecificFilters('frecuentes', {});
+        filterError.hidden = true;
+      });
+      form.addEventListener('submit', async (event) => {
+        event.preventDefault();
+        const submit = form.querySelector('[type="submit"]');
+        submit.disabled = true;
+        filterError.hidden = true;
+        const filters = { ...Object.fromEntries(new FormData(form).entries()), busqueda: searchForm.elements.busqueda.value.trim() };
+        try {
+          if (await renderSegmentation({ filters, page: 1, preservePrevious: true })) view.querySelector('[data-open-segmentation-filters]')?.focus();
+        } finally { submit.disabled = false; }
       });
       view.querySelectorAll('[data-segmentation-page]').forEach((button) => button.addEventListener('click', () => {
-        ui.segmentationPage = Number(button.dataset.segmentationPage);
-        renderSegmentation();
+        renderSegmentation({ page: Number(button.dataset.segmentationPage) });
       }));
       view.querySelectorAll('[data-segment-customer]').forEach((button) => button.addEventListener('click', () => openCustomerProfile(button.dataset.segmentCustomer)));
     }
@@ -379,7 +431,7 @@
 
     function wireCustomerView(customers) {
       view.querySelector('[data-new-customer]')?.addEventListener('click', () => openCustomerForm());
-      view.querySelector('[data-customer-segmentation]')?.addEventListener('click', renderSegmentation);
+      view.querySelector('[data-customer-segmentation]')?.addEventListener('click', () => renderSegmentation());
       view.querySelector('[data-credit-config]')?.addEventListener('click', openCreditConfiguration);
       view.querySelector('[data-export-customers]:not([disabled])')?.addEventListener('click', (event) => {
         const query = filterQuery(ui.customerFilters);

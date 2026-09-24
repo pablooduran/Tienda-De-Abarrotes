@@ -84,9 +84,10 @@ check('UI explica criterio y usa resumen global del backend',
   creditJs.includes('Criterio aplicado')
   && creditJs.includes('segmentationSummaryMarkup(data.resumen)')
   && !creditJs.includes('data.resultados.reduce'));
-check('Cambio de segmento reinicia pagina',
-  creditJs.includes('form?.elements.segmento?.addEventListener')
-  && creditJs.includes('ui.segmentationPage = 1;'));
+check('Cambio de segmento prepara sus criterios y aplicar reinicia pagina',
+  creditJs.includes("form?.elements.segmento?.addEventListener('change'")
+  && creditJs.includes("segmentationSpecificFilters(form.elements.segmento.value, {})")
+  && creditJs.includes('renderSegmentation({ filters, page: 1, preservePrevious: true })'));
 check('Respuestas obsoletas de segmentacion se ignoran',
   creditJs.includes('const request = ++ui.segmentationRequest')
   && (creditJs.match(/request !== ui\.segmentationRequest/g) || []).length >= 2);

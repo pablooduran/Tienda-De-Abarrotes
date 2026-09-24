@@ -105,8 +105,10 @@ function harness() {
 
 function createServer() {
   let postCount = 0;
+  const requests = [];
   const server = http.createServer(async (req, res) => {
     const url = new URL(req.url, 'http://localhost');
+    if (url.pathname.startsWith('/api/')) requests.push({ path: url.pathname, search: url.search });
     if (url.pathname === '/') {
       res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
       return res.end(harness());
@@ -121,7 +123,8 @@ function createServer() {
     }
     if (url.pathname === '/api/inventario/conciliacion') {
       const status = url.searchParams.get('estado');
-      await new Promise((resolve) => setTimeout(resolve, status === 'warning' ? 120 : 15));
+      if (url.searchParams.get('busqueda') === 'FALLO') return json(res, 503, { error: 'Consulta temporalmente no disponible' });
+      await new Promise((resolve) => setTimeout(resolve, url.searchParams.get('busqueda') === 'LENTA' ? 120 : 15));
       return json(res, 200, reconciliation(status === 'todos' ? 'warning' : status));
     }
     if (url.pathname === '/api/inventario/ajustes' && req.method === 'GET') {
@@ -150,7 +153,7 @@ function createServer() {
     }
     return json(res, 404, { error: 'No encontrado.' });
   });
-  return { server, getPostCount: () => postCount };
+  return { server, getPostCount: () => postCount, requests };
 }
 
 async function testViewport(browser, baseUrl, viewport) {
@@ -167,7 +170,7 @@ async function testViewport(browser, baseUrl, viewport) {
 }
 
 async function main() {
-  const { server, getPostCount } = createServer();
+  const { server, getPostCount, requests } = createServer();
   await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
   const address = server.address();
   const baseUrl = `http://127.0.0.1:${address.port}`;
@@ -203,11 +206,46 @@ async function main() {
     check(await page.evaluate(() => window.__inventoryXss) === undefined,
       'El nombre dinamico malicioso se muestra como texto.');
 
+    const search = page.locator('[data-inventory-search]');
     const filters = page.locator('[data-inventory-filters]');
+    const filterDialog = page.locator('[data-inventory-filter-dialog]');
+    check(await search.isVisible() && !await filterDialog.isVisible(),
+      'La busqueda permanece visible y el estado inicia cerrado.');
+    const requestCount = requests.length;
+    await page.locator('[data-open-inventory-filters]').click();
+    await filters.locator('select[name="estado"]').selectOption('warning');
+    await page.locator('[data-close-inventory-filters]').click();
+    check(!requests.slice(requestCount).some((request) => request.path === '/api/inventario/conciliacion'),
+      'Cerrar descarta el estado sin consultar.');
+    await page.locator('[data-open-inventory-filters]').click();
+    check(await filters.locator('select[name="estado"]').inputValue() === 'todos',
+      'Al reabrir se restaura el estado aplicado.');
     await filters.locator('select[name="estado"]').selectOption('warning');
     await filters.locator('button[type="submit"]').click();
+    await filterDialog.waitFor({ state: 'hidden' });
+    check(await page.locator('.inventory-reconciliation-status.warning').isVisible(),
+      'Aplicar muestra los resultados del estado elegido.');
+    check(await page.evaluate(() => document.activeElement?.hasAttribute('data-open-inventory-filters')),
+      'El foco vuelve al boton de filtros.');
+    const previous = await page.locator('[data-inventory-content]').innerHTML();
+    await search.locator('input[name="busqueda"]').fill('FALLO');
+    await search.locator('button[type="submit"]').click();
+    await page.locator('[data-inventory-search-error]:visible').waitFor();
+    check(await page.locator('[data-inventory-content]').innerHTML() === previous,
+      'Un error de busqueda conserva los resultados anteriores.');
+    await page.locator('[data-open-inventory-filters]').click();
     await filters.locator('select[name="estado"]').selectOption('error');
     await filters.locator('button[type="submit"]').click();
+    await page.locator('[data-inventory-filter-error]:visible').waitFor();
+    check(await filterDialog.isVisible() && await page.locator('[data-inventory-content]').innerHTML() === previous,
+      'Un error al aplicar mantiene el filtro abierto y la lista anterior.');
+    await page.locator('[data-close-inventory-filters]').click();
+    await search.locator('input[name="busqueda"]').fill('LENTA');
+    await search.locator('button[type="submit"]').click();
+    await page.locator('[data-open-inventory-filters]').click();
+    await filters.locator('select[name="estado"]').selectOption('error');
+    await filters.locator('button[type="submit"]').click();
+    await filterDialog.waitFor({ state: 'hidden' });
     await page.locator('.inventory-reconciliation-status.error').waitFor();
     await page.waitForTimeout(150);
     check(await page.locator('.inventory-reconciliation-status.error').isVisible(),

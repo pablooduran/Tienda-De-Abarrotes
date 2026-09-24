@@ -40,20 +40,44 @@ se publicaron en staging con el commit `ee5c99f`; CI pasó y se consultó el
 reporte de fiados hospedado. Esta validación no
 declara `PILOT_READY`, no autoriza datos reales y no inicia el piloto.
 
-## Bloque local posterior: filtros de Gastos y Movimientos
+## Filtros de Gastos y Movimientos publicados
 
 Los filtros secundarios de Gastos y Movimientos de stock ahora se abren en una
 ventana. La búsqueda de producto en Movimientos permanece visible. Cerrar
 descarta cambios; Aplicar actualiza los resultados y devuelve el foco al botón.
 Si falla una consulta filtrada, la ventana permanece abierta y se conserva la
-lista anterior. Las pruebas de navegador usan respuestas sintéticas locales;
-este bloque aún no se ha publicado ni validado en staging.
+lista anterior. Las pruebas de navegador usan respuestas sintéticas locales.
+El bloque se publicó en la rama `mejora-multitienda` con el commit `903d54f`;
+la interacción hospedada aún requiere comprobación específica.
+
+## Bloque local actual: filtros de Lotes, Inteligencia, Conciliación y Segmentación
+
+La vista de Lotes conserva la lista visible y agrupa los filtros secundarios en
+una ventana. Cerrar descarta el borrador; Aplicar consulta con los filtros
+confirmados y solo cierra si la carga resulta correcta. Ante un error se
+mantienen los resultados anteriores. Los accesos rápidos de Alertas siguen
+aplicando rangos de vencimiento y Exportar queda fuera de la ventana, usando
+los filtros confirmados. Inteligencia adopta el mismo patrón: las fechas se
+validan dentro de la ventana, cerrar descarta cambios, un fallo conserva el
+resultado previo y la exportación usa los filtros confirmados. Las pruebas
+locales de navegador cubren móvil, tableta y escritorio con datos sintéticos.
+En Stock vendible y conciliación, Buscar producto permanece visible mientras
+el estado pasa a Filtros. Cerrar descarta el estado sin consultar; aplicar lo
+confirma solo si la carga termina bien. Una consulta fallida conserva la tabla,
+y una respuesta tardía no reemplaza el filtro más reciente.
+La Segmentación de clientes conserva Buscar visible y reúne los criterios en
+una ventana. Cambiar el segmento prepara sus campos sin consultar; Cerrar
+restaura lo aplicado. Un error conserva el análisis anterior y la ventana
+abierta. La prueba sintética de navegador cubre los tres tamaños de pantalla;
+el arnés más amplio quedó adaptado, pero no se ejecutó porque usa una base
+local y crea datos temporales.
+La publicación y la validación en staging quedan pendientes al cierre de este registro.
 
 ## Siguiente secuencia de bloques
 
-1. Unificar filtros y modales en las vistas de mayor uso, empezando por Pagos, Tiendas y Catálogo.
+1. Completar la misma convención en otros filtros secundarios pendientes, según uso y riesgo.
 2. Revisar detalles concretos de módulos operativos sin eliminar subflujos útiles.
-3. Pulir POS, cobranza, compras y devoluciones; luego catálogo e inventario avanzado.
+3. Decidir la integración de lotes con Compras y el alcance de empresa en Catálogo antes de modificar datos persistentes.
 4. Rediseño visual y regresión hospedada sintética.
 
 Cada bloque: diagnóstico acotado → implementación → prueba relacionada → revisión

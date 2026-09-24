@@ -3290,9 +3290,8 @@ function localDateFromInput(value) {
     && date.getDate() === Number(match[3]) ? date : null;
 }
 
-function inventoryFilterQuery() {
-  const form = document.getElementById('inventoryFilters');
-  const data = formData(form);
+function inventoryFilterQuery(data = inventoryUi.appliedFilters, page = inventoryUi.page) {
+  data = data || {};
   const from = data.desde ? localDateFromInput(data.desde) : null;
   const until = data.hasta ? localDateFromInput(data.hasta) : null;
   if ((data.desde && !from) || (data.hasta && !until)) throw new Error('Revise las fechas del período.');
@@ -3305,7 +3304,7 @@ function inventoryFilterQuery() {
   ['desde', 'hasta', 'ventana', 'categoria', 'proveedor', 'producto', 'estado', 'prioridad', 'tipoAlerta', 'estadoSugerencia', 'limite'].forEach((field) => {
     if (data[field] !== undefined && data[field] !== '') query.set(field, data[field]);
   });
-  query.set('pagina', String(inventoryUi.page || 1));
+  query.set('pagina', String(page || 1));
   return query;
 }
 
@@ -3530,18 +3529,18 @@ function renderInventoryActiveTab() {
   applyReadOnlyUi();
 }
 
-async function loadInventoryActiveTab(force = false) {
+async function loadInventoryActiveTab(force = false, { filters = inventoryUi.appliedFilters, keepPrevious = false, commitFilters = false } = {}) {
   const tab = inventoryUi.activeTab;
   const content = document.getElementById('inventoryContent');
-  if (!content) return;
+  if (!content) return false;
   const needsAdvancedValuation = tab === 'resumen' && inventoryUi.level === 'avanzado'
     && inventoryFeature('valor_inventario_basico') && !inventoryUi.data.resumenValoracion;
-  if (!force && inventoryUi.data[tab] && !needsAdvancedValuation) return renderInventoryActiveTab();
-  content.innerHTML = inventoryLoading();
+  if (!force && inventoryUi.data[tab] && !needsAdvancedValuation) { renderInventoryActiveTab(); return true; }
+  if (!keepPrevious) content.innerHTML = inventoryLoading();
   content.setAttribute('aria-busy', 'true');
   const request = ++inventoryUi.request;
   try {
-    const query = inventoryFilterQuery().toString();
+    const query = inventoryFilterQuery(filters, commitFilters ? 1 : inventoryUi.page).toString();
     if (tab === 'resumen') {
       const advanced = inventoryUi.level === 'avanzado';
       const [summary, valuation, lots] = await Promise.all([
@@ -3550,6 +3549,8 @@ async function loadInventoryActiveTab(force = false) {
           ? api(`/api/inventario-inteligente/valoracion?${query}`) : Promise.resolve(null),
         advanced && hasLotOperationalAccess() ? api('/api/lotes/resumen') : Promise.resolve(null)
       ]);
+      if (request !== inventoryUi.request || inventoryUi.activeTab !== tab) return false;
+      if (commitFilters) { inventoryUi.appliedFilters = filters; inventoryUi.page = 1; inventoryUi.data = {}; }
       inventoryUi.data.resumen = summary;
       inventoryUi.data.resumenValoracion = valuation;
       inventoryUi.data.resumenLotes = lots;
@@ -3558,14 +3559,25 @@ async function loadInventoryActiveTab(force = false) {
         alertas: 'alertas', ranking: 'ranking', valoracion: 'valoracion', sugerencias: 'compras-sugeridas',
         rotacion: 'rotacion', sinMovimiento: 'sin-movimiento', configuracion: 'configuracion'
       };
-      inventoryUi.data[tab] = await api(`/api/inventario-inteligente/${endpoints[tab]}?${tab === 'configuracion' ? 'limite=100' : query}`);
+      const result = await api(`/api/inventario-inteligente/${endpoints[tab]}?${tab === 'configuracion' ? 'limite=100' : query}`);
+      if (request !== inventoryUi.request || inventoryUi.activeTab !== tab) return false;
+      if (commitFilters) { inventoryUi.appliedFilters = filters; inventoryUi.page = 1; inventoryUi.data = {}; }
+      inventoryUi.data[tab] = result;
     }
     if (request === inventoryUi.request && inventoryUi.activeTab === tab) renderInventoryActiveTab();
+    return true;
   } catch (error) {
     if (request === inventoryUi.request && inventoryUi.activeTab === tab) {
-      content.innerHTML = inventoryErrorState(error);
-      content.querySelector('[data-inventory-retry]')?.addEventListener('click', () => loadInventoryActiveTab(true));
+      const dialogError = document.getElementById('inventoryFilterError');
+      if (keepPrevious && dialogError?.closest('dialog')?.open) {
+        dialogError.textContent = UiPatterns.messageFor(error);
+        dialogError.hidden = false;
+      } else {
+        content.innerHTML = inventoryErrorState(error);
+        content.querySelector('[data-inventory-retry]')?.addEventListener('click', () => loadInventoryActiveTab(true));
+      }
     }
+    return false;
   } finally {
     if (request === inventoryUi.request) content.removeAttribute('aria-busy');
   }
@@ -3700,8 +3712,9 @@ async function downloadInventoryExport() {
 async function inventarioInteligente() {
   const today = new Date();
   const start = new Date(today.getFullYear(), today.getMonth(), today.getDate() - 29);
-  inventoryUi = { level: 'simple', activeTab: 'resumen', rankingMode: 'ingresos', movementClass: '', page: 1, request: 0, data: {} };
-  view.innerHTML = `<div class="panel inventory-filter-panel">
+  inventoryUi = { level: 'simple', activeTab: 'resumen', rankingMode: 'ingresos', movementClass: '', page: 1, request: 0, data: {}, appliedFilters: {} };
+  view.innerHTML = `<div class="toolbar lot-filter-toolbar"><div><h3>Inteligencia de inventario</h3><p class="muted">Revisa alertas, rotación y decisiones de abastecimiento.</p></div><div class="actions"><button type="button" class="secondary" id="openInventoryFilters">Filtros</button>${inventoryFeature('exportacion_inventario') ? '<button type="button" class="secondary" id="exportInventory">Exportar inventario</button>' : ''}</div></div>
+    <dialog id="inventoryFilterDialog" class="owner-filter-dialog" aria-labelledby="inventoryFilterTitle"><div class="owner-filter-heading"><h3 id="inventoryFilterTitle">Filtrar inteligencia de inventario</h3><button type="button" class="secondary" id="closeInventoryFilters">Cerrar</button></div>
     <form id="inventoryFilters" class="inventory-filters">
       <label>Desde<input type="date" name="desde" value="${localDateValue(start)}"></label>
       <label>Hasta<input type="date" name="hasta" value="${localDateValue(today)}"></label>
@@ -3714,15 +3727,32 @@ async function inventarioInteligente() {
       <label>Alerta<select name="tipoAlerta"><option value="">Todas</option><option value="stock_vendible_bajo">Stock bajo</option><option value="sin_stock_vendible">Sin stock</option><option value="exceso_inventario">Exceso</option><option value="baja_rotacion">Baja rotación</option><option value="sin_movimiento">Sin movimiento</option><option value="proximo_vencimiento">Próximo vencimiento</option><option value="vencido">Vencido</option><option value="stock_no_vendible_alto">No vendible alto</option><option value="conciliacion">Conciliación</option></select></label>
       <label>Sugerencias<select name="estadoSugerencia"><option value="todos">Todas</option><option value="urgente">Urgentes</option><option value="recomendada">Recomendadas</option><option value="suficiente">Suficientes</option><option value="exceso">Exceso</option><option value="sin_datos">Sin datos</option></select></label>
       <label>Resultados<select name="limite"><option value="25">25</option><option value="50" selected>50</option><option value="100">100</option></select></label>
-      <div class="inventory-filter-actions"><button type="submit">Aplicar filtros</button><button type="button" class="secondary" id="clearInventoryFilters">Limpiar</button>${inventoryFeature('exportacion_inventario') ? '<button type="button" class="secondary" id="exportInventory">Exportar inventario</button>' : ''}</div>
+      <div class="filter-actions"><button type="button" class="secondary" id="clearInventoryFilters">Limpiar</button><button type="submit">Aplicar</button></div>
     </form>
-    <p class="hint">El período incluye ambos días elegidos. Máximo 365 días.</p>
-  </div>
+    <p class="hint">El período incluye ambos días elegidos. Máximo 365 días.</p><p class="form-error" id="inventoryFilterError" role="alert" hidden></p></dialog>
   <div class="inventory-level-switch" role="group" aria-label="Nivel de análisis"><button type="button" data-inventory-level="simple" aria-pressed="true">Simple</button><button type="button" data-inventory-level="avanzado" aria-pressed="false">Avanzado</button></div>
   <div class="inventory-tabs" role="tablist" aria-label="Análisis de inventario"></div>
   ${!inventoryAdvancedAvailable() ? '<div class="inventory-plan-note"><strong>Análisis avanzado</strong><span>Algunas funciones de análisis no están incluidas en tu plan actual.</span></div>' : ''}
   <div class="panel inventory-content" id="inventoryContent"></div>`;
   const form = document.getElementById('inventoryFilters');
+  const dialog = document.getElementById('inventoryFilterDialog');
+  const trigger = document.getElementById('openInventoryFilters');
+  const errorTarget = document.getElementById('inventoryFilterError');
+  inventoryUi.appliedFilters = formData(form);
+  const restore = () => {
+    for (const control of form.elements) {
+      if (control.name) control.value = inventoryUi.appliedFilters[control.name] ?? '';
+    }
+    errorTarget.hidden = true;
+  };
+  trigger.addEventListener('click', () => { restore(); dialog.showModal(); form.elements.desde.focus(); });
+  document.getElementById('closeInventoryFilters').addEventListener('click', () => {
+    if (!form.querySelector('[type="submit"]').disabled) dialog.close();
+  });
+  dialog.addEventListener('cancel', (event) => {
+    if (form.querySelector('[type="submit"]').disabled) event.preventDefault();
+  });
+  dialog.addEventListener('close', () => { restore(); trigger.focus(); });
   form.elements.ventana.addEventListener('change', () => {
     if (!form.elements.ventana.value) return;
     form.elements.desde.value = '';
@@ -3731,27 +3761,26 @@ async function inventarioInteligente() {
   ['desde', 'hasta'].forEach((field) => form.elements[field].addEventListener('change', () => {
     if (form.elements[field].value) form.elements.ventana.value = '';
   }));
-  const updateInventoryFilters = compactInventoryFilters(form,
-    ['desde', 'hasta', 'ventana', 'categoria', 'proveedor', 'producto', 'estado', 'prioridad', 'tipoAlerta', 'estadoSugerencia', 'limite'],
-    { desde: form.elements.desde.value, hasta: form.elements.hasta.value, estadoSugerencia: 'todos', limite: '50' });
   form.addEventListener('submit', async (event) => {
     event.preventDefault();
+    const submit = form.querySelector('[type="submit"]');
+    const candidate = formData(form);
     try {
-      inventoryFilterQuery();
-      inventoryUi.page = 1;
-      inventoryUi.data = {};
-      await loadInventoryActiveTab(true);
-    } catch (error) { showError(error.message); }
+      inventoryFilterQuery(candidate, 1);
+      submit.disabled = true;
+      errorTarget.hidden = true;
+      if (await loadInventoryActiveTab(true, { filters: candidate, keepPrevious: true, commitFilters: true })) dialog.close();
+    } catch (error) {
+      errorTarget.textContent = error.message;
+      errorTarget.hidden = false;
+    } finally { submit.disabled = false; }
   });
-  document.getElementById('clearInventoryFilters').addEventListener('click', async () => {
+  document.getElementById('clearInventoryFilters').addEventListener('click', () => {
     form.reset();
     form.elements.desde.value = localDateValue(start);
     form.elements.hasta.value = localDateValue(today);
     form.elements.ventana.value = '';
-    updateInventoryFilters();
-    inventoryUi.page = 1;
-    inventoryUi.data = {};
-    await loadInventoryActiveTab(true);
+    errorTarget.hidden = true;
   });
   document.getElementById('exportInventory')?.addEventListener('click', downloadInventoryExport);
   document.querySelectorAll('[data-inventory-level]').forEach((button) => button.addEventListener('click', async () => {
@@ -3799,13 +3828,17 @@ function lotEmpty(text) {
   return UiPatterns.empty('Sin datos', escapeHtml(text));
 }
 
-function lotFilterQuery(page = lotUi.page) {
-  const form = document.getElementById('lotFilters');
-  const values = form ? formData(form) : {};
-  const query = new URLSearchParams({ pagina: String(page), limite: values.limite || '25' });
+function readLotFilters(form) {
+  const filters = new URLSearchParams(formData(form));
+  if (form.elements.soloConSaldo.checked) filters.set('soloConSaldo', 'true');
+  return filters;
+}
+
+function lotFilterQuery(page = lotUi.page, filters = lotUi.appliedFilters) {
+  const query = new URLSearchParams({ pagina: String(page), limite: filters?.get('limite') || '25' });
   ['producto', 'proveedor', 'codigoLote', 'estadoOperativo', 'estadoCalculado', 'venceDesde', 'venceHasta']
-    .forEach((key) => { if (values[key]) query.set(key, values[key]); });
-  if (form?.querySelector('[name="soloConSaldo"]')?.checked) query.set('soloConSaldo', 'true');
+    .forEach((key) => { if (filters?.get(key)) query.set(key, filters.get(key)); });
+  if (filters?.get('soloConSaldo')) query.set('soloConSaldo', 'true');
   return query;
 }
 
@@ -3867,20 +3900,25 @@ function wireLotRowActions(root) {
   }));
 }
 
-async function loadLotsPanel(page = 1) {
+async function loadLotsPanel(page = 1, filters = lotUi.appliedFilters, { keepPrevious = false } = {}) {
   const target = document.getElementById('lotContent');
-  if (!target) return;
-  target.innerHTML = lotLoading(lotUi.activeTab === 'alertas' ? 'Cargando alertas...' : 'Cargando lotes...');
+  if (!target) return false;
+  if (!keepPrevious) target.innerHTML = lotLoading(lotUi.activeTab === 'alertas' ? 'Cargando alertas...' : 'Cargando lotes...');
+  const request = ++lotUi.request;
+  const exportButton = document.getElementById('exportLots');
+  target.setAttribute('aria-busy', 'true');
+  if (exportButton) exportButton.disabled = true;
   try {
-    const query = lotFilterQuery(page);
+    const query = lotFilterQuery(page, filters);
     const [summary, data] = await Promise.all([
       api(`/api/lotes/resumen?${query}`),
       api(`/api/lotes?${query}`)
     ]);
+    if (request !== lotUi.request) return false;
     lotUi.page = Number(data.page || 1);
     lotUi.pages = Number(data.pages || 1);
     const alertNote = lotUi.activeTab === 'alertas'
-      ? '<div class="inventory-note"><strong>Alertas de vencimiento</strong><p>Use el filtro de estado para revisar vencidos, los que vencen hoy, próximos, bloqueados o agotados.</p><div class="inventory-segmented"><button type="button" data-lot-alert-days="7">Próximos 7 días</button><button type="button" data-lot-alert-days="15">15 días</button><button type="button" data-lot-alert-days="30">30 días</button><button type="button" class="secondary" data-lot-alert-days="all">Limpiar período</button></div></div>' : '';
+      ? '<div class="inventory-note"><strong>Alertas de vencimiento</strong><p>Abre Filtros para revisar vencidos, los que vencen hoy, próximos, bloqueados o agotados.</p><div class="inventory-segmented"><button type="button" data-lot-alert-days="7">Próximos 7 días</button><button type="button" data-lot-alert-days="15">15 días</button><button type="button" data-lot-alert-days="30">30 días</button><button type="button" class="secondary" data-lot-alert-days="all">Limpiar período</button></div></div>' : '';
     target.innerHTML = `${renderLotSummary(summary)}${alertNote}<div class="lot-results-heading"><strong>${escapeHtml(data.total)} lotes</strong><span>Página ${lotUi.page} de ${lotUi.pages}</span></div>${renderLotRows(data.rows)}
       <div class="movement-pagination"><button type="button" class="secondary" id="lotPrevious">Anterior</button><span>Página ${lotUi.page} de ${lotUi.pages}</span><button type="button" class="secondary" id="lotNext">Siguiente</button></div>`;
     document.getElementById('lotPrevious').disabled = lotUi.page <= 1;
@@ -3901,11 +3939,30 @@ async function loadLotsPanel(page = 1) {
         form.elements.venceHasta.value = localDateValue(new Date(today.getFullYear(), today.getMonth(), today.getDate() + days));
         form.elements.estadoCalculado.value = 'proximo_a_vencer';
       }
-      loadLotsPanel(1);
+      const candidate = readLotFilters(form);
+      loadLotsPanel(1, candidate, { keepPrevious: true }).then((loaded) => {
+        if (loaded) lotUi.appliedFilters = candidate;
+      });
     }));
+    return true;
   } catch (error) {
-    target.innerHTML = `<div class="inventory-empty inventory-error"><strong>No se pudo cargar</strong><p>${escapeHtml(error.message)}</p><button type="button" id="retryLots">Reintentar</button></div>`;
-    document.getElementById('retryLots').addEventListener('click', () => loadLotsPanel(page));
+    if (request !== lotUi.request) return false;
+    const dialogError = document.getElementById('lotFilterError');
+    if (dialogError?.closest('dialog')?.open) {
+      dialogError.textContent = error.message;
+      dialogError.hidden = false;
+    } else if (keepPrevious) {
+      showError(error.message);
+    } else {
+      target.innerHTML = `<div class="inventory-empty inventory-error"><strong>No se pudo cargar</strong><p>${escapeHtml(error.message)}</p><button type="button" id="retryLots">Reintentar</button></div>`;
+      document.getElementById('retryLots').addEventListener('click', () => loadLotsPanel(page));
+    }
+    return false;
+  } finally {
+    if (request === lotUi.request) {
+      target.removeAttribute('aria-busy');
+      if (exportButton) exportButton.disabled = false;
+    }
   }
 }
 
@@ -3922,7 +3979,7 @@ async function openLotDetail(idLote) {
       body: `<div class="lot-detail-grid">
         <div><span>Producto</span><strong>${escapeHtml(lot.producto)}</strong></div><div><span>Código</span><strong>${escapeHtml(lot.codigoLote || 'Sin código')}</strong></div>
         <div><span>Estado</span>${lotBadge(lot.estadoOperativo)}</div>
-        <div><span>Clasificacion</span>${lotBadge(lot.clasificacionInventario)}</div>
+        <div><span>Clasificación</span>${lotBadge(lot.clasificacionInventario)}</div>
         <div><span>Vencimiento</span><strong>${lotDate(lot.fechaVencimiento)}</strong></div>
         <div><span>Ingreso</span><strong>${escapeHtml(formatDate(lot.fechaIngreso))}</strong></div><div><span>Proveedor</span><strong>${escapeHtml(lot.proveedor || 'Sin proveedor')}</strong></div>
         <div><span>Cantidad inicial</span><strong>${escapeHtml(lot.cantidadInicial)}</strong></div><div><span>Cantidad restante</span><strong>${escapeHtml(lot.cantidadRestante)}</strong></div>
@@ -3980,12 +4037,13 @@ async function downloadLotExport() {
 }
 
 async function lotesVencimientos() {
-  lotUi = { page: 1, pages: 1, activeTab: 'lotes' };
+  lotUi = { page: 1, pages: 1, activeTab: 'lotes', request: 0, appliedFilters: new URLSearchParams() };
   const canAlert = hasFeature('alertas_vencimiento');
   const canExport = hasFeature('exportacion_lotes');
   const downgraded = !hasFeature('trazabilidad_lotes') && Number(state.lotAccess?.productosControlados || 0) > 0;
   view.innerHTML = `${downgraded ? '<div class="inventory-plan-note"><strong>Trazabilidad protegida</strong><span>La tienda conserva productos controlados. Puede consultar sus lotes, pero las funciones avanzadas dependen del plan actual.</span></div>' : ''}
-    <div class="panel lot-filter-panel"><form id="lotFilters" class="lot-filters">
+    <div class="toolbar lot-filter-toolbar"><div><h3>Lotes y vencimientos</h3><p class="muted">Consulta existencias y fechas sin modificar el stock.</p></div><div class="actions"><button type="button" class="secondary" id="openLotFilters">Filtros</button>${canExport ? '<button type="button" class="secondary" id="exportLots">Exportar XLSX</button>' : ''}</div></div>
+    <dialog id="lotFilterDialog" class="owner-filter-dialog" aria-labelledby="lotFilterTitle"><div class="owner-filter-heading"><h3 id="lotFilterTitle">Filtrar lotes</h3><button type="button" class="secondary" id="closeLotFilters">Cerrar</button></div><form id="lotFilters" class="lot-filters">
       <label>Producto<select name="producto">${options(state.productos, 'idProducto', 'nombre', 'Todos')}</select></label>
       <label>Proveedor<select name="proveedor">${options(state.proveedores, 'idProveedor', 'nombre', 'Todos')}</select></label>
       <label>Código de lote<input name="codigoLote" maxlength="80" placeholder="Buscar código"></label>
@@ -3994,16 +4052,45 @@ async function lotesVencimientos() {
       <label>Vence desde<input name="venceDesde" type="date"></label><label>Vence hasta<input name="venceHasta" type="date"></label>
       <label>Resultados<select name="limite"><option value="25">25</option><option value="50">50</option><option value="100">100</option></select></label>
       <label class="check"><input name="soloConSaldo" type="checkbox"> Solo con saldo</label>
-      <div class="lot-filter-actions"><button type="submit">Aplicar filtros</button><button type="button" class="secondary" id="clearLotFilters">Limpiar</button>${canExport ? '<button type="button" class="secondary" id="exportLots">Exportar XLSX</button>' : ''}</div>
-    </form></div>
+      <div class="filter-actions"><button type="button" class="secondary" id="clearLotFilters">Limpiar</button><button type="submit">Aplicar</button></div>
+    </form><p class="form-error" id="lotFilterError" role="alert" hidden></p></dialog>
     <div class="inventory-tabs" role="tablist" aria-label="Vistas de lotes"><button type="button" class="active" role="tab" data-lot-tab="lotes" aria-selected="true">Todos los lotes</button>${canAlert ? '<button type="button" role="tab" data-lot-tab="alertas" aria-selected="false">Alertas</button>' : ''}</div>
     <div class="panel" id="lotContent"></div>`;
   const form = document.getElementById('lotFilters');
-  const updateLotFilters = compactInventoryFilters(form,
-    ['producto', 'proveedor', 'codigoLote', 'estadoOperativo', 'estadoCalculado', 'venceDesde', 'venceHasta', 'limite', 'soloConSaldo'],
-    { limite: '25' });
-  form.addEventListener('submit', (event) => { event.preventDefault(); loadLotsPanel(1); });
-  document.getElementById('clearLotFilters').addEventListener('click', () => { form.reset(); updateLotFilters(); loadLotsPanel(1); });
+  const dialog = document.getElementById('lotFilterDialog');
+  const trigger = document.getElementById('openLotFilters');
+  const errorTarget = document.getElementById('lotFilterError');
+  lotUi.appliedFilters = readLotFilters(form);
+  const restore = () => {
+    for (const control of form.elements) {
+      if (!control.name) continue;
+      if (control.type === 'checkbox') control.checked = lotUi.appliedFilters.has(control.name);
+      else control.value = lotUi.appliedFilters.get(control.name) || (control.name === 'limite' ? '25' : '');
+    }
+    errorTarget.hidden = true;
+  };
+  trigger.addEventListener('click', () => { restore(); dialog.showModal(); form.elements.producto.focus(); });
+  document.getElementById('closeLotFilters').addEventListener('click', () => {
+    if (!form.querySelector('[type="submit"]').disabled) dialog.close();
+  });
+  document.getElementById('clearLotFilters').addEventListener('click', () => form.reset());
+  dialog.addEventListener('cancel', (event) => {
+    if (form.querySelector('[type="submit"]').disabled) event.preventDefault();
+  });
+  dialog.addEventListener('close', () => { restore(); trigger.focus(); });
+  form.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    const submit = form.querySelector('[type="submit"]');
+    submit.disabled = true;
+    errorTarget.hidden = true;
+    const candidate = readLotFilters(form);
+    try {
+      if (await loadLotsPanel(1, candidate, { keepPrevious: true })) {
+        lotUi.appliedFilters = candidate;
+        dialog.close();
+      }
+    } finally { submit.disabled = false; }
+  });
   document.getElementById('exportLots')?.addEventListener('click', downloadLotExport);
   document.querySelectorAll('[data-lot-tab]').forEach((button) => button.addEventListener('click', () => {
     lotUi.activeTab = button.dataset.lotTab;
@@ -4012,7 +4099,10 @@ async function lotesVencimientos() {
       tab.classList.toggle('active', active);
       tab.setAttribute('aria-selected', String(active));
     });
-    if (lotUi.activeTab === 'alertas' && !form.elements.estadoCalculado.value) form.elements.estadoCalculado.value = 'proximo_a_vencer';
+    if (lotUi.activeTab === 'alertas' && !lotUi.appliedFilters.get('estadoCalculado')) {
+      lotUi.appliedFilters.set('estadoCalculado', 'proximo_a_vencer');
+      restore();
+    }
     loadLotsPanel(1);
   }));
   await loadLotsPanel(1);

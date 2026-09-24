@@ -3455,13 +3455,23 @@ button.is-busy { cursor: wait; opacity: .72; }
 .owner-filter-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .owner-filter-heading h3 { margin: 0; }
 .owner-filter-dialog .movement-filters,
-.owner-filter-dialog .filter-bar { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin: 18px 0 0; }
+.owner-filter-dialog .filter-bar,
+.owner-filter-dialog .lot-filters,
+.owner-filter-dialog .inventory-filters,
+.owner-filter-dialog .inventory-reconciliation-filters,
+.owner-filter-dialog .segmentation-filters { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin: 18px 0 0; }
+.segmentation-specific-fields { display: contents; }
 .owner-filter-dialog .filter-actions { grid-column: 1 / -1; justify-content: flex-end; }
+.lot-filter-toolbar { align-items: center; }
 .movement-search { display: flex; align-items: end; gap: 12px; flex-wrap: wrap; }
 .movement-search label { flex: 1 1 220px; }
 @media (max-width: 560px) {
   .owner-filter-dialog .movement-filters,
-  .owner-filter-dialog .filter-bar { grid-template-columns: 1fr; }
+  .owner-filter-dialog .filter-bar,
+  .owner-filter-dialog .lot-filters,
+  .owner-filter-dialog .inventory-filters,
+  .owner-filter-dialog .inventory-reconciliation-filters,
+  .owner-filter-dialog .segmentation-filters { grid-template-columns: 1fr; }
   .owner-filter-dialog .filter-actions { display: flex; flex-wrap: wrap; }
   .movement-search button { flex: 1 1 100px; }
 }

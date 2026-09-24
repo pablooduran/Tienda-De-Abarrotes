@@ -118,23 +118,22 @@
           <h3 id="inventoryHistoryTitle">Historial de ajustes</h3>${historyTable(state.history)}
         </section>`;
       root.querySelector('[data-inventory-previous]')?.addEventListener('click', () => {
-        state.page -= 1;
-        load();
+        load({ page: state.page - 1, status: state.status, search: state.search });
       });
       root.querySelector('[data-inventory-next]')?.addEventListener('click', () => {
-        state.page += 1;
-        load();
+        load({ page: state.page + 1, status: state.status, search: state.search });
       });
     }
 
-    async function load() {
+    async function load(filters = { page: state.page, status: state.status, search: state.search }, keepPrevious = false) {
       const request = ++state.request;
       const target = root.querySelector('[data-inventory-content]');
-      target.innerHTML = loading();
+      if (!keepPrevious) target.innerHTML = loading();
+      target.setAttribute('aria-busy', 'true');
       const query = new URLSearchParams({
-        page: String(state.page), pageSize: String(state.pageSize), estado: state.status
+        page: String(filters.page), pageSize: String(state.pageSize), estado: filters.status
       });
-      if (state.search) query.set('busqueda', state.search);
+      if (filters.search) query.set('busqueda', filters.search);
       try {
         const [reconciliation, history] = await Promise.all([
           api(`/api/inventario/conciliacion?${query}`),
@@ -142,14 +141,30 @@
             ? api('/api/inventario/ajustes?page=1&pageSize=25')
             : Promise.resolve({ resultados: [], paginacion: {} })
         ]);
-        if (request !== state.request) return;
+        if (request !== state.request) return false;
+        state.page = filters.page;
+        state.status = filters.status;
+        state.search = filters.search;
         state.reconciliation = reconciliation;
         state.history = history;
         renderData();
+        return true;
       } catch (error) {
-        if (request !== state.request) return;
-        target.innerHTML = errorState(error);
-        target.querySelector('[data-inventory-retry]')?.addEventListener('click', load);
+        if (request !== state.request) return false;
+        const dialog = root.querySelector('[data-inventory-filter-dialog]');
+        if (keepPrevious) {
+          const errorTarget = dialog?.open
+            ? dialog.querySelector('[data-inventory-filter-error]')
+            : root.querySelector('[data-inventory-search-error]');
+          errorTarget.textContent = patterns.messageFor(error);
+          errorTarget.hidden = false;
+        } else {
+          target.innerHTML = errorState(error);
+          target.querySelector('[data-inventory-retry]')?.addEventListener('click', () => load());
+        }
+        return false;
+      } finally {
+        if (request === state.request) target.removeAttribute('aria-busy');
       }
     }
 
@@ -334,33 +349,71 @@
         </div>${hasFeature('ajuste_stock') && !isReadOnly()
           ? '<button type="button" data-new-inventory-adjustment>Registrar ajuste</button>'
           : '<span class="muted">Ajustes no disponibles en modo de solo lectura.</span>'}</div>
-        <form class="inventory-reconciliation-filters" data-inventory-filters>
-          <label>Buscar<input name="busqueda" maxlength="100"></label>
+        <form class="panel movement-search" data-inventory-search>
+          <label>Buscar producto<input name="busqueda" type="search" maxlength="100"></label>
+          <button type="submit" class="secondary">Buscar</button>
+          <button type="button" class="secondary" data-open-inventory-filters>Filtros</button>
+        </form><p class="form-error" data-inventory-search-error role="alert" hidden></p>
+        <dialog class="owner-filter-dialog" data-inventory-filter-dialog aria-labelledby="inventoryReconciliationFilterTitle">
+          <div class="owner-filter-heading"><h3 id="inventoryReconciliationFilterTitle">Filtrar conciliación</h3>
+            <button type="button" class="secondary" data-close-inventory-filters>Cerrar</button></div>
+          <form class="inventory-reconciliation-filters" data-inventory-filters>
           <label>Estado<select name="estado"><option value="todos">Todos</option>
             <option value="ok">Correctos</option><option value="warning">Advertencias</option>
             <option value="error">Errores</option></select></label>
-          <div class="filter-actions"><button type="submit" class="secondary">Aplicar filtros</button>
-            <button type="button" class="secondary" data-inventory-clear>Limpiar filtros</button></div>
-        </form><div data-inventory-content>${loading()}</div>
+          <div class="filter-actions"><button type="button" class="secondary" data-inventory-clear>Limpiar</button>
+            <button type="submit">Aplicar</button></div>
+          </form><p class="form-error" data-inventory-filter-error role="alert" hidden></p>
+        </dialog><div data-inventory-content>${loading()}</div>
       </section>`;
       root.querySelector('[data-new-inventory-adjustment]')?.addEventListener(
         'click', (event) => openAdjustment(event.currentTarget)
       );
-      root.querySelector('[data-inventory-filters]').addEventListener('submit', (event) => {
+      const searchForm = root.querySelector('[data-inventory-search]');
+      const filterForm = root.querySelector('[data-inventory-filters]');
+      const dialog = root.querySelector('[data-inventory-filter-dialog]');
+      const trigger = root.querySelector('[data-open-inventory-filters]');
+      const filterError = root.querySelector('[data-inventory-filter-error]');
+      const searchError = root.querySelector('[data-inventory-search-error]');
+      trigger.addEventListener('click', () => {
+        filterForm.elements.estado.value = state.status;
+        filterError.hidden = true;
+        dialog.showModal();
+        filterForm.elements.estado.focus();
+      });
+      root.querySelector('[data-close-inventory-filters]').addEventListener('click', () => {
+        if (!filterForm.querySelector('[type="submit"]').disabled) dialog.close();
+      });
+      dialog.addEventListener('cancel', (event) => {
+        if (filterForm.querySelector('[type="submit"]').disabled) event.preventDefault();
+      });
+      dialog.addEventListener('close', () => {
+        filterForm.elements.estado.value = state.status;
+        filterError.hidden = true;
+        trigger.focus();
+      });
+      searchForm.addEventListener('submit', async (event) => {
         event.preventDefault();
-        state.search = event.currentTarget.elements.busqueda.value.trim();
-        state.status = event.currentTarget.elements.estado.value;
-        state.page = 1;
-        load();
+        searchError.hidden = true;
+        await load({ page: 1, status: state.status, search: searchForm.elements.busqueda.value.trim() }, true);
       });
-      root.querySelector('[data-inventory-clear]').addEventListener('click', () => {
-        const form = root.querySelector('[data-inventory-filters]');
-        form.reset();
-        state.search = '';
-        state.status = 'todos';
-        state.page = 1;
-        load();
+      filterForm.addEventListener('submit', async (event) => {
+        event.preventDefault();
+        const submit = filterForm.querySelector('[type="submit"]');
+        submit.disabled = true;
+        filterError.hidden = true;
+        const candidate = {
+          page: 1, status: filterForm.elements.estado.value,
+          search: searchForm.elements.busqueda.value.trim()
+        };
+        try {
+          if (await load(candidate, true)) {
+            searchError.hidden = true;
+            dialog.close();
+          }
+        } finally { submit.disabled = false; }
       });
+      root.querySelector('[data-inventory-clear]').addEventListener('click', () => filterForm.reset());
       await load();
     }
 

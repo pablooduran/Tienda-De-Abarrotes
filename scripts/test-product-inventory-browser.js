@@ -14,7 +14,7 @@ function json(response, body) {
 }
 
 function context() {
-  return { tienda: { nombre: 'Tienda inventario' }, plan: { nombre: 'Pro' }, suscripcion: { fechaFin: '2026-12-31 00:00:00', diasRestantes: 120 }, caracteristicas: ['inventario_resumen', 'historial_stock', 'ajuste_stock', 'control_lotes', 'alertas_vencimiento', 'trazabilidad_lotes', 'gastos'] };
+  return { tienda: { nombre: 'Tienda inventario' }, plan: { nombre: 'Pro' }, suscripcion: { fechaFin: '2026-12-31 00:00:00', diasRestantes: 120 }, caracteristicas: ['inventario_resumen', 'exportacion_inventario', 'historial_stock', 'ajuste_stock', 'control_lotes', 'alertas_vencimiento', 'trazabilidad_lotes', 'exportacion_lotes', 'gastos'] };
 }
 
 function serverFor(requests) {
@@ -24,6 +24,15 @@ function serverFor(requests) {
     if (url.pathname.startsWith('/api/')) {
       if (url.pathname === '/api/contexto') return json(response, context());
       if (url.pathname === '/api/lotes/acceso') return json(response, { productosControlados: 0 });
+      if (url.pathname === '/api/lotes/resumen') {
+        if (url.searchParams.get('codigoLote') === 'FALLO') { response.writeHead(503, { 'Content-Type': 'application/json' }); return response.end(JSON.stringify({ error: 'Consulta temporalmente no disponible' })); }
+        return json(response, { productosControlados: 0, stockTrazado: 0, stockVendible: 0, stockNoVendible: 0, stockVencido: 0, stockBloqueado: 0, stockAislado: 0, stockTecnico: 0, lotesProximos: 0, valorTotalRestante: 0, lotesVencidos: 0, lotesVencenHoy: 0, lotesBloqueados: 0, lotesAgotados: 0, lotesCostoDesconocido: 0 });
+      }
+      if (url.pathname === '/api/lotes') return json(response, { page: 1, pages: 1, total: 0, rows: [] });
+      if (url.pathname === '/api/inventario-inteligente/resumen') {
+        if (url.searchParams.get('prioridad') === 'critical') { response.writeHead(503, { 'Content-Type': 'application/json' }); return response.end(JSON.stringify({ error: 'Consulta temporalmente no disponible' })); }
+        return json(response, { estados: {}, productosActivos: 0, periodo: {} });
+      }
       if (url.pathname === '/api/dashboard') return json(response, { ventasHoy: 0, ventasAyer: 0, ventasMes: 0, ventasMesPasado: 0, gananciaHoy: 0, gananciaMes: 0, bajoStock: 0, fiados: {}, chartVentasDias: [] });
       if (url.pathname === '/api/productos') return json(response, [{ idProducto: 1, nombre: 'Arroz prueba', categoria: 'Granos', proveedor: 'Proveedor prueba', precioVenta: 10, stockUnidadesTotal: 8, unidadesPorPaquete: 1, activo: 1, bajoStock: false, controlaLotes: 0 }]);
       if (['/api/clientes', '/api/proveedores', '/api/fiados', '/api/ventas', '/api/categorias'].includes(url.pathname)) return json(response, []);
@@ -128,7 +137,77 @@ async function verifyViewport(browser, baseUrl, viewport, requests) {
     await page.locator('#view').getByText('1. Proveedor y productos').waitFor();
     assert.strictEqual(await page.locator('text=1. Proveedor y productos').count(), 1, 'Paso inicial de compra.');
     assert.strictEqual(await page.locator('text=3. Confirmación').count(), 1, 'Paso de confirmacion de compra.');
-    assert.strictEqual(errors.filter((error) => error.includes('status of 503')).length, 2, 'Solo fallan las dos consultas simuladas.');
+    await inventoryView(page, 'lotesVencimientos');
+    await page.locator('#lotContent .lot-results-heading').waitFor();
+    assert.strictEqual(await page.locator('#lotFilterDialog').isVisible(), false, 'Filtros de lotes cerrados inicialmente.');
+    assert.strictEqual(await page.locator('#exportLots').isVisible(), true, 'Exportar queda disponible fuera del filtro.');
+    await page.locator('#openLotFilters').click();
+    await page.locator('#lotFilters [name="codigoLote"]').fill('BORRADOR');
+    await page.locator('#closeLotFilters').click();
+    await page.waitForFunction(() => document.querySelector('#lotFilters [name="codigoLote"]')?.value === '');
+    assert(!requests.some((request) => request.path === '/api/lotes' && request.search.includes('BORRADOR')), 'Cerrar descarta el filtro de lote.');
+    await page.locator('#openLotFilters').click();
+    await page.locator('#lotFilters [name="codigoLote"]').fill('LOTE-QA');
+    await page.locator('#lotFilters [name="soloConSaldo"]').check();
+    await page.locator('#lotFilters button[type="submit"]').click();
+    await page.locator('#lotFilterDialog').waitFor({ state: 'hidden' });
+    assert(requests.some((request) => request.path === '/api/lotes' && request.search.includes('codigoLote=LOTE-QA') && request.search.includes('soloConSaldo=true')), 'Aplicar consulta lotes con los filtros elegidos.');
+    assert.strictEqual(await page.evaluate(() => document.activeElement?.id), 'openLotFilters', 'Lotes devuelve el foco al botón.');
+    const lotResults = await page.locator('#lotContent').innerHTML();
+    await page.locator('#openLotFilters').click();
+    await page.locator('#lotFilters [name="codigoLote"]').fill('FALLO');
+    await page.locator('#lotFilters button[type="submit"]').click();
+    await page.locator('#lotFilterError:visible').waitFor();
+    assert.strictEqual(await page.locator('#lotContent').innerHTML(), lotResults, 'El error de lotes conserva resultados previos.');
+    await page.locator('#closeLotFilters').click();
+    await page.waitForFunction(() => document.querySelector('#lotFilters [name="codigoLote"]')?.value === 'LOTE-QA');
+    await page.locator('[data-lot-tab="alertas"]').click();
+    await page.locator('[data-lot-alert-days="7"]').click();
+    await page.waitForFunction(() => document.querySelector('#lotFilters [name="venceHasta"]')?.value !== '');
+    assert(requests.some((request) => request.path === '/api/lotes' && request.search.includes('estadoCalculado=proximo_a_vencer') && request.search.includes('venceHasta=')), 'Acceso rápido de alertas aplica vencimiento.');
+    const exportRequest = page.waitForRequest((request) => request.url().includes('/api/lotes/exportacion.xlsx'));
+    await page.locator('#exportLots').click();
+    const exportUrl = new URL((await exportRequest).url());
+    assert.strictEqual(exportUrl.searchParams.get('codigoLote'), 'LOTE-QA', 'Exportar conserva el código aplicado.');
+    assert.strictEqual(exportUrl.searchParams.get('estadoCalculado'), 'proximo_a_vencer', 'Exportar conserva el estado aplicado por Alertas.');
+    assert(exportUrl.searchParams.has('venceHasta'), 'Exportar conserva el rango rápido de vencimiento.');
+    await inventoryView(page, 'inventarioInteligente');
+    await page.locator('#inventorySimpleTitle').waitFor();
+    assert.strictEqual(await page.locator('#inventoryFilterDialog').isVisible(), false, 'Inteligencia inicia con filtros cerrados.');
+    assert.strictEqual(await page.locator('#exportInventory').isVisible(), true, 'Exportar inteligencia queda fuera del filtro.');
+    const intelligenceRequestStart = requests.length;
+    await page.locator('#openInventoryFilters').click();
+    await page.locator('#inventoryFilters [name="prioridad"]').selectOption('warning');
+    await page.locator('#closeInventoryFilters').click();
+    await page.waitForFunction(() => document.querySelector('#inventoryFilters [name="prioridad"]')?.value === '');
+    assert(!requests.slice(intelligenceRequestStart).some((request) => request.path === '/api/inventario-inteligente/resumen' && request.search.includes('prioridad=warning')), 'Cerrar descarta el filtro de inteligencia.');
+    await page.locator('#openInventoryFilters').click();
+    await page.locator('#inventoryFilters [name="desde"]').fill('2026-01-02');
+    await page.locator('#inventoryFilters [name="hasta"]').fill('2026-01-01');
+    await page.locator('#inventoryFilters button[type="submit"]').click();
+    await page.locator('#inventoryFilterError:visible').waitFor();
+    assert.strictEqual(await page.locator('#inventoryFilterDialog').isVisible(), true, 'Un período inválido mantiene la ventana abierta.');
+    await page.locator('#clearInventoryFilters').click();
+    await page.locator('#inventoryFilters [name="ventana"]').selectOption('7');
+    await page.locator('#inventoryFilters [name="prioridad"]').selectOption('warning');
+    await page.locator('#inventoryFilters button[type="submit"]').click();
+    await page.locator('#inventoryFilterDialog').waitFor({ state: 'hidden' });
+    assert(requests.some((request) => request.path === '/api/inventario-inteligente/resumen' && request.search.includes('ventana=7') && request.search.includes('prioridad=warning') && !request.search.includes('desde=')), 'Inteligencia aplica la ventana rápida y prioridad.');
+    assert.strictEqual(await page.evaluate(() => document.activeElement?.id), 'openInventoryFilters', 'Inteligencia devuelve el foco al botón.');
+    const inventoryResults = await page.locator('#inventoryContent').innerHTML();
+    await page.locator('#openInventoryFilters').click();
+    await page.locator('#inventoryFilters [name="prioridad"]').selectOption('critical');
+    await page.locator('#inventoryFilters button[type="submit"]').click();
+    await page.locator('#inventoryFilterError:visible').waitFor();
+    assert.strictEqual(await page.locator('#inventoryContent').innerHTML(), inventoryResults, 'El error de inteligencia conserva los resultados anteriores.');
+    await page.locator('#closeInventoryFilters').click();
+    await page.waitForFunction(() => document.querySelector('#inventoryFilters [name="prioridad"]')?.value === 'warning');
+    const intelligenceExport = page.waitForRequest((request) => request.url().includes('/api/inventario-inteligente/exportacion.xlsx'));
+    await page.locator('#exportInventory').click();
+    const intelligenceExportUrl = new URL((await intelligenceExport).url());
+    assert.strictEqual(intelligenceExportUrl.searchParams.get('ventana'), '7', 'La exportación conserva la ventana aplicada.');
+    assert.strictEqual(intelligenceExportUrl.searchParams.get('prioridad'), 'warning', 'La exportación no toma el borrador fallido.');
+    assert.strictEqual(errors.filter((error) => error.includes('status of 503')).length, 4, 'Solo fallan las cuatro consultas simuladas.');
     assert.deepStrictEqual(errors.filter((error) => !error.includes('status of 503')), [], `Sin errores inesperados a ${viewport.width}x${viewport.height}.`);
   } finally { await context.close(); }
 }
