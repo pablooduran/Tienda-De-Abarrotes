@@ -34,11 +34,20 @@ movimientos. Configuración cargó y Mi plan mostró Basic 1/500/25/15, prueba
 de 30 días y gracia de 7 días. La devolución parcial se inspeccionó sin
 confirmarla; no se probó una cuenta suspendida ni un pago de suscripción.
 
-Quedaron detectados y corregidos **solo localmente**, pendientes de publicación,
-los encabezados técnicos de Reportes, el aviso de fiado que pedía elegir un
-cliente ya seleccionado y el número interno del administrador en Auditoría.
-Las correcciones tienen pruebas de navegador específicas. Esta validación no
+Los encabezados técnicos de Reportes, el aviso de fiado que pedía elegir un
+cliente ya seleccionado y el número interno del administrador en Auditoría
+se publicaron en staging con el commit `ee5c99f`; CI pasó y se consultó el
+reporte de fiados hospedado. Esta validación no
 declara `PILOT_READY`, no autoriza datos reales y no inicia el piloto.
+
+## Bloque local posterior: filtros de Gastos y Movimientos
+
+Los filtros secundarios de Gastos y Movimientos de stock ahora se abren en una
+ventana. La búsqueda de producto en Movimientos permanece visible. Cerrar
+descarta cambios; Aplicar actualiza los resultados y devuelve el foco al botón.
+Si falla una consulta filtrada, la ventana permanece abierta y se conserva la
+lista anterior. Las pruebas de navegador usan respuestas sintéticas locales;
+este bloque aún no se ha publicado ni validado en staging.
 
 ## Siguiente secuencia de bloques
 

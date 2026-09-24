@@ -1768,30 +1768,29 @@ async function openHiddenProducts() {
 async function movimientosStock() {
   view.innerHTML = `
     <section class="inventory-section-heading"><div><h3>Stock y movimientos</h3><p>Consulta el stock actual en Productos; aquí revisa solamente su historial de entradas, salidas y ajustes.</p></div></section>
-    <form class="panel movement-filters" id="movementFilters">
-      <label>Producto<input id="movementSearch" name="q" type="search" placeholder="Buscar producto"></label>
+    <div class="panel movement-search"><label>Producto<input id="movementSearch" type="search" placeholder="Buscar producto"></label><button type="button" id="searchMovements" class="secondary">Buscar</button><button type="button" id="openMovementFilters" class="secondary">Filtros</button></div>
+    <dialog id="movementFilterDialog" class="owner-filter-dialog" aria-labelledby="movementFilterTitle"><div class="owner-filter-heading"><h3 id="movementFilterTitle">Filtrar movimientos</h3><button type="button" id="closeMovementFilters" class="secondary">Cerrar</button></div><form class="movement-filters" id="movementFilters">
       <label>Tipo<select id="movementType" name="tipo"><option value="">Todos</option><option value="entrada">Entrada</option><option value="salida">Salida</option><option value="ajuste_positivo">Ajuste positivo</option><option value="ajuste_negativo">Ajuste negativo</option><option value="inventario_inicial">Inventario inicial</option></select></label>
       <label>Origen<select id="movementOrigin" name="origen"><option value="">Todos</option><option value="compra">Compra</option><option value="venta">Venta</option><option value="ajuste_manual">Ajuste manual</option><option value="alta_producto">Alta de producto</option><option value="migracion_inicial">Migración inicial</option></select></label>
       <label>Desde<input id="movementFrom" name="desde" type="date"></label><label>Hasta<input id="movementTo" name="hasta" type="date"></label>
       <label>Responsable<select id="movementOwner" name="idAdministrador"><option value="">Todos</option></select></label>
-      <div class="filter-actions"><button type="submit">Aplicar filtros</button><button type="button" class="secondary" id="clearMovementFilters">Limpiar filtros</button></div>
-    </form>
+      <div class="filter-actions"><button type="button" class="secondary" id="clearMovementFilters">Limpiar</button><button type="submit">Aplicar</button></div>
+    </form><p class="form-error" id="movementFilterError" role="alert" hidden></p></dialog>
     <div class="panel" id="movementResults">${UiPatterns.skeleton('rows', 4)}</div>
     <div class="movement-pagination"><button id="movementPrevious" class="secondary">Anterior</button><span id="movementPage">Página 1</span><button id="movementNext" class="secondary">Siguiente</button></div>`;
   let currentPage = 1;
-  const load = async (page = 1) => {
+  let appliedFilters = new URLSearchParams();
+  let appliedSearch = '';
+  const search = document.getElementById('movementSearch');
+  const form = document.getElementById('movementFilters');
+  const dialog = document.getElementById('movementFilterDialog');
+  const trigger = document.getElementById('openMovementFilters');
+  const errorTarget = document.getElementById('movementFilterError');
+  const load = async (page = 1, filters = appliedFilters, queryText = appliedSearch) => {
     const results = document.getElementById('movementResults');
-    results.innerHTML = UiPatterns.skeleton('rows', 4);
     const query = new URLSearchParams({ page: String(page), limit: '25' });
-    const values = {
-      q: document.getElementById('movementSearch').value.trim(),
-      tipo: document.getElementById('movementType').value,
-      origen: document.getElementById('movementOrigin').value,
-      desde: document.getElementById('movementFrom').value,
-      hasta: document.getElementById('movementTo').value,
-      idAdministrador: document.getElementById('movementOwner').value
-    };
-    Object.entries(values).forEach(([key, value]) => { if (value) query.set(key, value); });
+    if (queryText) query.set('q', queryText);
+    for (const [key, value] of filters) if (value) query.set(key, value);
     try {
       const data = await api(`/api/movimientos-stock?${query}`);
       currentPage = data.page;
@@ -1802,15 +1801,47 @@ async function movimientosStock() {
       document.getElementById('movementPage').textContent = `Página ${data.page} de ${data.pages}`;
       document.getElementById('movementPrevious').disabled = data.page <= 1;
       document.getElementById('movementNext').disabled = data.page >= data.pages;
+      return true;
     } catch (error) {
-      results.innerHTML = UiPatterns.empty('No se pudieron cargar los movimientos', UiPatterns.messageFor(error), '<button type="button" class="secondary" data-retry-movements>Reintentar</button>');
-      results.querySelector('[data-retry-movements]')?.addEventListener('click', () => load(page));
+      if (dialog.open) {
+        errorTarget.textContent = UiPatterns.messageFor(error);
+        errorTarget.hidden = false;
+      } else {
+        results.innerHTML = UiPatterns.empty('No se pudieron cargar los movimientos', UiPatterns.messageFor(error), '<button type="button" class="secondary" data-retry-movements>Reintentar</button>');
+        results.querySelector('[data-retry-movements]')?.addEventListener('click', () => load(page));
+      }
+      return false;
     }
   };
-  const form = document.getElementById('movementFilters');
-  const updateMovementFilters = compactInventoryFilters(form, ['movementType', 'movementOrigin', 'movementFrom', 'movementTo', 'movementOwner']);
-  form.addEventListener('submit', (event) => { event.preventDefault(); load(1); });
-  document.getElementById('clearMovementFilters').addEventListener('click', () => { form.reset(); updateMovementFilters(); load(1); });
+  const restore = () => {
+    for (const control of form.elements) if (control.name) control.value = appliedFilters.get(control.name) || '';
+    errorTarget.hidden = true;
+  };
+  trigger.addEventListener('click', () => { restore(); dialog.showModal(); form.elements.tipo.focus(); });
+  document.getElementById('closeMovementFilters').addEventListener('click', () => {
+    if (!form.querySelector('[type="submit"]').disabled) dialog.close();
+  });
+  document.getElementById('clearMovementFilters').addEventListener('click', () => form.reset());
+  dialog.addEventListener('cancel', (event) => {
+    if (form.querySelector('[type="submit"]').disabled) event.preventDefault();
+  });
+  dialog.addEventListener('close', () => { restore(); trigger.focus(); });
+  form.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    const submit = form.querySelector('[type="submit"]');
+    submit.disabled = true;
+    errorTarget.hidden = true;
+    const candidate = new URLSearchParams(formData(form));
+    try {
+      if (await load(1, candidate)) { appliedFilters = candidate; dialog.close(); }
+    } finally { submit.disabled = false; }
+  });
+  const runSearch = async () => {
+    const candidate = search.value.trim();
+    if (await load(1, appliedFilters, candidate)) appliedSearch = candidate;
+  };
+  document.getElementById('searchMovements').addEventListener('click', runSearch);
+  search.addEventListener('keydown', (event) => { if (event.key === 'Enter') { event.preventDefault(); runSearch(); } });
   document.getElementById('movementPrevious').addEventListener('click', () => load(currentPage - 1));
   document.getElementById('movementNext').addEventListener('click', () => load(currentPage + 1));
   await load(1);
@@ -2934,9 +2965,9 @@ async function manageExpenseCategories() {
   });
 }
 
-async function loadExpenses() {
-  const form = document.getElementById('expenseFilters');
-  const query = new URLSearchParams(formData(form));
+let expenseAppliedFilters = new URLSearchParams();
+
+async function loadExpenses(query = expenseAppliedFilters) {
   const data = await api(`/api/gastos?${query}`);
   const container = document.getElementById('expenseList');
   container.innerHTML = UiPatterns.skeleton('rows', 4);
@@ -2961,15 +2992,50 @@ async function loadExpenses() {
 
 async function gastos() {
   const categories = await api('/api/gastos/categorias');
-  view.innerHTML = `<div class="toolbar"><div><h3>Gastos operativos</h3><p class="muted">Compras de mercadería y gastos del negocio se mantienen separados.</p></div><div class="actions"><button id="expenseCategories" class="secondary">Categorías</button><button id="addExpense" data-finance-write>Añadir gasto</button></div></div>
-    <div class="panel"><form id="expenseFilters" class="filter-bar">
+  view.innerHTML = `<div class="toolbar"><div><h3>Gastos operativos</h3><p class="muted">Compras de mercadería y gastos del negocio se mantienen separados.</p></div><div class="actions"><button type="button" id="openExpenseFilters" class="secondary">Filtros</button><button id="expenseCategories" class="secondary">Categorías</button><button id="addExpense" data-finance-write>Añadir gasto</button></div></div>
+    <dialog id="expenseFilterDialog" class="owner-filter-dialog" aria-labelledby="expenseFilterTitle"><div class="owner-filter-heading"><h3 id="expenseFilterTitle">Filtrar gastos</h3><button type="button" class="secondary" id="closeExpenseFilters">Cerrar</button></div><form id="expenseFilters" class="filter-bar">
       <label>Desde<input name="desde" type="date" value="${monthStartValue()}"></label><label>Hasta<input name="hasta" type="date" value="${localDateValue()}"></label>
       <label>Categoría<select name="idCategoriaGasto">${options(categories, 'idCategoriaGasto', 'nombre', 'Todas')}</select></label>
       <label>Método<select name="metodoPago"><option value="">Todos</option><option value="efectivo">Efectivo</option><option value="qr">QR</option><option value="transferencia">Transferencia</option><option value="otro">Otro</option></select></label>
       <label>Estado<select name="estado"><option value="">Todos</option><option value="registrado">Registrado</option><option value="anulado">Anulado</option></select></label>
-      <button type="submit">Consultar</button>
-    </form></div><div class="panel" id="expenseList"><p class="muted">Cargando gastos...</p></div>`;
-  document.getElementById('expenseFilters').addEventListener('submit', (event) => { event.preventDefault(); loadExpenses().catch((error) => showError(error.message)); });
+      <div class="filter-actions"><button type="button" class="secondary" id="clearExpenseFilters">Limpiar</button><button type="submit">Aplicar</button></div>
+    </form><p class="form-error" id="expenseFilterError" role="alert" hidden></p></dialog><div class="panel" id="expenseList"><p class="muted">Cargando gastos...</p></div>`;
+  const form = document.getElementById('expenseFilters');
+  const dialog = document.getElementById('expenseFilterDialog');
+  const trigger = document.getElementById('openExpenseFilters');
+  const errorTarget = document.getElementById('expenseFilterError');
+  expenseAppliedFilters = new URLSearchParams(formData(form));
+  const restore = () => {
+    for (const control of form.elements) if (control.name) control.value = expenseAppliedFilters.get(control.name) || '';
+    errorTarget.hidden = true;
+  };
+  trigger.addEventListener('click', () => { restore(); dialog.showModal(); form.elements.desde.focus(); });
+  document.getElementById('closeExpenseFilters').addEventListener('click', () => {
+    if (!form.querySelector('[type="submit"]').disabled) dialog.close();
+  });
+  document.getElementById('clearExpenseFilters').addEventListener('click', () => {
+    form.reset();
+    for (const name of ['desde', 'hasta']) form.elements[name].value = '';
+  });
+  dialog.addEventListener('close', () => { restore(); trigger.focus(); });
+  dialog.addEventListener('cancel', (event) => {
+    if (form.querySelector('[type="submit"]').disabled) event.preventDefault();
+  });
+  form.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    const submit = form.querySelector('[type="submit"]');
+    submit.disabled = true;
+    errorTarget.hidden = true;
+    const candidate = new URLSearchParams(formData(form));
+    try {
+      await loadExpenses(candidate);
+      expenseAppliedFilters = candidate;
+      dialog.close();
+    } catch (error) {
+      errorTarget.textContent = error.message;
+      errorTarget.hidden = false;
+    } finally { submit.disabled = false; }
+  });
   document.getElementById('addExpense').addEventListener('click', async () => {
     if (await expenseEditor()) { await loadExpenses(); showSuccess('Gasto registrado.'); }
   });
