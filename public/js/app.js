@@ -3128,7 +3128,7 @@ async function finanzas() {
       <label>Período<select name="periodo"><option value="hoy">Hoy</option><option value="ayer">Ayer</option><option value="semana">Esta semana</option><option value="mes" selected>Este mes</option><option value="mes_anterior">Mes anterior</option><option value="anio">Este año</option><option value="rango">Rango personalizado</option></select></label>
       <span class="finance-range" hidden><label>Desde<input name="desde" type="date" value="${monthStartValue()}"></label><label>Hasta<input name="hasta" type="date" value="${localDateValue()}"></label></span>
       <button type="submit">Actualizar</button>
-      <div class="export-menu"><button type="button" class="secondary" data-export="resumen-financiero">Resumen XLSX</button><button type="button" class="secondary" data-export="ventas">Ventas XLSX</button><button type="button" class="secondary" data-export="pagos">Pagos XLSX</button><button type="button" class="secondary" data-export="gastos">Gastos XLSX</button>${advanced ? '<button type="button" class="secondary" data-export="rentabilidad">Rentabilidad XLSX</button>' : ''}</div>
+      <details class="export-menu"><summary>Exportar reportes</summary><div><button type="button" class="secondary" data-export="resumen-financiero">Resumen de finanzas · Excel</button><button type="button" class="secondary" data-export="ventas">Ventas · Excel</button><button type="button" class="secondary" data-export="pagos">Pagos · Excel</button><button type="button" class="secondary" data-export="gastos">Gastos · Excel</button>${advanced ? '<button type="button" class="secondary" data-export="rentabilidad">Rentabilidad · Excel</button>' : ''}</div></details>
     </form></div><div id="financeContent"><p class="muted">Cargando información financiera...</p></div>`;
   const form = document.getElementById('financeFilters');
   const toggleRange = () => { form.querySelector('.finance-range').hidden = form.elements.periodo.value !== 'rango'; };
@@ -3172,7 +3172,7 @@ async function cierreCaja() {
   const now = new Date();
   const start = new Date(now.getFullYear(), now.getMonth(), now.getDate());
   let operationKey = newOperationKey();
-  view.innerHTML = `<div class="panel"><div class="panel-title"><div><h3>Nuevo cierre de caja</h3><p>El cierre es opcional y no modifica ventas, pagos, gastos ni stock.</p></div><button id="exportClosures" class="secondary">Exportar XLSX</button></div>
+  view.innerHTML = `<div class="panel"><div class="panel-title"><div><h3>Nuevo cierre de caja</h3><p>El cierre es opcional y no modifica ventas, pagos, gastos ni stock.</p></div><button id="exportClosures" class="secondary">Exportar a Excel</button></div>
     <form id="cashClosureForm" class="form-grid">
       <label>Desde<input name="fechaInicio" type="datetime-local" step="1" required value="${localDateTimeValue(start)}"></label>
       <label>Hasta<input name="fechaFin" type="datetime-local" step="1" required value="${localDateTimeValue(now)}"></label>
@@ -3719,7 +3719,7 @@ async function inventarioInteligente() {
   const today = new Date();
   const start = new Date(today.getFullYear(), today.getMonth(), today.getDate() - 29);
   inventoryUi = { level: 'simple', activeTab: 'resumen', rankingMode: 'ingresos', movementClass: '', page: 1, request: 0, data: {}, appliedFilters: {} };
-  view.innerHTML = `<div class="toolbar lot-filter-toolbar"><div><h3>Inteligencia de inventario</h3><p class="muted">Revisa alertas, rotación y decisiones de abastecimiento.</p></div><div class="actions"><button type="button" class="secondary" id="openInventoryFilters">Filtros</button>${inventoryFeature('exportacion_inventario') ? '<button type="button" class="secondary" id="exportInventory">Exportar inventario</button>' : ''}</div></div>
+  view.innerHTML = `<div class="toolbar lot-filter-toolbar"><div><h3>Inteligencia de inventario</h3><p class="muted">Revisa qué comprar, qué se está agotando y qué productos no se venden.</p></div><div class="actions"><button type="button" class="secondary" id="openInventoryFilters">Filtrar inventario</button>${inventoryFeature('exportacion_inventario') ? '<button type="button" class="secondary" id="exportInventory">Exportar a Excel</button>' : ''}</div></div>
     <dialog id="inventoryFilterDialog" class="owner-filter-dialog" aria-labelledby="inventoryFilterTitle"><div class="owner-filter-heading"><h3 id="inventoryFilterTitle">Filtrar inteligencia de inventario</h3><button type="button" class="secondary" id="closeInventoryFilters">Cerrar</button></div>
     <form id="inventoryFilters" class="inventory-filters">
       <label>Desde<input type="date" name="desde" value="${localDateValue(start)}"></label>
@@ -3736,7 +3736,7 @@ async function inventarioInteligente() {
       <div class="filter-actions"><button type="button" class="secondary" id="clearInventoryFilters">Limpiar</button><button type="submit">Aplicar</button></div>
     </form>
     <p class="hint">El período incluye ambos días elegidos. Máximo 365 días.</p><p class="form-error" id="inventoryFilterError" role="alert" hidden></p></dialog>
-  <div class="inventory-level-switch" role="group" aria-label="Nivel de análisis"><button type="button" data-inventory-level="simple" aria-pressed="true">Simple</button><button type="button" data-inventory-level="avanzado" aria-pressed="false">Avanzado</button></div>
+  <div class="inventory-level-switch" role="group" aria-label="Nivel de análisis"><button type="button" data-inventory-level="simple" aria-pressed="true">Vista sencilla</button><button type="button" data-inventory-level="avanzado" aria-pressed="false">Más detalles</button></div>
   <div class="inventory-tabs" role="tablist" aria-label="Análisis de inventario"></div>
   ${!inventoryAdvancedAvailable() ? '<div class="inventory-plan-note"><strong>Análisis avanzado</strong><span>Algunas funciones de análisis no están incluidas en tu plan actual.</span></div>' : ''}
   <div class="panel inventory-content" id="inventoryContent"></div>`;
@@ -4048,7 +4048,7 @@ async function lotesVencimientos() {
   const canExport = hasFeature('exportacion_lotes');
   const downgraded = !hasFeature('trazabilidad_lotes') && Number(state.lotAccess?.productosControlados || 0) > 0;
   view.innerHTML = `${downgraded ? '<div class="inventory-plan-note"><strong>Trazabilidad protegida</strong><span>La tienda conserva productos controlados. Puede consultar sus lotes, pero las funciones avanzadas dependen del plan actual.</span></div>' : ''}
-    <div class="toolbar lot-filter-toolbar"><div><h3>Lotes y vencimientos</h3><p class="muted">Consulta existencias y fechas sin modificar el stock.</p></div><div class="actions"><button type="button" class="secondary" id="openLotFilters">Filtros</button>${canExport ? '<button type="button" class="secondary" id="exportLots">Exportar XLSX</button>' : ''}</div></div>
+    <div class="toolbar lot-filter-toolbar"><div><h3>Lotes y vencimientos</h3><p class="muted">Consulta existencias y fechas sin modificar el stock.</p></div><div class="actions"><button type="button" class="secondary" id="openLotFilters">Filtros</button>${canExport ? '<button type="button" class="secondary" id="exportLots">Exportar a Excel</button>' : ''}</div></div>
     <dialog id="lotFilterDialog" class="owner-filter-dialog" aria-labelledby="lotFilterTitle"><div class="owner-filter-heading"><h3 id="lotFilterTitle">Filtrar lotes</h3><button type="button" class="secondary" id="closeLotFilters">Cerrar</button></div><form id="lotFilters" class="lot-filters">
       <label>Producto<select name="producto">${options(state.productos, 'idProducto', 'nombre', 'Todos')}</select></label>
       <label>Proveedor<select name="proveedor">${options(state.proveedores, 'idProveedor', 'nombre', 'Todos')}</select></label>
@@ -4328,7 +4328,7 @@ async function reportes() {
   reportRequest += 1;
   view.innerHTML = `
     <div class="panel">
-      <form class="grid" id="reportForm">
+      <p class="muted">Elige qué quieres revisar, ajusta las fechas si hace falta y presiona “Ver reporte”.</p><form class="grid" id="reportForm">
         <label>Reporte<select name="tipo" id="reportType">
           <option value="ventasDia">Ventas del día</option>
           <option value="ventasRango">Ventas por rango</option>
@@ -4341,7 +4341,7 @@ async function reportes() {
           <option value="ganancias">Ganancias</option>
         </select></label>
         <span id="dynamicFilters" class="filter-inline"></span>
-        <button type="submit">Consultar</button>
+        <button type="submit">Ver reporte</button>
       </form>
     </div>
     <div class="panel" id="reportChartPanel" hidden><h3>Tendencia y comparación</h3><canvas id="reportChart"></canvas></div>

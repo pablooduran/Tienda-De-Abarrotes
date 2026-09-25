@@ -83,27 +83,44 @@
       const scheduled = data.planProgramado
         ? `<p class="subscription-plan-scheduled" role="status">Cambio programado a <strong>${escapeHtml(data.planProgramado.nombre)}</strong> para ${escapeHtml(formatDate(data.planProgramado.fechaAplicacion))}.</p>`
         : '';
-      const choices = data.planes.filter((plan) => plan.codigo !== 'avanzado').map((plan) => {
+      const visiblePlans = data.planes.filter((plan) => plan.codigo !== 'avanzado');
+      const choices = visiblePlans.map((plan, index) => {
         const action = plan.tipoCambio === 'upgrade' ? 'upgrade'
           : (plan.tipoCambio === 'downgrade' ? 'downgrade' : null);
         const exceeded = Object.entries(plan.disponibilidad || {})
           .filter(([, value]) => value.excedido)
           .map(([key]) => label(key));
+        const planFeatures = Array.isArray(plan.funcionalidades) ? plan.funcionalidades : [];
+        const previousPlan = visiblePlans[index - 1];
+        const previousFeatures = new Set(Array.isArray(previousPlan?.funcionalidades) ? previousPlan.funcionalidades : []);
+        const additionalFeatures = previousPlan
+          ? planFeatures.filter((feature) => !previousFeatures.has(feature))
+          : planFeatures;
+        const inheritance = previousPlan
+          ? `Incluye lo de ${previousPlan.nombre} y agrega:`
+          : 'Incluye lo esencial para comenzar:';
+        const featureItems = additionalFeatures.length
+          ? additionalFeatures.slice(0, 6).map((feature) => `<li>${escapeHtml(featureLabel(feature))}</li>`).join('')
+          : '<li>Consulta el detalle de funciones disponibles.</li>';
+        const limits = Object.entries(plan.limites || {}).slice(0, 4).map(([key, value]) => `<span><strong>${escapeHtml(value === null ? 'Ilimitado' : value)}</strong> ${escapeHtml(label(key))}</span>`).join('');
         const message = plan.tipoCambio === 'upgrade'
           ? 'Se aplica inmediatamente y conserva la fecha de finalizacion actual.'
           : (plan.tipoCambio === 'downgrade'
             ? 'Se aplicara en el siguiente periodo. Tus datos no se eliminaran.'
             : (plan.tipoCambio === 'mismo_plan' ? 'Este es tu plan actual.' : 'Este cambio combina ampliaciones y reducciones y no esta disponible.'));
-        return `<article class="subscription-plan" data-plan-code="${escapeHtml(plan.codigo)}">
-          <header><h3>${escapeHtml(plan.nombre)}</h3><strong>${escapeHtml(statusLabel(plan.tipoCambio))}</strong></header>
+        return `<article class="subscription-plan ${plan.tipoCambio === 'mismo_plan' ? 'subscription-plan-current' : ''}" data-plan-code="${escapeHtml(plan.codigo)}">
+          <header><div><p class="subscription-plan-kicker">${plan.tipoCambio === 'mismo_plan' ? 'Tu plan actual' : 'Plan disponible'}</p><h3>${escapeHtml(plan.nombre)}</h3></div><strong>${escapeHtml(statusLabel(plan.tipoCambio))}</strong></header>
           <p>${escapeHtml(plan.descripcion || message)}</p>
+          <div class="subscription-plan-limits" aria-label="Limites del plan">${limits || '<span>Consulta las funciones incluidas</span>'}</div>
+          <div class="subscription-plan-features"><strong>${escapeHtml(inheritance)}</strong><ul>${featureItems}</ul></div>
           <p class="subscription-plan-help">${escapeHtml(message)}</p>
           ${exceeded.length ? `<p class="subscription-plan-excess">Limites excedidos: ${escapeHtml(exceeded.join(', '))}. Se conservaran los datos y se bloquearan nuevas altas.</p>` : ''}
           <button type="button" data-plan-action="${escapeHtml(action || '')}" data-plan-code="${escapeHtml(plan.codigo)}" ${action ? '' : 'disabled'}>${action === 'upgrade' ? `Cambiar a ${escapeHtml(plan.nombre)}` : (action === 'downgrade' ? 'Programar cambio' : 'No disponible')}</button>
         </article>`;
       }).join('');
       return `<section class="subscription-section" aria-labelledby="subscription-plans-title">
-        <h2 id="subscription-plans-title">Planes disponibles</h2>
+        <h2 id="subscription-plans-title">Elige el plan que necesitas</h2>
+        <p class="subscription-section-intro">Cada plan incluye lo anterior y suma más capacidad o herramientas. Puedes cambiarlo cuando lo necesites.</p>
         ${scheduled}
         <div class="subscription-plans">${choices}</div>
         <p data-plan-feedback role="status" aria-live="polite"></p>
@@ -170,7 +187,10 @@
               <h1>${escapeHtml(data.plan?.nombre || 'Sin plan asignado')}</h1>
               <p>${escapeHtml(access.mensaje || 'Consulta el estado de tu suscripcion.')}</p>
             </div>
-            <span class="subscription-status" data-status="${escapeHtml(visibleStatus)}">${escapeHtml(statusLabel(visibleStatus))}</span>
+            <div class="subscription-heading-actions">
+              ${restricted ? '' : '<a class="button-link secondary subscription-back-link" href="/app.html" data-subscription-panel>← Volver al panel</a>'}
+              <span class="subscription-status" data-status="${escapeHtml(visibleStatus)}">${escapeHtml(statusLabel(visibleStatus))}</span>
+            </div>
           </header>
           <section class="subscription-overview" aria-label="Resumen de mi plan">
             <article><span>Plan actual</span><strong>${escapeHtml(data.plan?.nombre || 'Sin plan asignado')}</strong></article>
@@ -207,7 +227,6 @@
           ${planChoices(plans)}
           <section id="paymentSubscriptionRoot" class="subscription-section payment-subscription-section" aria-live="polite"></section>
           <div class="subscription-actions">
-            ${restricted ? '' : '<a class="button-link secondary" href="/app.html" data-subscription-panel>Volver al panel</a>'}
             <a class="button-link secondary" href="/app.html?help=mi-plan">Ayuda sobre Mi plan</a>
             <span id="future-action-help">Usa el flujo de pagos manuales para renovar o reactivar cuando tu estado lo permita.</span>
             <button type="button" class="secondary" data-subscription-logout>Cerrar sesion</button>

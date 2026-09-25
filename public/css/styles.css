@@ -1355,12 +1355,11 @@ tr.low-stock { background: var(--warn); }
 }
 .finance-range[hidden] { display: none; }
 .export-menu {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 7px;
   margin-left: auto;
 }
-.export-menu button { padding: 8px 10px; }
+.export-menu summary { cursor: pointer; padding: 8px 10px; border: 1px solid var(--line); border-radius: 6px; background: #fff; font-weight: 700; }
+.export-menu > div { display: grid; gap: 7px; min-width: 220px; margin-top: 7px; padding: 8px; border: 1px solid var(--line); border-radius: 6px; background: #fff; box-shadow: 0 8px 20px #102d3520; }
+.export-menu button { padding: 8px 10px; text-align: left; }
 .finance-explain {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -2845,10 +2844,16 @@ td.actions { position: relative; }
   gap: 24px;
   padding-bottom: 20px;
   border-bottom: 1px solid var(--line);
+  padding: 22px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fff;
 }
 .subscription-heading h1 { margin: 4px 0 8px; font-size: 30px; }
 .subscription-heading p { margin: 0; color: var(--muted); line-height: 1.5; }
 .subscription-eyebrow { color: #1f5f8b !important; font-weight: 700; }
+.subscription-heading-actions { display: flex; flex-direction: column; align-items: flex-end; gap: 10px; position: sticky; top: 12px; z-index: 2; }
+.subscription-back-link { white-space: nowrap; }
 .subscription-overview { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
 .subscription-overview article { min-width: 0; padding: 14px; border: 1px solid var(--line); border-radius: 6px; background: #fff; }
 .subscription-overview span { display: block; color: var(--muted); font-size: 13px; }
@@ -2876,9 +2881,13 @@ td.actions { position: relative; }
 .subscription-notice-critical { border-left-color: #b42318; background: #fff0ef; }
 .subscription-section {
   padding: 18px 0;
-  border-bottom: 1px solid var(--line);
+  padding: 20px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fff;
 }
 .subscription-section h2 { margin: 0 0 14px; font-size: 19px; }
+.subscription-section-intro { margin: -4px 0 14px; color: var(--muted); }
 .subscription-details,
 .subscription-metrics {
   display: grid;
@@ -2918,7 +2927,7 @@ td.actions { position: relative; }
 .subscription-actions #future-action-help { flex-basis: 100%; color: var(--muted); font-size: 13px; }
 .subscription-plans {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 12px;
 }
 .subscription-plan {
@@ -2931,10 +2940,18 @@ td.actions { position: relative; }
   border-radius: 6px;
   background: #fff;
 }
+.subscription-plan-current { border-color: var(--brand); box-shadow: 0 0 0 2px rgba(40, 106, 89, .12); }
 .subscription-plan header { display: flex; justify-content: space-between; gap: 12px; align-items: baseline; }
 .subscription-plan h3, .subscription-plan p { margin: 0; }
+.subscription-plan-kicker { color: var(--brand-dark) !important; font-size: 12px; font-weight: 700; text-transform: uppercase; }
 .subscription-plan header strong { color: var(--muted); font-size: 12px; font-weight: 700; text-transform: capitalize; }
 .subscription-plan-help { color: var(--muted); font-size: 13px; line-height: 1.45; }
+.subscription-plan-limits { display: flex; flex-wrap: wrap; gap: 6px; }
+.subscription-plan-limits span { padding: 5px 7px; border-radius: 5px; background: #f3f6f8; color: var(--muted); font-size: 12px; }
+.subscription-plan-limits strong { color: var(--ink); }
+.subscription-plan-features { display: grid; gap: 6px; padding-top: 2px; }
+.subscription-plan-features strong { font-size: 13px; }
+.subscription-plan-features ul { display: grid; gap: 4px; margin: 0; padding-left: 18px; color: var(--muted); font-size: 13px; }
 .subscription-plan-excess { padding: 10px; border-left: 3px solid #c49a16; background: #fff8dc; font-size: 13px; }
 .subscription-plan-scheduled { padding: 12px; background: #eaf4fb; border-left: 3px solid #1f5f8b; }
 [data-plan-feedback] { min-height: 22px; margin: 10px 0 0; color: #155e45; }
@@ -2961,6 +2978,7 @@ td.actions { position: relative; }
 .payment-subscription-section { border-bottom: 0; }
 .payment-subscription-shell,
 .payment-request-detail { display: grid; gap: 16px; }
+.payment-subscription-shell { padding: 20px; border: 1px solid var(--line); border-radius: 8px; background: #fff; }
 .payment-section-heading,
 .payment-detail-heading {
   display: flex;
@@ -3043,6 +3061,7 @@ td.actions { position: relative; }
   .subscription-root { width: min(100% - 24px, 960px); padding: 18px 0; }
   .subscription-heading { display: grid; gap: 14px; }
   .subscription-status { justify-self: start; }
+  .subscription-heading-actions { align-items: stretch; position: static; }
   .subscription-overview, .subscription-details, .subscription-metrics, .subscription-features, .subscription-feature-detail ul { grid-template-columns: 1fr 1fr; }
   .subscription-plans { grid-template-columns: 1fr; }
   .payment-config-form { grid-template-columns: repeat(2, minmax(0, 1fr)); }

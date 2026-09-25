@@ -671,7 +671,7 @@
           ['metodos-pago', 'Metodos de pago netos']
         ].map(([type, text]) => `<div><strong>${e(text)}</strong>
           <button type="button" class="secondary" data-compensation-export="${type}:csv">CSV</button>
-          <button type="button" data-compensation-export="${type}:xlsx">XLSX</button></div>`).join('')}</div>`
+          <button type="button" data-compensation-export="${type}:xlsx">Excel</button></div>`).join('')}</div>`
           : `<p class="credit-plan-note">${hasExportFeature
             ? 'La suscripcion debe estar activa para generar exportaciones.'
             : 'Las exportaciones requieren la funcionalidad de exportacion de reportes.'}</p>`}
