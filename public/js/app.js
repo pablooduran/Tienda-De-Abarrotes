@@ -172,6 +172,12 @@ document.addEventListener('keydown', (event) => {
     first.focus();
   }
 });
+
+document.addEventListener('click', (event) => {
+  const closeButton = event.target.closest('[data-secondary-actions-close]');
+  if (!closeButton) return;
+  closeButton.closest('details')?.removeAttribute('open');
+});
 function showError(error) { return modal({ title: 'No se pudo completar', body: `<p>${escapeHtml(UiPatterns.messageFor(error))}</p>`, confirmText: 'Entendido', danger: true }); }
 function showSuccess(text) { return modal({ title: 'Listo', body: `<p>${escapeHtml(text)}</p>`, confirmText: 'Cerrar' }); }
 function confirmAction(text, danger = false) { return modal({ title: 'Confirmar acción', body: `<p>${escapeHtml(text)}</p>`, confirmText: 'Confirmar', cancelText: 'Cancelar', danger }); }
@@ -1021,7 +1027,7 @@ function renderCrud(type, rows, fields, idField, ui = {}) {
     </form>`;
   const table = rows.length ? `<div class="panel table-wrap"><table>
       <thead><tr>${fields.map((f) => `<th>${f.label}</th>`).join('')}<th>Acciones</th></tr></thead>
-      <tbody>${rows.map((row) => `<tr>${fields.map((f) => `<td>${escapeHtml(row[f.name] || '')}</td>`).join('')}<td class="actions"><button class="small secondary" data-edit="${row[idField]}">Editar</button>${groupedActions ? `<details class="row-actions"><summary>Más opciones</summary><button class="small danger" data-delete="${row[idField]}">Eliminar</button></details>` : `<button class="small danger" data-delete="${row[idField]}">Eliminar</button>`}</td></tr>`).join('')}</tbody>
+      <tbody>${rows.map((row) => `<tr>${fields.map((f) => `<td>${escapeHtml(row[f.name] || '')}</td>`).join('')}<td class="actions"><button class="small secondary" data-edit="${row[idField]}">Editar</button>${groupedActions ? `<details class="row-actions"><summary>Más opciones</summary><button class="small danger" data-delete="${row[idField]}">Eliminar</button><button type="button" class="small secondary secondary-actions-close" data-secondary-actions-close>Cerrar</button></details>` : `<button class="small danger" data-delete="${row[idField]}">Eliminar</button>`}</td></tr>`).join('')}</tbody>
     </table></div>` : `<div class="panel">${UiPatterns.empty(ui.emptyTitle || 'Sin registros', ui.emptyDescription || 'Aún no hay registros para mostrar.')}</div>`;
   view.innerHTML = `<section class="inventory-crud-heading"><div><h3>${escapeHtml(ui.title || '')}</h3><p>${escapeHtml(ui.description || '')}</p></div></section><div class="panel">${formHtml()}</div>${table}`;
   wireUppercase(view);
@@ -1452,7 +1458,7 @@ function renderProductTable(rows) {
       <td>${escapeHtml(p.nombre)}</td><td>${escapeHtml(p.proveedor || 'SIN PROVEEDOR')}</td><td>${escapeHtml(p.categoria)}</td>
       <td>Bs ${money(p.precioVenta)}</td><td>${stockLabel(p)}</td><td>${packageText(p)}</td>
       <td>${p.bajoStock ? '<span class="badge pendiente">Bajo stock</span>' : '<span class="badge pagado">Normal</span>'}${Number(p.controlaLotes) ? `<span class="lot-control-label">Lotes${Number(p.controlaVencimiento) ? ' y vencimiento' : ''}</span>` : ''}</td>
-      <td class="actions"><button class="small secondary" data-edit="${p.idProducto}">Editar</button><details class="row-actions"><summary>Más opciones</summary>${hasFeature('ajuste_stock') && !state.context?.soloLectura ? `<button class="small" data-adjust-stock="${p.idProducto}">Ajustar stock</button>` : ''}<button class="small secondary" data-product-movements="${p.idProducto}">Ver movimientos</button>${Number(p.controlaLotes) || hasFeature('control_lotes') ? `<button class="small secondary" data-lot-config="${p.idProducto}">${Number(p.controlaLotes) ? 'Configurar lotes' : 'Activar lotes'}</button>` : ''}<button class="small danger" data-delete="${p.idProducto}">Ocultar</button></details></td>
+      <td class="actions"><button class="small secondary" data-edit="${p.idProducto}">Editar</button><details class="row-actions"><summary>Más opciones</summary>${hasFeature('ajuste_stock') && !state.context?.soloLectura ? `<button class="small" data-adjust-stock="${p.idProducto}">Ajustar stock</button>` : ''}<button class="small secondary" data-product-movements="${p.idProducto}">Ver movimientos</button>${Number(p.controlaLotes) || hasFeature('control_lotes') ? `<button class="small secondary" data-lot-config="${p.idProducto}">${Number(p.controlaLotes) ? 'Configurar lotes' : 'Activar lotes'}</button>` : ''}<button class="small danger" data-delete="${p.idProducto}">Ocultar</button><button type="button" class="small secondary secondary-actions-close" data-secondary-actions-close>Cerrar</button></details></td>
     </tr>`).join('')}</tbody></table></div>`;
   target.querySelectorAll('[data-edit]').forEach((btn) => btn.addEventListener('click', () => openProductModal(state.productos.find((p) => String(p.idProducto) === btn.dataset.edit))));
   target.querySelectorAll('[data-adjust-stock]').forEach((btn) => btn.addEventListener('click', () => openStockAdjustment(state.productos.find((p) => String(p.idProducto) === btn.dataset.adjustStock))));
@@ -1472,7 +1478,7 @@ async function productos() {
   view.innerHTML = `
     <section class="inventory-product-heading"><div><h3>Productos</h3><p>Tu punto principal para consultar el catálogo y decidir el siguiente paso de inventario.</p></div>${state.context?.soloLectura ? '<span class="muted">Modo solo lectura</span>' : '<button id="addProduct">Agregar producto</button>'}</section>
     <div class="panel toolbar inventory-product-toolbar">
-      <details class="inventory-secondary-actions"><summary>Más opciones</summary><div><button id="addFromCatalog" class="secondary">Agregar desde catálogo</button><button id="showHiddenProducts" class="secondary">Ver productos ocultos</button>${hasLotOperationalAccess() ? '<button id="openLots" class="secondary">Lotes y vencimientos</button>' : ''}</div></details>
+      <details class="inventory-secondary-actions"><summary>Más opciones</summary><div><button id="addFromCatalog" class="secondary">Agregar desde catálogo</button><button id="showHiddenProducts" class="secondary">Ver productos ocultos</button>${hasLotOperationalAccess() ? '<button id="openLots" class="secondary">Lotes y vencimientos</button>' : ''}<button type="button" class="secondary secondary-actions-close" data-secondary-actions-close>Cerrar</button></div></details>
       <label>Buscar<input id="productSearch" placeholder="Buscar producto"></label>
       <label>Categoría<select id="productCategory"><option value="">Todas</option>${categoryOptions()}</select></label>
       <label>Proveedor<select id="productProvider">${options(state.proveedores, 'idProveedor', 'nombre', 'Todos')}</select></label>
@@ -2769,7 +2775,7 @@ async function historialVentas() {
   const rows = state.ventas || [];
   view.innerHTML = `<section class="sales-section-heading"><div><h3>Historial de ventas</h3><p>Revisa comprobantes, cobros y saldos sin perder el contexto de cada venta.</p></div></section>${rows.length ? `<div class="panel table-wrap"><table>
     <thead><tr><th>Comprobante</th><th>Fecha</th><th>Cliente</th><th>Total</th><th>Pagado</th><th>Saldo</th><th>Métodos</th><th>Estado</th><th>Acciones</th></tr></thead>
-    <tbody>${rows.map((v) => `<tr><td>${escapeHtml(v.codigoComprobante || `Venta #${v.idVenta}`)}</td><td>${formatDate(v.fecha)}</td><td>${escapeHtml(v.cliente)}</td><td>Bs ${money(v.total)}</td><td>Bs ${money(v.montoPagado)}</td><td class="${Number(v.saldoActualFiado ?? v.saldoPendiente) > 0 ? 'text-danger' : 'text-ok'}">Bs ${money(v.saldoActualFiado ?? v.saldoPendiente)}</td><td>${escapeHtml(String(v.metodosPago || 'No especificado').replaceAll(',', ', '))}</td><td>${statusBadge(v.estadoPago === 'pagada' ? 'pagado' : v.estadoPago)}</td><td><div class="actions"><button type="button" class="small secondary" data-detail="${v.idVenta}">Ver detalle</button><button type="button" class="small secondary" data-receipt="${v.idVenta}">Comprobante</button></div></td></tr>`).join('')}</tbody>
+    <tbody>${rows.map((v) => `<tr><td>${escapeHtml(v.codigoComprobante || `Venta #${v.idVenta}`)}</td><td>${formatDate(v.fecha)}</td><td>${escapeHtml(v.cliente)}</td><td>Bs ${money(v.total)}</td><td>Bs ${money(v.montoPagado)}</td><td class="${Number(v.saldoActualFiado ?? v.saldoPendiente) > 0 ? 'text-danger' : 'text-ok'}">Bs ${money(v.saldoActualFiado ?? v.saldoPendiente)}</td><td>${escapeHtml(String(v.metodosPago || 'No especificado').replaceAll(',', ', '))}</td><td>${statusBadge(v.estadoPago === 'pagada' ? 'pagado' : v.estadoPago)}</td><td><button class="small secondary" data-detail="${v.idVenta}">Ver detalle</button><details class="row-actions"><summary>Más opciones</summary><button type="button" class="small" data-receipt="${v.idVenta}">Comprobante</button><button type="button" class="small secondary secondary-actions-close" data-secondary-actions-close>Cerrar</button></details></td></tr>`).join('')}</tbody>
   </table></div>` : UiPatterns.empty('Aún no hay ventas registradas', 'Cuando completes una venta, su comprobante y estado de cobro aparecerán aquí.')}`;
   view.querySelectorAll('[data-detail]').forEach((btn) => btn.addEventListener('click', () => showSaleDetail(btn.dataset.detail)));
   view.querySelectorAll('[data-receipt]').forEach((btn) => btn.addEventListener('click', async () => {
