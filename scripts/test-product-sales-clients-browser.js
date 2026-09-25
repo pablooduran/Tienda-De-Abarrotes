@@ -203,7 +203,9 @@ async function verifyViewport(browser, baseUrl, viewport) {
     await page.locator('[data-credit-modal] [data-modal-cancel]').click();
     await page.locator('[data-view="clientes"]').click();
     await page.locator('#customerFilters').waitFor();
-    await page.locator('.credit-heading .inventory-secondary-actions > summary').click();
+    assert.strictEqual(await page.locator('.credit-heading .inventory-secondary-actions').count(), 0,
+      'Segmentacion queda visible cuando es la unica accion secundaria.');
+    assert.strictEqual(await page.locator('.credit-heading [data-customer-segmentation]').isVisible(), true);
     await page.locator('[data-customer-segmentation]').click();
     await page.locator('#segmentationResults').waitFor();
     assert.strictEqual(await page.locator('#segmentationSearch [name="busqueda"]').isVisible(), true, 'Segmentación conserva la búsqueda visible.');

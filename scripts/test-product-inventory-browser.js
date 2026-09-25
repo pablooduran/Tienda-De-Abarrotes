@@ -78,6 +78,18 @@ async function verifyViewport(browser, baseUrl, viewport, requests) {
     assert.strictEqual(await page.locator('.inventory-workspace-nav').isVisible(), viewport.width <= 900,
       'La subnavegacion solo debe mostrarse cuando el menu lateral pasa arriba.');
     assert.strictEqual(await page.locator('.row-actions > summary').first().textContent(), 'Más opciones', 'Acciones secundarias agrupadas.');
+    const productActions = page.locator('.row-actions').first();
+    const actionTrigger = productActions.locator('> summary');
+    await actionTrigger.scrollIntoViewIfNeeded();
+    const triggerBefore = await actionTrigger.boundingBox();
+    await actionTrigger.click();
+    const triggerAfter = await actionTrigger.boundingBox();
+    assert.strictEqual(await productActions.locator('.row-actions-menu').isVisible(), true, 'El panel de acciones se abre.');
+    assert(Math.abs(triggerBefore.x - triggerAfter.x) < 2 && Math.abs(triggerBefore.y - triggerAfter.y) < 2,
+      `Mas opciones conserva su posicion al abrir el panel (${triggerBefore.x}, ${triggerBefore.y} -> ${triggerAfter.x}, ${triggerAfter.y}).`);
+    await productActions.locator('[data-secondary-actions-close]').click();
+    assert.strictEqual(await productActions.evaluate((node) => node.open), false, 'Cerrar deja el disparador en su sitio.');
+    assert.strictEqual(await actionTrigger.evaluate((node) => document.activeElement === node), true, 'Cerrar devuelve el foco al disparador.');
     await page.locator('.filter-disclosure > summary').click();
     assert.strictEqual(await page.locator('[data-apply-product-filters]').count(), 1, 'Aplicar filtros de Productos.');
     assert.strictEqual(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 2), true, `Overflow a ${viewport.width}px.`);
