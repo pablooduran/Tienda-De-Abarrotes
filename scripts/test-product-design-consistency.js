@@ -14,7 +14,7 @@ const checks = [
   ['Inicio tiene una jerarquia orientada a la tarea', app.includes('<h3>Resumen de hoy</h3>') && app.includes('Ventas, cobros, inventario y alertas para decidir que revisar.')],
   ['Los dialogos pasivos usan Cerrar', app.includes("confirmText = 'Cerrar'") && app.includes("confirmText: 'Cerrar'")],
   ['Productos usa acciones concretas de guardado', app.includes("confirmText: isEdit ? 'Guardar cambios' : 'Agregar producto'")],
-  ['Mi plan mantiene cotizacion como accion primaria', paymentUi.includes('button-link payment-primary') && paymentUi.includes('Crear solicitud de pago')],
+  ['Mi plan mantiene revisar precio como accion primaria', paymentUi.includes('button-link payment-primary') && paymentUi.includes('Ver precio') && paymentUi.includes('Solicitar este plan')],
   ['La accion primaria de pagos tiene estilo compartido', styles.includes('.payment-form-actions .payment-primary')],
   ['Superadmin agrupa acciones poco frecuentes', admin.includes('function adminMoreActions(buttons)') && admin.includes("summary.textContent = 'Mas opciones'")],
   ['El menu administrativo conserva foco visible', adminStyles.includes('.admin-more-actions summary:focus-visible')],

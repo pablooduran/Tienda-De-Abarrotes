@@ -314,8 +314,8 @@ async function runBrowserFlow({ baseUrl, username, password, productName, custom
     ok((await page.locator('body').innerText()).includes('Pro'),
       'Mi plan muestra la suscripcion sintetica vigente.');
     await page.locator('[data-payment-form] [name="plan"]').selectOption('pro');
-    ok(await page.getByRole('button', { name: 'Cotizar' }).isEnabled(),
-      'Mi plan conserva la accion de cotizacion.');
+    ok(await page.getByRole('button', { name: 'Ver precio' }).isEnabled(),
+      'Mi plan conserva la accion de revisar el precio.');
     ok(errors.length === 0, `El recorrido browser termina con consola limpia${errors.length ? `: ${errors.join(' | ')}` : ''}.`);
     return sale;
   } finally {
