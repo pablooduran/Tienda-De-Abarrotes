@@ -96,6 +96,41 @@ async function assertViewport(browser, baseUrl, url, selector, fixtureState) {
       assert.strictEqual(await page.locator('[data-payment-detail]').evaluate((node) => node.open), false);
     }
     if (url === '/admin.html#pagos-suscripcion') {
+      if (viewport.width > 760) {
+        const desktopLayout = await page.evaluate(() => {
+          const main = document.querySelector('.admin-main');
+          const sidebar = document.querySelector('.admin-sidebar');
+          const spacer = document.createElement('div');
+          spacer.dataset.layoutTestSpacer = 'true';
+          spacer.style.height = '1600px';
+          document.querySelector('#pagos-suscripcion').append(spacer);
+          main.scrollTop = 500;
+          const sidebarRect = sidebar.getBoundingClientRect();
+          const shellRect = document.querySelector('.admin-shell').getBoundingClientRect();
+          const result = {
+            documentScrollTop: document.scrollingElement.scrollTop,
+            documentOverflow: getComputedStyle(document.documentElement).overflow,
+            bodyOverflow: getComputedStyle(document.body).overflow,
+            mainScrolled: main.scrollTop > 0,
+            sidebarTop: Math.round(sidebarRect.top),
+            sidebarBottom: Math.round(sidebarRect.bottom),
+            shellTop: Math.round(shellRect.top),
+            shellBottom: Math.round(shellRect.bottom),
+            viewportHeight: window.innerHeight
+          };
+          spacer.remove();
+          main.scrollTop = 0;
+          return result;
+        });
+        assert.strictEqual(desktopLayout.documentScrollTop, 0, 'El documento administrativo no debe desplazarse.');
+        assert.strictEqual(desktopLayout.documentOverflow, 'hidden', 'La raiz debe bloquear el desplazamiento exterior.');
+        assert.strictEqual(desktopLayout.bodyOverflow, 'hidden', 'El cuerpo debe bloquear el desplazamiento exterior.');
+        assert.strictEqual(desktopLayout.mainScrolled, true, 'El contenido central debe tener desplazamiento propio.');
+        assert.strictEqual(desktopLayout.shellTop, 0, 'El panel debe comenzar arriba de la ventana.');
+        assert.strictEqual(desktopLayout.shellBottom, desktopLayout.viewportHeight, 'El panel debe ocupar exactamente el alto visible.');
+        assert.strictEqual(desktopLayout.sidebarTop, 0, 'La barra lateral debe permanecer fijada arriba.');
+        assert.strictEqual(desktopLayout.sidebarBottom, desktopLayout.viewportHeight, 'La barra lateral debe cubrir todo el alto visible.');
+      }
       const filterButton = page.locator('#openPaymentReviewFilters');
       const queriesBeforeCancel = fixtureState.reviewQueries.length;
       await filterButton.click();

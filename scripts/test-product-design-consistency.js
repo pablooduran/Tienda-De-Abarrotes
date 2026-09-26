@@ -18,6 +18,8 @@ const checks = [
   ['La accion primaria de pagos tiene estilo compartido', styles.includes('.payment-form-actions .payment-primary')],
   ['Superadmin agrupa acciones poco frecuentes', admin.includes('function adminMoreActions(buttons)') && admin.includes("summary.textContent = 'Mas opciones'")],
   ['El menu administrativo conserva foco visible', adminStyles.includes('.admin-more-actions summary:focus-visible')],
+  ['Superadmin mantiene el documento fijo y desplaza solo el contenido', adminStyles.includes('scrollbar-gutter: stable') && adminStyles.includes('overscroll-behavior: contain') && /html,\s*body\s*\{[\s\S]*?overflow:\s*hidden/.test(adminStyles)],
+  ['Pagos administrativos evita columnas desiguales', adminStyles.includes('.payment-admin-grid { display: grid; grid-template-columns: minmax(0, 1fr);')],
   ['No se modifican contratos de tenant desde la interfaz', !paymentUi.includes('idTienda')]
 ];
 
