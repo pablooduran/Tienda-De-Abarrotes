@@ -73,6 +73,37 @@ el arnés más amplio quedó adaptado, pero no se ejecutó porque usa una base
 local y crea datos temporales.
 La publicación y la validación en staging quedan pendientes al cierre de este registro.
 
+## Tema visual claro/oscuro (publicado en staging)
+
+La referencia de Figma Make proporcionada por el propietario guía la paleta
+blanco/verde oscuro y negro verdoso/verde oscuro. La preferencia visual local
+se aplica a acceso, registro/onboarding, aplicación, Mi plan y administración.
+Los módulos operativos comparten tokens de color; se ajustaron los estados de
+Lotes, Cobranza y Devoluciones, los menús de acciones, los filtros y Ayuda.
+Los comprobantes de venta, cobranza, estado de cuenta y compensación conservan
+fondo blanco y texto oscuro al imprimir incluso si la interfaz está en modo
+oscuro. Las pruebas locales de navegador de Inventario, Ventas/Clientes,
+Devoluciones, Ayuda, Auditoría, Ajustes e Inteligencia pasaron con datos
+sintéticos. Las suites de Cobranza y reportes financieros que requieren MySQL
+no se ejecutaron porque faltan las variables locales de conexión. El bloque
+visual se publicó en `2d20c54`; la corrección de contraste y tablas extensas
+se publicó en `7895d63`. Ambos commits pasaron CI y se confirmaron activos
+en staging. Se revisaron acceso, Inicio, Configuración, Productos, Clientes,
+Reportes, Finanzas, Gastos y Mi plan en las variantes pertinentes; a 1000 px
+la tabla de Productos desplaza dentro de su recuadro sin desbordar la página.
+
+## Guía local de vencimientos (pendiente de publicación)
+
+La pantalla Lotes y vencimientos explica dónde se asigna la fecha: al activar
+lotes para un producto con stock existente se distribuyen sus unidades y se
+registran las fechas; para stock nuevo, la fecha se captura al agregar el
+producto controlado en Compras / stock. Los accesos llevan a Productos y a
+Registrar compra solo si la cuenta puede configurar lotes y no está en modo de
+solo lectura. Los formularios de activación explican cuándo se exige una fecha;
+la prueba de navegador recorre ambos accesos y el campo requerido en tres
+tamaños de pantalla, sin escribir en la base de datos. No cambia la fecha de
+lotes ya registrados ni añade una operación comercial nueva.
+
 ## Siguiente secuencia de bloques
 
 1. Completar la misma convención en otros filtros secundarios pendientes, según uso y riesgo.

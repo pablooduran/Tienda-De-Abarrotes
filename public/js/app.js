@@ -1934,7 +1934,7 @@ function operationView(kind) {
             <label>Tipo de venta<select name="tipo"><option value="pagada">Venta pagada</option><option value="fiada">Venta fiada</option></select></label>
             <label>Cliente<select name="idCliente">${options(state.clientes, 'idCliente', 'nombre', 'Cliente ocasional')}</select></label>
           </div>
-        ` : '<p class="purchase-step"><strong>2. Cantidades y costos</strong><span>Revisa cada producto antes de confirmar la compra.</span></p><p class="hint">Cada producto muestra su proveedor asociado para evitar confusiones.</p>'}
+        ` : '<p class="purchase-step"><strong>2. Cantidades y costos</strong><span>Revisa cada producto antes de confirmar la compra.</span></p><p class="hint">Cada producto muestra su proveedor asociado. Si controla vencimientos, al agregarlo aparecerá el campo de fecha de cada lote.</p>'}
         <div id="items" class="cart-items"></div>
         <div id="cartWarnings" class="cart-warnings"></div>
         <div class="cart-total">
@@ -4046,9 +4046,11 @@ async function lotesVencimientos() {
   lotUi = { page: 1, pages: 1, activeTab: 'lotes', request: 0, appliedFilters: new URLSearchParams() };
   const canAlert = hasFeature('alertas_vencimiento');
   const canExport = hasFeature('exportacion_lotes');
+  const canConfigure = hasFeature('control_lotes') && !state.context?.soloLectura;
   const downgraded = !hasFeature('trazabilidad_lotes') && Number(state.lotAccess?.productosControlados || 0) > 0;
   view.innerHTML = `${downgraded ? '<div class="inventory-plan-note"><strong>Trazabilidad protegida</strong><span>La tienda conserva productos controlados. Puede consultar sus lotes, pero las funciones avanzadas dependen del plan actual.</span></div>' : ''}
     <div class="toolbar lot-filter-toolbar"><div><h3>Lotes y vencimientos</h3><p class="muted">Consulta existencias y fechas sin modificar el stock.</p></div><div class="actions"><button type="button" class="secondary" id="openLotFilters">Filtros</button>${canExport ? '<button type="button" class="secondary" id="exportLots">Exportar a Excel</button>' : ''}</div></div>
+    ${canConfigure ? '<section class="inventory-note lot-entry-guide" aria-labelledby="lotEntryGuideTitle"><h4 id="lotEntryGuideTitle">¿Dónde agrego la fecha de vencimiento?</h4><p>Para un producto que aún no controla lotes, entra a Productos → Más opciones → Activar lotes. Si ya tiene stock, podrás repartirlo en lotes y poner la fecha de cada uno.</p><p>Para stock nuevo, entra a Compras / stock: al agregar un producto con control de vencimiento aparecerá la fecha de cada lote.</p><div class="actions"><button type="button" class="secondary" id="lotGuideProducts">Ir a Productos</button><button type="button" class="secondary" id="lotGuidePurchase">Registrar compra</button></div></section>' : ''}
     <dialog id="lotFilterDialog" class="owner-filter-dialog" aria-labelledby="lotFilterTitle"><div class="owner-filter-heading"><h3 id="lotFilterTitle">Filtrar lotes</h3><button type="button" class="secondary" id="closeLotFilters">Cerrar</button></div><form id="lotFilters" class="lot-filters">
       <label>Producto<select name="producto">${options(state.productos, 'idProducto', 'nombre', 'Todos')}</select></label>
       <label>Proveedor<select name="proveedor">${options(state.proveedores, 'idProveedor', 'nombre', 'Todos')}</select></label>
@@ -4066,6 +4068,8 @@ async function lotesVencimientos() {
   const dialog = document.getElementById('lotFilterDialog');
   const trigger = document.getElementById('openLotFilters');
   const errorTarget = document.getElementById('lotFilterError');
+  document.getElementById('lotGuideProducts')?.addEventListener('click', () => loadView('productos'));
+  document.getElementById('lotGuidePurchase')?.addEventListener('click', () => loadView('compras'));
   lotUi.appliedFilters = readLotFilters(form);
   const restore = () => {
     for (const control of form.elements) {
@@ -4172,6 +4176,7 @@ async function openInitialLotDistribution(product) {
     <h3 id="initialLotTitle">Distribuir stock de ${escapeHtml(product.nombre)}</h3><div class="modal-body">
       <div class="inventory-note"><strong>${stock} unidades base existentes</strong><p>La distribución debe coincidir exactamente. Esta operación no modifica el stock general.</p></div>
       <div class="form-grid"><label class="check"><input name="controlaVencimiento" type="checkbox"> Controlar vencimientos</label><label>Días de alerta<input name="diasAlertaVencimiento" type="number" min="1" max="365" value="${escapeHtml(product.diasAlertaVencimiento || state.lotAccess?.diasAlertaVencimientoDefault || 30)}"></label></div>
+      <p class="hint">Marca «Controlar vencimientos» para pedir una fecha por cada lote del stock actual.</p>
       <div id="initialLotRows" class="lot-entry-list">${lotEntryRow(0, { quantity: stock })}</div>
       <div class="lot-editor-footer"><strong id="initialLotTotal"></strong><button type="button" class="secondary" id="addInitialLot">Agregar lote</button></div>
       <div class="inventory-note" id="initialLotConfirmation" hidden><strong>Confirme la distribución</strong><p>Se crearán los lotes indicados sin cambiar el stock general.</p></div>
@@ -4236,6 +4241,7 @@ async function openLotProductConfiguration(product) {
       ${!canConfigure ? '<div class="inventory-plan-note"><strong>Modo consulta</strong><span>La configuración no puede modificarse con el plan o estado actual.</span></div>' : ''}
       <label class="check"><input name="controlaLotes" type="checkbox" ${controlled ? 'checked disabled' : ''}> Controlar lotes</label>
       <label class="check"><input name="controlaVencimiento" type="checkbox" ${Number(product.controlaVencimiento) ? 'checked' : ''} ${canConfigure ? '' : 'disabled'}> Controlar vencimientos</label>
+      <p class="hint">Si activas vencimientos, las próximas compras pedirán la fecha de cada lote.</p>
       <label>Días de alerta<input name="diasAlertaVencimiento" type="number" min="1" max="365" value="${escapeHtml(product.diasAlertaVencimiento || state.lotAccess?.diasAlertaVencimientoDefault || 30)}" ${canConfigure ? '' : 'disabled'}></label>
       <p class="hint">${controlled ? `Activado: ${escapeHtml(formatDate(product.lotesActivadosEn))}. No puede desactivarse porque su historial es inmutable.` : 'El producto no tiene stock y puede activarse directamente.'}</p>
       <div class="inventory-note" data-lot-activation-confirm hidden><strong>Confirme la activación</strong><p>Desde este momento, las compras, ventas y ajustes deberán conservar trazabilidad por lotes.</p></div>

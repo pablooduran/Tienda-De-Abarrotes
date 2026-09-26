@@ -153,6 +153,27 @@ async function verifyViewport(browser, baseUrl, viewport, requests) {
     await page.locator('#view').getByText('1. Proveedor y productos').waitFor();
     assert.strictEqual(await page.locator('text=1. Proveedor y productos').count(), 1, 'Paso inicial de compra.');
     assert.strictEqual(await page.locator('text=3. Confirmación').count(), 1, 'Paso de confirmacion de compra.');
+    assert.strictEqual(await page.locator('#view').getByText('Si controla vencimientos, al agregarlo aparecerá el campo de fecha de cada lote.').count(), 1,
+      'Compras explica donde se carga el vencimiento del stock nuevo.');
+    await inventoryView(page, 'lotesVencimientos');
+    await page.locator('#lotContent .lot-results-heading').waitFor();
+    assert.strictEqual(await page.locator('#lotEntryGuideTitle').isVisible(), true, 'Lotes explica como cargar vencimientos.');
+    assert.strictEqual(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 2), true,
+      `La guia de vencimientos no desborda a ${viewport.width}px.`);
+    await page.locator('#lotGuideProducts').click();
+    await page.locator('#addProduct').waitFor();
+    await page.locator('.row-actions > summary').first().click();
+    await page.locator('[data-lot-config]').first().click();
+    await page.locator('#initialLotForm').waitFor();
+    assert.strictEqual(await page.locator('#initialLotForm').getByText('Marca «Controlar vencimientos» para pedir una fecha por cada lote del stock actual.').count(), 1,
+      'La activacion explica como registrar fechas para el stock existente.');
+    await page.locator('#initialLotForm [name="controlaVencimiento"]').check();
+    assert.strictEqual(await page.locator('#initialLotForm [name="fechaVencimiento"]').first().evaluate((node) => node.required), true,
+      'Al activar vencimientos, cada lote exige fecha.');
+    await page.locator('#initialLotForm [data-modal-cancel]').click();
+    await inventoryView(page, 'lotesVencimientos');
+    await page.locator('#lotGuidePurchase').click();
+    await page.locator('#comprasForm').waitFor();
     await inventoryView(page, 'lotesVencimientos');
     await page.locator('#lotContent .lot-results-heading').waitFor();
     assert.strictEqual(await page.locator('#lotFilterDialog').isVisible(), false, 'Filtros de lotes cerrados inicialmente.');
