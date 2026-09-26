@@ -572,6 +572,8 @@ button.danger { background: var(--danger); }
 button.small { padding: 7px 10px; font-size: 13px; }
 
 .table-wrap { overflow-x: auto; }
+.table-wrap table:has(thead th:nth-child(8)) { min-width: 960px; }
+.table-wrap table:has(thead th:nth-child(10)) { min-width: 1120px; }
 table { width: 100%; border-collapse: collapse; background: var(--panel); }
 th, td { padding: 10px; border-bottom: 1px solid var(--line); text-align: left; vertical-align: top; }
 thead { background: var(--surface); }
@@ -3644,6 +3646,8 @@ html[data-theme="dark"] {
   html[data-theme="dark"] .onboarding-eyebrow,
   html[data-theme="dark"] .eyebrow { color: #4ade80 !important; }
   html[data-theme="dark"] .auth-link:hover { color: #9bf2ad; }
+  html[data-theme="dark"] .link-button { color: #9bf2ad; }
+  html[data-theme="dark"] .link-button:hover { color: #d6ffdd; }
   html[data-theme="dark"] .onboarding-logout { color: var(--ink); }
   html[data-theme="dark"] .subscription-status,
   html[data-theme="dark"] .payment-state { color: #95e3a5 !important; background: #143422; border-color: #316c42; }

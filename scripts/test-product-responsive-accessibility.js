@@ -17,6 +17,8 @@ const checks = [
   ['El editor de gastos devuelve el foco al cerrar', app.includes('id="expenseForm"') && app.includes('aria-labelledby="expenseFormTitle"')],
   ['El guardado de producto devuelve foco a una accion operable', app.includes("document.querySelector(isEdit ? `[data-edit=\"${row.idProducto}\"]` : '#addProduct')?.focus()")],
   ['Los enlaces y resumenes tienen foco visible', styles.includes('a:focus-visible') && styles.includes('summary:focus-visible')],
+  ['Las tablas extensas conservan columnas legibles con scroll interno', styles.includes('.table-wrap table:has(thead th:nth-child(8)) { min-width: 960px; }') && styles.includes('.table-wrap table:has(thead th:nth-child(10)) { min-width: 1120px; }')],
+  ['Los enlaces secundarios mantienen contraste en modo oscuro', styles.includes('html[data-theme="dark"] .link-button { color: #9bf2ad; }')],
   ['Reduced motion elimina transiciones no esenciales', styles.includes('@media (prefers-reduced-motion: reduce)') && styles.includes('transition-duration: .01ms !important')],
   ['Superadmin conserva nombres accesibles en dialogs', admin.includes('aria-label="Cerrar"') && admin.includes('role="alert"')],
   ['El frontend no controla el tenant', !app.includes('idTienda')]
