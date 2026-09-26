@@ -105,11 +105,14 @@ async function main() {
       { width: 1366, height: 768 }
     ]) {
       const page = await browser.newPage({ viewport });
+      await page.addInitScript(() => localStorage.setItem('tienda-apariencia', 'dark'));
       const errors = [];
       page.on('console', (message) => { if (message.type() === 'error') errors.push(message.text()); });
       page.on('pageerror', (error) => errors.push(error.message));
       await page.goto(`${baseUrl}/suscripcion.html`);
       await page.locator('article[data-plan-code="standard"]').waitFor();
+      assert.strictEqual(await page.locator('html').getAttribute('data-theme'), 'dark');
+      assert.strictEqual(await page.locator('.subscription-section').first().evaluate((node) => getComputedStyle(node).backgroundColor), 'rgb(11, 17, 11)');
       assert.strictEqual(await page.locator('article[data-plan-code="avanzado"]').count(), 0);
       assert.strictEqual(await page.evaluate(() => document.documentElement.scrollWidth > document.documentElement.clientWidth + 1), false);
       assert.strictEqual(await page.locator('.subscription-plan-excess').isVisible(), true);

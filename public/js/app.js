@@ -709,7 +709,7 @@ function drawChart(canvas, labels, values, color = '#286a59', tooltips = []) {
   const labelStep = Math.max(1, Math.ceil(values.length / 6));
   const hitAreas = [];
   ctx.font = '12px "Segoe UI", Arial';
-  ctx.fillStyle = '#6b7684';
+  ctx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--muted').trim();
   ctx.fillText('0', 8, bottom + 5);
   values.forEach((value, index) => {
     const x = startX + index * (barWidth + gap);
@@ -723,13 +723,13 @@ function drawChart(canvas, labels, values, color = '#286a59', tooltips = []) {
       ctx.rect(x, y, barWidth, h || 2);
     }
     ctx.fill();
-    ctx.fillStyle = '#1d2733';
+    ctx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--ink').trim();
     if (values.length <= 6) ctx.fillText(String(Number(value).toFixed(0)), x, Math.max(18, y - 8));
     if (index % labelStep === 0) {
       ctx.save();
       ctx.translate(x + 2, 181);
       ctx.rotate(-0.35);
-      ctx.fillStyle = '#6b7684';
+      ctx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--muted').trim();
       ctx.fillText(String(labels[index] || '').slice(0, 12), 0, 0);
       ctx.restore();
     }
@@ -768,7 +768,7 @@ function drawLineChart(canvas, labels, values, color = '#286a59', tooltips = [])
   const max = Math.max(1, ...numbers);
   const y = (value) => bottom - ((value - min) / (max - min)) * (bottom - top);
   const x = (index) => numbers.length === 1 ? (left + right) / 2 : left + index * (right - left) / (numbers.length - 1);
-  ctx.strokeStyle = '#dfe4ea';
+  ctx.strokeStyle = getComputedStyle(document.documentElement).getPropertyValue('--chart-grid').trim();
   ctx.beginPath();
   ctx.moveTo(left, y(0));
   ctx.lineTo(right, y(0));
@@ -786,7 +786,7 @@ function drawLineChart(canvas, labels, values, color = '#286a59', tooltips = [])
     ctx.arc(x(index), y(value), 4, 0, Math.PI * 2);
     ctx.fill();
     if (index % labelStep === 0) {
-      ctx.fillStyle = '#6b7684';
+      ctx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--muted').trim();
       ctx.font = '11px "Segoe UI", Arial';
       ctx.fillText(String(labels[index] || '').slice(0, 10), Math.max(2, x(index) - 18), 181);
     }
@@ -814,11 +814,11 @@ function drawPieChart(canvas, labels, values, colors, tooltips = []) {
   const radius = 78;
   const hitAreas = [];
   if (!total) {
-    ctx.fillStyle = '#e9eef1';
+    ctx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--surface-2').trim();
     ctx.beginPath();
     ctx.arc(cx, cy, radius, 0, Math.PI * 2);
     ctx.fill();
-    ctx.fillStyle = '#6b7684';
+    ctx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--muted').trim();
     ctx.font = '13px "Segoe UI", Arial';
     ctx.textAlign = 'center';
     ctx.fillText('Sin ventas', cx, cy + 4);
@@ -851,7 +851,7 @@ function drawPieChart(canvas, labels, values, colors, tooltips = []) {
     const y = 42 + index * 28;
     ctx.fillStyle = colors[index % colors.length];
     ctx.fillRect(legendX, y, 10, 10);
-    ctx.fillStyle = '#1d2733';
+    ctx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--ink').trim();
     ctx.fillText(String(label).slice(0, 16), legendX + 16, y + 9);
   });
   bindChartTooltip(canvas, hitAreas);
@@ -994,13 +994,13 @@ async function inicio() {
       </div>
     </div>`;
 
-  drawLineChart(document.getElementById('dailyBars'), dayLabels, dayValues, '#286a59', dayTooltips);
-  drawPieChart(document.getElementById('dailyPie'), dayLabels, dayValues, ['#286a59', '#5f9f8c', '#8a6500', '#b42318', '#536471'], dayTooltips);
-  drawChart(document.getElementById('weekCompare'), ['Semana pasada', 'Semana actual'], [data.ventasSemanaPasada, data.ventasSemana], '#536471', [
+  drawLineChart(document.getElementById('dailyBars'), dayLabels, dayValues, '#22a83d', dayTooltips);
+  drawPieChart(document.getElementById('dailyPie'), dayLabels, dayValues, ['#1a7a2e', '#22a83d', '#4ade80', '#166a26', '#7a9a7a'], dayTooltips);
+  drawChart(document.getElementById('weekCompare'), ['Semana pasada', 'Semana actual'], [data.ventasSemanaPasada, data.ventasSemana], '#1a7a2e', [
     `<strong>Semana pasada</strong><br>Ventas: Bs ${money(data.ventasSemanaPasada)}`,
     `<strong>Semana actual</strong><br>Ventas: Bs ${money(data.ventasSemana)}`
   ]);
-  drawChart(document.getElementById('monthCompare'), ['Mes pasado', 'Mes actual'], [data.ventasMesPasado, data.ventasMes], '#18794e', [
+  drawChart(document.getElementById('monthCompare'), ['Mes pasado', 'Mes actual'], [data.ventasMesPasado, data.ventasMes], '#22a83d', [
     `<strong>Mes pasado</strong><br>Ventas: Bs ${money(data.ventasMesPasado)}`,
     `<strong>Mes actual</strong><br>Ventas: Bs ${money(data.ventasMes)}`
   ]);

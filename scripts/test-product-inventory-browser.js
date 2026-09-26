@@ -66,6 +66,7 @@ async function inventoryView(page, id) {
 
 async function verifyViewport(browser, baseUrl, viewport, requests) {
   const context = await browser.newContext({ viewport, isMobile: viewport.width === 360, hasTouch: viewport.width !== 1366 });
+  await context.addInitScript(() => localStorage.setItem('tienda-apariencia', 'dark'));
   const page = await context.newPage();
   const errors = [];
   page.on('console', (message) => { if (message.type() === 'error') errors.push(message.text()); });
@@ -73,6 +74,9 @@ async function verifyViewport(browser, baseUrl, viewport, requests) {
   try {
     await page.goto(`${baseUrl}/app.html`);
     await inventoryView(page, 'productos');
+    await page.locator('#addProduct').waitFor();
+    assert.strictEqual(await page.locator('html').getAttribute('data-theme'), 'dark', 'Inventario respeta la apariencia elegida.');
+    assert.strictEqual(await page.locator('.panel:visible').first().evaluate((node) => getComputedStyle(node).backgroundColor), 'rgb(11, 17, 11)');
     assert.strictEqual(await page.locator('#addProduct').textContent(), 'Agregar producto', 'Accion primaria de Productos.');
     assert.strictEqual(await page.locator('.inventory-workspace-nav button').count() >= 5, true, 'Subnavegacion de inventario.');
     assert.strictEqual(await page.locator('.inventory-workspace-nav').isVisible(), viewport.width <= 900,

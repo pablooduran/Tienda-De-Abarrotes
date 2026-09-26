@@ -38,7 +38,7 @@ function state(status = 'pendiente') {
 }
 
 function harness() {
-  return `<!doctype html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><link rel="stylesheet" href="/css/styles.css"><title>Onboarding</title></head><body class="onboarding-page"><main id="root" class="onboarding-root"></main><script src="/js/onboarding-ui.js"></script><script>(() => { window.mode = 'normal'; window.__destination = null; const api = async (url, options = {}) => { const method = String(options.method || 'GET').toUpperCase(); const headers = new Headers(options.headers || {}); if (method !== 'GET') headers.set('X-Requested-With', 'XMLHttpRequest'); const response = await fetch(url, { ...options, method, headers }); const body = await response.json(); if (!response.ok) { const error = new Error(body.error || 'Error seguro.'); error.code = body.code; throw error; } return body; }; window.__onboarding = window.OnboardingUI.create({ root: document.getElementById('root'), api, navigate: (destination) => { window.__destination = destination; } }); window.__ready = window.__onboarding.render(); })();</script></body></html>`;
+  return `<!doctype html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><script src="/js/store-theme.js"></script><link rel="stylesheet" href="/css/styles.css"><title>Onboarding</title></head><body class="onboarding-page"><main id="root" class="onboarding-root"></main><script src="/js/onboarding-ui.js"></script><script>(() => { window.mode = 'normal'; window.__destination = null; const api = async (url, options = {}) => { const method = String(options.method || 'GET').toUpperCase(); const headers = new Headers(options.headers || {}); if (method !== 'GET') headers.set('X-Requested-With', 'XMLHttpRequest'); const response = await fetch(url, { ...options, method, headers }); const body = await response.json(); if (!response.ok) { const error = new Error(body.error || 'Error seguro.'); error.code = body.code; throw error; } return body; }; window.__onboarding = window.OnboardingUI.create({ root: document.getElementById('root'), api, navigate: (destination) => { window.__destination = destination; } }); window.__ready = window.__onboarding.render(); })();</script></body></html>`;
 }
 
 function createServer() {
@@ -51,9 +51,9 @@ function createServer() {
       response.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
       return response.end(harness());
     }
-    if (url.pathname === '/js/onboarding-ui.js') {
+    if (url.pathname === '/js/onboarding-ui.js' || url.pathname === '/js/store-theme.js') {
       response.writeHead(200, { 'Content-Type': 'text/javascript; charset=utf-8' });
-      return fs.createReadStream(path.join(PUBLIC, 'js', 'onboarding-ui.js')).pipe(response);
+      return fs.createReadStream(path.join(PUBLIC, 'js', path.basename(url.pathname))).pipe(response);
     }
     if (url.pathname === '/css/styles.css') {
       response.writeHead(200, { 'Content-Type': 'text/css; charset=utf-8' });
@@ -91,12 +91,15 @@ function createServer() {
 
 async function assertViewport(browser, baseUrl, viewport) {
   const page = await browser.newPage({ viewport });
+  await page.addInitScript(() => localStorage.setItem('tienda-apariencia', 'dark'));
   const errors = [];
   page.on('console', (message) => { if (message.type() === 'error') errors.push(message.text()); });
   page.on('pageerror', (error) => errors.push(error.message));
   await page.goto(baseUrl);
   await page.evaluate(() => window.__ready);
   await page.locator('[data-onboarding-form]').waitFor();
+  assert.strictEqual(await page.locator('html').getAttribute('data-theme'), 'dark');
+  assert.strictEqual(await page.locator('.onboarding-card').evaluate((node) => getComputedStyle(node).backgroundColor), 'rgb(11, 17, 11)');
   const overflow = await page.evaluate(() => document.documentElement.scrollWidth > document.documentElement.clientWidth + 1);
   assert.strictEqual(overflow, false, `La vista ${viewport.width}x${viewport.height} no debe desbordar.`);
   assert.strictEqual(await page.locator('label').count(), 6);

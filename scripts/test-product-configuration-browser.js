@@ -121,6 +121,36 @@ async function assertViewport(browser, baseUrl, viewport, { readOnly = false } =
     assert.strictEqual(await page.locator('select[name="moneda"]').inputValue(), 'BOB');
     assert.strictEqual(await page.locator('select[name="zonaHoraria"]').inputValue(), 'America/La_Paz');
     assert.strictEqual(await page.locator('input[name="datoFiscalBasico"]').count(), 1, 'Dato fiscal opcional visible.');
+    const darkChoice = page.locator('[data-theme-choice="dark"]');
+    await darkChoice.click();
+    assert.strictEqual(await darkChoice.getAttribute('aria-pressed'), 'true', 'Modo oscuro seleccionado.');
+    assert.strictEqual(await page.locator('html').getAttribute('data-theme'), 'dark', 'Modo oscuro aplicado.');
+    assert.strictEqual(await page.evaluate(() => getComputedStyle(document.body).backgroundColor), 'rgb(5, 8, 5)', 'Fondo oscuro de la referencia.');
+    await page.reload();
+    await openConfiguration(page);
+    assert.strictEqual(await page.locator('html').getAttribute('data-theme'), 'dark', 'La preferencia persiste en el dispositivo.');
+    const darkColors = await page.evaluate(() => {
+      const field = document.querySelector('input[name="nombreMostrado"]');
+      const sidebar = document.querySelector('.sidebar');
+      return {
+        fieldBackground: getComputedStyle(field).backgroundColor,
+        fieldText: getComputedStyle(field).color,
+        sidebarBackground: getComputedStyle(sidebar).backgroundColor
+      };
+    });
+    assert.strictEqual(darkColors.fieldBackground, 'rgb(11, 17, 11)', 'Formulario oscuro.');
+    assert.strictEqual(darkColors.fieldText, 'rgb(240, 245, 240)', 'Texto legible en formulario oscuro.');
+    assert.strictEqual(darkColors.sidebarBackground, 'rgb(5, 11, 7)', 'Navegacion verde oscuro.');
+    await page.locator('[data-view="inicio"]').click();
+    const metric = page.locator('.dashboard-cards .metric-card').first();
+    await metric.waitFor();
+    assert.strictEqual(await metric.evaluate((node) => getComputedStyle(node).backgroundColor), 'rgb(11, 17, 11)', 'Tarjetas oscuras con datos reales.');
+    await metric.hover();
+    await page.waitForTimeout(240);
+    assert.notStrictEqual(await metric.evaluate((node) => getComputedStyle(node).transform), 'none', 'La tarjeta se eleva al pasar el cursor.');
+    await openConfiguration(page);
+    await page.locator('[data-theme-choice="light"]').click();
+    assert.strictEqual(await page.locator('html').getAttribute('data-theme'), 'light', 'Se puede volver al modo claro.');
     assert.strictEqual(await page.locator('body').textContent().then((text) => !text.includes('idTienda') && !text.includes('idConfiguracionTienda')), true, 'Sin identificadores internos visibles.');
     assert.strictEqual(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 2), true, `Overflow a ${viewport.width}x${viewport.height}.`);
     if (readOnly) {

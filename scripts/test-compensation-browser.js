@@ -232,6 +232,7 @@ async function main() {
   const port = server.address().port;
   const browser = await chromium.launch({ executablePath: edgeExecutable(), headless: true });
   const context = await browser.newContext({ acceptDownloads: true });
+  await context.addInitScript(() => { document.documentElement.dataset.theme = 'dark'; });
   const page = await context.newPage();
   const consoleErrors = [];
   page.on('console', (message) => {
@@ -296,6 +297,14 @@ async function main() {
       'El comprobante no muestra el cliente como texto.');
     assert(await page.evaluate(() => window.__xss) === undefined,
       'Se ejecuto contenido dinamico del comprobante.');
+    await page.emulateMedia({ media: 'print' });
+    const printStyle = await page.locator('[data-print-compensation]').evaluate((node) => {
+      const style = getComputedStyle(node);
+      return { color: style.color, background: style.backgroundColor };
+    });
+    assert(printStyle.color === 'rgb(23, 32, 39)' && printStyle.background === 'rgb(255, 255, 255)',
+      `La devolucion se imprime legible incluso en modo oscuro: ${JSON.stringify(printStyle)}`);
+    await page.emulateMedia({ media: 'screen' });
     await page.locator('[data-compensation-print]').click();
     assert(await page.evaluate(() => window.__printCalls === 1),
       'La impresion no se activo.');

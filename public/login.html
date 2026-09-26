@@ -3,8 +3,9 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="color-scheme" content="light">
+  <meta name="color-scheme" content="light dark">
   <title>Acceso | Tienda de abarrotes</title>
+  <script src="/js/store-theme.js"></script>
   <link rel="stylesheet" href="/css/styles.css">
 </head>
 <body class="login-page">
@@ -36,6 +37,7 @@
     </section>
 
     <section class="auth-workspace" aria-label="Acceso a la cuenta">
+      <button class="theme-page-toggle" type="button" data-toggle-theme aria-pressed="false">Modo oscuro</button>
       <div class="auth-switcher" aria-label="Elige cómo continuar">
         <button type="button" data-auth-target="login" aria-pressed="true">Iniciar sesión</button>
         <button type="button" data-auth-target="register" aria-pressed="false">Crear cuenta</button>

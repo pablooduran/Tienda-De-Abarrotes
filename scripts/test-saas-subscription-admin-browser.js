@@ -114,6 +114,9 @@ async function main() {
       page.on('console', (message) => { if (message.type() === 'error') errors.push(message.text()); });
       page.on('pageerror', (error) => errors.push(error.message));
       await page.goto(`${baseUrl}/admin.html#suscripciones-saas`);
+      await page.locator('[data-toggle-theme]').click();
+      assert.strictEqual(await page.locator('html').getAttribute('data-theme'), 'dark');
+      assert.strictEqual(await page.locator('.content-section').first().evaluate((node) => getComputedStyle(node).backgroundColor), 'rgb(11, 17, 11)');
       await page.locator('#saasSubscriptionsTableBody tr').waitFor({ state: 'attached' });
       const expectedEnd = new Intl.DateTimeFormat('es-BO', {
         dateStyle: 'medium', timeStyle: 'short', hour12: false, timeZone: 'America/La_Paz'

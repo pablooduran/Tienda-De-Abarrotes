@@ -1,12 +1,12 @@
 :root {
-  --ink: #18201d;
-  --muted: #64706b;
-  --line: #dce3df;
+  --ink: #0d150d;
+  --muted: #4a6a4a;
+  --line: #d0dcd0;
   --surface: #ffffff;
-  --canvas: #f4f7f5;
-  --brand: #176b50;
-  --brand-dark: #0f513c;
-  --brand-soft: #e4f2ec;
+  --canvas: #ffffff;
+  --brand: #1a7a2e;
+  --brand-dark: #166a26;
+  --brand-soft: #eaf0ea;
   --danger: #b42318;
   --danger-soft: #feeceb;
   --warning: #9a6700;
@@ -51,7 +51,7 @@ button {
   padding: 24px 18px;
   overflow: hidden;
   color: #f7fbf9;
-  background: #173a30;
+  background: #0e2117;
 }
 
 .brand-block {
@@ -108,8 +108,10 @@ button {
 
 .nav-link.active,
 .nav-link:hover {
-  background: rgba(255, 255, 255, 0.11);
+  background: #1a7a2e;
 }
+.admin-sidebar .admin-nav-group { color: #a7c6b1; }
+.admin-theme-toggle { width: 100%; margin-bottom: 14px; }
 
 .session-block {
   width: 100%;
@@ -338,7 +340,7 @@ select {
   border: 1px solid #cbd5d0;
   border-radius: 5px;
   color: var(--ink);
-  background: #fff;
+  background: var(--surface);
   outline: none;
 }
 
@@ -377,7 +379,7 @@ td {
 }
 
 tbody tr:hover {
-  background: #f8faf9;
+  background: var(--brand-soft);
 }
 
 .store-name strong,
@@ -1052,6 +1054,42 @@ textarea {
   .payment-admin-section thead { display: none; }
   .payment-admin-section tr { margin-bottom: 12px; padding: 10px; border: 1px solid var(--line); border-radius: 6px; }
   .payment-admin-section td { padding: 6px 0; border: 0; }
+}
+
+html { color-scheme: light; }
+html[data-theme="dark"] {
+  color-scheme: dark;
+  --ink: #f0f5f0;
+  --muted: #a3bda3;
+  --line: #2d432d;
+  --surface: #0b110b;
+  --canvas: #050805;
+  --brand: #1a7a2e;
+  --brand-dark: #166a26;
+  --brand-soft: #143422;
+  --danger: #ef8d83;
+  --danger-soft: #371d1b;
+  --warning: #f3d891;
+  --warning-soft: #342a13;
+  --shadow: 0 16px 36px rgba(0, 0, 0, .32);
+}
+@media screen {
+  html[data-theme="dark"] .admin-sidebar { background: #050b07; }
+  html[data-theme="dark"] .admin-main { color: var(--ink); }
+  html[data-theme="dark"] .admin-main :is(input, select, textarea, dialog, .admin-more-actions summary, .detail-facts div, .audit-card, .audit-detail, .audit-dialog, .audit-filters, .audit-screen button, .audit-dialog button, .checkbox-field, .payment-admin-card, .table-action) { color: var(--ink); background: var(--surface); border-color: var(--line); }
+  html[data-theme="dark"] .admin-main :is(th, td, .detail-facts, .payment-admin-card) { border-color: var(--line); }
+  html[data-theme="dark"] .admin-main :is(.status-active, .table-action) { color: #95e3a5; }
+  html[data-theme="dark"] .admin-main :is(.form-field, .audit-status-correcto) { color: var(--ink); }
+  html[data-theme="dark"] .admin-main :is(.audit-status-correcto, .payment-admin-feedback) { color: #95e3a5; }
+  html[data-theme="dark"] .payment-admin-section .payment-state { color: #95e3a5; background: #143422; border-color: #316c42; }
+  html[data-theme="dark"] .payment-admin-section .payment-state[data-state="observada"] { color: #f3d891; background: #342a13; border-color: #8c701f; }
+  html[data-theme="dark"] .payment-admin-section .payment-state[data-state="rechazada"] { color: #ffc4bc; background: #371d1b; border-color: #a75b55; }
+}
+.summary-item { transition: transform .18s ease, box-shadow .18s ease, border-color .18s ease; }
+.summary-item:hover { transform: translateY(-3px); border-color: var(--brand); box-shadow: var(--shadow); }
+@media (prefers-reduced-motion: reduce) {
+  .summary-item { transition: none; }
+  .summary-item:hover { transform: none; }
 }
 
 .sr-only {

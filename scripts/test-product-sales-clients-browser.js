@@ -129,6 +129,7 @@ async function salesView(page, id) {
 
 async function verifyViewport(browser, baseUrl, viewport) {
   const context = await browser.newContext({ viewport, isMobile: viewport.width === 360, hasTouch: viewport.width !== 1366 });
+  await context.addInitScript(() => localStorage.setItem('tienda-apariencia', 'dark'));
   const page = await context.newPage();
   const errors = [];
   page.on('console', (message) => { if (message.type() === 'error') errors.push(message.text()); });
@@ -136,6 +137,8 @@ async function verifyViewport(browser, baseUrl, viewport) {
   try {
     await page.goto(`${baseUrl}/app.html`);
     await salesView(page, 'ventas');
+    assert.strictEqual(await page.locator('html').getAttribute('data-theme'), 'dark', 'Ventas respeta la apariencia elegida.');
+    assert.strictEqual(await page.locator('.panel').first().evaluate((node) => getComputedStyle(node).backgroundColor), 'rgb(11, 17, 11)');
     await page.locator('#posClient').waitFor({ state: 'attached' });
     await page.locator('.sales-workspace-nav').waitFor({ state: 'attached' });
     assert.strictEqual(await page.locator('.sales-workspace-nav').isVisible(), viewport.width <= 900,
@@ -167,6 +170,12 @@ async function verifyViewport(browser, baseUrl, viewport) {
     await page.locator('#view [data-receipt="31"]').click();
     await page.locator('[role="dialog"] #saleReceipt').waitFor();
     assert.strictEqual(await page.locator('#saleReceipt').textContent().then((text) => text.includes('V-000031')), true, 'El comprobante debe corresponder a la venta.');
+    await page.emulateMedia({ media: 'print' });
+    assert.deepStrictEqual(await page.locator('#saleReceipt').evaluate((node) => {
+      const style = getComputedStyle(node);
+      return { color: style.color, background: style.backgroundColor };
+    }), { color: 'rgb(23, 32, 39)', background: 'rgb(255, 255, 255)' }, 'El comprobante se imprime legible incluso en modo oscuro.');
+    await page.emulateMedia({ media: 'screen' });
     await page.locator('[role="dialog"] [data-modal-confirm]').click();
     await page.locator('#view [data-detail="31"]').click();
     await page.locator('[role="dialog"] [data-open-receipt="31"]').waitFor();

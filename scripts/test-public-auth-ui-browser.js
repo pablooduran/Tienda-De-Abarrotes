@@ -224,6 +224,26 @@ async function assertMissingSession(browser, baseUrl, state) {
   }
 }
 
+async function assertTheme(browser, baseUrl, state) {
+  const session = await open(browser, baseUrl, { width: 360, height: 800 });
+  try {
+    const previousRequests = state.requests.length;
+    await session.page.locator('[data-toggle-theme]').click();
+    assert.strictEqual(await session.page.locator('html').getAttribute('data-theme'), 'dark');
+    assert.strictEqual(await session.page.locator('[data-toggle-theme]').getAttribute('aria-pressed'), 'true');
+    assert.strictEqual(await session.page.locator('.auth-shell').evaluate((node) => getComputedStyle(node).backgroundColor), 'rgb(11, 17, 11)');
+    await session.page.reload();
+    assert.strictEqual(await session.page.locator('html').getAttribute('data-theme'), 'dark', 'El tema persiste al recargar acceso.');
+    await session.page.getByRole('button', { name: 'Crear cuenta', exact: true }).click();
+    await assertNoPageOverflow(session.page, 'registro en modo oscuro');
+    assert.strictEqual(state.requests.length, previousRequests, 'La apariencia no realiza peticiones de autenticacion.');
+    assert.deepStrictEqual(await session.page.evaluate(() => Object.keys(localStorage)), ['tienda-apariencia'], 'Solo persiste la preferencia visual.');
+    assert.deepStrictEqual(session.errors, [], 'El acceso oscuro conserva la consola limpia.');
+  } finally {
+    await session.context.close();
+  }
+}
+
 async function assertViewport(browser, baseUrl, viewport) {
   const session = await open(browser, baseUrl, viewport);
   try {
@@ -266,6 +286,7 @@ async function main() {
   const baseUrl = `http://127.0.0.1:${fixture.server.address().port}`;
   try {
     await runFlow(browser, baseUrl, fixture.state);
+    await assertTheme(browser, baseUrl, fixture.state);
     await assertMissingSession(browser, baseUrl, fixture.state);
     await assertViewport(browser, baseUrl, { width: 360, height: 800 });
     await assertViewport(browser, baseUrl, { width: 768, height: 1024 });

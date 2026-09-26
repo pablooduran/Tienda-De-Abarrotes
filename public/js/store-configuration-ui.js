@@ -30,10 +30,23 @@
               <label>Dato fiscal basico opcional<input name="datoFiscalBasico" maxlength="120" value="${escapeHtml(config.datoFiscalBasico)}"></label>
             </div><p class="field-help">La facturacion fiscal no forma parte de esta configuracion.</p></section>
             <section class="configuration-group"><h4>Otros ajustes</h4><p class="field-help">Los ajustes de credito e inventario se mantienen en sus herramientas operativas correspondientes.</p></section>
+            <section class="configuration-group"><h4>Apariencia</h4>
+              <p class="field-help">Elige cómo se ve esta aplicación en este dispositivo.</p>
+              <div class="theme-choices" role="group" aria-label="Modo de apariencia">
+                <button type="button" class="theme-choice" data-theme-choice="light" aria-pressed="${global.StoreTheme?.get() !== 'dark'}">Modo claro</button>
+                <button type="button" class="theme-choice" data-theme-choice="dark" aria-pressed="${global.StoreTheme?.get() === 'dark'}">Modo oscuro</button>
+              </div>
+            </section>
           </div>
           <p class="configuration-message" data-configuration-message role="status" aria-live="polite">${escapeHtml(announcement)}</p>
           ${readOnly ? '<p class="readonly-note">La suscripcion esta en modo de solo lectura. Puedes consultar estos datos, pero no guardarlos.</p>' : '<button type="button" class="primary-action" data-configuration-save>Guardar cambios</button>'}
         </section>`;
+      root.querySelectorAll('[data-theme-choice]').forEach((button) => button.addEventListener('click', () => {
+        const selected = global.StoreTheme?.set(button.dataset.themeChoice);
+        root.querySelectorAll('[data-theme-choice]').forEach((choice) => {
+          choice.setAttribute('aria-pressed', String(choice.dataset.themeChoice === selected));
+        });
+      }));
       if (readOnly) return;
       root.querySelector('[data-configuration-save]').addEventListener('click', async () => {
         if (submitting) return;
