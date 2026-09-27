@@ -6,6 +6,8 @@ const {
   INITIAL_TABLES,
   REMOTE_STAGING_ARGUMENT,
   REMOTE_STAGING_CONFIRMATION,
+  REMOTE_STAGING_EXACT_MIGRATION,
+  REMOTE_STAGING_EXACT_MIGRATION_CONFIRMATION,
   assertEmptyRemoteStagingDatabase,
   assertRemoteStagingMigrationBaseline,
   resolveDatabaseMutationMode
@@ -60,6 +62,22 @@ async function main() {
   assert.deepStrictEqual(resolveDatabaseMutationMode({
     args: [REMOTE_STAGING_ARGUMENT], environment: stagingEnvironment()
   }), { type: 'remote-staging' });
+  assert.deepStrictEqual(resolveDatabaseMutationMode({
+    args: [REMOTE_STAGING_ARGUMENT, '--only', REMOTE_STAGING_EXACT_MIGRATION],
+    environment: stagingEnvironment({
+      STAGING_DB_MIGRATION_CONFIRMATION: REMOTE_STAGING_EXACT_MIGRATION_CONFIRMATION
+    })
+  }), { type: 'remote-staging-exact', migration: REMOTE_STAGING_EXACT_MIGRATION });
+  assert.throws(() => resolveDatabaseMutationMode({
+    args: [REMOTE_STAGING_ARGUMENT, '--only', REMOTE_STAGING_EXACT_MIGRATION],
+    environment: stagingEnvironment({ STAGING_DB_MIGRATION_CONFIRMATION: '' })
+  }), /STAGING_DB_MIGRATION_CONFIRMATION/);
+  assert.throws(() => resolveDatabaseMutationMode({
+    args: [REMOTE_STAGING_ARGUMENT, '--only', '024_corregir_idempotencia_y_snapshot_pagos.sql'],
+    environment: stagingEnvironment({
+      STAGING_DB_MIGRATION_CONFIRMATION: REMOTE_STAGING_EXACT_MIGRATION_CONFIRMATION
+    })
+  }), /solo autoriza/);
 
   assert.throws(() => resolveDatabaseMutationMode({ environment: stagingEnvironment() }), /--remote-staging/);
   assert.throws(() => resolveDatabaseMutationMode({

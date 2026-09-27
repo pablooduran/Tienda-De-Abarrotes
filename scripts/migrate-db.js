@@ -50,18 +50,19 @@ const MIGRATION_LOCAL_DATETIME_TOKEN = '__MIGRATION_LOCAL_DATETIME__';
 
 function selectedMigration(files, args = process.argv.slice(2)) {
   if (args.length === 0 || (args.length === 1 && args[0] === '--remote-staging')) return null;
-  if (args.length !== 2 || args[0] !== '--only') {
-    throw new Error('Uso: npm.cmd run db:migrate -- --only <migracion.sql>');
+  const exactArgs = args[0] === '--remote-staging' ? args.slice(1) : args;
+  if (exactArgs.length !== 2 || exactArgs[0] !== '--only') {
+    throw new Error('Uso: npm.cmd run db:migrate -- [--remote-staging] --only <migracion.sql>');
   }
-  const target = String(args[1] || '').trim();
+  const target = String(exactArgs[1] || '').trim();
   if (!/^\d{3}_[a-z0-9_]+\.sql$/.test(target) || !files.includes(target)) {
     throw new Error('La migracion exacta solicitada no existe o tiene un nombre invalido.');
   }
   return target;
 }
 
-async function validateExactMigrationContext(connection, allFiles, target) {
-  requireLocalhostDatabase('Aplicacion de migracion exacta');
+async function validateExactMigrationContext(connection, allFiles, target, { allowRemote = false } = {}) {
+  if (!allowRemote) requireLocalhostDatabase('Aplicacion de migracion exacta');
   const targetIndex = allFiles.indexOf(target);
   if (targetIndex <= 0) {
     throw new Error('La migracion exacta requiere una predecesora registrada.');
@@ -3863,7 +3864,8 @@ async function main() {
   try {
     const mode = resolveDatabaseMutationMode({ args });
     phase = 'CONFIGURATION';
-    const config = mode.type === 'remote-staging'
+    const remoteMode = mode.type === 'remote-staging' || mode.type === 'remote-staging-exact';
+    const config = remoteMode
       ? buildRemoteStagingDatabaseOptions()
       : databaseConfig();
     logDatabaseTarget('Aplicacion de migraciones', config);
@@ -3883,7 +3885,9 @@ async function main() {
     const migrationsDir = path.join(__dirname, '..', 'database', 'migrations');
     const allFiles = fs.readdirSync(migrationsDir).filter((file) => file.endsWith('.sql')).sort();
     const target = selectedMigration(allFiles, args);
-    if (target) await validateExactMigrationContext(connection, allFiles, target);
+    if (target) await validateExactMigrationContext(connection, allFiles, target, {
+      allowRemote: mode.type === 'remote-staging-exact'
+    });
     const files = target ? [target] : allFiles;
 
     phase = 'MIGRATION_APPLY';
@@ -4193,7 +4197,7 @@ async function main() {
     await connection.end();
     connection = null;
     console.log('Migraciones completadas. No se cargaron datos de demostracion.');
-    if (mode.type === 'remote-staging') {
+    if (remoteMode) {
       console.log(remoteOperationStatus('MIGRATE', { passed: true }));
     }
   } catch (error) {

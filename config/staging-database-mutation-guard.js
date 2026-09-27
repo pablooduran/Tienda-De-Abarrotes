@@ -2,6 +2,8 @@ const INITIAL_STAGING_DATABASE = 'tienda_abarrotes_staging';
 const REMOTE_STAGING_ARGUMENT = '--remote-staging';
 const REMOTE_STAGING_DIAGNOSTIC_ARGUMENT = '--remote-staging-diagnose';
 const REMOTE_STAGING_CONFIRMATION = 'CONFIRM_EMPTY_STAGING_001_025';
+const REMOTE_STAGING_EXACT_MIGRATION_CONFIRMATION = 'CONFIRM_STAGING_MIGRATION_025';
+const REMOTE_STAGING_EXACT_MIGRATION = '025_google_oauth_identities.sql';
 const REMOTE_STAGING_SUPERADMIN_ARGUMENT = '--remote-staging-superadmin';
 const REMOTE_STAGING_SUPERADMIN_CONFIRMATION = 'CREATE_FIRST_STAGING_SUPERADMIN';
 const STAGING_DATABASE_DIAGNOSTICS = Object.freeze({
@@ -73,6 +75,17 @@ function resolveDatabaseMutationMode({ args = [], environment = process.env } = 
   const remoteRequested = args.includes(REMOTE_STAGING_ARGUMENT);
   const appEnvironment = normalized(environment.APP_ENV);
   if (remoteRequested) {
+    if (args.length === 3 && args[0] === REMOTE_STAGING_ARGUMENT && args[1] === '--only') {
+      assertRemoteStagingConnectionAuthorization(environment);
+      if (args[2] !== REMOTE_STAGING_EXACT_MIGRATION) {
+        throw new Error(`La migracion remota exacta solo autoriza ${REMOTE_STAGING_EXACT_MIGRATION}.`);
+      }
+      if (String(environment.STAGING_DB_MIGRATION_CONFIRMATION || '').trim()
+        !== REMOTE_STAGING_EXACT_MIGRATION_CONFIRMATION) {
+        throw new Error('Falta la confirmacion explicita STAGING_DB_MIGRATION_CONFIRMATION para la migracion 025.');
+      }
+      return Object.freeze({ type: 'remote-staging-exact', migration: args[2] });
+    }
     assertRemoteStagingArguments(args);
     assertRemoteStagingAuthorization(environment);
     return Object.freeze({ type: 'remote-staging' });
@@ -163,6 +176,8 @@ module.exports = {
   REMOTE_STAGING_ARGUMENT,
   REMOTE_STAGING_DIAGNOSTIC_ARGUMENT,
   REMOTE_STAGING_CONFIRMATION,
+  REMOTE_STAGING_EXACT_MIGRATION,
+  REMOTE_STAGING_EXACT_MIGRATION_CONFIRMATION,
   REMOTE_STAGING_SUPERADMIN_ARGUMENT,
   REMOTE_STAGING_SUPERADMIN_CONFIRMATION,
   STAGING_DATABASE_DIAGNOSTICS,
