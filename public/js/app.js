@@ -601,8 +601,7 @@ function closeMobileNavigation() {
   if (!mobileNavigation()) return;
   appLayout?.classList.remove('sidebar-open');
   if (sidebarScrim) sidebarScrim.hidden = true;
-  navigationToggle?.setAttribute('aria-expanded', 'false');
-  navigationToggle?.setAttribute('aria-label', 'Mostrar navegación');
+  setNavigationToggleState(false);
 }
 
 function navigateFromMenu(id) {
@@ -778,10 +777,17 @@ settingsBackTopbar?.addEventListener('click', () => loadView('inicio'));
 
 function setDesktopSidebarCollapsed(collapsed, persist = true) {
   appLayout?.classList.toggle('sidebar-collapsed', collapsed);
-  navigationToggle?.setAttribute('aria-expanded', String(!collapsed));
-  navigationToggle?.setAttribute('aria-label', collapsed ? 'Mostrar navegación' : 'Ocultar navegación');
+  setNavigationToggleState(!collapsed);
   if (!persist) return;
   try { window.localStorage.setItem('tienda-sidebar-collapsed', collapsed ? 'true' : 'false'); } catch (_) { /* La preferencia visual no es crítica. */ }
+}
+
+function setNavigationToggleState(open) {
+  if (!navigationToggle) return;
+  navigationToggle.setAttribute('aria-expanded', String(open));
+  navigationToggle.setAttribute('aria-label', open ? 'Ocultar navegación' : 'Mostrar navegación');
+  navigationToggle.textContent = open ? '×' : '☰';
+  navigationToggle.classList.toggle('is-open', open);
 }
 
 function initializeShell() {
@@ -789,8 +795,7 @@ function initializeShell() {
   try { collapsed = window.localStorage.getItem('tienda-sidebar-collapsed') === 'true'; } catch (_) { /* Mantener el valor seguro. */ }
   if (mobileNavigation()) {
     appLayout?.classList.remove('sidebar-collapsed', 'sidebar-open');
-    navigationToggle?.setAttribute('aria-expanded', 'false');
-    navigationToggle?.setAttribute('aria-label', 'Mostrar navegación');
+    setNavigationToggleState(false);
     if (sidebarScrim) sidebarScrim.hidden = true;
   } else {
     setDesktopSidebarCollapsed(collapsed, false);
@@ -801,8 +806,7 @@ navigationToggle?.addEventListener('click', () => {
   if (mobileNavigation()) {
     const open = !appLayout?.classList.contains('sidebar-open');
     appLayout?.classList.toggle('sidebar-open', open);
-    navigationToggle.setAttribute('aria-expanded', String(open));
-    navigationToggle.setAttribute('aria-label', open ? 'Ocultar navegación' : 'Mostrar navegación');
+    setNavigationToggleState(open);
     if (sidebarScrim) sidebarScrim.hidden = !open;
     return;
   }

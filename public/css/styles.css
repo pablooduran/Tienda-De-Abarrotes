@@ -42,15 +42,31 @@ body {
 .navigation-toggle {
   position: fixed;
   z-index: 50;
-  top: 20px;
-  left: 252px;
-  transition: left .22s ease, background .18s ease, border-color .18s ease;
+  top: 30px;
+  left: 32px;
+  width: 42px;
+  min-width: 42px;
+  height: 42px;
+  padding: 0;
+  color: var(--brand-dark);
+  background: var(--panel);
+  border-color: var(--line);
+  box-shadow: 0 4px 14px rgba(13, 21, 13, .14);
+  transition: background .18s ease, color .18s ease, border-color .18s ease, box-shadow .18s ease;
 }
-.layout.sidebar-collapsed .navigation-toggle { left: 16px; }
+.layout.sidebar-collapsed .topbar-heading { padding-left: 60px; }
+@media (min-width: 901px) {
+  .layout:not(.sidebar-collapsed):not(.settings-workspace) .navigation-toggle {
+    color: #fff;
+    background: var(--sidebar-active);
+    border-color: #4ade80;
+    box-shadow: 0 4px 14px rgba(3, 20, 9, .28);
+  }
+}
 .sidebar {
   background: var(--sidebar-bg);
   color: white;
-  padding: 20px;
+  padding: 92px 20px 20px;
   display: flex;
   flex-direction: column;
   gap: 18px;
@@ -2879,7 +2895,7 @@ td.actions { position: relative; }
     inset: 0 auto 0 0;
     z-index: 45;
     width: min(310px, 88vw);
-    padding: 18px;
+    padding: 84px 18px 18px;
     gap: 10px;
     overflow-x: hidden;
     height: 100dvh;
@@ -2890,9 +2906,14 @@ td.actions { position: relative; }
   }
   .layout.sidebar-open .sidebar { opacity: 1; pointer-events: auto; transform: translateX(0); }
   .layout.sidebar-collapsed .sidebar { opacity: 0; pointer-events: none; transform: translateX(-102%); }
-  .navigation-toggle { top: 16px; left: 16px; }
-  .layout.sidebar-open .navigation-toggle { left: min(322px, calc(88vw + 12px)); }
-  .layout.sidebar-collapsed .navigation-toggle { left: 16px; }
+  .navigation-toggle { top: 26px; left: 26px; }
+  .layout.sidebar-open .navigation-toggle {
+    color: #fff;
+    background: var(--sidebar-active);
+    border-color: #4ade80;
+    box-shadow: 0 4px 14px rgba(3, 20, 9, .28);
+  }
+  .topbar-heading { padding-left: 58px; }
   .sidebar-scrim {
     position: fixed;
     z-index: 40;
