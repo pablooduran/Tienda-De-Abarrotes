@@ -5,6 +5,7 @@ const {
   normalizeOnboardingPatch,
   onboardingError
 } = require('../config/onboarding-contract');
+const { PENDING_STORE_NAME_PREFIX } = require('../config/public-registration-contract');
 const { administrativeAuditService } = require('./administrative-audit-service');
 const { businessAnalytics } = require('./product-analytics');
 
@@ -16,9 +17,13 @@ function positiveId(value, label) {
   return parsed;
 }
 
+function isPendingStoreName(value) {
+  return String(value || '').startsWith(PENDING_STORE_NAME_PREFIX);
+}
+
 function publicConfiguration(row) {
   return Object.freeze({
-    nombreMostrado: row.nombreMostrado,
+    nombreMostrado: isPendingStoreName(row.nombreMostrado) ? '' : row.nombreMostrado,
     moneda: row.moneda,
     zonaHoraria: row.zonaHoraria,
     telefono: row.telefono || null,
@@ -28,16 +33,17 @@ function publicConfiguration(row) {
 }
 
 function publicState(store, configuration, repeated = false) {
-  const missingFields = missingRequiredFields(configuration);
+  const visibleConfiguration = publicConfiguration(configuration);
+  const missingFields = missingRequiredFields(visibleConfiguration);
   const completed = store.estadoOnboarding === 'completado';
   const configurationReady = missingFields.length === 0;
   return Object.freeze({
     estado: store.estadoOnboarding,
     completadoEn: store.onboardingCompletadoEn || null,
-    configuracion: publicConfiguration(configuration),
+    configuracion: visibleConfiguration,
     camposFaltantes: missingFields,
     progreso: completed ? 100 : (configurationReady ? 75 : 0),
-    siguienteAccion: completed ? 'ir_al_panel' : (configurationReady ? 'completar' : 'guardar'),
+    siguienteAccion: completed ? 'ir_al_panel' : 'completar',
     repetida: repeated
   });
 }
@@ -45,7 +51,7 @@ function publicState(store, configuration, repeated = false) {
 async function readAccess(connection, idTienda, idAdministrador, { lock = false } = {}) {
   const suffix = lock ? ' FOR UPDATE' : '';
   const [stores] = await connection.query(
-    `SELECT idTienda, activo, estado, estadoOnboarding, onboardingCompletadoEn
+    `SELECT idTienda, nombre, activo, estado, estadoOnboarding, onboardingCompletadoEn
      FROM tienda WHERE idTienda=? LIMIT 1${suffix}`,
     [idTienda]
   );
@@ -129,6 +135,12 @@ function createOnboardingService({
         `UPDATE configuracionTienda SET ${assignments}, actualizadoEn=? WHERE idTienda=?`,
         [...fields.map((field) => patch[field]), now, context.idTienda]
       );
+      if (Object.hasOwn(patch, 'nombreMostrado')) {
+        await connection.query(
+          'UPDATE tienda SET nombre=?, actualizadoEn=? WHERE idTienda=?',
+          [patch.nombreMostrado, now, context.idTienda]
+        );
+      }
       const started = access.store.estadoOnboarding === 'pendiente';
       const nextState = started ? 'en_progreso' : access.store.estadoOnboarding;
       if (started) {
@@ -147,7 +159,7 @@ function createOnboardingService({
         { estado: access.store.estadoOnboarding }, { estado: nextState }, { camposModificados: fields }
       ));
       const configuration = { ...access.configuration, ...patch };
-      const state = publicState({ ...access.store, estadoOnboarding: nextState }, configuration);
+      const state = publicState({ ...access.store, nombre: patch.nombreMostrado || access.store.nombre, estadoOnboarding: nextState }, configuration);
       await connection.commit();
       return state;
     } catch (error) {
@@ -168,8 +180,9 @@ function createOnboardingService({
     }
   }
 
-  async function complete(contextInput) {
+  async function complete(contextInput, body = null) {
     const context = contextFrom(contextInput);
+    const patch = body === null ? null : normalizeOnboardingPatch(body);
     let connection;
     try {
       connection = await database.getConnection();
@@ -179,29 +192,43 @@ function createOnboardingService({
         await connection.commit();
         return publicState(access.store, access.configuration, true);
       }
-      if (access.store.estadoOnboarding !== 'en_progreso') {
-        throw onboardingError(409, 'ONBOARDING_PROGRESS_REQUIRED', 'Guarde la configuracion antes de completar el onboarding.');
+      const now = clock();
+      let configuration = access.configuration;
+      if (patch) {
+        const fields = Object.keys(patch);
+        const assignments = fields.map((field) => `${field}=?`).join(', ');
+        await connection.query(
+          `UPDATE configuracionTienda SET ${assignments}, actualizadoEn=? WHERE idTienda=?`,
+          [...fields.map((field) => patch[field]), now, context.idTienda]
+        );
+        if (Object.hasOwn(patch, 'nombreMostrado')) {
+          await connection.query(
+            'UPDATE tienda SET nombre=?, actualizadoEn=? WHERE idTienda=?',
+            [patch.nombreMostrado, now, context.idTienda]
+          );
+        }
+        configuration = { ...configuration, ...patch };
       }
-      const missingFields = missingRequiredFields(access.configuration);
+      const missingFields = missingRequiredFields(publicConfiguration(configuration));
       if (missingFields.length) {
         throw onboardingError(400, 'ONBOARDING_REQUIRED_FIELDS_MISSING', 'Complete los campos obligatorios antes de continuar.');
       }
-      const now = clock();
       await connection.query(
         `UPDATE tienda
          SET estadoOnboarding='completado', onboardingCompletadoEn=?, actualizadoEn=?
-         WHERE idTienda=? AND estadoOnboarding='en_progreso'`,
+         WHERE idTienda=? AND estadoOnboarding IN ('pendiente','en_progreso')`,
         [now, now, context.idTienda]
       );
       await audit.recordCritical(connection, auditInput(
         context, 'onboarding_completado', 'correcto', 'ONBOARDING_COMPLETED',
-        { estado: 'en_progreso' }, { estado: 'completado' }, { camposModificados: [] }
+        { estado: access.store.estadoOnboarding }, { estado: 'completado' }, { camposModificados: Object.keys(patch || {}) }
       ));
       const state = publicState({
         ...access.store,
+        nombre: patch?.nombreMostrado || access.store.nombre,
         estadoOnboarding: 'completado',
         onboardingCompletadoEn: now
-      }, access.configuration);
+      }, configuration);
       await connection.commit();
       analytics.storeConfigured({ completed: true, repeated: false });
       return state;

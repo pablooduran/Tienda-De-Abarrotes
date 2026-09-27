@@ -223,6 +223,14 @@
           </div>
         </div>`;
       root.querySelector('[data-subscription-logout]').addEventListener('click', () => { void logout(); });
+      root.querySelectorAll('.subscription-disclosure').forEach((disclosure) => {
+        disclosure.addEventListener('toggle', () => {
+          if (!disclosure.open) return;
+          root.querySelectorAll('.subscription-disclosure[open]').forEach((other) => {
+            if (other !== disclosure) other.open = false;
+          });
+        });
+      });
       bindPlanActions();
       trackPlanViewed(data);
     }

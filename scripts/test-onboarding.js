@@ -142,7 +142,7 @@ async function main() {
     assert.strictEqual(pending.estado, 'pendiente');
     assert.strictEqual(pending.progreso, 75);
     await assert.rejects(() => serviceOne.get({ ...one, idTienda: 2 }), (error) => error.code === 'ONBOARDING_ACCESS_DENIED');
-    await assert.rejects(() => serviceOne.complete(one), (error) => error.code === 'ONBOARDING_PROGRESS_REQUIRED');
+    await assert.rejects(() => serviceOne.complete(one), (error) => error.code === 'ONBOARDING_REQUIRED_FIELDS_MISSING');
 
     const saved = await serviceOne.save(one, { nombreMostrado: 'Tienda uno configurada', telefono: '70000000' });
     assert.strictEqual(saved.estado, 'en_progreso');
@@ -157,7 +157,7 @@ async function main() {
     const [[completedAudits]] = await first.query("SELECT COUNT(*) AS total FROM eventoAuditoriaAdministrativa WHERE accion='onboarding_completado'");
     assert.strictEqual(Number(completedAudits.total), 1);
 
-    await serviceTwo.save(two, { direccion: 'Direccion temporal' });
+    await serviceTwo.save(two, { telefono: '71111111', direccion: 'Direccion temporal' });
     const concurrent = await Promise.all([
       serviceOne.complete({ ...two, requestId: '55555555-5555-4555-8555-555555555555' }),
       serviceTwo.complete({ ...two, requestId: '66666666-6666-4666-8666-666666666666' })

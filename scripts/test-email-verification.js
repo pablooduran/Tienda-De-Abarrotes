@@ -110,8 +110,6 @@ async function createSchema(connection) {
 
 function registration(marker, suffix = '') {
   return {
-    nombreTienda: `Tienda verificacion ${marker}${suffix}`,
-    slug: `tienda-verificacion-${marker}${suffix}`,
     usuario: `verificacion_${marker}${suffix}`,
     correo: `verificacion-${marker}${suffix}@example.test`,
     password: `Verificacion-${marker}${suffix}-segura!`

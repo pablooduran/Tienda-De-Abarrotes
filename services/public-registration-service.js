@@ -13,6 +13,7 @@ const {
   INITIAL_SUBSCRIPTION_TYPE,
   INITIAL_TRIAL_DAYS,
   PENDING_ACCESS_STATUS,
+  initialStoreIdentity,
   normalizeRegistration,
   registrationError,
   requestFingerprint,
@@ -117,11 +118,12 @@ function createPublicRegistrationService({
         resultCode: 'PUBLIC_REGISTRATION_REQUESTED', origin: 'web', requestId
       });
       const now = clock();
+      const initialStore = initialStoreIdentity(registration.usuario);
       const [storeResult] = await connection.query(
         `INSERT INTO tienda
          (nombre, slug, activo, estado, estadoOnboarding, creadoEn, actualizadoEn)
          VALUES (?, ?, 1, 'activa', ?, ?, ?)`,
-        [registration.nombreTienda, registration.slug, INITIAL_ONBOARDING_STATUS, now, now]
+        [initialStore.nombreTienda, initialStore.slug, INITIAL_ONBOARDING_STATUS, now, now]
       );
       const idTienda = Number(storeResult.insertId);
       await bootstrap(connection, idTienda, now);

@@ -92,10 +92,12 @@ async function verifyViewport(browser, baseUrl, viewport, includeKeyboard) {
       `La navegacion genera overflow a ${viewport.width}px.`);
 
     const families = await page.locator('[data-navigation-family]').evaluateAll((nodes) => nodes.map((node) => node.dataset.navigationFamily));
-    assert.deepStrictEqual(families, ['inicio', 'ventas', 'inventario', 'clientes', 'reportes', 'administracion']);
+    assert.deepStrictEqual(families, ['inicio', 'ventas', 'inventario', 'clientes', 'reportes']);
     assert.strictEqual(await page.locator('[data-navigation-family="ventas"] [data-view="compensaciones"]').textContent(), 'Devoluciones y anulaciones');
     assert.strictEqual(await page.locator('#accountMenu a[href="/suscripcion.html"]').count(), 1);
     assert.strictEqual(await page.locator('#subscriptionSummary').evaluate((element) => element.tagName), 'P');
+    assert.strictEqual(await page.locator('#settingsStoreButton').count(), 1);
+    assert.strictEqual(await page.locator('#settingsAuditButton').count(), 1);
     for (const family of ['inicio', 'clientes']) {
       assert.strictEqual(await page.locator(`[data-navigation-family="${family}"]`).evaluate((node) => node.tagName === 'DETAILS'), false,
         `${family} no debe mostrar un desplegable con una sola opcion.`);
@@ -124,6 +126,13 @@ async function verifyViewport(browser, baseUrl, viewport, includeKeyboard) {
       'Abrir Reportes debe cerrar Ventas.');
     await page.locator('[data-navigation-family="reportes"] [data-view="reportes"]').click();
     assert.strictEqual(await page.locator('#viewTitle').textContent(), 'Reportes');
+    await page.locator('#accountMenu > summary').click();
+    await page.locator('#settingsStoreButton').click();
+    await page.locator('#viewTitle').waitFor();
+    assert.strictEqual(await page.locator('#viewTitle').textContent(), 'Configuracion');
+    assert.strictEqual(await page.locator('#appLayout').evaluate((node) => node.classList.contains('settings-workspace')), true);
+    assert.strictEqual(await page.locator('#appSidebar').evaluate((node) => getComputedStyle(node).display), 'none');
+    assert.strictEqual(await page.locator('#settingsStoreButton').isHidden(), true);
     assert.deepStrictEqual(errors, [], `Consola limpia a ${viewport.width}x${viewport.height}.`);
   } finally {
     await browserContext.close();

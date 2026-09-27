@@ -217,10 +217,9 @@ router.post('/google/start', async (req, res, next) => {
       return res.status(503).json({ error: 'El acceso con Google no esta disponible.', code: 'GOOGLE_NOT_CONFIGURED' });
     }
     const mode = req.body?.mode === 'register' ? 'register' : 'login';
-    const hasRegistration = mode === 'register'
-      && (req.body?.nombreTienda !== undefined || req.body?.usuario !== undefined);
+    const hasRegistration = mode === 'register' && req.body?.usuario !== undefined;
     const registration = hasRegistration
-      ? normalizeGoogleRegistration({ nombreTienda: req.body?.nombreTienda, usuario: req.body?.usuario })
+      ? normalizeGoogleRegistration({ usuario: req.body?.usuario })
       : null;
     const state = crypto.randomBytes(32).toString('base64url');
     const nonce = crypto.randomBytes(32).toString('base64url');
@@ -237,7 +236,7 @@ router.post('/google/start', async (req, res, next) => {
   } catch (error) {
     if (Number(error?.status || 500) < 500) {
       return res.status(400).json({
-        error: 'Completa el nombre de la tienda y el usuario.',
+        error: 'Completa tu usuario.',
         code: 'GOOGLE_REGISTRATION_INVALID'
       });
     }
@@ -311,17 +310,14 @@ router.post('/google/complete-registration', async (req, res, next) => {
         code: 'GOOGLE_REGISTRATION_EXPIRED'
       });
     }
-    const registration = normalizeGoogleRegistration({
-      nombreTienda: req.body?.nombreTienda,
-      usuario: req.body?.usuario
-    });
+    const registration = normalizeGoogleRegistration({ usuario: req.body?.usuario });
     const result = await googleIdentityService.authenticate({
       subject: pending.subject, email: pending.email, mode: 'register', registration, requestId: req.requestId
     });
     delete req.session.googleRegistration;
     await saveSession(req);
     const destination = await establishGoogleSession(req, res, result.admin);
-    return res.status(201).json({ message: 'Tu tienda fue creada con Google.', destination });
+    return res.status(201).json({ message: 'Tu cuenta fue creada con Google.', destination });
   } catch (error) {
     return next(error);
   }

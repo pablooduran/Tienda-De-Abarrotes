@@ -11,7 +11,7 @@ const { createAdministrativeAuditService } = require('../services/administrative
 const { createEmailVerificationService } = require('../services/email-verification-service');
 const { createLocalVerificationMailAdapter } = require('../services/local-verification-mail-adapter');
 const { ensureBaseConfiguration } = require('../services/store-bootstrap-service');
-const { normalizeRegistration, normalizeSlug } = require('../config/public-registration-contract');
+const { initialStoreIdentity, normalizeRegistration, normalizeSlug } = require('../config/public-registration-contract');
 
 const ROOT = path.resolve(__dirname, '..');
 const MIGRATION_FILES = Object.freeze([
@@ -137,8 +137,6 @@ async function applyRegistrationMigrations(connection) {
 
 function request(marker, overrides = {}) {
   return {
-    nombreTienda: `Tienda SaaS ${marker}`,
-    slug: `tienda-saas-${marker}`,
     usuario: `saas_${marker}`,
     correo: `saas-${marker}@example.test`,
     password: `Registro-${marker}-seguro!`,
@@ -241,7 +239,7 @@ async function main() {
        FROM configuracionTienda WHERE idTienda=?`,
       [owner.idTienda]
     );
-    assert.strictEqual(baseConfiguration.nombreMostrado, body.nombreTienda);
+    assert.strictEqual(baseConfiguration.nombreMostrado, initialStoreIdentity(body.usuario).nombreTienda);
     assert.strictEqual(baseConfiguration.moneda, 'BOB');
     assert.strictEqual(baseConfiguration.zonaHoraria, 'America/La_Paz');
     const [[tokenCount]] = await connection.query(
@@ -255,7 +253,7 @@ async function main() {
     const repeated = await service.register({ body, idempotencyKey: key, requestId: '22222222-2222-4222-8222-222222222222' });
     assert.strictEqual(repeated.repetida, true);
     await assert.rejects(
-      service.register({ body: request(marker, { slug: `otro-${marker}` }), idempotencyKey: key, requestId: '33333333-3333-4333-8333-333333333333' }),
+      service.register({ body: request(marker, { correo: `otro-${marker}@example.test` }), idempotencyKey: key, requestId: '33333333-3333-4333-8333-333333333333' }),
       (error) => error.code === 'OPERATION_KEY_CONFLICT'
     );
     await assert.rejects(
@@ -296,7 +294,7 @@ async function main() {
     const concurrentResults = await Promise.all([firstConcurrent, secondConcurrent]);
     assert.strictEqual(concurrentResults.filter((item) => item.repetida === false).length, 1);
     assert.strictEqual(concurrentResults.filter((item) => item.repetida === true).length, 1);
-    const [[concurrentStores]] = await connection.query('SELECT COUNT(*) total FROM tienda WHERE slug=?', [concurrentBody.slug]);
+    const [[concurrentStores]] = await connection.query('SELECT COUNT(*) total FROM tienda WHERE slug=?', [initialStoreIdentity(concurrentBody.usuario).slug]);
     assert.strictEqual(Number(concurrentStores.total), 1);
 
     const failing = createPublicRegistrationService({
@@ -309,7 +307,7 @@ async function main() {
       failing.register({ body: failedBody, idempotencyKey: `registro:${marker}:rollback` }),
       (error) => error.code === 'REGISTRATION_FAILED'
     );
-    const [[rollbackCount]] = await connection.query('SELECT COUNT(*) total FROM tienda WHERE slug=?', [failedBody.slug]);
+    const [[rollbackCount]] = await connection.query('SELECT COUNT(*) total FROM tienda WHERE slug=?', [initialStoreIdentity(failedBody.usuario).slug]);
     assert.strictEqual(Number(rollbackCount.total), 0);
     const [[requestCount]] = await connection.query('SELECT COUNT(*) total FROM solicitudRegistroPublico');
     assert.strictEqual(Number(requestCount.total), 2);

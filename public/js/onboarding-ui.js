@@ -41,10 +41,8 @@
       return {
         nombreMostrado: raw.nombreMostrado,
         moneda: raw.moneda,
-        zonaHoraria: raw.zonaHoraria,
         telefono: raw.telefono,
-        direccion: raw.direccion,
-        datoFiscalBasico: raw.datoFiscalBasico
+        direccion: raw.direccion
       };
     }
 
@@ -69,33 +67,29 @@
           <header class="onboarding-heading">
             <p class="onboarding-eyebrow">Configuracion inicial</p>
             <h1>Prepara tu tienda</h1>
-            <p>Confirma estos datos para continuar al panel. Los campos opcionales pueden quedar vacios.</p>
+            <p>Completa los datos esenciales para empezar a usar tu tienda.</p>
           </header>
           <div class="onboarding-progress" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${progress}">
             <span>Progreso</span><strong>${progress}%</strong><progress value="${progress}" max="100">${progress}%</progress>
           </div>
           <form data-onboarding-form novalidate>
             <div class="onboarding-grid">
-              <label>Nombre mostrado<input name="nombreMostrado" maxlength="120" required value="${escapeHtml(config.nombreMostrado)}"></label>
+              <label>Nombre de la tienda<input name="nombreMostrado" maxlength="120" required value="${escapeHtml(config.nombreMostrado)}"></label>
               <label>Moneda<select name="moneda" required><option value="BOB" ${config.moneda === 'BOB' ? 'selected' : ''}>BOB</option></select></label>
-              <label>Zona horaria<select name="zonaHoraria" required><option value="America/La_Paz" ${config.zonaHoraria === 'America/La_Paz' ? 'selected' : ''}>America/La_Paz</option></select></label>
-              <label>Telefono opcional<input name="telefono" maxlength="30" autocomplete="tel" value="${escapeHtml(config.telefono)}"></label>
-              <label>Direccion opcional<textarea name="direccion" maxlength="255" rows="3">${escapeHtml(config.direccion)}</textarea></label>
-              <label>Dato fiscal basico opcional<input name="datoFiscalBasico" maxlength="120" value="${escapeHtml(config.datoFiscalBasico)}"></label>
+              <label>Teléfono<input name="telefono" maxlength="30" required autocomplete="tel" value="${escapeHtml(config.telefono)}"></label>
+              <label>Dirección (opcional)<textarea name="direccion" maxlength="255" rows="3">${escapeHtml(config.direccion)}</textarea></label>
             </div>
             <p class="onboarding-message" data-onboarding-message role="status" aria-live="polite">${escapeHtml(announcement)}</p>
             <p class="onboarding-message error" data-onboarding-error role="alert" aria-live="assertive"></p>
             <div class="onboarding-actions">
-              <button type="button" class="secondary" data-onboarding-omit>Omitir campos opcionales</button>
-              <button type="submit" data-onboarding-save>Guardar</button>
-              <button type="button" data-onboarding-complete>Completar configuracion</button>
+              <button type="submit" data-onboarding-complete>Completar configuración</button>
             </div>
           </form>
           <button type="button" class="onboarding-logout" data-onboarding-logout>Cerrar sesion</button>
         </section>`;
       const form = root.querySelector('[data-onboarding-form]');
       const error = root.querySelector('[data-onboarding-error]');
-      const save = async ({ complete = false } = {}) => {
+      const complete = async () => {
         if (submitting) return;
         submitting = true;
         const payload = bodyFrom(form);
@@ -104,13 +98,9 @@
         root.querySelector('[data-onboarding-screen]').setAttribute('aria-busy', 'true');
         error.textContent = '';
         try {
-          current = await request('/onboarding', { method: 'PATCH', body: JSON.stringify(payload) });
-          if (complete) {
-            current = await request('/onboarding/completar', { method: 'POST', body: JSON.stringify({}) });
-            renderCompleted(current);
-            return;
-          }
-          renderForm(current, 'Configuracion guardada.');
+          current = await request('/onboarding/completar', { method: 'POST', body: JSON.stringify(payload) });
+          renderCompleted(current);
+          return;
         } catch (requestError) {
           error.textContent = requestError.message || 'No se pudo guardar la configuracion.';
           controls.forEach((control) => { control.disabled = false; });
@@ -119,13 +109,7 @@
           submitting = false;
         }
       };
-      form.addEventListener('submit', (event) => { event.preventDefault(); void save(); });
-      root.querySelector('[data-onboarding-complete]').addEventListener('click', () => void save({ complete: true }));
-      root.querySelector('[data-onboarding-omit]').addEventListener('click', () => {
-        ['telefono', 'direccion', 'datoFiscalBasico'].forEach((name) => { form.elements[name].value = ''; });
-        root.querySelector('[data-onboarding-message]').textContent = 'Los campos opcionales se omitiran al guardar.';
-        form.elements.telefono.focus();
-      });
+      form.addEventListener('submit', (event) => { event.preventDefault(); void complete(); });
       wireLogout();
     }
 

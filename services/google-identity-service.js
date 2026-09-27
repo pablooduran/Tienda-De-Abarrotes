@@ -11,6 +11,7 @@ const {
   INITIAL_PLAN_CODE,
   INITIAL_SUBSCRIPTION_TYPE,
   INITIAL_TRIAL_DAYS,
+  initialStoreIdentity,
   normalizeEmail,
   normalizeGoogleRegistration,
   registrationError
@@ -109,11 +110,12 @@ function createGoogleIdentityService({
           action: 'registro_publico_solicitado', result: 'correcto',
           resultCode: 'PUBLIC_REGISTRATION_REQUESTED', origin: 'web', requestId
         });
+        const initialStore = initialStoreIdentity(normalizedRegistration.usuario);
         const [storeResult] = await connection.query(
           `INSERT INTO tienda
            (nombre, slug, activo, estado, estadoOnboarding, creadoEn, actualizadoEn)
            VALUES (?, ?, 1, 'activa', ?, ?, ?)`,
-          [normalizedRegistration.nombreTienda, normalizedRegistration.slug, INITIAL_ONBOARDING_STATUS, now, now]
+          [initialStore.nombreTienda, initialStore.slug, INITIAL_ONBOARDING_STATUS, now, now]
         );
         const idTienda = Number(storeResult.insertId);
         await bootstrap(connection, idTienda, now);

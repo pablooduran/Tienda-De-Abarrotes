@@ -11,7 +11,10 @@ const sidebarScrim = document.getElementById('sidebarScrim');
 const accountMenu = document.getElementById('accountMenu');
 const viewProgress = document.getElementById('viewProgress');
 const helpBackTopbar = document.getElementById('helpBackTopbar');
+const settingsBackTopbar = document.getElementById('settingsBackTopbar');
 const quickActions = document.getElementById('quickActions');
+const settingsStoreButton = document.getElementById('settingsStoreButton');
+const settingsAuditButton = document.getElementById('settingsAuditButton');
 
 let state = { productos: [], clientes: [], proveedores: [], fiados: [], ventas: [], categorias: [], context: null, lotAccess: null };
 let debtFocus = null;
@@ -67,9 +70,10 @@ const navigationFamilies = [
   { id: 'ventas', label: 'Ventas', sections: ['ventas', 'historialVentas', 'pagos', 'compensaciones'] },
   { id: 'inventario', label: 'Inventario', sections: ['productos', 'movimientosStock', 'compras', 'proveedores', 'inventarioInteligente', 'inventarioOperativo', 'lotesVencimientos'] },
   { id: 'clientes', label: 'Clientes', sections: ['clientes'] },
-  { id: 'reportes', label: 'Reportes', sections: ['reportes', 'finanzas', 'gastos', 'cierreCaja'] },
-  { id: 'administracion', label: 'Administracion y configuracion', sections: ['configuracion', 'auditoria'] }
+  { id: 'reportes', label: 'Reportes', sections: ['reportes', 'finanzas', 'gastos', 'cierreCaja'] }
 ];
+
+const settingsViews = new Set(['configuracion', 'auditoria']);
 
 const inventoryWorkspaceSections = ['productos', 'compras', 'movimientosStock', 'proveedores', 'lotesVencimientos', 'inventarioInteligente', 'inventarioOperativo'];
 const salesWorkspaceSections = ['ventas', 'historialVentas', 'pagos', 'compensaciones'];
@@ -508,8 +512,8 @@ const guidedHelp = Object.freeze({
     { view: 'productos', selector: '#addProduct', title: 'Agrega un producto', text: 'Este botón abre el formulario para registrar lo que vendes. La guía no guardará nada por ti.' }
   ],
   'registrar-stock': [
-    { view: 'compras', selector: '#comprasProvider', title: 'Elige el proveedor', text: 'Selecciona quién entrega la mercadería. También puedes continuar sin proveedor cuando corresponda.' },
-    { view: 'compras', selector: '#comprasSearch', title: 'Busca el producto', text: 'Escribe el nombre del producto y agrégalo a la compra.' },
+    { view: 'compras', selector: '#comprasProvider', advanceEvent: 'change', title: 'Elige el proveedor', text: 'Selecciona aquí quién entrega la mercadería. Al elegirlo, continuaremos al siguiente paso.' },
+    { view: 'compras', selector: '#comprasSearch', advanceEvent: 'input', title: 'Busca el producto', text: 'Escribe aquí el nombre del producto y agrégalo a la compra.' },
     { view: 'compras', selector: '#comprasForm button[type="submit"]', title: 'Confirma después de revisar', text: 'Revisa cantidades, costos y vencimientos. Este botón registra la compra; la guía nunca lo pulsará automáticamente.' }
   ],
   compras: [
@@ -560,15 +564,21 @@ async function startGuidedHelp(topic) {
         <h3 id="guidedTourTitle">${escapeHtml(step.title)}</h3>
         <p>${escapeHtml(step.text)}</p>
         <div class="guided-tour-actions">
-          <button type="button" class="secondary" data-tour-close data-modal-cancel>${current + 1 === steps.length ? 'Cerrar' : 'Salir'}</button>
           ${current > 0 ? '<button type="button" class="secondary" data-tour-back>Anterior</button>' : ''}
           ${current + 1 < steps.length ? '<button type="button" data-tour-next>Siguiente</button>' : ''}
+          <button type="button" class="secondary" data-tour-close data-modal-cancel>${current + 1 === steps.length ? 'Cerrar' : 'Salir'}</button>
         </div>
       </section>
     </div>`;
     modalRoot.querySelector('[data-tour-close]')?.addEventListener('click', close);
     modalRoot.querySelector('[data-tour-back]')?.addEventListener('click', () => { current -= 1; void render(); });
     modalRoot.querySelector('[data-tour-next]')?.addEventListener('click', () => { current += 1; void render(); });
+    if (step.advanceEvent && current + 1 < steps.length) {
+      target.addEventListener(step.advanceEvent, () => {
+        current += 1;
+        void render();
+      }, { once: true });
+    }
     modalRoot.querySelector('[data-tour-next], [data-tour-close]')?.focus();
   };
 
@@ -598,6 +608,15 @@ function closeMobileNavigation() {
 function navigateFromMenu(id) {
   closeMobileNavigation();
   return loadView(id);
+}
+
+function applyWorkspaceMode(id) {
+  const isSettings = settingsViews.has(id);
+  appLayout?.classList.toggle('settings-workspace', isSettings);
+  navigationToggle.hidden = isSettings;
+  if (isSettings) closeMobileNavigation();
+  settingsStoreButton.hidden = id === 'configuracion';
+  settingsAuditButton.hidden = id === 'auditoria' || !sectionAllowed('auditoria');
 }
 
 function renderMenu(activeView = 'inicio') {
@@ -719,12 +738,14 @@ async function loadView(id) {
   }
   if (id === 'ayuda' && activeView !== 'ayuda') helpReturnView = activeView;
   activeView = id;
+  applyWorkspaceMode(id);
   renderMenu(id);
   title.textContent = section[1];
   subtitle.textContent = section[2];
   if (helpButton) helpButton.hidden = id === 'ayuda';
   if (helpBackTopbar) helpBackTopbar.hidden = id !== 'ayuda';
-  if (quickActions) quickActions.hidden = id === 'ayuda';
+  if (settingsBackTopbar) settingsBackTopbar.hidden = !settingsViews.has(id);
+  if (quickActions) quickActions.hidden = id === 'ayuda' || settingsViews.has(id);
   accountMenu?.removeAttribute('open');
   view.setAttribute('aria-busy', 'true');
   view.classList.add('view-is-loading');
@@ -753,6 +774,7 @@ async function loadView(id) {
 
 helpButton?.addEventListener('click', () => openHelp());
 helpBackTopbar?.addEventListener('click', () => loadView(helpReturnView || 'inicio'));
+settingsBackTopbar?.addEventListener('click', () => loadView('inicio'));
 
 function setDesktopSidebarCollapsed(collapsed, persist = true) {
   appLayout?.classList.toggle('sidebar-collapsed', collapsed);

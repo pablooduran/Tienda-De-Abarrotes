@@ -21,7 +21,7 @@
     expired: 'La solicitud de Google venció. Inténtalo nuevamente.',
     account_not_found: 'No encontramos una cuenta vinculada. Elige Crear cuenta para comenzar con Google.',
     account_unavailable: 'Esta cuenta no está disponible para acceso con Google.',
-    invalid_registration: 'Completa correctamente el nombre de la tienda y el usuario.',
+    invalid_registration: 'Completa correctamente tu usuario.',
     failed: 'No pudimos completar el acceso con Google. Inténtalo nuevamente.'
   });
 
@@ -71,14 +71,14 @@
 
     if (googleRegistrationPending) {
       eyebrow.textContent = 'Cuenta de Google lista';
-      title.textContent = 'Completa los datos de tu tienda';
-      description.textContent = 'Google ya confirmó tu correo. Elige el nombre de tu tienda y tu usuario.';
-      submit.textContent = 'Crear mi tienda';
-      submit.dataset.pendingLabel = 'Creando tu tienda…';
+      title.textContent = 'Elige tu usuario';
+      description.textContent = 'Google ya confirmó tu correo. Después podrás preparar los datos de tu tienda.';
+      submit.textContent = 'Crear mi cuenta';
+      submit.dataset.pendingLabel = 'Creando tu cuenta…';
     } else {
       eyebrow.textContent = 'Primer paso';
-      title.textContent = 'Crea la cuenta de tu tienda';
-      description.textContent = 'Completa tus datos o continúa con Google para crear tu cuenta.';
+      title.textContent = 'Crea tu cuenta';
+      description.textContent = 'Elige tu usuario, agrega tu correo y crea una contraseña.';
       submit.textContent = 'Crear cuenta';
       submit.dataset.pendingLabel = 'Creando cuenta…';
     }
@@ -183,7 +183,7 @@
     showPanel(register ? 'register' : 'login', { focus: false });
     if (googleResult === 'registration_required') {
       setGoogleRegistrationMode(true);
-      setFeedback('register', 'Tu cuenta de Google está lista. Completa estos dos datos para crear tu tienda.');
+      setFeedback('register', 'Tu cuenta de Google está lista. Elige tu usuario para continuar.');
     } else {
       setFeedback(register ? 'register' : 'login', googleMessages[googleResult] || googleMessages.failed, 'error');
     }
@@ -214,10 +214,7 @@
     mutate(registrationForm, 'register', async () => {
       const data = Object.fromEntries(new FormData(registrationForm).entries());
       if (googleRegistrationPending) {
-        const result = await requestJson('/auth/google/complete-registration', {
-          nombreTienda: data.nombreTienda,
-          usuario: data.usuario
-        });
+        const result = await requestJson('/auth/google/complete-registration', { usuario: data.usuario });
         window.location.href = allowedDestinations.has(result.destination) ? result.destination : '/onboarding.html';
         return;
       }

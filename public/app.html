@@ -28,6 +28,7 @@
         </div>
         <div class="topbar-actions">
           <button id="helpBackTopbar" type="button" class="secondary" hidden>← Volver</button>
+          <button id="settingsBackTopbar" type="button" class="secondary" hidden>← Volver al panel</button>
           <nav class="quick-actions" id="quickActions" aria-label="Accesos rápidos">
             <button type="button" data-quick-view="ventas">Vender</button>
             <button type="button" class="secondary" data-quick-view="compras">Registrar compra</button>
@@ -38,7 +39,8 @@
             <div class="account-menu-panel">
               <p class="account-menu-title">Cuenta y configuración</p>
               <p id="subscriptionSummary" class="subscription-summary" hidden></p>
-              <button type="button" data-settings-view="configuracion">Configuración de la tienda</button>
+              <button id="settingsStoreButton" type="button" data-settings-view="configuracion">Configuración de la tienda</button>
+              <button id="settingsAuditButton" type="button" data-settings-view="auditoria">Auditoría</button>
               <a href="/suscripcion.html">Mi plan y facturación</a>
               <button id="helpBtn" type="button">Centro de ayuda</button>
               <button type="button" data-toggle-theme aria-pressed="false">Modo oscuro</button>

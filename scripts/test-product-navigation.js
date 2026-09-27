@@ -13,14 +13,19 @@ function check(name, condition) {
   checks.push({ name, ok: Boolean(condition) });
 }
 
-check('Las familias del propietario son explicitas', [
+check('Las familias operativas del propietario son explicitas', [
   "{ id: 'inicio', label: 'Inicio'",
   "{ id: 'ventas', label: 'Ventas'",
   "{ id: 'inventario', label: 'Inventario'",
   "{ id: 'clientes', label: 'Clientes'",
-  "{ id: 'reportes', label: 'Reportes'",
-  "{ id: 'administracion', label: 'Administracion y configuracion'"
+  "{ id: 'reportes', label: 'Reportes'"
 ].every((value) => app.includes(value)));
+check('Configuracion y auditoria viven fuera de la barra operativa',
+  !app.includes("{ id: 'administracion', label: 'Administracion y configuracion'")
+  && html.includes('id="settingsStoreButton"')
+  && html.includes('id="settingsAuditButton"')
+  && app.includes("const settingsViews = new Set(['configuracion', 'auditoria'])")
+  && css.includes('.layout.settings-workspace .sidebar'));
 check('Ventas conserva POS, historial, cobranza y devoluciones',
   app.includes("sections: ['ventas', 'historialVentas', 'pagos', 'compensaciones']"));
 check('Inventario conserva sus destinos existentes',
@@ -40,6 +45,10 @@ check('Movil conserva una navegacion compacta sin scroll horizontal',
   css.includes('.layout.sidebar-open .sidebar')
   && css.includes('transform: translateX(-102%);')
   && css.includes('overflow-x: hidden;'));
+check('El control para ocultar navegacion permanece disponible al desplazarse',
+  css.includes('.navigation-toggle {\n  position: fixed;')
+  && css.includes('.layout.sidebar-collapsed .navigation-toggle')
+  && css.includes('.layout.sidebar-open .navigation-toggle'));
 check('Superadmin conserva su navegacion independiente',
   admin.includes('Navegación administrativa')
   && admin.includes('Suscripciones SaaS')

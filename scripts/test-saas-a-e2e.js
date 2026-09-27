@@ -209,12 +209,14 @@ class HttpSession {
 
 function registration(marker, suffix = '') {
   return {
-    nombreTienda: `Tienda SaaS A5 ${marker}${suffix}`,
-    slug: `tienda-saas-a5-${marker}${suffix}`,
     usuario: `saas_a5_${marker}${suffix}`,
     correo: `saas-a5-${marker}${suffix}@example.test`,
     password: `SaaS-A5-${marker}${suffix}-segura!`
   };
+}
+
+function storeName(account) {
+  return `Tienda SaaS A5 ${account.usuario}`;
 }
 
 async function expectStatus(session, route, options, expected, label) {
@@ -241,7 +243,7 @@ async function runBrowserFlow(baseUrl, account) {
       }
     });
     page.on('request', (request) => {
-      if (!request.url().endsWith('/onboarding') || request.method() !== 'PATCH') return;
+      if (!request.url().endsWith('/onboarding/completar') || request.method() !== 'POST') return;
       try {
         onboardingPayloadKeys.push(Object.keys(JSON.parse(request.postData() || '{}')).sort());
       } catch {
@@ -259,24 +261,11 @@ async function runBrowserFlow(baseUrl, account) {
     await page.locator('#loginForm button[type="submit"]').press('Enter');
     await page.waitForURL('**/onboarding.html');
     await page.locator('[data-onboarding-form]').waitFor();
-    await page.locator('input[name="nombreMostrado"]').fill(`${account.nombreTienda} Configurada`);
+    await page.locator('input[name="nombreMostrado"]').fill(`${storeName(account)} Configurada`);
     await page.locator('input[name="telefono"]').fill('70000000');
-    await page.locator('[data-onboarding-save]').click();
-    await page.locator(
-      '[data-onboarding-message]:not(:empty), [data-onboarding-error]:not(:empty)'
-    ).waitFor();
-    const saveError = await page.locator('[data-onboarding-error]').textContent();
-    assert.strictEqual(
-      saveError,
-      '',
-      `El guardado de onboarding fallo: ${saveError}; campos=${JSON.stringify(onboardingPayloadKeys)}`
-    );
-    assert.strictEqual(
-      await page.locator('[data-onboarding-message]').textContent(),
-      'Configuracion guardada.'
-    );
     await page.locator('[data-onboarding-complete]').click();
     await page.locator('[data-onboarding-completed]').waitFor();
+    assert.deepStrictEqual(onboardingPayloadKeys, [['direccion', 'moneda', 'nombreMostrado', 'telefono']]);
     await page.locator('[data-onboarding-panel]').click();
     await page.waitForURL('**/app.html');
     const overflow = await page.evaluate(() =>
@@ -379,7 +368,7 @@ async function main() {
     await expectStatus(anonymous, '/auth/registro', {
       method: 'POST',
       headers: { 'Idempotency-Key': registrationKey },
-      body: { ...account, slug: `${account.slug}-conflicto` }
+      body: { ...account, correo: `conflicto-${marker}@example.test` }
     }, 409, 'Conflicto idempotente');
     await expectStatus(anonymous, '/auth/registro', {
       method: 'POST',
@@ -438,8 +427,8 @@ async function main() {
     }, 200, 'Login segunda tienda');
     assert.strictEqual(secondLogin.body.destination, '/onboarding.html');
     const secondOnboarding = await expectStatus(secondSession, '/onboarding', {}, 200, 'Onboarding segunda tienda');
-    assert.strictEqual(secondOnboarding.body.configuracion.nombreMostrado, secondAccount.nombreTienda);
-    assert.notStrictEqual(secondOnboarding.body.configuracion.nombreMostrado, `${account.nombreTienda} Configurada`);
+    assert.strictEqual(secondOnboarding.body.configuracion.nombreMostrado, '');
+    assert.notStrictEqual(secondOnboarding.body.configuracion.nombreMostrado, `${storeName(account)} Configurada`);
     await expectStatus(secondSession, '/onboarding', {
       method: 'PATCH', body: { idTienda: 1 }
     }, 400, 'Tenant rechazado en onboarding');

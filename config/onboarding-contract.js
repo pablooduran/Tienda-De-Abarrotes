@@ -1,7 +1,8 @@
 const ONBOARDING_STATES = Object.freeze(['pendiente', 'en_progreso', 'completado']);
-const REQUIRED_FIELDS = Object.freeze(['nombreMostrado', 'moneda', 'zonaHoraria']);
-const OPTIONAL_FIELDS = Object.freeze(['telefono', 'direccion', 'datoFiscalBasico']);
-const ALLOWED_FIELDS = Object.freeze([...REQUIRED_FIELDS, ...OPTIONAL_FIELDS]);
+const REQUIRED_FIELDS = Object.freeze(['nombreMostrado', 'moneda', 'telefono']);
+const OPTIONAL_FIELDS = Object.freeze(['direccion']);
+const LEGACY_FIELDS = Object.freeze(['zonaHoraria', 'datoFiscalBasico']);
+const ALLOWED_FIELDS = Object.freeze([...REQUIRED_FIELDS, ...OPTIONAL_FIELDS, ...LEGACY_FIELDS]);
 const ALLOWED_CURRENCIES = Object.freeze(['BOB']);
 const ALLOWED_TIME_ZONES = Object.freeze(['America/La_Paz']);
 

@@ -146,7 +146,6 @@ async function runFlow(browser, baseUrl, state) {
       'El acceso inicial no debe ofrecer verificacion antes de crear cuenta.');
     await page.getByRole('button', { name: 'Crear cuenta', exact: true }).click();
     await page.locator('#registrationForm').waitFor();
-    await page.locator('#register-store').fill('Tienda Pública Sintética');
     await page.locator('#register-user').fill('propietario_demo');
     await page.locator('#register-email').fill('propietario@example.test');
     await page.locator('#register-password').fill('ClaveSegura123');
@@ -162,7 +161,7 @@ async function runFlow(browser, baseUrl, state) {
     assert.strictEqual(registrationRequests.length, 1, 'Dos activaciones no deben duplicar el registro.');
     assert.deepStrictEqual(
       Object.keys(registrationRequests[0].payload).sort(),
-      ['correo', 'nombreTienda', 'password', 'usuario'],
+      ['correo', 'password', 'usuario'],
       'El registro envia exclusivamente el contrato publico.'
     );
     assert.match(registrationRequests[0].headers['idempotency-key'] || '', /^registro:[a-z0-9]+:/,
@@ -255,15 +254,13 @@ async function assertGoogleAvailability(browser, baseUrl, state) {
       'Despues de elegir Google no se debe pedir el correo de nuevo.');
     assert.strictEqual(await session.page.locator('[data-password-fields]').isHidden(), true,
       'Despues de elegir Google no se debe pedir contraseña.');
-    assert.strictEqual(await session.page.locator('#register-store').isVisible(), true);
     assert.strictEqual(await session.page.locator('#register-user').isVisible(), true);
-    await session.page.locator('#register-store').fill('Tienda Google Sintética');
     await session.page.locator('#register-user').fill('propietario_google');
     await session.page.locator('#registrationForm button[type="submit"]').click();
     await session.page.waitForURL('**/onboarding.html');
     assert(state.requests.some((item) => item.path === '/auth/google/complete-registration'
-      && Object.keys(item.payload).sort().join(',') === 'nombreTienda,usuario'),
-    'El cierre de registro Google solo debe enviar tienda y usuario.');
+      && Object.keys(item.payload).sort().join(',') === 'usuario'),
+    'El cierre de registro Google solo debe enviar el usuario.');
     assert.deepStrictEqual(session.errors, [], 'La activacion configurable de Google mantiene la consola limpia.');
   } finally {
     state.googleAvailable = false;
@@ -299,15 +296,15 @@ async function assertViewport(browser, baseUrl, viewport) {
     await session.page.getByRole('button', { name: 'Crear cuenta', exact: true }).click();
     await session.page.locator('#registrationForm').waitFor();
     await assertNoPageOverflow(session.page, `${viewport.width}x${viewport.height} registro`);
-    assert.strictEqual(await session.page.locator('#registrationForm input').count(), 5);
+    assert.strictEqual(await session.page.locator('#registrationForm input').count(), 4);
     const targetSize = await session.page.locator('#registrationForm button[type="submit"]').evaluate((node) => {
       const rect = node.getBoundingClientRect();
       return { width: rect.width, height: rect.height };
     });
     assert(targetSize.height >= 44 && targetSize.width >= 44, 'El CTA debe ser utilizable por touch.');
-    await session.page.locator('#register-store').focus();
+    await session.page.locator('#register-user').focus();
     await session.page.keyboard.press('Tab');
-    assert(await session.page.locator('#register-user').evaluate((node) => document.activeElement === node),
+    assert(await session.page.locator('#register-email').evaluate((node) => document.activeElement === node),
       'El orden de foco del registro debe ser logico.');
     assert.deepStrictEqual(session.errors, [], `Consola limpia en ${viewport.width}x${viewport.height}.`);
   } finally {

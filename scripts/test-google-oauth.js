@@ -132,7 +132,7 @@ async function main() {
     analytics: { accountRegistered: (event) => events.push(`analytics:${event.plan}`) }
   })).authenticate({
     subject: 'google-subject-new', email: 'new@example.test', mode: 'register',
-    registration: { nombreTienda: 'Tienda Google', usuario: 'owner_google' }
+    registration: { usuario: 'owner_google' }
   });
   assert.strictEqual(registered.created, true);
   assert.strictEqual(registered.admin.idTienda, 12);

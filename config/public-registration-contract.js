@@ -6,8 +6,9 @@ const INITIAL_SUBSCRIPTION_TYPE = 'prueba';
 const INITIAL_TRIAL_DAYS = 30;
 const INITIAL_ONBOARDING_STATUS = 'pendiente';
 const PENDING_ACCESS_STATUS = 'pendiente_verificacion';
+const PENDING_STORE_NAME_PREFIX = 'Tienda pendiente ';
 const RESERVED_SLUGS = new Set(['admin', 'api', 'auth', 'health', 'login', 'registro', 'www']);
-const ALLOWED_FIELDS = new Set(['nombreTienda', 'slug', 'usuario', 'correo', 'password']);
+const ALLOWED_FIELDS = new Set(['usuario', 'correo', 'password']);
 const IDEMPOTENCY_KEY = /^[A-Za-z0-9._:-]{16,128}$/;
 
 function registrationError(status, code, message = 'No se pudo completar el registro.') {
@@ -67,18 +68,9 @@ function normalizeRegistration(body) {
   for (const key of Object.keys(body)) {
     if (!ALLOWED_FIELDS.has(key)) throw registrationError(400, 'REGISTRATION_INPUT_INVALID');
   }
-  const nombreTienda = cleanText(body.nombreTienda);
-  if (nombreTienda.length < 2 || nombreTienda.length > 120) {
-    throw registrationError(400, 'REGISTRATION_INPUT_INVALID');
-  }
-  const slug = normalizeSlug(body.slug || nombreTienda);
-  if (slug.length < 3 || RESERVED_SLUGS.has(slug)) {
-    throw registrationError(400, 'REGISTRATION_INPUT_INVALID');
-  }
+  const usuario = normalizeUsername(body.usuario);
   return Object.freeze({
-    nombreTienda,
-    slug,
-    usuario: normalizeUsername(body.usuario),
+    usuario,
     correo: normalizeEmail(body.correo),
     password: validatePassword(body.password)
   });
@@ -88,15 +80,15 @@ function normalizeGoogleRegistration(body) {
   if (!body || typeof body !== 'object' || Array.isArray(body)) {
     throw registrationError(400, 'REGISTRATION_INPUT_INVALID');
   }
-  const nombreTienda = cleanText(body.nombreTienda);
-  if (nombreTienda.length < 2 || nombreTienda.length > 120) {
-    throw registrationError(400, 'REGISTRATION_INPUT_INVALID');
-  }
-  const slug = normalizeSlug(body.slug || nombreTienda);
-  if (slug.length < 3 || RESERVED_SLUGS.has(slug)) {
-    throw registrationError(400, 'REGISTRATION_INPUT_INVALID');
-  }
-  return Object.freeze({ nombreTienda, slug, usuario: normalizeUsername(body.usuario) });
+  return Object.freeze({ usuario: normalizeUsername(body.usuario) });
+}
+
+function initialStoreIdentity(usuario) {
+  const normalizedUser = normalizeUsername(usuario);
+  return Object.freeze({
+    nombreTienda: `${PENDING_STORE_NAME_PREFIX}${normalizedUser}`,
+    slug: `tienda-${normalizeSlug(normalizedUser)}`
+  });
 }
 
 function sha256(value) {
@@ -105,8 +97,6 @@ function sha256(value) {
 
 function requestFingerprint(registration, secret) {
   const serialized = JSON.stringify({
-    nombreTienda: registration.nombreTienda,
-    slug: registration.slug,
     usuario: registration.usuario,
     correo: registration.correo,
     password: registration.password
@@ -128,7 +118,9 @@ module.exports = {
   INITIAL_PLAN_CODE,
   INITIAL_SUBSCRIPTION_TYPE,
   INITIAL_TRIAL_DAYS,
+  initialStoreIdentity,
   PENDING_ACCESS_STATUS,
+  PENDING_STORE_NAME_PREFIX,
   RESERVED_SLUGS,
   normalizeEmail,
   normalizeGoogleRegistration,

@@ -40,7 +40,7 @@ assert(!/<style[\s>]/i.test(html), 'No se permiten estilos inline.');
 assert(!html.includes('login-box'), 'La superficie anterior no debe coexistir con el acceso unificado.');
 
 for (const id of [
-  'login-user', 'login-password', 'register-store', 'register-user', 'register-email',
+  'login-user', 'login-password', 'register-user', 'register-email',
   'register-password', 'register-confirmation', 'verification-token', 'resend-email',
   'recovery-email', 'recovery-resend-email', 'recovery-token', 'new-password', 'new-password-confirmation'
 ]) {
@@ -70,7 +70,7 @@ assert(script.includes("'/auth/google/status'") && script.includes("SecurityHttp
 assert(html.includes('class="google-logo"') && html.includes('fill="#4285F4"'),
   'Google debe usar su marca multicolor reconocible, no una letra generica.');
 assert(script.includes('setGoogleRegistrationMode') && script.includes("'/auth/google/complete-registration'"),
-  'El registro con Google debe pedir tienda y usuario solo despues de confirmar Google.');
+  'El registro con Google debe pedir solo el usuario despues de confirmar Google.');
 assert(!/GOOGLE_OAUTH_CLIENT_SECRET|clientSecret/.test(html + script),
   'El frontend no debe contener credenciales de Google.');
 

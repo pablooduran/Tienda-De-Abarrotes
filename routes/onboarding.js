@@ -29,13 +29,10 @@ function createOnboardingRouter({ service = onboardingService } = {}) {
   }));
 
   router.post('/completar', asyncRoute(async (req, res) => {
-    if (req.body && typeof req.body === 'object' && Object.keys(req.body).length) {
-      const error = new Error('La solicitud de finalizacion no acepta campos adicionales.');
-      error.status = 400;
-      error.code = 'ONBOARDING_INPUT_INVALID';
-      throw error;
-    }
-    res.json(await service.complete(context(req)));
+    const body = req.body && typeof req.body === 'object' && Object.keys(req.body).length > 0
+      ? req.body
+      : null;
+    res.json(await service.complete(context(req), body));
   }));
 
   return router;
