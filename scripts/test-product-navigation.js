@@ -50,7 +50,7 @@ check('El control para ocultar navegacion permanece disponible al desplazarse',
   && css.includes('left: 32px;')
   && css.includes('.layout.sidebar-open .navigation-toggle')
   && app.includes('function setNavigationToggleState(open)')
-  && app.includes("navigationToggle.textContent = open ? '×' : '☰'"));
+  && app.includes("navigationToggle.textContent = open ? '‹' : '☰'"));
 check('Superadmin conserva su navegacion independiente',
   admin.includes('Navegación administrativa')
   && admin.includes('Suscripciones SaaS')

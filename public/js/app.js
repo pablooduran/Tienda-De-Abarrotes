@@ -786,7 +786,7 @@ function setNavigationToggleState(open) {
   if (!navigationToggle) return;
   navigationToggle.setAttribute('aria-expanded', String(open));
   navigationToggle.setAttribute('aria-label', open ? 'Ocultar navegación' : 'Mostrar navegación');
-  navigationToggle.textContent = open ? '×' : '☰';
+  navigationToggle.textContent = open ? '‹' : '☰';
   navigationToggle.classList.toggle('is-open', open);
 }
 
