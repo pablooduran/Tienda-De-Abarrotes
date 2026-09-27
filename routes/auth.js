@@ -217,13 +217,16 @@ router.post('/google/start', async (req, res, next) => {
       return res.status(503).json({ error: 'El acceso con Google no esta disponible.', code: 'GOOGLE_NOT_CONFIGURED' });
     }
     const mode = req.body?.mode === 'register' ? 'register' : 'login';
-    const registration = mode === 'register'
+    const hasRegistration = mode === 'register'
+      && (req.body?.nombreTienda !== undefined || req.body?.usuario !== undefined);
+    const registration = hasRegistration
       ? normalizeGoogleRegistration({ nombreTienda: req.body?.nombreTienda, usuario: req.body?.usuario })
       : null;
     const state = crypto.randomBytes(32).toString('base64url');
     const nonce = crypto.randomBytes(32).toString('base64url');
     const codeVerifier = crypto.randomBytes(48).toString('base64url');
     const codeChallenge = crypto.createHash('sha256').update(codeVerifier).digest('base64url');
+    delete req.session.googleRegistration;
     req.session.googleOauth = { state, nonce, codeVerifier, mode, registration, createdAt: Date.now() };
     await saveSession(req);
     return res.json({ authorizationUrl: googleClient.generateAuthUrl({
@@ -262,10 +265,23 @@ router.get('/google/callback', async (req, res) => {
     const payload = ticket.getPayload();
     if (!payload || !safeEqual(payload.nonce, flow.nonce) || payload.email_verified !== true
       || !payload.email || !payload.sub) return googleRedirect(res, 'failed');
-    const result = await googleIdentityService.authenticate({
-      subject: payload.sub, email: payload.email, mode: flow.mode,
-      registration: flow.registration, requestId: req.requestId
-    });
+    let result;
+    try {
+      result = await googleIdentityService.authenticate({
+        subject: payload.sub, email: payload.email,
+        mode: flow.registration ? 'register' : 'login',
+        registration: flow.registration, requestId: req.requestId
+      });
+    } catch (error) {
+      if (error?.code === 'GOOGLE_ACCOUNT_NOT_FOUND' && flow.mode === 'register' && !flow.registration) {
+        req.session.googleRegistration = {
+          subject: String(payload.sub), email: String(payload.email), createdAt: Date.now()
+        };
+        await saveSession(req);
+        return googleRedirect(res, 'registration_required');
+      }
+      throw error;
+    }
     const destination = await establishGoogleSession(req, res, result.admin);
     return res.redirect(destination);
   } catch (error) {
@@ -281,6 +297,33 @@ router.get('/google/callback', async (req, res) => {
       return googleRedirect(res, 'account_unavailable');
     }
     return googleRedirect(res, 'failed');
+  }
+});
+
+router.post('/google/complete-registration', async (req, res, next) => {
+  try {
+    const pending = req.session?.googleRegistration;
+    if (!pending || Date.now() - Number(pending.createdAt || 0) > GOOGLE_FLOW_TTL_MS) {
+      delete req.session.googleRegistration;
+      await saveSession(req);
+      return res.status(400).json({
+        error: 'Tu registro con Google venció. Vuelve a continuar con Google.',
+        code: 'GOOGLE_REGISTRATION_EXPIRED'
+      });
+    }
+    const registration = normalizeGoogleRegistration({
+      nombreTienda: req.body?.nombreTienda,
+      usuario: req.body?.usuario
+    });
+    const result = await googleIdentityService.authenticate({
+      subject: pending.subject, email: pending.email, mode: 'register', registration, requestId: req.requestId
+    });
+    delete req.session.googleRegistration;
+    await saveSession(req);
+    const destination = await establishGoogleSession(req, res, result.admin);
+    return res.status(201).json({ message: 'Tu tienda fue creada con Google.', destination });
+  } catch (error) {
+    return next(error);
   }
 });
 

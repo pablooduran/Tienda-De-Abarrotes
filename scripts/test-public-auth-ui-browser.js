@@ -78,6 +78,9 @@ function createFixture() {
       if (url.pathname === '/auth/restablecer-password') {
         return json(response, 200, { message: 'Contraseña actualizada.' });
       }
+      if (url.pathname === '/auth/google/complete-registration') {
+        return json(response, 201, { destination: '/onboarding.html' });
+      }
       if (url.pathname === '/auth/login' && ['propietario_demo', 'propietario@example.test'].includes(payload.usuario)) {
         return json(response, 200, { destination: '/app.html', admin: { rol: 'dueno_tienda' } });
       }
@@ -86,6 +89,10 @@ function createFixture() {
     if (url.pathname === '/app.html') {
       response.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
       return response.end('<!doctype html><title>Aplicación</title><main id="app-loaded">Aplicación</main>');
+    }
+    if (url.pathname === '/onboarding.html') {
+      response.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+      return response.end('<!doctype html><title>Onboarding</title><main id="onboarding-loaded">Onboarding</main>');
     }
     const relative = url.pathname === '/' ? 'login.html' : url.pathname.slice(1);
     const file = path.resolve(PUBLIC, relative);
@@ -175,7 +182,7 @@ async function runFlow(browser, baseUrl, state) {
     await page.locator('[data-auth-feedback="verify"]').getByText(/nuevo código/i).waitFor();
 
     await page.getByRole('button', { name: 'Volver a iniciar sesión' }).click();
-    await page.getByRole('button', { name: 'Olvidé mi contraseña' }).click();
+    await page.getByRole('button', { name: '¿Olvidaste tu contraseña?' }).click();
     await page.locator('#recovery-email').fill('propietario@example.test');
     await page.locator('#recoveryRequestForm button[type="submit"]').click();
     await page.locator('[data-auth-panel="reset"]:visible').waitFor();
@@ -236,9 +243,27 @@ async function assertGoogleAvailability(browser, baseUrl, state) {
   state.googleAvailable = true;
   const session = await open(browser, baseUrl, { width: 1366, height: 768 });
   try {
-    await session.page.getByRole('button', { name: 'Continuar con Google' }).waitFor();
+    assert.strictEqual(await session.page.getByRole('button', { name: 'Continuar con Google', exact: true }).count(), 1,
+      'El acceso debe mostrar una sola accion Google junto al formulario convencional.');
     await session.page.getByRole('button', { name: 'Crear cuenta', exact: true }).click();
-    await session.page.getByRole('button', { name: 'Crear cuenta con Google' }).waitFor();
+    assert.strictEqual(await session.page.getByRole('button', { name: 'Continuar con Google', exact: true }).count(), 1,
+      'El registro debe conservar una sola accion Google debajo del formulario convencional.');
+
+    await session.page.goto(`${baseUrl}/login.html?google=registration_required`);
+    await session.page.locator('[data-auth-panel="register"]:visible').waitFor();
+    assert.strictEqual(await session.page.locator('#register-email').isHidden(), true,
+      'Despues de elegir Google no se debe pedir el correo de nuevo.');
+    assert.strictEqual(await session.page.locator('[data-password-fields]').isHidden(), true,
+      'Despues de elegir Google no se debe pedir contraseña.');
+    assert.strictEqual(await session.page.locator('#register-store').isVisible(), true);
+    assert.strictEqual(await session.page.locator('#register-user').isVisible(), true);
+    await session.page.locator('#register-store').fill('Tienda Google Sintética');
+    await session.page.locator('#register-user').fill('propietario_google');
+    await session.page.locator('#registrationForm button[type="submit"]').click();
+    await session.page.waitForURL('**/onboarding.html');
+    assert(state.requests.some((item) => item.path === '/auth/google/complete-registration'
+      && Object.keys(item.payload).sort().join(',') === 'nombreTienda,usuario'),
+    'El cierre de registro Google solo debe enviar tienda y usuario.');
     assert.deepStrictEqual(session.errors, [], 'La activacion configurable de Google mantiene la consola limpia.');
   } finally {
     state.googleAvailable = false;

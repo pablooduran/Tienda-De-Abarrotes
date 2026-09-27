@@ -44,41 +44,35 @@
           <button type="button" data-toggle-theme aria-pressed="false">Modo oscuro</button>
         </div>
       </details>
-      <div class="auth-switcher" aria-label="Elige cómo continuar">
-        <button type="button" data-auth-target="login" aria-pressed="true">Iniciar sesión</button>
-        <button type="button" data-auth-target="register" aria-pressed="false">Crear cuenta</button>
-      </div>
-
       <section class="auth-panel" data-auth-panel="login" aria-labelledby="login-title">
         <header class="auth-panel-heading">
           <p class="auth-eyebrow">Bienvenido de nuevo</p>
-          <h2 id="login-title" tabindex="-1">Entra a tu tienda</h2>
-          <p>Usa tu usuario o correo verificado y la contraseña de tu cuenta.</p>
+          <h2 id="login-title" tabindex="-1">Iniciar sesión</h2>
+          <p>Ingresa con tu correo o usuario, o continúa directamente con Google.</p>
         </header>
-        <div class="auth-google-entry" data-google-entry="login" hidden>
-          <button type="button" class="auth-google-button" data-google-action="login"><span aria-hidden="true">G</span> Continuar con Google</button>
-          <p class="auth-divider"><span>o usa tu contraseña</span></p>
-        </div>
         <form id="loginForm" class="auth-form" novalidate>
-          <label for="login-user">Usuario o correo
+          <label for="login-user">Correo o usuario
             <input id="login-user" name="usuario" required maxlength="160" autocomplete="username">
           </label>
           <label for="login-password">Contraseña
             <input id="login-password" name="password" type="password" required autocomplete="current-password">
           </label>
+          <div class="auth-inline-link"><button type="button" class="auth-link" data-auth-target="recovery">¿Olvidaste tu contraseña?</button></div>
           <button type="submit" data-pending-label="Ingresando…">Iniciar sesión</button>
           <p id="loginMessage" class="auth-message" role="status" aria-live="polite"></p>
         </form>
-        <div class="auth-panel-links" aria-label="Otras opciones de acceso">
-          <button type="button" class="auth-link" data-auth-target="recovery">Olvidé mi contraseña</button>
+        <div class="auth-google-entry" data-google-entry="login" hidden>
+          <p class="auth-divider"><span>o continúa con</span></p>
+          <button type="button" class="auth-google-button" data-google-action="login"><svg class="google-logo" viewBox="0 0 24 24" aria-hidden="true"><path fill="#4285F4" d="M21.8 12.23c0-.71-.06-1.39-.18-2.05H12v3.88h5.5a4.7 4.7 0 0 1-2.04 3.08v2.52h3.3c1.93-1.78 3.04-4.4 3.04-7.43Z"/><path fill="#34A853" d="M12 22c2.76 0 5.08-.92 6.77-2.49l-3.3-2.52c-.92.62-2.08.99-3.47.99-2.67 0-4.94-1.8-5.75-4.23H2.84v2.6A10.22 10.22 0 0 0 12 22Z"/><path fill="#FBBC05" d="M6.25 13.75A6.14 6.14 0 0 1 5.93 12c0-.61.11-1.2.32-1.75v-2.6H2.84A10 10 0 0 0 1.78 12c0 1.61.39 3.14 1.06 4.35l3.41-2.6Z"/><path fill="#EA4335" d="M12 6.02c1.5 0 2.85.52 3.91 1.53l2.94-2.94C17.08 2.96 14.76 2 12 2a10.22 10.22 0 0 0-9.16 5.65l3.41 2.6C7.06 7.82 9.33 6.02 12 6.02Z"/></svg><span>Continuar con Google</span></button>
         </div>
+        <p class="auth-account-link">¿No tienes cuenta? <button type="button" class="auth-link" data-auth-target="register">Crear cuenta</button></p>
       </section>
 
       <section class="auth-panel" data-auth-panel="register" aria-labelledby="register-title" hidden>
         <header class="auth-panel-heading">
-          <p class="auth-eyebrow">Primer paso</p>
+          <p class="auth-eyebrow" data-register-eyebrow>Primer paso</p>
           <h2 id="register-title" tabindex="-1">Crea la cuenta de tu tienda</h2>
-          <p>Después confirmarás tu correo antes de comenzar la configuración.</p>
+          <p data-register-description>Completa tus datos o continúa con Google para crear tu cuenta.</p>
         </header>
         <form id="registrationForm" class="auth-form" novalidate>
           <label for="register-store">Nombre de la tienda
@@ -92,12 +86,7 @@
               <input id="register-email" name="correo" type="email" required maxlength="160" autocomplete="email">
             </label>
           </div>
-          <div class="auth-google-entry" data-google-entry="register" hidden>
-            <button type="button" class="auth-google-button" data-google-action="register"><span aria-hidden="true">G</span> Crear cuenta con Google</button>
-            <small>Primero escribe el nombre de la tienda y el usuario que quieres usar.</small>
-            <p class="auth-divider"><span>o crea una contraseña</span></p>
-          </div>
-          <div class="auth-form-row">
+          <div class="auth-form-row" data-password-fields>
             <label for="register-password">Contraseña
               <input id="register-password" name="password" type="password" required minlength="12" maxlength="72" autocomplete="new-password" aria-describedby="register-password-help">
             </label>
@@ -105,13 +94,18 @@
               <input id="register-confirmation" name="confirmacionRegistro" type="password" required minlength="12" maxlength="72" autocomplete="new-password">
             </label>
           </div>
-          <p id="register-password-help" class="auth-field-help">Usa al menos 12 caracteres.</p>
+          <p id="register-password-help" class="auth-field-help" data-password-help>Usa al menos 12 caracteres.</p>
           <button type="submit" data-pending-label="Creando cuenta…">Crear cuenta</button>
           <p class="auth-message" data-auth-feedback="register" role="status" aria-live="polite"></p>
         </form>
+        <div class="auth-google-entry" data-google-entry="register" hidden>
+          <p class="auth-divider"><span>o continúa con</span></p>
+          <button type="button" class="auth-google-button" data-google-action="register"><svg class="google-logo" viewBox="0 0 24 24" aria-hidden="true"><path fill="#4285F4" d="M21.8 12.23c0-.71-.06-1.39-.18-2.05H12v3.88h5.5a4.7 4.7 0 0 1-2.04 3.08v2.52h3.3c1.93-1.78 3.04-4.4 3.04-7.43Z"/><path fill="#34A853" d="M12 22c2.76 0 5.08-.92 6.77-2.49l-3.3-2.52c-.92.62-2.08.99-3.47.99-2.67 0-4.94-1.8-5.75-4.23H2.84v2.6A10.22 10.22 0 0 0 12 22Z"/><path fill="#FBBC05" d="M6.25 13.75A6.14 6.14 0 0 1 5.93 12c0-.61.11-1.2.32-1.75v-2.6H2.84A10 10 0 0 0 1.78 12c0 1.61.39 3.14 1.06 4.35l3.41-2.6Z"/><path fill="#EA4335" d="M12 6.02c1.5 0 2.85.52 3.91 1.53l2.94-2.94C17.08 2.96 14.76 2 12 2a10.22 10.22 0 0 0-9.16 5.65l3.41 2.6C7.06 7.82 9.33 6.02 12 6.02Z"/></svg><span>Continuar con Google</span></button>
+        </div>
         <div class="auth-panel-links" aria-label="Verificación pendiente">
           <button type="button" class="auth-link" data-auth-target="verify">Ya creé mi cuenta y tengo un código</button>
         </div>
+        <p class="auth-account-link">¿Ya tienes cuenta? <button type="button" class="auth-link" data-auth-target="login">Iniciar sesión</button></p>
       </section>
 
       <section class="auth-panel" data-auth-panel="verify" aria-labelledby="verify-title" hidden>

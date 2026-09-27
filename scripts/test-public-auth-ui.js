@@ -14,7 +14,8 @@ const endpoints = [
   '/auth/verificar-correo',
   '/auth/reenviar-verificacion',
   '/auth/solicitar-recuperacion',
-  '/auth/restablecer-password'
+  '/auth/restablecer-password',
+  '/auth/google/complete-registration'
 ];
 
 for (const panel of panels) {
@@ -26,9 +27,8 @@ for (const endpoint of endpoints) {
 
 assert(html.includes('Empieza') === false, 'El acceso publico no debe duplicar la guia Welcome.');
 assert(html.includes('Crear cuenta'), 'Debe existir un CTA publico para crear cuenta.');
-assert(html.includes('Olvidé mi contraseña'), 'Debe existir recuperacion visible.');
-assert(html.includes('Usuario o correo'), 'El acceso debe ofrecer usuario o correo verificado.');
-assert(html.includes('correo verificado'), 'El acceso debe aclarar que el correo debe estar verificado.');
+assert(html.includes('¿Olvidaste tu contraseña?'), 'Debe existir recuperacion visible.');
+assert(html.includes('Correo o usuario'), 'El acceso debe ofrecer correo o usuario.');
 const loginPanel = html.split('data-auth-panel="login"')[1].split('data-auth-panel="register"')[0];
 const registerPanel = html.split('data-auth-panel="register"')[1].split('data-auth-panel="verify"')[0];
 assert(!loginPanel.includes('data-auth-target="verify"'), 'El login no debe mostrar verificacion antes de solicitar codigo.');
@@ -67,6 +67,10 @@ assert(html.includes('data-google-action="login"') && html.includes('data-google
   'El acceso debe incluir las dos entradas configurables de Google.');
 assert(script.includes("'/auth/google/status'") && script.includes("SecurityHttp.secureFetch('/auth/google/start'"),
   'Google debe activarse desde backend y comenzar mediante un POST protegido.');
+assert(html.includes('class="google-logo"') && html.includes('fill="#4285F4"'),
+  'Google debe usar su marca multicolor reconocible, no una letra generica.');
+assert(script.includes('setGoogleRegistrationMode') && script.includes("'/auth/google/complete-registration'"),
+  'El registro con Google debe pedir tienda y usuario solo despues de confirmar Google.');
 assert(!/GOOGLE_OAUTH_CLIENT_SECRET|clientSecret/.test(html + script),
   'El frontend no debe contener credenciales de Google.');
 

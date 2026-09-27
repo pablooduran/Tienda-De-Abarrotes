@@ -13,6 +13,7 @@
   });
   const allowedDestinations = new Set(['/admin.html', '/app.html', '/onboarding.html', '/suscripcion.html']);
   let registrationKey = null;
+  let googleRegistrationPending = false;
   const resendTimers = new WeakMap();
   const googleMessages = Object.freeze({
     not_configured: 'El acceso con Google todavía no está configurado.',
@@ -46,6 +47,41 @@
     }
     document.title = `${panelTitles[panelName]} | Tienda de abarrotes`;
     if (focus) panels.get(panelName).querySelector('h2')?.focus();
+  }
+
+  function setGoogleRegistrationMode(enabled) {
+    googleRegistrationPending = Boolean(enabled);
+    const form = document.getElementById('registrationForm');
+    const email = document.getElementById('register-email');
+    const passwordFields = document.querySelector('[data-password-fields]');
+    const passwordHelp = document.querySelector('[data-password-help]');
+    const title = document.getElementById('register-title');
+    const eyebrow = document.querySelector('[data-register-eyebrow]');
+    const description = document.querySelector('[data-register-description]');
+    const submit = form?.querySelector('button[type="submit"]');
+    const googleEntry = document.querySelector('[data-google-entry="register"]');
+    if (!form || !email || !passwordFields || !passwordHelp || !title || !eyebrow || !description || !submit) return;
+
+    email.closest('label').hidden = googleRegistrationPending;
+    email.required = !googleRegistrationPending;
+    passwordFields.hidden = googleRegistrationPending;
+    passwordHelp.hidden = googleRegistrationPending;
+    passwordFields.querySelectorAll('input').forEach((input) => { input.required = !googleRegistrationPending; });
+    if (googleEntry) googleEntry.hidden = googleRegistrationPending;
+
+    if (googleRegistrationPending) {
+      eyebrow.textContent = 'Cuenta de Google lista';
+      title.textContent = 'Completa los datos de tu tienda';
+      description.textContent = 'Google ya confirmó tu correo. Elige el nombre de tu tienda y tu usuario.';
+      submit.textContent = 'Crear mi tienda';
+      submit.dataset.pendingLabel = 'Creando tu tienda…';
+    } else {
+      eyebrow.textContent = 'Primer paso';
+      title.textContent = 'Crea la cuenta de tu tienda';
+      description.textContent = 'Completa tus datos o continúa con Google para crear tu cuenta.';
+      submit.textContent = 'Crear cuenta';
+      submit.dataset.pendingLabel = 'Creando cuenta…';
+    }
   }
 
   function operationKey() {
@@ -89,13 +125,6 @@
 
   async function submitGoogle(mode, button) {
     const fields = { mode };
-    if (mode === 'register') {
-      const store = document.getElementById('register-store');
-      const user = document.getElementById('register-user');
-      if (!store.reportValidity() || !user.reportValidity()) return;
-      fields.nombreTienda = store.value;
-      fields.usuario = user.value;
-    }
     button.disabled = true;
     try {
       const response = await SecurityHttp.secureFetch('/auth/google/start', {
@@ -150,9 +179,14 @@
 
   const googleResult = new URLSearchParams(window.location.search).get('google');
   if (googleResult) {
-    const register = googleResult === 'account_not_found' || googleResult === 'invalid_registration';
+    const register = ['account_not_found', 'invalid_registration', 'registration_required'].includes(googleResult);
     showPanel(register ? 'register' : 'login', { focus: false });
-    setFeedback(register ? 'register' : 'login', googleMessages[googleResult] || googleMessages.failed, 'error');
+    if (googleResult === 'registration_required') {
+      setGoogleRegistrationMode(true);
+      setFeedback('register', 'Tu cuenta de Google está lista. Completa estos dos datos para crear tu tienda.');
+    } else {
+      setFeedback(register ? 'register' : 'login', googleMessages[googleResult] || googleMessages.failed, 'error');
+    }
     window.history.replaceState({}, '', '/login.html');
   }
 
@@ -179,6 +213,14 @@
     event.preventDefault();
     mutate(registrationForm, 'register', async () => {
       const data = Object.fromEntries(new FormData(registrationForm).entries());
+      if (googleRegistrationPending) {
+        const result = await requestJson('/auth/google/complete-registration', {
+          nombreTienda: data.nombreTienda,
+          usuario: data.usuario
+        });
+        window.location.href = allowedDestinations.has(result.destination) ? result.destination : '/onboarding.html';
+        return;
+      }
       if (data.password !== data.confirmacionRegistro) {
         throw new Error('Las contraseñas no coinciden. Revísalas e inténtalo nuevamente.');
       }
@@ -217,6 +259,8 @@
       window.setTimeout(() => startResendCooldown(resendForm), 0);
     });
   });
+
+  if (!googleRegistrationPending) setGoogleRegistrationMode(false);
 
   const recoveryForm = document.getElementById('recoveryRequestForm');
   recoveryForm.addEventListener('submit', (event) => {
