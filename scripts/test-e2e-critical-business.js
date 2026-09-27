@@ -100,8 +100,8 @@ async function initializeSchema(connection) {
   );
   const migrations = fs.readdirSync(MIGRATIONS_DIR)
     .filter((name) => /^\d{3}_.+\.sql$/i.test(name)).sort();
-  ok(migrations.length === 24 && migrations.at(-1).startsWith('024_'),
-    'La base temporal representa exactamente las migraciones 001-024.');
+  ok(migrations.length === 25 && migrations.at(-1).startsWith('025_'),
+    'La base temporal representa exactamente las migraciones 001-025.');
   for (const migration of migrations) {
     await connection.query('INSERT INTO schema_migrations (nombre) VALUES (?)', [migration]);
   }
@@ -313,7 +313,8 @@ async function runBrowserFlow({ baseUrl, username, password, productName, custom
     await page.locator('[data-payment-form]').waitFor();
     ok((await page.locator('body').innerText()).includes('Pro'),
       'Mi plan muestra la suscripcion sintetica vigente.');
-    await page.locator('[data-payment-form] [name="plan"]').selectOption('pro');
+    await page.locator('article[data-plan-code="pro"] [data-plan-action="payment"]').click();
+    await page.locator('[data-payment-form]:visible').waitFor();
     ok(await page.getByRole('button', { name: 'Ver precio' }).isEnabled(),
       'Mi plan conserva la accion de revisar el precio.');
     ok(errors.length === 0, `El recorrido browser termina con consola limpia${errors.length ? `: ${errors.join(' | ')}` : ''}.`);

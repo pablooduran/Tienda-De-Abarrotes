@@ -1,7 +1,9 @@
 const INITIAL_STAGING_DATABASE = 'tienda_abarrotes_staging';
 const REMOTE_STAGING_ARGUMENT = '--remote-staging';
 const REMOTE_STAGING_DIAGNOSTIC_ARGUMENT = '--remote-staging-diagnose';
-const REMOTE_STAGING_CONFIRMATION = 'CONFIRM_EMPTY_STAGING_001_024';
+const REMOTE_STAGING_CONFIRMATION = 'CONFIRM_EMPTY_STAGING_001_025';
+const REMOTE_STAGING_SUPERADMIN_ARGUMENT = '--remote-staging-superadmin';
+const REMOTE_STAGING_SUPERADMIN_CONFIRMATION = 'CREATE_FIRST_STAGING_SUPERADMIN';
 const STAGING_DATABASE_DIAGNOSTICS = Object.freeze({
   EMPTY: 'EMPTY',
   BASELINE_INITIAL: 'BASELINE_INITIAL',
@@ -84,6 +86,26 @@ function resolveDatabaseMutationMode({ args = [], environment = process.env } = 
   return Object.freeze({ type: 'local' });
 }
 
+function resolveSuperadminCreationMode({ args = [], environment = process.env } = {}) {
+  if (args.includes(REMOTE_STAGING_SUPERADMIN_ARGUMENT)) {
+    if (args.length !== 1 || args[0] !== REMOTE_STAGING_SUPERADMIN_ARGUMENT) {
+      throw new Error(`La creacion remota exige el argumento explicito ${REMOTE_STAGING_SUPERADMIN_ARGUMENT}.`);
+    }
+    assertRemoteStagingConnectionAuthorization(environment);
+    if (String(environment.STAGING_SUPERADMIN_CONFIRMATION || '').trim() !== REMOTE_STAGING_SUPERADMIN_CONFIRMATION) {
+      throw new Error('Falta la confirmacion explicita para crear el primer superadmin de staging.');
+    }
+    return Object.freeze({ type: 'remote-staging-superadmin' });
+  }
+  if (!isLocalHost(environment.DB_HOST)) {
+    throw new Error(`Un destino remoto exige ${REMOTE_STAGING_SUPERADMIN_ARGUMENT} y la autorizacion explicita de staging.`);
+  }
+  if (!['local', 'test'].includes(normalized(environment.APP_ENV))) {
+    throw new Error('La creacion local de superadmin exige APP_ENV=local o test y DB_HOST=localhost.');
+  }
+  return Object.freeze({ type: 'local' });
+}
+
 async function tableNames(connection, database) {
   const [rows] = await connection.query(
     `SELECT TABLE_NAME
@@ -141,6 +163,8 @@ module.exports = {
   REMOTE_STAGING_ARGUMENT,
   REMOTE_STAGING_DIAGNOSTIC_ARGUMENT,
   REMOTE_STAGING_CONFIRMATION,
+  REMOTE_STAGING_SUPERADMIN_ARGUMENT,
+  REMOTE_STAGING_SUPERADMIN_CONFIRMATION,
   STAGING_DATABASE_DIAGNOSTICS,
   assertEmptyRemoteStagingDatabase,
   assertRemoteStagingMigrationBaseline,
@@ -149,5 +173,6 @@ module.exports = {
   diagnoseRemoteStagingDatabase,
   isLocalHost,
   resolveDatabaseMutationMode,
-  resolveRemoteStagingDiagnosticMode
+  resolveRemoteStagingDiagnosticMode,
+  resolveSuperadminCreationMode
 };

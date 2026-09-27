@@ -1250,6 +1250,26 @@ const migrationRequirements = {
         ['idMetodoPagoResultado'], 'metodoPagoSuscripcion',
         ['idMetodoPagoSuscripcion'], 'RESTRICT', 'RESTRICT']
     ]
+  },
+  '025_google_oauth_identities.sql': {
+    columns: {
+      identidadOauthAdministrador: [
+        'idIdentidadOauth', 'idAdministrador', 'proveedor', 'subjectProveedor',
+        'correoNormalizado', 'creadoEn', 'ultimoAccesoEn', 'actualizadoEn'
+      ]
+    },
+    indexes: [
+      ['identidadOauthAdministrador', 'uq_identidadOauth_proveedor_subject',
+        ['proveedor', 'subjectProveedor'], true],
+      ['identidadOauthAdministrador', 'uq_identidadOauth_administrador_proveedor',
+        ['idAdministrador', 'proveedor'], true],
+      ['identidadOauthAdministrador', 'idx_identidadOauth_correo',
+        ['correoNormalizado'], false]
+    ],
+    foreignKeyConstraints: [
+      ['identidadOauthAdministrador', 'fk_identidadOauth_administrador',
+        ['idAdministrador'], 'administrador', ['idAdministrador'], 'RESTRICT', 'RESTRICT']
+    ]
   }
 };
 
@@ -3935,7 +3955,8 @@ async function main() {
               '021_configuracion_base_tienda.sql',
               '022_ciclo_vida_suscripciones.sql',
               '023_estructura_pagos_suscripcion.sql',
-              '024_corregir_idempotencia_y_snapshot_pagos.sql'
+              '024_corregir_idempotencia_y_snapshot_pagos.sql',
+              '025_google_oauth_identities.sql'
             ].includes(file)
             && !await requirementsSatisfied(connection, file);
         if (registeredMigrationIsIncomplete) {
@@ -3970,7 +3991,8 @@ async function main() {
           '021_configuracion_base_tienda.sql',
           '022_ciclo_vida_suscripciones.sql',
           '023_estructura_pagos_suscripcion.sql',
-          '024_corregir_idempotencia_y_snapshot_pagos.sql'
+          '024_corregir_idempotencia_y_snapshot_pagos.sql',
+          '025_google_oauth_identities.sql'
         ].includes(file)) {
           await connection.query('INSERT IGNORE INTO schema_migrations (nombre) VALUES (?)', [file]);
           const [finalRecord] = await connection.query(

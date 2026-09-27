@@ -210,6 +210,7 @@ app.use(mutationProtection(appSecurityConfig.trustedOrigins));
 
 app.use('/auth', rateLimiters.auth);
 app.use('/auth/login', rateLimiters.loginIp, rateLimiters.loginIdentity);
+app.use('/auth/google/start', rateLimiters.loginIp);
 app.use('/auth/registro', rateLimiters.publicRegistration);
 app.use('/auth/verificar-correo', rateLimiters.emailVerificationConfirm);
 app.use('/auth/reenviar-verificacion', rateLimiters.emailVerificationResendIp, rateLimiters.emailVerificationResendIdentity);

@@ -84,6 +84,21 @@ function normalizeRegistration(body) {
   });
 }
 
+function normalizeGoogleRegistration(body) {
+  if (!body || typeof body !== 'object' || Array.isArray(body)) {
+    throw registrationError(400, 'REGISTRATION_INPUT_INVALID');
+  }
+  const nombreTienda = cleanText(body.nombreTienda);
+  if (nombreTienda.length < 2 || nombreTienda.length > 120) {
+    throw registrationError(400, 'REGISTRATION_INPUT_INVALID');
+  }
+  const slug = normalizeSlug(body.slug || nombreTienda);
+  if (slug.length < 3 || RESERVED_SLUGS.has(slug)) {
+    throw registrationError(400, 'REGISTRATION_INPUT_INVALID');
+  }
+  return Object.freeze({ nombreTienda, slug, usuario: normalizeUsername(body.usuario) });
+}
+
 function sha256(value) {
   return crypto.createHash('sha256').update(String(value), 'utf8').digest('hex');
 }
@@ -116,6 +131,7 @@ module.exports = {
   PENDING_ACCESS_STATUS,
   RESERVED_SLUGS,
   normalizeEmail,
+  normalizeGoogleRegistration,
   normalizeRegistration,
   normalizeSlug,
   normalizeUsername,

@@ -13,7 +13,7 @@ $ExpectedDatabase = 'tienda_abarrotes_staging'
 $RemoteStagingFlag = '--remote-staging'
 $RemoteStagingDiagnosticFlag = '--remote-staging-diagnose'
 $RemoteStagingPreflightFlag = '--remote-staging-preflight'
-$RemoteStagingConfirmation = 'CONFIRM_EMPTY_STAGING_001_024'
+$RemoteStagingConfirmation = 'CONFIRM_EMPTY_STAGING_001_025'
 $RemoteStagingPreflightConfirmation = 'PREFLIGHT_STAGING_TLS_AND_SCHEMA_ONLY'
 $DiagnosticCauses = @(
   'PREREQUISITE_LOCAL', 'TLS_CA', 'AUTHENTICATION',

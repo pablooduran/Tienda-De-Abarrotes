@@ -643,7 +643,7 @@ async function main() {
   }
   const after = await primaryFingerprint(primary);
   assert.strictEqual(after, before, 'La base principal cambio durante el ensayo temporal 023-024.');
-  console.log('SAAS-C1.1: 001-024, 023-024, idempotencia global/tenant, snapshots y limpieza verificados.');
+  console.log('SAAS-C1.1: esquema vigente 001-025, cambio 023-024, idempotencia global/tenant, snapshots y limpieza verificados.');
 }
 
 main().catch((error) => {

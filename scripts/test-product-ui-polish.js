@@ -14,7 +14,10 @@ const checks = [
   ['Inicio conserva el resumen principal de cinco días', app.includes('Ventas de los últimos 5 días') && app.includes('id="dailyBars"')],
   ['El detalle diario queda subordinado y preserva su canvas', app.includes('class="dashboard-period-detail"') && app.includes('Ver detalle del período') && app.includes('id="dailyPie"')],
   ['Las métricas usan cifras escaneables', css.includes('font-variant-numeric: tabular-nums;')],
-  ['Las tablas mantienen una jerarquía visual compacta', css.includes('thead { background: #f8faf9; }') && css.includes('td { line-height: 1.4; }')],
+  ['Las tablas mantienen una jerarquía visual compacta y compatible con ambos temas',
+    css.includes('thead { background: var(--surface); }')
+      && css.includes('th { color: var(--muted); font-size: 13px; font-weight: 700; }')
+      && css.includes('td { line-height: 1.4; }')],
   ['El detalle de período conserva foco y estado visible', css.includes('.dashboard-period-detail > summary') && css.includes('.dashboard-period-detail[open] > summary::after')],
   ['UX-005 se registra como resuelto en P7E', pending.includes('| UX-005 |') && pending.includes('Resuelto en P7E')],
   ['TECH-026 queda resuelto tras P8', pending.includes('| TECH-026 |') && pending.includes('Resuelto: local 3/3 PASS')],

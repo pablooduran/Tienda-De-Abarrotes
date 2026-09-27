@@ -37,7 +37,13 @@
     </section>
 
     <section class="auth-workspace" aria-label="Acceso a la cuenta">
-      <button class="theme-page-toggle" type="button" data-toggle-theme aria-pressed="false">Modo oscuro</button>
+      <details class="auth-settings">
+        <summary class="theme-page-toggle" aria-label="Abrir apariencia"><span aria-hidden="true">⚙</span></summary>
+        <div class="auth-settings-menu">
+          <strong>Apariencia</strong>
+          <button type="button" data-toggle-theme aria-pressed="false">Modo oscuro</button>
+        </div>
+      </details>
       <div class="auth-switcher" aria-label="Elige cómo continuar">
         <button type="button" data-auth-target="login" aria-pressed="true">Iniciar sesión</button>
         <button type="button" data-auth-target="register" aria-pressed="false">Crear cuenta</button>
@@ -49,6 +55,10 @@
           <h2 id="login-title" tabindex="-1">Entra a tu tienda</h2>
           <p>Usa tu usuario o correo verificado y la contraseña de tu cuenta.</p>
         </header>
+        <div class="auth-google-entry" data-google-entry="login" hidden>
+          <button type="button" class="auth-google-button" data-google-action="login"><span aria-hidden="true">G</span> Continuar con Google</button>
+          <p class="auth-divider"><span>o usa tu contraseña</span></p>
+        </div>
         <form id="loginForm" class="auth-form" novalidate>
           <label for="login-user">Usuario o correo
             <input id="login-user" name="usuario" required maxlength="160" autocomplete="username">
@@ -81,6 +91,11 @@
             <label for="register-email">Correo
               <input id="register-email" name="correo" type="email" required maxlength="160" autocomplete="email">
             </label>
+          </div>
+          <div class="auth-google-entry" data-google-entry="register" hidden>
+            <button type="button" class="auth-google-button" data-google-action="register"><span aria-hidden="true">G</span> Crear cuenta con Google</button>
+            <small>Primero escribe el nombre de la tienda y el usuario que quieres usar.</small>
+            <p class="auth-divider"><span>o crea una contraseña</span></p>
           </div>
           <div class="auth-form-row">
             <label for="register-password">Contraseña
@@ -117,7 +132,8 @@
             <label for="resend-email">Correo de la cuenta
               <input id="resend-email" name="correo" type="email" required maxlength="160" autocomplete="email">
             </label>
-            <button type="submit" class="secondary" data-pending-label="Solicitando…">Solicitar otro código</button>
+            <button type="submit" class="secondary" data-pending-label="Solicitando…" data-resend-button>Solicitar otro código</button>
+            <p class="auth-resend-status" data-resend-status role="status" aria-live="polite"></p>
           </form>
         </details>
         <p class="auth-message" data-auth-feedback="verify" role="status" aria-live="polite"></p>
@@ -164,6 +180,16 @@
           <button type="submit" data-pending-label="Actualizando…">Guardar nueva contraseña</button>
           <p class="auth-message" data-auth-feedback="reset" role="status" aria-live="polite"></p>
         </form>
+        <details class="auth-secondary-flow">
+          <summary>No recibí el código</summary>
+          <form id="resendRecoveryForm" class="auth-form auth-form-compact" novalidate>
+            <label for="recovery-resend-email">Correo de la cuenta
+              <input id="recovery-resend-email" name="correo" type="email" required maxlength="160" autocomplete="email">
+            </label>
+            <button type="submit" class="secondary" data-pending-label="Solicitando…" data-resend-button>Volver a enviar el código</button>
+            <p class="auth-resend-status" data-resend-status role="status" aria-live="polite"></p>
+          </form>
+        </details>
         <button type="button" class="auth-link auth-back" data-auth-target="login">Volver a iniciar sesión</button>
       </section>
 

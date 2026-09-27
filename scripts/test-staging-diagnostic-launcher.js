@@ -14,7 +14,7 @@ function writeWrapper(directory) {
   const wrapperPath = path.join(directory, 'invoke-launcher.ps1');
   const source = [
     'param([string]$Launcher, [string]$CertificatePath, [string]$TracePath, [string]$Mode)',
-    '$global:answers = @("tienda_abarrotes_staging", "offline-staging.invalid", "3306", "offline-user", $CertificatePath, "CONFIRM_EMPTY_STAGING_001_024")',
+    '$global:answers = @("tienda_abarrotes_staging", "offline-staging.invalid", "3306", "offline-user", $CertificatePath, "CONFIRM_EMPTY_STAGING_001_025")',
     '$global:answerIndex = 0',
     'function global:Read-Host {',
     '  param([string]$Prompt, [switch]$AsSecureString)',

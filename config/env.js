@@ -17,7 +17,8 @@ if (environmentWarning) console.warn(environmentWarning);
 // Explicit staging tools receive a complete ephemeral environment from the launcher.
 // Never supplement that environment from a file before authorization runs.
 const explicitStagingTool = process.argv.slice(2).some((arg) => [
-  '--remote-staging', '--remote-staging-diagnose', '--remote-staging-preflight'
+  '--remote-staging', '--remote-staging-diagnose', '--remote-staging-preflight',
+  '--remote-staging-superadmin'
 ].includes(arg));
 if (!explicitStagingTool) dotenv.config({ path: path.join(__dirname, '..', environmentFile) });
 

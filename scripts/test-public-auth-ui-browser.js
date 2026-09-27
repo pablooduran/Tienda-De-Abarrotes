@@ -38,7 +38,7 @@ async function body(request) {
 }
 
 function createFixture() {
-  const state = { requests: [], sessionAvailable: true, statusChecks: 0 };
+  const state = { requests: [], sessionAvailable: true, statusChecks: 0, googleAvailable: false };
   const server = http.createServer(async (request, response) => {
     const url = new URL(request.url, 'http://127.0.0.1');
     if (url.pathname === '/favicon.ico') {
@@ -50,6 +50,9 @@ function createFixture() {
       return json(response, 200, state.sessionAvailable
         ? { authenticated: true, admin: { rol: 'dueno_tienda' } }
         : { authenticated: false, admin: null, code: 'AUTH_REQUIRED' });
+    }
+    if (request.method === 'GET' && url.pathname === '/auth/google/status') {
+      return json(response, 200, { available: state.googleAvailable });
     }
     if (request.method === 'POST' && url.pathname.startsWith('/auth/')) {
       const payload = await body(request);
@@ -130,6 +133,8 @@ async function runFlow(browser, baseUrl, state) {
   const session = await open(browser, baseUrl, { width: 1366, height: 768 });
   const { page } = session;
   try {
+    assert.strictEqual(await page.locator('[data-google-entry]:visible').count(), 0,
+      'Google debe permanecer oculto cuando el backend no esta configurado.');
     assert.strictEqual(await page.getByRole('button', { name: 'Ya creé mi cuenta y tengo un código' }).count(), 0,
       'El acceso inicial no debe ofrecer verificacion antes de crear cuenta.');
     await page.getByRole('button', { name: 'Crear cuenta', exact: true }).click();
@@ -164,7 +169,7 @@ async function runFlow(browser, baseUrl, state) {
 
     await page.getByRole('button', { name: 'Crear cuenta', exact: true }).click();
     await page.getByRole('button', { name: 'Ya creé mi cuenta y tengo un código' }).click();
-    await page.locator('.auth-secondary-flow summary').click();
+    await page.locator('[data-auth-panel="verify"] .auth-secondary-flow summary').click();
     await page.locator('#resend-email').fill('propietario@example.test');
     await page.locator('#resendVerificationForm button[type="submit"]').click();
     await page.locator('[data-auth-feedback="verify"]').getByText(/nuevo código/i).waitFor();
@@ -175,6 +180,9 @@ async function runFlow(browser, baseUrl, state) {
     await page.locator('#recoveryRequestForm button[type="submit"]').click();
     await page.locator('[data-auth-panel="reset"]:visible').waitFor();
     assert.match(await page.locator('[data-auth-feedback="reset"]').textContent(), /instrucciones/i);
+    assert.strictEqual(await page.locator('#recovery-resend-email').inputValue(), 'propietario@example.test');
+    assert.strictEqual(await page.locator('#resendRecoveryForm [data-resend-button]').isDisabled(), true,
+      'El reenvío de recuperación aplica una espera visible para evitar solicitudes repetidas.');
 
     await page.locator('#recovery-token').fill(TOKEN);
     await page.locator('#new-password').fill('NuevaClave1234');
@@ -224,10 +232,25 @@ async function assertMissingSession(browser, baseUrl, state) {
   }
 }
 
+async function assertGoogleAvailability(browser, baseUrl, state) {
+  state.googleAvailable = true;
+  const session = await open(browser, baseUrl, { width: 1366, height: 768 });
+  try {
+    await session.page.getByRole('button', { name: 'Continuar con Google' }).waitFor();
+    await session.page.getByRole('button', { name: 'Crear cuenta', exact: true }).click();
+    await session.page.getByRole('button', { name: 'Crear cuenta con Google' }).waitFor();
+    assert.deepStrictEqual(session.errors, [], 'La activacion configurable de Google mantiene la consola limpia.');
+  } finally {
+    state.googleAvailable = false;
+    await session.context.close();
+  }
+}
+
 async function assertTheme(browser, baseUrl, state) {
   const session = await open(browser, baseUrl, { width: 360, height: 800 });
   try {
     const previousRequests = state.requests.length;
+    await session.page.locator('.auth-settings > summary').click();
     await session.page.locator('[data-toggle-theme]').click();
     assert.strictEqual(await session.page.locator('html').getAttribute('data-theme'), 'dark');
     assert.strictEqual(await session.page.locator('[data-toggle-theme]').getAttribute('aria-pressed'), 'true');
@@ -286,6 +309,7 @@ async function main() {
   const baseUrl = `http://127.0.0.1:${fixture.server.address().port}`;
   try {
     await runFlow(browser, baseUrl, fixture.state);
+    await assertGoogleAvailability(browser, baseUrl, fixture.state);
     await assertTheme(browser, baseUrl, fixture.state);
     await assertMissingSession(browser, baseUrl, fixture.state);
     await assertViewport(browser, baseUrl, { width: 360, height: 800 });

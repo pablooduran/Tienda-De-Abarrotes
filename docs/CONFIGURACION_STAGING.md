@@ -62,6 +62,22 @@ Staging y production requieren ademas:
 suficiente y no ser un placeholder. Las URL, contrasenas, CA y secretos nunca
 se imprimen en logs ni deben aparecer en Git.
 
+### Google OAuth opcional
+
+El acceso con Google se habilita solamente cuando el gestor de secretos define
+las tres variables `GOOGLE_OAUTH_CLIENT_ID`, `GOOGLE_OAUTH_CLIENT_SECRET` y
+`GOOGLE_OAUTH_REDIRECT_URI`. Si falta una de ellas, el proceso se detiene para
+evitar una configuracion parcial; si no existe ninguna, la funcion queda
+deshabilitada y sus botones permanecen ocultos.
+
+En Google Cloud se debe registrar exactamente la URI HTTPS publica
+`https://DOMINIO/auth/google/callback`. Debe coincidir con el origen de
+`APP_BASE_URL`; no se aceptan query strings, fragmentos ni HTTP hospedado. Las
+credenciales se cargan solo desde secretos de Render o del proveedor elegido,
+nunca desde Git. La migracion 025 guarda unicamente el identificador estable
+`sub` y el correo verificado usado como referencia; no persiste access tokens,
+refresh tokens ni ID tokens.
+
 ## Inventario seguro de infraestructura existente (auditoria 2026-08-24)
 
 - Render: existe un unico Web Service publico con HTTPS y variables de MySQL,
@@ -162,7 +178,7 @@ documento no contiene valores, URIs, certificados ni ejemplos sensibles.
 4. Construir con Node 20 y dependencias bloqueadas. La inicializacion remota
    exige autorizacion separada del responsable y las guardas descritas en
    "Inicializacion remota protegida"; aplicar solamente las migraciones
-   existentes 001–024 sobre la base vacia autorizada.
+   existentes 001–025 sobre la base vacia autorizada.
 5. Arrancar con fail-fast, configurar health check sobre `/health/ready` y
    validar tambien `/health/live`.
 6. Ejecutar smoke tests sinteticos: sesion, tenant, venta, inventario,
@@ -181,7 +197,7 @@ verificacion y restore temporal protegido. No hay planificador ni restore
 remoto soportado por codigo. Para staging se debe decidir externamente la
 frecuencia, retencion y ubicacion del respaldo; como evidencia minima se exige
 un backup administrado verificable, su politica visible, una restauracion en
-base sintetica aislada, migraciones 001–024 y FKs comprobadas, y limpieza de la
+base sintetica aislada, migraciones 001–025 y FKs comprobadas, y limpieza de la
 base temporal. Tambien debe definirse el respaldo del storage privado.
 
 ### Inicializacion remota protegida
@@ -192,7 +208,7 @@ para una preparacion futura de staging que cumpla todos estos requisitos a la
 vez: `APP_ENV=staging`, `NODE_ENV=production`, `DB_ENVIRONMENT=staging`,
 `DB_NAME=tienda_abarrotes_staging`, host no local, `DB_SSL_ENABLED=true`,
 `DB_SSL_CA` presente, el argumento exacto `--remote-staging` y
-`STAGING_DB_MUTATION_CONFIRMATION=CONFIRM_EMPTY_STAGING_001_024`.
+`STAGING_DB_MUTATION_CONFIRMATION=CONFIRM_EMPTY_STAGING_001_025`.
 
 La confirmacion no es un secreto ni reemplaza una autorizacion operativa. No
 debe versionarse en archivos de entorno del repositorio ni compartirse junto a
@@ -202,6 +218,20 @@ rechaza cualquier base que ya tenga tablas. Antes de aplicar migraciones,
 `schema_migrations`, sin tablas adicionales y sin filas. Una ejecucion parcial
 queda bloqueada para revision manual; no se intenta adoptar ni reparar el
 destino de forma automatica.
+
+### Primer superadmin de staging
+
+Después de completar y comprobar las migraciones, el primer administrador
+global se crea con `scripts/create-staging-superadmin.ps1`. Es una mutación
+independiente de la inicialización: exige el argumento interno
+`--remote-staging-superadmin`, la confirmación exacta
+`CREATE_FIRST_STAGING_SUPERADMIN`, TLS y el destino exacto
+`tienda_abarrotes_staging`. Antes del `INSERT` comprueba estructura
+multitienda, 25 migraciones y ausencia total de superadmins, y adquiere un
+bloqueo de MySQL para evitar dos altas simultáneas. No crea tiendas, no permite
+un segundo superadmin y no imprime usuario, contraseña ni hash. Las credenciales
+se introducen únicamente en la terminal interactiva y se eliminan del entorno
+del proceso al finalizar.
 
 Render Free no ofrece Shell ni One-Off Jobs para ejecutar estas mutaciones. Por
 ello existe un lanzador local de un solo uso, versionado, que no persiste los
@@ -260,7 +290,7 @@ El lanzador exige una sola respuesta del protocolo, con salida y codigo de
 proceso concordantes; rechaza respuestas ausentes, duplicadas o desconocidas.
 
 Para interpretar un fallo sin revelar datos, consultar la tabla del
-[runbook](RUNBOOK_PREPROD.md#migraciones-001-024). Un codigo de red no prueba
+[runbook](RUNBOOK_PREPROD.md#migraciones-001-025). Un codigo de red no prueba
 por si solo una allowlist incorrecta; un codigo local no autoriza cambiar TLS.
 No se imprimen mensajes, SQL, stacks, host, puerto, usuario, CA ni credenciales.
 
@@ -326,7 +356,7 @@ procedimiento es:
    mutacion. Solo tras `STAGING_REMOTE_PREFLIGHT: PASS` ejecuta `db:init --
    --remote-staging`, que verifica el vacio, y despues `db:migrate --
    --remote-staging`, que valida la estructura inicial sin datos y aplica
-   unicamente 001–024. No ejecutar esos comandos por separado ni usar SQL
+   unicamente 001–025. No ejecutar esos comandos por separado ni usar SQL
    manual alternativo. Si una fase posterior falla, el lanzador conserva el
    preflight `PASS` y expone una unica linea `STAGING_REMOTE_DB_INIT` o
    `STAGING_REMOTE_DB_MIGRATE` con fase, causa y razon sanitizadas. Las fases posibles
@@ -353,7 +383,7 @@ exactos o modo Render valido y verificado; MySQL TLS con red restringida;
 Redis/Valkey TLS en `PING`; storage
 privado disponible si el flujo de comprobantes se incluye, o
 `privateStorage: disabled` si se excluye explicitamente en staging;
-`/health/live` y `/health/ready` sanos; migraciones 001–024 en base vacia sintetica; smoke tests
+`/health/live` y `/health/ready` sanos; migraciones 001–025 en base vacia sintetica; smoke tests
 PASS; backup y restore remoto sintetico PASS; limites/costo/disponibilidad del
 plan aceptados; y limpieza completa. La autorizacion para datos reales sigue
 siendo un gate separado posterior.
@@ -551,7 +581,7 @@ desplegar recursos externos.
 5. Configurar y verificar health check; revisar limites, suspension y
    facturacion del plan Free antes de depender del servicio.
 6. Mantener correo deshabilitado.
-7. Ejecutar migraciones 001-024 solo sobre una base vacia sintetica autorizada.
+7. Ejecutar migraciones 001-025 solo sobre una base vacia sintetica autorizada.
 8. Validar `/health/live` y `/health/ready` sin exponer diagnosticos internos.
 9. Ejecutar smoke tests, backup/restore remoto y limpieza con datos sinteticos.
 10. Documentar rollback antes de cualquier produccion de prueba.

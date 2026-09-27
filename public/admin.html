@@ -73,16 +73,20 @@
         </div>
         <p id="paymentAdminFeedback" class="payment-admin-feedback" role="status" aria-live="polite"></p>
         <div class="payment-admin-grid">
-          <section class="payment-admin-card" aria-labelledby="paymentRateHeading">
-            <h3 id="paymentRateHeading">Tipo de cambio USD/BOB</h3>
-            <p id="paymentCurrentRate" class="payment-muted">Cargando historial...</p>
-            <form id="paymentRateForm" class="payment-form">
-              <label><span>Valor por USD</span><input name="valor" inputmode="decimal" required pattern="[0-9]+(\\.[0-9]{1,8})?"></label>
-              <label><span>Fuente</span><input name="fuente" maxlength="120" required></label>
-              <button class="button button-primary" type="submit">Registrar tasa</button>
-            </form>
-            <div id="paymentRateHistory" class="payment-history"></div>
-          </section>
+          <details class="payment-admin-card payment-admin-advanced">
+            <summary><span><strong>Conversión para cobros manuales</strong><small>Solo se usa mientras los pagos se confirmen por QR o transferencia.</small></span></summary>
+            <section aria-labelledby="paymentRateHeading">
+              <h3 id="paymentRateHeading">Valor de referencia USD a BOB</h3>
+              <p class="payment-muted">Cuando se conecte un proveedor de pagos, la conversión será automática y este ajuste dejará de ser necesario.</p>
+              <p id="paymentCurrentRate" class="payment-muted">Cargando historial...</p>
+              <form id="paymentRateForm" class="payment-form">
+                <label><span>Bolivianos por 1 USD</span><input name="valor" inputmode="decimal" required pattern="[0-9]+(\\.[0-9]{1,8})?"></label>
+                <label><span>Referencia usada</span><input name="fuente" maxlength="120" required></label>
+                <button class="button button-primary" type="submit">Guardar conversión</button>
+              </form>
+              <div id="paymentRateHistory" class="payment-history"></div>
+            </section>
+          </details>
           <section class="payment-admin-card" aria-labelledby="paymentMethodsHeading">
             <h3 id="paymentMethodsHeading">Métodos manuales</h3>
             <div id="paymentAdminMethods" class="payment-method-admin-list"></div>

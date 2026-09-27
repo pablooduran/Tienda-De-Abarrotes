@@ -4,8 +4,9 @@ Sistema con Node.js, Express, MySQL y frontend en HTML, CSS y JavaScript. Admini
 
 ## Estado operativo actual
 
-El estado local estable usa las migraciones `001-024`; no existe migracion
-`025`. SAAS-A, SAAS-B y SAAS-C estan cerrados: las suscripciones y los pagos
+El repositorio define las migraciones `001-025`. La `025` incorpora la
+vinculacion estable y opcional de cuentas Google sin almacenar tokens OAuth.
+SAAS-A, SAAS-B y SAAS-C estan cerrados: las suscripciones y los pagos
 de suscripcion actuales son manuales, con comprobantes privados y revision
 administrativa. No hay pagos automaticos, tarjetas, QR dinamico, webhooks,
 conciliacion, facturacion fiscal ni correo externo habilitado.
@@ -61,7 +62,7 @@ Variables obligatorias para iniciar la aplicacion:
 El workflow [`.github/workflows/ci.yml`](.github/workflows/ci.yml) se ejecuta en
 pushes a `mejora-multitienda` y pull requests. Instala dependencias bloqueadas
 con `npm ci`, valida sintaxis y seguridad web, crea una instancia MySQL 8
-efimera y aplica el esquema 001-024 antes de ejecutar las pruebas server-side
+efimera y aplica el esquema 001-025 antes de ejecutar las pruebas server-side
 de autenticacion, suscripciones, multitienda, auditoria y pagos manuales.
 
 CI usa valores sinteticos y exige `APP_ENV=local`, `DB_HOST=localhost` y la base
@@ -181,6 +182,17 @@ Migraciones actuales, en orden:
 22. `022_ciclo_vida_suscripciones.sql`: contrato de gracia, snapshot por periodo, historial append-only e idempotencia futura de suscripciones.
 23. `023_estructura_pagos_suscripcion.sql`: catalogo Basic/Standard/Pro, precios USD versionados, tasa manual USD/BOB y estructura segura de pagos manuales sin rutas ni archivos.
 24. `024_corregir_idempotencia_y_snapshot_pagos.sql`: separacion global/tenant de idempotencia, resultados tipados y snapshot del plan actual.
+25. `025_google_oauth_identities.sql`: vinculo unico entre administrador y el identificador estable de Google, sin guardar tokens de acceso o renovacion.
+
+### Acceso opcional con Google
+
+El acceso con Google permanece oculto cuando no esta configurado. Para
+habilitarlo se deben definir juntas `GOOGLE_OAUTH_CLIENT_ID`,
+`GOOGLE_OAUTH_CLIENT_SECRET` y `GOOGLE_OAUTH_REDIRECT_URI` en el gestor de
+secretos del entorno. La URI debe terminar exactamente en
+`/auth/google/callback`, usar el mismo origen que `APP_BASE_URL` en entornos
+hospedados y estar registrada de forma identica en Google Cloud. No se deben
+versionar credenciales ni tokens.
 
 ### Auditoria administrativa
 
@@ -681,6 +693,23 @@ npm.cmd run db:create-superadmin
 ```
 
 El script crea unicamente una cuenta con rol `superadmin`, `idTienda=NULL` y estado activo. No crea tiendas, no modifica usuarios existentes y no imprime la contrasena ni su hash.
+
+### Crear el primer superadmin de staging
+
+La cuenta local no se copia a staging. La primera cuenta global hospedada se
+crea una sola vez desde un PC autorizado con el lanzador interactivo:
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\create-staging-superadmin.ps1
+```
+
+El lanzador solicita en la propia terminal el destino MySQL, la ruta temporal
+del certificado CA, las credenciales de Aiven y el nuevo usuario y contrasena.
+Las contrasenas se leen ocultas, no se escriben en archivos y las variables se
+restauran al finalizar. Solo permite `tienda_abarrotes_staging` con TLS, exige
+las 25 migraciones y cero superadmins existentes. Si ya existe uno, se detiene
+sin cambiarlo; su recuperacion debe seguir otro procedimiento administrativo.
+El formulario publico nunca crea este rol.
 
 ### Cargar datos de demostracion
 

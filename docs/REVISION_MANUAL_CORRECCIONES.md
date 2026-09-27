@@ -16,9 +16,9 @@ equivale a una validación del entorno hospedado.
 | 6. Catálogo maestro y carga inicial | Existe catálogo maestro, formulario e incorporación a tienda. La lista inicial y la selección entre páginas ya existían. En el bloque local pendiente de publicación, la selección usa casillas, muestra el límite de 50 y distingue marca de proveedor; se ignoran respuestas de búsqueda obsoletas. | Decidir si se agrega empresa a datos persistentes antes de cambiar estructura. No importar los 1194 productos sin decisión específica. |
 | 7. Inventario avanzado | Existen inteligencia, conciliación y lotes. El ajuste físico explica que se registra la diferencia y distingue entradas y salidas. En el bloque local pendiente de publicación, inteligencia separa una vista simple de decisiones de la lectura avanzada, muestra alertas en lenguaje cotidiano y presenta correctamente el último día del período. La vista simple ya no depende de la valoración y la avanzada solo la solicita cuando está habilitada. | Decidir integración de lotes con Compras y validar ambas vistas con datos sintéticos hospedados. |
 | 8. Reportes y gráficos | Hay paneles, reportes y una jerarquía inicial de gráficos. En el bloque local pendiente de publicación, las series diarias usan líneas, las comparaciones conservan barras acotadas, los gráficos admiten interacción táctil y lectura textual, y Reportes oculta el gráfico cuando la consulta no devuelve datos. | Validar tamaños e interacción móvil con datos sintéticos hospedados; validar cifras reales solo después de autorización de piloto. |
-| 9. Rediseño visual Figma | Hay guía de diseño y pulido PRODUCTO-1, además de la nueva pantalla de acceso. | Aplicar una referencia Figma concreta cuando esté disponible; ventana flotante de acceso pendiente. |
-| 10. Onboarding y ayuda | WELCOME y HELP están implementados y probados localmente. | Ajustar tutorial a la interfaz definitiva y validar hospedado. |
-| 11. Suscripciones y monetización | Motor, límites, trial, gracia, suspensión y pagos manuales implementados localmente. En el bloque local pendiente, la cotización y el detalle muestran el tipo de cambio aplicado y su fuente registrada, el panel administrativo los identifica con unidades, y las fechas ausentes dejan de mostrarse como “No aplica”. | Validación sintética hospedada de renovación, cambio de plan, comprobantes y lectura de cuenta suspendida. |
+| 9. Rediseño visual Figma | La referencia Figma ya se aplicó a la paleta, tipografía, modo claro/oscuro, acceso, Inicio, navegación, tarjetas, relieve e interacciones principales. | Completar el pulido visual módulo por módulo después de publicar y revisar este bloque estructural en staging. |
+| 10. Onboarding y ayuda | WELCOME y HELP están implementados. El bloque local reorganiza categorías, elimina repeticiones y agrega recorridos contextuales seguros para producto, stock, compras y venta. | Validar los recorridos hospedados y ampliar solo los temas que necesite la usuaria piloto. |
+| 11. Suscripciones y monetización | Motor, límites, trial, gracia, suspensión y pagos manuales implementados. El bloque local rediseña Mi plan, alinea tarjetas, oculta uso/funciones por defecto y abre periodo/método/precio en una ventana después de elegir plan. La conversión manual queda como contingencia administrativa plegada. | Validación sintética hospedada de renovación, cambio de plan, comprobantes y lectura de cuenta suspendida. Tarjeta, QR automático y conversión de proveedor quedan para antes del lanzamiento comercial. |
 | 12. Regresión y piloto | E2E local y CI de negocio constan en `docs/MAPA_PRUEBAS.md`; staging ya está disponible. El login local ahora comprueba `/auth/status` antes de navegar y avisa si la sesión no se conserva; el arnés de navegador cubre ese fallo sin credenciales reales. | Confirmar con cuenta sintética por qué staging devuelve al formulario tras aceptar la contraseña; esta protección visual no demuestra que la sesión hospedada funcione. Completar pruebas hospedadas sintéticas y backup/restore. `PILOT_READY`, datos reales y piloto siguen sin autorización. |
 
 ## Validación hospedada sintética del 23 de septiembre de 2026
@@ -115,3 +115,186 @@ Cada bloque: diagnóstico acotado → implementación → prueba relacionada →
 de diferencias → publicación autorizada → CI → siguiente bloque. La verificación
 de correo con código numérico de seis dígitos requiere expiración, límite de
 intentos y rate limit antes de cambiar el contrato actual de token opaco.
+
+## Nuevas correcciones solicitadas para acceso y presentación
+
+1. **AUTH-UX-001 — Continuar con Google:** agregar en registro e inicio de
+   sesión una opción funcional para acceder con una cuenta de Google. No debe
+   ser un botón decorativo. El bloque debe configurar OAuth en backend,
+   validar `state` y redirecciones, aceptar solamente correos verificados,
+   impedir cuentas o tiendas duplicadas, permitir vincular de forma segura una
+   cuenta existente y conservar los contratos de tenant, rol y sesiones. Estado:
+   implementado localmente de forma configurable mediante Authorization Code,
+   PKCE, `state`, `nonce`, correo verificado e identidad estable de Google. El
+   botón permanece oculto sin las tres variables requeridas; no se guardan
+   tokens ni credenciales en el repositorio. Falta aplicar la migración 025 en
+   un entorno autorizado, configurar Google Cloud y validar el recorrido real.
+
+2. **BILLING-UX-002 — Eliminar la tasa manual de la operación cotidiana:** los
+   planes y precios comerciales se expresan en USD. Un futuro cobro con tarjeta
+   debe procesarse en USD y dejar la conversión al emisor o proveedor de pago.
+   Si se ofrece QR denominado en BOB, el servidor debe obtener una cotización
+   automática desde una fuente aprobada, mostrar el monto final antes de
+   confirmar y guardar en la solicitud la tasa, fuente y vigencia aplicadas.
+   El superadministrador no debe actualizar el cambio cada día ni ver este
+   formulario dentro del flujo normal. Una tasa manual, si se conserva como
+   contingencia, debe quedar fuera de la operación habitual, restringida,
+   auditada y con vencimiento. Estado: la tasa manual queda plegada como
+   contingencia fuera del flujo cotidiano. El proveedor de
+   pagos y la fuente automática se decidirán antes del lanzamiento. No bloquea
+   el piloto gratuito de una tienda, donde no se cobrarán suscripciones.
+
+3. **ACCESS-UX-003 — Recuperación y presentación del acceso:** mejorar la
+   pantalla de recuperación con los siguientes criterios:
+   - ofrecer **Reenviar código** con espera visible, expiración, límite de
+     intentos y rate limit, sin generar envíos repetidos por doble clic;
+   - conservar una respuesta neutral al solicitar recuperación, incluso cuando
+     el correo no exista, para impedir enumeración de cuentas. No se mostrará
+     “ese correo no tiene cuenta”; el error específico solo puede aparecer
+     después de presentar un código inválido o vencido y tampoco debe revelar
+     la existencia del correo;
+   - retirar el botón aislado “Modo oscuro” y mover Apariencia a un menú de
+     configuración representado por una rueda en una esquina, accesible por
+     teclado y con opción claro/oscuro;
+   - sustituir el fondo blanco exterior por una composición visual ligera
+     relacionada con tiendas y abarrotes, coherente con la paleta verde, sin
+     reducir contraste, legibilidad, rendimiento ni adaptación móvil.
+   Estado: implementado localmente. Recuperación y verificación permiten
+   reenviar con espera visible; la respuesta sigue siendo neutral por seguridad.
+   Apariencia está en una rueda y el acceso usa un fondo visual ligero.
+
+4. **DASHBOARD-UX-004 — Inicio interactivo, navegación rápida y privacidad:**
+   tomar la referencia de interacción del dashboard SaaS compartido, adaptando
+   contenido y jerarquía a una tienda de abarrotes:
+   - agregar profundidad visual, elevación y respuestas `hover`, `focus` y
+     pulsación a tarjetas y opciones realmente interactivas, con transiciones
+     breves y respeto a `prefers-reduced-motion`;
+   - destacar **Ventas de hoy** como indicador principal mediante una tarjeta
+     verde de alta jerarquía;
+   - separar el resumen en bloques comprensibles: ventas/dinero,
+     fiados/cobranza e inventario/stock, evitando una sola fila de métricas sin
+     agrupación;
+   - permitir contraer la barra lateral en escritorio, conservar la preferencia
+     y usar un panel deslizable en móvil, con iconos, textos o tooltips
+     accesibles;
+   - crear una barra superior con accesos directos a tareas frecuentes como
+     Vender, Registrar compra y Cobranza/fiado, sin duplicar acciones ni
+     saturarla;
+   - mover la fecha de vencimiento del plan fuera de la barra lateral. Debe
+     mostrarse en Mi plan y, si se crea un menú de cuenta, dentro de su resumen;
+   - usar una rueda de configuración en la barra superior para Apariencia,
+     Ayuda, Cuenta, Mi plan y Cerrar sesión. Cerrar sesión debe estar claramente
+     enmarcado y seguir siendo accesible, pero no ocupar permanentemente el pie
+     de la barra lateral;
+   - no activar cookies o telemetría de analítica durante el piloto mientras el
+     adaptador siga en modo `noop`. Antes de habilitar medición remota, crear un
+     centro de preferencias con Aceptar y Rechazar al mismo nivel, categorías
+     separadas, revocación posterior y bloqueo previo de toda analítica no
+     esencial;
+   - preparar Política de privacidad y Política de cookies con responsable,
+     datos tratados, finalidad, destinatarios/proveedores, transferencias,
+     conservación, derechos y mecanismo de revocación. Requiere revisión legal
+     antes del lanzamiento; no se simulará consentimiento sin analítica real.
+   Estado: implementado localmente en navegación, Inicio y cuenta: barra
+   contraíble, panel móvil, accesos rápidos, rueda, plan fuera del lateral,
+   tarjetas agrupadas e interacciones. Analítica continúa en `noop`, por lo que
+   no se muestran consentimientos ficticios; centro de preferencias y textos
+   legales se cierran antes de habilitar medición o abrir el producto al público.
+
+5. **PLAN-UX-005 — Rediseñar Mi plan y convertir el cambio en un checkout:**
+   - mover Mi plan al menú de cuenta/configuración de la barra superior, sin
+     impedir un acceso directo claro cuando la suscripción requiera atención;
+   - presentar el plan actual como bloque principal con nombre, estado, próxima
+     fecha relevante y acción comprensible, usando más ancho y jerarquía visual;
+   - separar en subsecciones o tarjetas: Resumen, Uso del plan, Qué incluye,
+     Facturación e Historial. Los límites y consumo deben permanecer cerrados
+     por defecto bajo **Ver uso**, con barras de progreso cuando el límite sea
+     finito y una lectura sencilla para capacidad ilimitada;
+   - mostrar funcionalidades bajo **Ver lo que incluye tu plan**, sin una lista
+     extensa siempre abierta;
+   - mantener las tres tarjetas de planes con igual alto, encabezados, contenido
+     y botones alineados. Deben tener relieve, hover/focus y comparación visual
+     de ventajas. El plan contratado se destaca en verde y su botón dice
+     **Plan actual**, nunca “No disponible”;
+   - usar **Mejorar plan** cuando el destino sea superior y **Cambiar plan**
+     cuando sea inferior. Un cambio inferior conserva la regla segura de
+     aplicarse en el siguiente periodo, aunque el botón no use lenguaje de
+     castigo como “disminuir”;
+   - al seleccionar una tarjeta, abrir una ventana o flujo por pasos con detalle
+     incremental (“incluye todo lo anterior y además…”), selección Mensual /
+     Trimestral / Anual, precio completo y método de pago;
+   - eliminar de la vista principal el formulario lineal “Renovar o cambiar mi
+     plan”. La selección de periodo y pago aparece solamente después de elegir
+     un plan. El historial de solicitudes puede permanecer dentro de
+     Facturación, no mezclado con la comparación;
+   - tarjeta: usar campos alojados/tokenización del futuro proveedor y no guardar
+     números completos ni código de seguridad. QR: generar el monto cotizado y
+     confirmar el pago desde el proveedor antes de aplicar el plan;
+   - no activar un plan por el clic ni por mostrar un QR. Solo una confirmación
+     de pago válida aplica la mejora o programa el cambio correspondiente.
+   Estado: implementado localmente para el flujo manual: plan actual destacado,
+   uso y funciones desplegables, tarjetas alineadas con precio y checkout en
+   ventana después de elegir plan. El historial queda plegado. La tokenización
+   de tarjeta, QR automático y confirmación del proveedor no se simulan y quedan
+   pendientes hasta elegir la integración comercial.
+
+6. **HELP-UX-006 — Centro de ayuda ordenado y tutorial interactivo:**
+   - ocultar el botón global Ayuda mientras la vista de Ayuda está activa;
+   - eliminar títulos repetidos y usar un único encabezado **Centro de ayuda**;
+     mantener una sola etiqueta de búsqueda con un ejemplo útil en el campo;
+   - colocar **Volver** dentro del encabezado superior y hacer el retorno
+     inmediato mediante navegación interna, conservando contexto y posición;
+   - presentar categorías en una columna lateral ordenada en escritorio y como
+     acordeón o selector compacto en móvil. Mostrar inicialmente solo los temas
+     de la categoría elegida, no los 31 artículos mezclados;
+   - conservar en cada artículo Qué hace / Cómo hacerlo / Qué pasa después, y
+     añadir **Guíame en la aplicación** cuando exista un recorrido contextual;
+   - el recorrido debe navegar al módulo correcto, oscurecer el resto de la
+     pantalla, resaltar un control por vez, explicar su propósito y avanzar solo
+     cuando el paso sea comprensible. Debe tener Atrás, Siguiente, Saltar y
+     Cerrar, funcionar con teclado, no atrapar al usuario y respetar movimiento
+     reducido;
+   - no confirmar ventas, compras, cobros ni cambios de datos automáticamente.
+     El tutorial puede preparar o señalar una acción, pero cualquier operación
+     real requiere la confirmación normal del usuario;
+   - ofrecer al crear la cuenta una introducción opcional y reanudable. Orden
+     operativo recomendado: completar datos de tienda → agregar producto →
+     registrar compra o stock inicial → agregar cliente si se usará fiado →
+     realizar venta → registrar cobranza → revisar reportes. El cliente no debe
+     bloquear una venta ocasional y no se puede enseñar una venta antes de tener
+     producto y stock;
+   - guardar progreso por usuario/tienda y permitir reiniciar cualquier guía
+     desde el Centro de ayuda.
+   Estado: implementado localmente para las tareas principales. Ayuda muestra una
+   categoría a la vez y los artículos compatibles ofrecen un recorrido que
+   navega, oscurece y resalta controles sin ejecutar operaciones. WELCOME sigue
+   siendo la introducción reanudable; queda validar hospedado y ampliar recorridos
+   solamente donde la prueba real revele necesidad.
+
+7. **PERF-UX-007 — Respuesta inmediata al cambiar de módulo:** la navegación
+   entre Inicio, Proveedores y el resto de opciones presenta una espera percibida
+   cercana a dos segundos. Debe tratarse como un problema transversal y medirse
+   antes de atribuirlo solamente al hosting o a la conexión:
+   - dar respuesta visual inmediata al clic, conservar el panel actual mientras
+     llega la información y mostrar un indicador discreto dentro del contenido,
+     sin dejar la pantalla en blanco ni bloquear toda la aplicación;
+   - separar en las mediciones el tiempo hasta la respuesta visual, el tiempo de
+     red/API y el tiempo de renderizado, comparando entorno local y staging;
+   - evitar recargar datos globales, permisos, configuración y catálogos que ya
+     estén vigentes en cada cambio de módulo. Aplicar caché con invalidación tras
+     escrituras, deduplicación de solicitudes y cancelación de respuestas viejas;
+   - cargar primero los datos imprescindibles para la vista y diferir reportes,
+     gráficos, detalles o listas secundarias; paginar o virtualizar tablas grandes
+     cuando la medición lo justifique;
+   - revisar consultas lentas, índices y respuestas excesivas del servidor, sin
+     ocultar una demora real únicamente con animaciones;
+   - precargar de forma limitada los módulos operativos más usados cuando la
+     conexión esté libre, sin descargar toda la aplicación de una vez;
+   - fijar como objetivo inicial que el cambio visual comience en menos de 100 ms
+     y que una vista habitual con datos sintéticos quede utilizable en menos de
+     un segundo en staging, registrando excepciones justificadas.
+   Estado: diagnosticado y corregido localmente. El cambio de módulo responde de
+   inmediato, conserva el contenido durante la carga y muestra progreso discreto.
+   Catálogos compartidos usan caché de 45 segundos, deduplicación y se invalidan
+   después de escrituras; respuestas antiguas no reemplazan la vista actual.
+   Falta medir local y staging después de publicar para comprobar el objetivo.

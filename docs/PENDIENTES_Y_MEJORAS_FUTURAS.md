@@ -17,7 +17,7 @@ lanzamiento oficial.
 - Planes publicos: Basic, Standard y Pro ya tienen contrato vigente en 023. `avanzado` permanece como legado no publico y no se deben corregir cuentas historicas a ciegas.
 - Pago mixto ocasional: efectivo + QR totalmente pagado queda cubierto por regresion; el saldo pendiente continua requiriendo cliente registrado.
 - Promesas de pago: se conserva el vencimiento original y la promesa vigente; la etiqueta visual de vencida con promesa no agrega estado persistido.
-- Lotes y vencimientos: el flujo existente de distribucion inicial y FEFO/FIFO fue diagnosticado y probado. La integracion de lote/vencimiento dentro de Compras requiere decision de flujo y posible trabajo estructural; queda diferida y no implica crear la migracion 025.
+- Lotes y vencimientos: el flujo existente de distribucion inicial y FEFO/FIFO fue diagnosticado y probado. La integracion de lote/vencimiento dentro de Compras requiere decision de flujo y posible trabajo estructural; queda diferida. La numeracion 025 ya corresponde a identidad Google.
 
 Estado de referencia actualizado despues del cierre de HELP:
 
@@ -25,7 +25,8 @@ Estado de referencia actualizado despues del cierre de HELP:
 - Base estable publicada: HEAD `0176ae6`; CI remoto PASS en los bloques cerrados.
 - SAAS-A, SAAS-B y SAAS-C0-C8 estan cerrados y publicados.
 - Seguridad publica final, CI, STAGING-1, PREPROD-1 y REGRESION GENERAL estan
-  cerrados; la base local esta en migracion 024 y no existe 025.
+  cerrados; la base local conocida esta en migracion 024 y la 025 de identidad
+  Google queda pendiente de aplicacion autorizada.
 - DOCS-OPS, PRODUCTO-0A, PRODUCTO-0B, PRODUCTO-1, WELCOME y HELP estan cerrados. PRODUCTO-GROWTH, COMMERCE y SECURITY-FINAL no estan iniciados. STAGING-2B permanece diferido y no autoriza infraestructura ni gasto.
 - Este documento no implementa funcionalidad ni modifica la base.
 

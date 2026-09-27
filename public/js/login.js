@@ -13,6 +13,16 @@
   });
   const allowedDestinations = new Set(['/admin.html', '/app.html', '/onboarding.html', '/suscripcion.html']);
   let registrationKey = null;
+  const resendTimers = new WeakMap();
+  const googleMessages = Object.freeze({
+    not_configured: 'El acceso con Google todavía no está configurado.',
+    cancelled: 'Se canceló el acceso con Google.',
+    expired: 'La solicitud de Google venció. Inténtalo nuevamente.',
+    account_not_found: 'No encontramos una cuenta vinculada. Elige Crear cuenta para comenzar con Google.',
+    account_unavailable: 'Esta cuenta no está disponible para acceso con Google.',
+    invalid_registration: 'Completa correctamente el nombre de la tienda y el usuario.',
+    failed: 'No pudimos completar el acceso con Google. Inténtalo nuevamente.'
+  });
 
   function feedback(panelName) {
     return panelName === 'login'
@@ -77,8 +87,73 @@
     }
   }
 
+  async function submitGoogle(mode, button) {
+    const fields = { mode };
+    if (mode === 'register') {
+      const store = document.getElementById('register-store');
+      const user = document.getElementById('register-user');
+      if (!store.reportValidity() || !user.reportValidity()) return;
+      fields.nombreTienda = store.value;
+      fields.usuario = user.value;
+    }
+    button.disabled = true;
+    try {
+      const response = await SecurityHttp.secureFetch('/auth/google/start', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(fields)
+      });
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok || !result.authorizationUrl) throw new Error(result.error || googleMessages.failed);
+      window.location.assign(result.authorizationUrl);
+    } catch (error) {
+      setFeedback(mode === 'register' ? 'register' : 'login', error.message || googleMessages.failed, 'error');
+      button.disabled = false;
+    }
+  }
+
+  function startResendCooldown(form, seconds = 30) {
+    const button = form.querySelector('[data-resend-button]');
+    const status = form.querySelector('[data-resend-status]');
+    if (!button || !status) return;
+    const previous = resendTimers.get(form);
+    if (previous) window.clearInterval(previous);
+    let remaining = seconds;
+    const original = button.dataset.readyLabel || button.textContent;
+    button.dataset.readyLabel = original;
+    button.disabled = true;
+    const render = () => {
+      status.textContent = remaining > 0 ? `Podrás solicitar otro código en ${remaining} segundos.` : 'Ya puedes solicitar otro código.';
+      button.textContent = remaining > 0 ? `Reenviar en ${remaining} s` : original;
+      button.disabled = remaining > 0;
+      if (remaining <= 0) {
+        window.clearInterval(resendTimers.get(form));
+        resendTimers.delete(form);
+        return;
+      }
+      remaining -= 1;
+    };
+    render();
+    resendTimers.set(form, window.setInterval(render, 1000));
+  }
+
   for (const button of targetButtons) {
     button.addEventListener('click', () => showPanel(button.dataset.authTarget));
+  }
+
+  document.querySelectorAll('[data-google-action]').forEach((button) => {
+    button.addEventListener('click', () => submitGoogle(button.dataset.googleAction, button));
+  });
+
+  SecurityHttp.secureFetch('/auth/google/status').then(async (response) => {
+    const result = response.ok ? await response.json().catch(() => ({})) : {};
+    if (result.available) document.querySelectorAll('[data-google-entry]').forEach((entry) => { entry.hidden = false; });
+  }).catch(() => {});
+
+  const googleResult = new URLSearchParams(window.location.search).get('google');
+  if (googleResult) {
+    const register = googleResult === 'account_not_found' || googleResult === 'invalid_registration';
+    showPanel(register ? 'register' : 'login', { focus: false });
+    setFeedback(register ? 'register' : 'login', googleMessages[googleResult] || googleMessages.failed, 'error');
+    window.history.replaceState({}, '', '/login.html');
   }
 
   const loginForm = document.getElementById('loginForm');
@@ -139,6 +214,7 @@
       const data = Object.fromEntries(new FormData(resendForm).entries());
       const result = await requestJson('/auth/reenviar-verificacion', data);
       setFeedback('verify', result.message || 'Si la cuenta sigue pendiente, recibirás un nuevo código.');
+      window.setTimeout(() => startResendCooldown(resendForm), 0);
     });
   });
 
@@ -148,9 +224,22 @@
     mutate(recoveryForm, 'recovery', async () => {
       const data = Object.fromEntries(new FormData(recoveryForm).entries());
       const result = await requestJson('/auth/solicitar-recuperacion', data);
+      document.getElementById('recovery-resend-email').value = data.correo;
       recoveryForm.reset();
       showPanel('reset');
       setFeedback('reset', result.message || 'Si existe una cuenta asociada, recibirás instrucciones para continuar.');
+      window.setTimeout(() => startResendCooldown(document.getElementById('resendRecoveryForm')), 0);
+    });
+  });
+
+  const resendRecoveryForm = document.getElementById('resendRecoveryForm');
+  resendRecoveryForm.addEventListener('submit', (event) => {
+    event.preventDefault();
+    mutate(resendRecoveryForm, 'reset', async () => {
+      const data = Object.fromEntries(new FormData(resendRecoveryForm).entries());
+      const result = await requestJson('/auth/solicitar-recuperacion', data);
+      setFeedback('reset', result.message || 'Si existe una cuenta asociada, recibirás instrucciones para continuar.');
+      window.setTimeout(() => startResendCooldown(resendRecoveryForm), 0);
     });
   });
 

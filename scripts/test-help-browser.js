@@ -69,6 +69,7 @@ async function open(browser, baseUrl, viewport = { width: 1366, height: 768 }) {
 async function assertViewport(browser, baseUrl, viewport) {
   const session = await open(browser, baseUrl, viewport);
   try {
+    await session.page.locator('#accountMenu > summary').click();
     await session.page.locator('#helpBtn').click();
     await session.page.locator('#helpCenterTitle').waitFor();
     const overflow = await session.page.evaluate(() => document.documentElement.scrollWidth > document.documentElement.clientWidth + 1);
@@ -85,6 +86,7 @@ async function main() {
   try {
     const session = await open(browser, baseUrl);
     const { page } = session;
+    await page.locator('#accountMenu > summary').click();
     await page.locator('#helpBtn').click();
     await page.locator('#helpCenterTitle').waitFor();
     assert.strictEqual(await page.locator('[data-help-category]').count(), 8, 'HELP muestra categorias reales.');
@@ -105,7 +107,7 @@ async function main() {
     await page.keyboard.press('Enter');
     assert.strictEqual(await page.locator('[data-help-article="compras"]').evaluate((node) => node.open), true, 'Los articulos se abren con teclado.');
 
-    await page.locator('[data-help-back]').click();
+    await page.locator('#helpBackTopbar').click();
     await page.locator('[data-navigation-family="ventas"] summary').click();
     await page.locator('[data-view="ventas"]').click();
     await page.locator('[data-context-help-topic="realizar-venta"]').click();
@@ -113,8 +115,10 @@ async function main() {
     assert.strictEqual(await page.locator('[data-help-article="realizar-venta"] summary').evaluate((node) => document.activeElement === node), true, 'La ayuda contextual enfoca el tema correcto.');
 
     await page.locator('[data-help-welcome]').click();
-    await page.locator('.welcome-guide').waitFor();
-    assert.strictEqual(await page.locator('.welcome-step').count(), 3, 'HELP reutiliza la guia Welcome existente.');
+    await page.locator('.guided-tour-card').waitFor();
+    assert.match(await page.locator('#guidedTourTitle').textContent(), /Agrega un producto/i, 'HELP inicia un recorrido dentro del modulo correcto.');
+    assert.strictEqual(await page.locator('.guided-tour-highlight').count(), 1, 'El recorrido resalta un control real.');
+    await page.locator('[data-tour-close]').click();
     assert.deepStrictEqual(session.errors, [], 'HELP mantiene la consola limpia.');
     await session.context.close();
 

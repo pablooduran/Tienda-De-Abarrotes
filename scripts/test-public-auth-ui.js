@@ -42,7 +42,7 @@ assert(!html.includes('login-box'), 'La superficie anterior no debe coexistir co
 for (const id of [
   'login-user', 'login-password', 'register-store', 'register-user', 'register-email',
   'register-password', 'register-confirmation', 'verification-token', 'resend-email',
-  'recovery-email', 'recovery-token', 'new-password', 'new-password-confirmation'
+  'recovery-email', 'recovery-resend-email', 'recovery-token', 'new-password', 'new-password-confirmation'
 ]) {
   assert(html.includes(`for="${id}"`), `Falta label persistente para ${id}.`);
   assert(html.includes(`id="${id}"`), `Falta control ${id}.`);
@@ -61,6 +61,13 @@ assert(styles.includes('@media (max-width: 820px)'), 'Falta comportamiento table
 assert(styles.includes('@media (max-width: 560px)'), 'Falta comportamiento movil del acceso publico.');
 assert(styles.includes('@media (prefers-reduced-motion: reduce)'), 'Falta respeto a reduced motion.');
 assert(styles.includes('.auth-form-row { grid-template-columns: 1fr; }'), 'Los formularios deben reordenarse a una columna en movil.');
-assert(!/\.auth-[^{]*\{[^}]*gradient/i.test(styles), 'La superficie publica no debe introducir gradients.');
+assert(styles.includes('.auth-settings') && styles.includes('background-image:'), 'El acceso debe integrar apariencia en una rueda y un fondo visual ligero.');
+assert(script.includes('startResendCooldown') && html.includes('id="resendRecoveryForm"'), 'La recuperacion debe permitir reenvio con espera visible.');
+assert(html.includes('data-google-action="login"') && html.includes('data-google-action="register"'),
+  'El acceso debe incluir las dos entradas configurables de Google.');
+assert(script.includes("'/auth/google/status'") && script.includes("SecurityHttp.secureFetch('/auth/google/start'"),
+  'Google debe activarse desde backend y comenzar mediante un POST protegido.');
+assert(!/GOOGLE_OAUTH_CLIENT_SECRET|clientSecret/.test(html + script),
+  'El frontend no debe contener credenciales de Google.');
 
 console.log('test:public-auth-ui OK');

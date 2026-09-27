@@ -77,6 +77,10 @@ async function assertViewport(browser, baseUrl, url, selector, fixtureState) {
     assert.strictEqual(overflow.active, false, `Overflow ${viewport.width}: ${JSON.stringify(overflow)}`);
     await page.keyboard.press('Tab'); assert.notStrictEqual(await page.evaluate(() => getComputedStyle(document.activeElement).outlineStyle), 'none');
     if (url === '/suscripcion.html') {
+      if (await page.locator('[data-payment-checkout]').evaluate((node) => node.open)) {
+        await page.locator('[data-close-payment-checkout]').click();
+      }
+      await page.locator('.payment-request-list > summary').click();
       const detailButton = page.locator('[data-request-detail]').first();
       await detailButton.evaluate((node) => node.addEventListener('click', () => {
         window.__scrollAtOwnerDetailClick = window.scrollY;
@@ -196,11 +200,18 @@ async function main() {
     const owner = await browser.newPage({ viewport: { width: 1366, height: 768 } });
     await owner.goto(`${baseUrl}/suscripcion.html`);
     await owner.locator('[data-payment-form]').waitFor();
-    await owner.getByRole('button', { name: 'Cotizar' }).click();
+    await owner.getByRole('button', { name: 'Ver precio' }).click();
     await owner.locator('.payment-quote').waitFor();
+    assert.strictEqual(await owner.locator('[data-create-payment]').isEnabled(), true, 'La solicitud se habilita al revisar el precio.');
     assert((await owner.locator('.payment-quote').textContent()).includes('1 USD = 7.00000000 BOB · Fuente registrada: Tasa de prueba'),
       'La cotizacion debe explicar la conversion y su fuente registrada.');
-    await owner.getByRole('button', { name: 'Crear solicitud' }).click();
+    await owner.locator('[data-payment-form] [name="plan"]').selectOption('standard');
+    assert.strictEqual(await owner.locator('[data-create-payment]').isDisabled(), true, 'Cambiar de plan invalida el precio anterior.');
+    assert.strictEqual(await owner.locator('.payment-quote').count(), 0);
+    await owner.locator('[data-payment-form] [name="plan"]').selectOption('basico');
+    await owner.getByRole('button', { name: 'Ver precio' }).click();
+    await owner.locator('.payment-quote').waitFor();
+    await owner.getByRole('button', { name: 'Solicitar este plan' }).click();
     await owner.locator('[data-receipt-form]').waitFor();
     assert((await owner.locator('[data-payment-detail]').textContent()).includes('Tipo de cambio aplicado'),
       'El detalle debe conservar visible el tipo de cambio aplicado.');
@@ -217,9 +228,10 @@ async function main() {
     const admin = await browser.newPage({ viewport: { width: 1366, height: 768 } });
     await admin.goto(`${baseUrl}/admin.html#pagos-suscripcion`);
     await admin.locator('#paymentReviewTableBody tr').waitFor();
+    await admin.locator('.payment-admin-advanced > summary').click();
     await admin.locator('#paymentRateForm input[name="valor"]').fill('7.00000000');
     await admin.locator('#paymentRateForm input[name="fuente"]').fill('Fuente browser');
-    await admin.getByRole('button', { name: 'Registrar tasa' }).click();
+    await admin.getByRole('button', { name: 'Guardar conversión' }).click();
     await admin.getByRole('button', { name: 'Guardar método' }).first().click();
     await admin.getByRole('button', { name: 'Ver detalle' }).click();
     await admin.locator('#paymentReviewDetail[open]').waitFor();
@@ -238,4 +250,4 @@ async function main() {
     assert(fixture.state.mutations.every((item) => item.key === undefined || /:[0-9a-f-]{36}$/.test(item.key))); assert(!JSON.stringify(fixture.state.mutations).includes('idTienda')); console.log('test:saas-c-payment-browser OK');
   } finally { await browser.close(); await new Promise((resolve) => fixture.server.close(resolve)); }
 }
-main().catch((error) => { console.error(`test:saas-c-payment-browser FAIL: ${error.message}`); process.exitCode = 1; });
+main().catch((error) => { console.error(`test:saas-c-payment-browser FAIL: ${error.stack || error.message}`); process.exitCode = 1; });

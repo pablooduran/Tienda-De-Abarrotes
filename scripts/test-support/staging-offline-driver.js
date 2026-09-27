@@ -87,7 +87,7 @@ if (entries.has(entry)) {
       assert.equal(process.env.STAGING_DB_MUTATION_CONFIRMATION, undefined);
     } else {
       assert.deepEqual(process.argv.slice(2), ['--remote-staging']);
-      assert.equal(process.env.STAGING_DB_MUTATION_CONFIRMATION, 'CONFIRM_EMPTY_STAGING_001_024');
+      assert.equal(process.env.STAGING_DB_MUTATION_CONFIRMATION, 'CONFIRM_EMPTY_STAGING_001_025');
     }
     // This is the actual installed driver's normalizer, not a copy of its behavior.
     if (scenario === 'frozen-regression') Object.freeze(options.ssl);

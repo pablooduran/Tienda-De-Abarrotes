@@ -86,15 +86,17 @@ async function verifyViewport(browser, baseUrl, viewport, includeKeyboard) {
   try {
     await page.goto(`${baseUrl}/app.html`);
     await page.locator('[data-navigation-family="inicio"]').waitFor();
+    const usesDrawer = viewport.width <= 900;
+    if (usesDrawer) await page.locator('#navigationToggle').click();
     assert.strictEqual(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 2), true,
       `La navegacion genera overflow a ${viewport.width}px.`);
 
     const families = await page.locator('[data-navigation-family]').evaluateAll((nodes) => nodes.map((node) => node.dataset.navigationFamily));
-    assert.deepStrictEqual(families, ['inicio', 'ventas', 'inventario', 'clientes', 'reportes', 'administracion', 'plan']);
+    assert.deepStrictEqual(families, ['inicio', 'ventas', 'inventario', 'clientes', 'reportes', 'administracion']);
     assert.strictEqual(await page.locator('[data-navigation-family="ventas"] [data-view="compensaciones"]').textContent(), 'Devoluciones y anulaciones');
-    assert.strictEqual(await page.locator('a[data-navigation-family="plan"][href="/suscripcion.html"]').count(), 1);
+    assert.strictEqual(await page.locator('#accountMenu a[href="/suscripcion.html"]').count(), 1);
     assert.strictEqual(await page.locator('#subscriptionSummary').evaluate((element) => element.tagName), 'P');
-    for (const family of ['inicio', 'clientes', 'plan']) {
+    for (const family of ['inicio', 'clientes']) {
       assert.strictEqual(await page.locator(`[data-navigation-family="${family}"]`).evaluate((node) => node.tagName === 'DETAILS'), false,
         `${family} no debe mostrar un desplegable con una sola opcion.`);
     }
@@ -116,6 +118,7 @@ async function verifyViewport(browser, baseUrl, viewport, includeKeyboard) {
     assert.strictEqual(await page.locator('#viewTitle').textContent(), 'Punto de venta');
     assert.strictEqual(await page.locator('[data-navigation-family="ventas"] [data-view="ventas"]').evaluate((node) => node.classList.contains('active')), true);
 
+    if (usesDrawer) await page.locator('#navigationToggle').click();
     await page.locator('[data-navigation-family="reportes"] > summary').click();
     assert.strictEqual(await page.locator('[data-navigation-family="ventas"]').evaluate((node) => node.open), false,
       'Abrir Reportes debe cerrar Ventas.');

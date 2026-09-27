@@ -77,8 +77,12 @@ function createServer() {
     }
     if (url.pathname === '/api/suscripcion') return json(response, 200, subscription());
     if (url.pathname === '/api/suscripcion/planes') return json(response, 200, plans());
-    if (url.pathname === '/api/pagos-suscripcion/planes') return json(response, 200, { planes: [] });
-    if (url.pathname === '/api/pagos-suscripcion/metodos') return json(response, 200, { disponibles: false, metodos: [] });
+    if (url.pathname === '/api/pagos-suscripcion/planes') return json(response, 200, { planes: [
+      { referencia: 'basico', nombre: 'Basico', operacionesDisponibles: ['renovacion'], periodos: [{ periodo: 'mensual', monto: '3.00' }] },
+      { referencia: 'standard', nombre: 'Standard', operacionesDisponibles: ['upgrade'], periodos: [{ periodo: 'mensual', monto: '6.00' }, { periodo: 'trimestral', monto: '16.50' }] },
+      { referencia: 'pro', nombre: 'Pro', operacionesDisponibles: ['upgrade'], periodos: [{ periodo: 'mensual', monto: '10.00' }] }
+    ] });
+    if (url.pathname === '/api/pagos-suscripcion/metodos') return json(response, 200, { disponibles: true, metodos: [{ referencia: 'qr_manual', nombre: 'QR manual' }] });
     if (url.pathname === '/api/pagos-suscripcion/solicitudes') return json(response, 200, { resultados: [], paginacion: { paginas: 1 } });
     if (url.pathname.startsWith('/js/') || url.pathname.startsWith('/css/')) {
       const file = path.join(PUBLIC, url.pathname.slice(1));
@@ -114,6 +118,14 @@ async function main() {
       assert.strictEqual(await page.locator('html').getAttribute('data-theme'), 'dark');
       assert.strictEqual(await page.locator('.subscription-section').first().evaluate((node) => getComputedStyle(node).backgroundColor), 'rgb(11, 17, 11)');
       assert.strictEqual(await page.locator('article[data-plan-code="avanzado"]').count(), 0);
+      assert.strictEqual(await page.locator('article[data-plan-code="standard"] .subscription-plan-price').textContent(), 'Desde USD 6.00 al mes');
+      assert.strictEqual(await page.locator('article[data-plan-code="basico"] button').textContent(), 'Plan actual');
+      assert.strictEqual(await page.locator('article[data-plan-code="basico"] button').isDisabled(), true);
+      assert.strictEqual(await page.locator('[data-payment-form]').isVisible(), false);
+      if (viewport.width > 760) {
+        const bottoms = await page.locator('.subscription-plan > button').evaluateAll((buttons) => buttons.map((button) => button.getBoundingClientRect().bottom));
+        assert(Math.max(...bottoms) - Math.min(...bottoms) < 2, `Los botones de planes quedan alineados a ${viewport.width}px.`);
+      }
       assert.strictEqual(await page.evaluate(() => document.documentElement.scrollWidth > document.documentElement.clientWidth + 1), false);
       assert.strictEqual(await page.locator('.subscription-plan-excess').isVisible(), true);
       await page.keyboard.press('Tab');
@@ -124,17 +136,23 @@ async function main() {
     }
     const page = await browser.newPage({ viewport: { width: 1366, height: 768 } });
     await page.goto(`${baseUrl}/suscripcion.html`);
-    await Promise.all([
-      page.waitForResponse((response) => response.url().endsWith('/api/suscripcion/upgrade')),
-      page.locator('[data-plan-action="upgrade"]').click()
-    ]);
+    await page.locator('[data-plan-code="standard"] [data-plan-action="payment"]').click();
+    await page.locator('[data-payment-form]:visible').waitFor();
+    assert.strictEqual(await page.locator('[data-payment-form]').isVisible(), true);
+    assert.strictEqual(await page.locator('[data-payment-form] [name="plan"]').inputValue(), 'standard');
+    assert.strictEqual(await page.locator('[data-payment-form] [name="operacion"]').inputValue(), 'upgrade');
+    assert.strictEqual(await page.locator('[data-payment-form] [name="periodo"] option').count(), 2);
+    assert.strictEqual(await page.locator('[data-create-payment]').isDisabled(), true, 'No se solicita pago sin revisar el precio.');
+    assert.strictEqual(fixture.requests.length, 0, 'Elegir plan no aplica cambios antes del pago.');
+    await page.locator('[data-close-payment-checkout]').click();
+    page.once('dialog', (dialog) => dialog.accept());
     await Promise.all([
       page.waitForResponse((response) => response.url().endsWith('/api/suscripcion/downgrade')),
       page.locator('[data-plan-action="downgrade"]').click()
     ]);
-    assert.strictEqual(fixture.requests.length, 2);
+    assert.strictEqual(fixture.requests.length, 1);
     assert.deepStrictEqual(fixture.requests.map((item) => item.body), [
-      { codigoPlan: 'standard' }, { codigoPlan: 'pro' }
+      { codigoPlan: 'pro' }
     ]);
     assert(fixture.requests.every((item) => /^plan-change:[0-9a-f-]{36}$/.test(item.key)));
     assert(fixture.requests.every((item) => !JSON.stringify(item).includes('idTienda')));

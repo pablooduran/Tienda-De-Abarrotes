@@ -12,6 +12,8 @@
     ['cuenta-acceso', 'Cuenta y acceso']
   ];
 
+  const guidedTopics = new Set(['agregar-producto', 'registrar-stock', 'primera-venta', 'realizar-venta', 'compras']);
+
   const articles = [
     article('agregar-producto', 'Agregar un producto', 'primeros-pasos', 'producto catalogo inventario', 'Permite registrar lo que vendes y definir sus datos basicos.', ['Abre Productos.', 'Selecciona Agregar producto.', 'Completa los datos visibles y guarda los cambios.'], 'El producto queda disponible para organizar tu inventario.'),
     article('registrar-stock', 'Registrar stock', 'primeros-pasos', 'stock existencias compra inventario', 'Permite registrar existencias con una compra o un ajuste autorizado.', ['Abre Compras para registrar una entrada de mercaderia.', 'Indica proveedor, productos y cantidades.', 'Confirma el registro.'], 'El stock y sus movimientos quedan actualizados.'),
@@ -39,7 +41,7 @@
     article('moneda-zona-horaria', 'Moneda y zona horaria', 'configuracion', 'moneda bob zona horaria fecha', 'La configuracion muestra la moneda y zona horaria usadas por la tienda.', ['Abre Configuracion.', 'Revisa los valores visibles.', 'Guarda cambios solo si la cuenta permite editar.'], 'Estos datos ayudan a mostrar la operacion de forma coherente.'),
     article('datos-fiscales', 'Datos fiscales opcionales', 'configuracion', 'dato fiscal opcional facturacion', 'Puedes guardar un dato fiscal basico opcional dentro de Configuracion.', ['Abre Configuracion.', 'Ubica Informacion fiscal.', 'Completa el campo solo si corresponde y guarda los cambios.'], 'Esto no habilita facturacion fiscal.'),
     article('mi-plan', 'Plan actual y limites', 'mi-plan', 'mi plan limites suscripcion plan actual', 'Mi plan muestra el estado de suscripcion, limites y funcionalidades visibles.', ['Abre Mi plan.', 'Revisa el plan, estado y fecha relevante.', 'Consulta los limites antes de intentar una nueva alta.'], 'La pantalla muestra lo permitido sin cambiar tu plan por consultarla.'),
-    article('cotizacion', 'Revisar el precio de un plan', 'mi-plan', 'cotizacion pago precio bob usd plan', 'La pantalla muestra el valor calculado para renovar o cambiar tu plan.', ['Abre Mi plan.', 'Elige el plan, la operación, el periodo y la forma de pago.', 'Selecciona Ver precio antes de crear una solicitud.'], 'El importe mostrado se calcula por el sistema; no necesitas ingresarlo manualmente.'),
+    article('cotizacion', 'Revisar el precio de un plan', 'mi-plan', 'cotizacion pago precio bob usd plan', 'La pantalla muestra el valor calculado para renovar o cambiar tu plan.', ['Abre Mi plan y elige un plan de las tarjetas.', 'Selecciona el periodo y la forma de pago.', 'Pulsa Ver precio antes de enviar la solicitud.'], 'El importe mostrado se calcula por el sistema; no necesitas ingresarlo manualmente.'),
     article('solicitudes-pago', 'Solicitudes de pago manual', 'mi-plan', 'solicitud pago comprobante revision rechazada vencida', 'Las solicitudes permiten seguir un pago manual de suscripcion.', ['Crea una solicitud solo cuando la cotizacion este disponible.', 'Sigue las instrucciones del metodo seleccionado.', 'Adjunta o reemplaza el comprobante cuando el estado lo permita.'], 'El estado muestra si falta comprobante, esta en revision, fue observado, rechazado, aplicado, cancelado o vencio.'),
     article('solo-lectura-plan', 'Modo solo lectura y suscripcion', 'mi-plan', 'solo lectura gracia suspendida suscripcion', 'Algunos estados permiten consultar datos, pero bloquean cambios comerciales.', ['Abre Mi plan para revisar el estado.', 'Consulta las acciones de pago manual disponibles.', 'Cuando la cuenta vuelva a estar activa, retoma las tareas permitidas.'], 'Tus datos permanecen conservados mientras revisas el estado de la suscripcion.'),
     article('cerrar-sesion', 'Cerrar sesion', 'cuenta-acceso', 'cerrar sesion cuenta acceso', 'Cerrar sesion termina tu acceso desde el dispositivo actual.', ['Ubica Cerrar sesion en el menu de la tienda.', 'Confirma la accion si se solicita.', 'Vuelve a iniciar sesion cuando necesites continuar.'], 'La pantalla de acceso vuelve a estar disponible.'),
@@ -75,29 +77,34 @@
         <section><h3>Que hace</h3><p>${escapeHtml(item.what)}</p></section>
         <section><h3>Como hacerlo</h3><ol>${item.steps.map((step) => `<li>${escapeHtml(step)}</li>`).join('')}</ol></section>
         <section><h3>Que pasa despues</h3><p>${escapeHtml(item.after)}</p></section>
+        ${guidedTopics.has(item.id) ? `<div class="help-article-actions"><button type="button" data-help-guide="${escapeHtml(item.id)}">Guíame en la aplicación</button></div>` : ''}
       </div>
     </details>`;
   }
 
-  function render({ root, topic = null, onBack = () => {}, onWelcome = () => {} } = {}) {
+  function render({ root, topic = null, onBack = () => {}, onWelcome = () => {}, onGuide = () => {} } = {}) {
     if (!root) return;
     global.ProductAnalytics?.track('help_opened', { module: 'help', topic: topic || 'general' });
-    let selectedCategory = '';
+    let selectedCategory = articles.find((item) => item.id === topic)?.category || 'primeros-pasos';
     let query = '';
     root.innerHTML = `
       <section class="help-center" aria-labelledby="helpCenterTitle">
-        <header class="help-heading">
-          <div><p class="eyebrow">Ayuda</p><h3 id="helpCenterTitle">Centro de ayuda</h3><p>Encuentra rapidamente como realizar las tareas mas comunes de tu tienda.</p></div>
-          <button type="button" class="secondary" data-help-back>Volver</button>
-        </header>
+        <h3 id="helpCenterTitle" class="sr-only">Centro de ayuda</h3>
+        <p class="help-intro">Elige una tarea para leerla o abrir una guía dentro de la aplicación.</p>
         <div class="help-search-row">
-          <label for="helpSearch">Buscar en la ayuda</label>
-          <div><input id="helpSearch" type="search" autocomplete="off" placeholder="Buscar en la ayuda"><button type="button" class="secondary" data-help-clear hidden>Limpiar busqueda</button></div>
+          <label for="helpSearch">¿Qué necesitas hacer?</label>
+          <div><input id="helpSearch" type="search" autocomplete="off" placeholder="Ej.: registrar una venta"><button type="button" class="secondary" data-help-clear hidden>Limpiar búsqueda</button></div>
         </div>
-        <nav class="help-categories" aria-label="Categorias de ayuda">${categories.map(([id, label]) => `<button type="button" class="secondary" data-help-category="${escapeHtml(id)}">${escapeHtml(label)}</button>`).join('')}</nav>
-        <div class="help-welcome-callout"><div><strong>Primeros pasos</strong><span>Revisa tu guia corta de producto, stock y primera venta.</span></div><button type="button" class="secondary" data-help-welcome>Ver guia de primeros pasos</button></div>
-        <p class="help-result-status" data-help-results role="status" aria-live="polite"></p>
-        <div class="help-article-list" data-help-list></div>
+        <div class="help-layout">
+          <aside class="help-navigation">
+            <nav class="help-categories" aria-label="Categorías de ayuda">${categories.map(([id, label]) => `<button type="button" class="secondary" data-help-category="${escapeHtml(id)}">${escapeHtml(label)}</button>`).join('')}</nav>
+            <div class="help-welcome-callout"><div><strong>Recorrido inicial</strong><span>Producto, stock y primera venta en orden.</span></div><button type="button" class="secondary" data-help-welcome>Iniciar recorrido</button></div>
+          </aside>
+          <div class="help-results-panel">
+            <p class="help-result-status" data-help-results role="status" aria-live="polite"></p>
+            <div class="help-article-list" data-help-list></div>
+          </div>
+        </div>
       </section>`;
     const input = root.querySelector('#helpSearch');
     const list = root.querySelector('[data-help-list]');
@@ -122,20 +129,25 @@
         const target = root.querySelector(`[data-help-article="${focusTopic}"]`);
         if (target) {
           target.open = true;
+          target.querySelector('summary')?.focus();
           global.requestAnimationFrame(() => {
-            target.querySelector('summary')?.focus();
             target.scrollIntoView({ block: 'start' });
           });
         }
       }
     };
 
-    root.querySelector('[data-help-back]')?.addEventListener('click', onBack);
     root.querySelector('[data-help-welcome]')?.addEventListener('click', onWelcome);
+    list.addEventListener('click', (event) => {
+      const button = event.target.closest('[data-help-guide]');
+      if (button) onGuide(button.dataset.helpGuide);
+    });
     input.addEventListener('input', () => { query = normalize(input.value); selectedCategory = ''; update(); });
     clear.addEventListener('click', () => { input.value = ''; query = ''; update(); input.focus(); });
     root.querySelectorAll('[data-help-category]').forEach((button) => button.addEventListener('click', () => {
-      selectedCategory = selectedCategory === button.dataset.helpCategory ? '' : button.dataset.helpCategory;
+      selectedCategory = button.dataset.helpCategory;
+      query = '';
+      input.value = '';
       update();
     }));
     update({ focusTopic: topic && articles.some((item) => item.id === topic) ? topic : null });

@@ -15,8 +15,8 @@ assert.match(read('services/subscription-plan-service.js'), /visiblePublicamente
 assert.match(read('services/subscription-plan-service.js'), /codigo IN \('basico','standard','pro'\)/);
 assert.match(read('public/js/subscription-ui.js'), /Plan actual/);
 assert.match(read('public/js/subscription-ui.js'), /Periodo de gracia/);
-assert.match(read('public/js/subscription-ui.js'), /subscription-feature-detail/);
-assert.match(read('public/js/payment-subscription-ui.js'), /Crear solicitud, realizar el pago, adjuntar comprobante y esperar la revision/);
+assert.match(read('public/js/subscription-ui.js'), /subscription-disclosure/);
+assert.match(read('public/js/payment-subscription-ui.js'), /payment-checkout-dialog/);
 assert.match(read('public/js/payment-subscription-ui.js'), /Tipo de cambio aplicado/);
 assert.match(read('public/js/payment-subscription-ui.js'), /Fuente registrada:/);
 assert.match(read('public/js/saas-subscription-admin-ui.js'), /Mas opciones/);

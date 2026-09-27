@@ -33,10 +33,11 @@
     return `1 USD = ${escapeHtml(conversion.valor)} BOB${conversion.fuente ? ` · Fuente registrada: ${escapeHtml(conversion.fuente)}` : ''}`;
   }
   function operationKey(scope) { return `${scope}:${global.crypto.randomUUID()}`; }
+  let pendingPlanCode = null;
 
   function create({ root, api = null } = {}) {
     if (!root) throw new Error('El contenedor de pagos es obligatorio.');
-    const state = { plans: [], methods: [], requests: [], page: 1, pages: 1, selected: null, loading: false };
+    const state = { plans: [], methods: [], requests: [], page: 1, pages: 1, selected: null, loading: false, quotedSelection: null };
     let detailReturnFocus = null;
 
     async function request(url, options = {}) {
@@ -49,6 +50,31 @@
     function selectedPlan() { return state.plans.find((item) => item.referencia === root.querySelector('[name="plan"]')?.value) || null; }
     function selectedMethod() { return state.methods.find((item) => item.referencia === root.querySelector('[name="metodo"]')?.value) || null; }
 
+    function invalidateQuote() {
+      state.quotedSelection = null;
+      root.querySelector('[data-create-payment]').disabled = true;
+      root.querySelector('[data-payment-quote]').replaceChildren();
+    }
+
+    function choosePlan(code) {
+      const plan = state.plans.find((item) => item.referencia === code && item.operacionesDisponibles?.length);
+      if (!plan) return false;
+      const form = root.querySelector('[data-payment-form]');
+      if (!form) return false;
+      form.elements.plan.value = code;
+      renderPlanOptions();
+      invalidateQuote();
+      form.hidden = false;
+      const checkout = root.querySelector('[data-payment-checkout]');
+      if (checkout && !checkout.open) checkout.showModal();
+      root.querySelector('[data-payment-choice]').textContent = state.methods.length
+        ? `Elegiste ${plan.nombre}. Selecciona el periodo y la forma de pago; después podrás revisar el monto.`
+        : `Elegiste ${plan.nombre}, pero aún no hay una forma de pago disponible.`;
+      form.elements.periodo.focus({ preventScroll: true });
+      return true;
+    }
+    root.__selectPaymentPlan = choosePlan;
+
     function renderPlanOptions() {
       const plan = selectedPlan();
       const operations = plan?.operacionesDisponibles || [];
@@ -58,6 +84,7 @@
       periodSelect.replaceChildren(...(plan?.periodos || []).map((item) => Object.assign(document.createElement('option'), { value: item.periodo, textContent: `${item.periodo[0].toUpperCase()}${item.periodo.slice(1)} · USD ${item.monto}` })));
       root.querySelector('[data-payment-plan-description]').textContent = plan?.descripcion || 'Selecciona un plan disponible.';
       root.querySelector('[data-payment-form]').querySelectorAll('button[type="submit"]').forEach((button) => { button.disabled = !operations.length || !state.methods.length; });
+      invalidateQuote();
     }
 
     function requestRow(item) {
@@ -121,6 +148,7 @@
       const form = event.currentTarget; const action = form.dataset.paymentAction;
       const feedback = root.querySelector('[data-payment-feedback]'); const button = form.querySelector('button[type="submit"]');
       const body = Object.fromEntries(new FormData(form).entries());
+      if (action === 'create' && state.quotedSelection !== JSON.stringify(body)) return;
       const restore = global.UiPatterns?.mutation(button, action === 'quote' ? 'Cotizando...' : 'Creando...');
       if (!restore) return;
       feedback.textContent = action === 'quote' ? 'Calculando cotización...' : 'Creando solicitud...';
@@ -132,12 +160,18 @@
             plan: selectedPlan()?.referencia
           });
           const quote = await request('/api/pagos-suscripcion/cotizar', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+          if (JSON.stringify(Object.fromEntries(new FormData(form).entries())) !== JSON.stringify(body)) return;
           root.querySelector('[data-payment-quote]').innerHTML = `<div class="payment-quote"><strong>${money(quote.montoCobro.monto, quote.montoCobro.moneda)}</strong><span>Precio base: ${money(quote.precioBase.monto, quote.precioBase.moneda)} · Cotización válida hasta ${escapeHtml(date(quote.vigenteHasta))}</span>${quote.conversion?.valor ? `<p>Tipo de cambio aplicado: ${conversionDescription(quote.conversion)}.</p>` : ''}<p>${escapeHtml(quote.efectoEsperado.tipo.replaceAll('_', ' '))}. El monto se confirmará al crear la solicitud.</p></div>`;
+          state.quotedSelection = JSON.stringify(body);
+          root.querySelector('[data-create-payment]').disabled = false;
           feedback.textContent = 'Cotización actualizada.';
         } else {
           const result = await request('/api/pagos-suscripcion/solicitudes', { method: 'POST', headers: { 'Content-Type': 'application/json', 'Idempotency-Key': operationKey('payment-request') }, body: JSON.stringify(body) });
           feedback.textContent = result.created ? 'Solicitud creada. Continúa cargando el comprobante.' : 'Ya existe una solicitud abierta para esta tienda.';
-          await loadRequests(); await showDetail(result.referencia);
+          root.querySelector('[data-payment-checkout]')?.close();
+          await loadRequests();
+          root.querySelector('.payment-request-list').open = true;
+          await showDetail(result.referencia);
         }
       } catch (error) { feedback.textContent = global.UiPatterns?.messageFor(error) || error.message || 'No se pudo completar la operacion.'; } finally { restore(); }
     }
@@ -153,13 +187,15 @@
     }
 
     function renderShell() {
-      root.innerHTML = `<div class="payment-subscription-shell"><div class="payment-section-heading"><div><p class="subscription-eyebrow">Pagos manuales</p><h2>Renovar o cambiar mi plan</h2><p>Elige un plan, revisa el precio y envía tu solicitud. Después podrás adjuntar el comprobante.</p></div></div><ol class="payment-flow" aria-label="Pasos del pago manual"><li>1. Elegir plan</li><li>2. Revisar precio</li><li>3. Adjuntar comprobante</li><li>4. Esperar revisión</li></ol><form data-payment-form data-payment-action="quote" class="payment-config-form"><label><span>Plan</span><select name="plan" required></select></label><label><span>Qué quieres hacer</span><select name="operacion" required></select></label><label><span>Periodo de pago</span><select name="periodo" required></select></label><label><span>Forma de pago</span><select name="metodo" required></select></label><p data-payment-plan-description class="payment-muted"></p><div class="payment-form-actions"><button type="submit" class="button-link payment-primary">Ver precio</button><button type="button" class="button-link secondary" data-create-payment>Solicitar este plan</button></div></form><div data-payment-quote></div><p data-payment-feedback role="status" aria-live="polite"></p><section class="payment-request-list" aria-labelledby="payment-request-list-title"><div class="payment-section-heading"><h3 id="payment-request-list-title">Mis solicitudes de pago</h3><div><button type="button" class="button-link" data-payment-previous>Anterior</button><span data-payment-page></span><button type="button" class="button-link" data-payment-next>Siguiente</button></div></div><div data-payment-requests></div></section><dialog data-payment-detail class="payment-request-dialog" aria-labelledby="payment-request-title"></dialog></div>`;
+      root.innerHTML = `<div class="payment-subscription-shell"><div class="payment-section-heading"><div><p class="subscription-eyebrow">Facturación</p><h2>Planes y pagos</h2><p data-payment-choice>Elige un plan de los cuadros de arriba. Las opciones de periodo y pago aparecerán después.</p></div></div><dialog data-payment-checkout class="payment-checkout-dialog" aria-labelledby="payment-checkout-title"><div class="payment-detail-heading"><div><p class="subscription-eyebrow">Cambiar plan</p><h3 id="payment-checkout-title">Elige cómo quieres pagar</h3><p>Revisa el periodo, la forma de pago y el precio antes de enviar la solicitud.</p></div><button type="button" class="button-link secondary" data-close-payment-checkout>Cerrar</button></div><form data-payment-form data-payment-action="quote" class="payment-config-form" hidden><label class="payment-internal-choice" hidden><span>Plan</span><select name="plan" required></select></label><label class="payment-internal-choice" hidden><span>Qué quieres hacer</span><select name="operacion" required></select></label><label><span>Periodo de pago</span><select name="periodo" required></select></label><label><span>Forma de pago</span><select name="metodo" required></select></label><p data-payment-plan-description class="payment-muted"></p><div class="payment-form-actions"><button type="submit" class="button-link payment-primary">Ver precio</button><button type="button" class="button-link secondary" data-create-payment disabled>Solicitar este plan</button></div></form><div data-payment-quote></div><p data-payment-feedback role="status" aria-live="polite"></p></dialog><details class="payment-request-list"><summary><span><strong>Facturación e historial</strong><small>Consulta solicitudes, comprobantes y revisiones.</small></span></summary><section aria-labelledby="payment-request-list-title"><div class="payment-section-heading"><h3 id="payment-request-list-title">Solicitudes de pago</h3><div><button type="button" class="button-link" data-payment-previous>Anterior</button><span data-payment-page></span><button type="button" class="button-link" data-payment-next>Siguiente</button></div></div><div data-payment-requests></div></section></details><dialog data-payment-detail class="payment-request-dialog" aria-labelledby="payment-request-title"></dialog></div>`;
+      const checkout = root.querySelector('[data-payment-checkout]');
+      root.querySelector('[data-close-payment-checkout]').addEventListener('click', () => checkout.close());
       const detail = root.querySelector('[data-payment-detail]');
       detail.addEventListener('close', () => {
         const matchingButton = Array.from(root.querySelectorAll('[data-request-detail]'))
-          .find((button) => button.dataset.requestDetail === state.selected?.referencia);
+          .find((button) => button.dataset.requestDetail === state.selected?.referencia && button.getClientRects().length);
         const target = matchingButton || (detailReturnFocus?.isConnected && detailReturnFocus.getClientRects().length
-          ? detailReturnFocus : root.querySelector('[data-create-payment]'));
+          ? detailReturnFocus : root.querySelector('.payment-request-list > summary'));
         detail.replaceChildren();
         state.selected = null;
         target?.focus();
@@ -170,11 +206,19 @@
       const methodSelect = root.querySelector('[name="metodo"]');
       methodSelect.replaceChildren(...state.methods.map((item) => Object.assign(document.createElement('option'), { value: item.referencia, textContent: item.nombre })));
       planSelect.addEventListener('change', renderPlanOptions);
+      root.querySelector('[data-payment-form]').addEventListener('change', invalidateQuote);
       root.querySelector('[data-payment-form]').addEventListener('submit', quoteOrCreate);
       root.querySelector('[data-create-payment]').addEventListener('click', () => { const form = root.querySelector('[data-payment-form]'); form.dataset.paymentAction = 'create'; form.requestSubmit(); form.dataset.paymentAction = 'quote'; });
       root.querySelector('[data-payment-previous]').addEventListener('click', () => { if (state.page > 1) { state.page -= 1; void loadRequests(); } });
       root.querySelector('[data-payment-next]').addEventListener('click', () => { if (state.page < state.pages) { state.page += 1; void loadRequests(); } });
       renderPlanOptions();
+      if (pendingPlanCode && choosePlan(pendingPlanCode)) pendingPlanCode = null;
+      if (!global.document.querySelector('.subscription-plan') && state.plans.length) {
+        root.querySelector('[data-payment-form]').hidden = false;
+        root.querySelectorAll('.payment-internal-choice').forEach((label) => { label.hidden = false; });
+        root.querySelector('[data-payment-choice]').textContent = 'Elige un plan y revisa el precio antes de enviar una solicitud.';
+        checkout.showModal();
+      }
     }
 
     async function render() {
@@ -190,6 +234,11 @@
   }
 
   global.PaymentSubscriptionUI = Object.freeze({ create });
+  if (global.document) global.document.addEventListener('subscription:select-plan', (event) => {
+    pendingPlanCode = event.detail?.code || null;
+    const root = global.document.getElementById('paymentSubscriptionRoot');
+    if (root?.__selectPaymentPlan && root.__selectPaymentPlan(pendingPlanCode)) pendingPlanCode = null;
+  });
   function mount() {
     const root = global.document && global.document.getElementById('paymentSubscriptionRoot');
     if (!root || root.dataset.paymentMounted) return Boolean(root);

@@ -100,6 +100,10 @@ function createServer() {
 }
 
 async function openConfiguration(page) {
+  if (await page.evaluate(() => window.innerWidth <= 900)) {
+    const expanded = await page.locator('#navigationToggle').getAttribute('aria-expanded');
+    if (expanded !== 'true') await page.locator('#navigationToggle').click();
+  }
   const family = page.locator('[data-navigation-family="administracion"]');
   if (!await family.evaluate((node) => node.open)) await family.locator('> summary').click();
   await page.locator('[data-view="configuracion"]').focus();
@@ -141,6 +145,7 @@ async function assertViewport(browser, baseUrl, viewport, { readOnly = false } =
     assert.strictEqual(darkColors.fieldBackground, 'rgb(11, 17, 11)', 'Formulario oscuro.');
     assert.strictEqual(darkColors.fieldText, 'rgb(240, 245, 240)', 'Texto legible en formulario oscuro.');
     assert.strictEqual(darkColors.sidebarBackground, 'rgb(5, 11, 7)', 'Navegacion verde oscuro.');
+    if (await page.evaluate(() => window.innerWidth <= 900)) await page.locator('#navigationToggle').click();
     await page.locator('[data-view="inicio"]').click();
     const metric = page.locator('.dashboard-cards .metric-card').first();
     await metric.waitFor();

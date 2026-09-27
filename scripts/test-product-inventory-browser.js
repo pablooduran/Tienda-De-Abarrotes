@@ -158,6 +158,24 @@ async function verifyViewport(browser, baseUrl, viewport, requests) {
     await inventoryView(page, 'lotesVencimientos');
     await page.locator('#lotContent .lot-results-heading').waitFor();
     assert.strictEqual(await page.locator('#lotEntryGuideTitle').isVisible(), true, 'Lotes explica como cargar vencimientos.');
+    const lotToolbar = await page.locator('.lot-filter-toolbar').evaluate((toolbar) => {
+      const heading = toolbar.firstElementChild.getBoundingClientRect();
+      const actions = toolbar.querySelector('.actions').getBoundingClientRect();
+      const filters = toolbar.querySelector('#openLotFilters').getBoundingClientRect();
+      const exportButton = toolbar.querySelector('#exportLots').getBoundingClientRect();
+      return {
+        sideBySide: actions.left >= heading.right - 2,
+        stacked: actions.top >= heading.bottom - 2,
+        buttonsSameRow: Math.abs(filters.top - exportButton.top) < 2,
+        buttonsStacked: exportButton.top >= filters.bottom - 2,
+        actionsInside: actions.right <= toolbar.getBoundingClientRect().right + 2
+      };
+    });
+    assert.strictEqual(viewport.width > 900 ? lotToolbar.sideBySide : lotToolbar.stacked, true,
+      `La barra de lotes distribuye el titulo y las acciones a ${viewport.width}px.`);
+    assert.strictEqual(viewport.width > 560 ? lotToolbar.buttonsSameRow : lotToolbar.buttonsStacked, true,
+      `Los botones de lotes se distribuyen sin apretarse a ${viewport.width}px.`);
+    assert.strictEqual(lotToolbar.actionsInside, true, `Las acciones de lotes quedan dentro del panel a ${viewport.width}px.`);
     assert.strictEqual(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 2), true,
       `La guia de vencimientos no desborda a ${viewport.width}px.`);
     await page.locator('#lotGuideProducts').click();

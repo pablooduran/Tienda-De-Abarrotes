@@ -9,8 +9,9 @@ Documento de relevo tecnico para continuar el proyecto sin depender del historia
 - Ultimo punto estable publicado: `eb53214 test: cerrar regresion general`.
 - No trabajar directamente en `main`.
 - El HEAD indicado es una referencia local conocida. Confirmar si tambien existe en el remoto antes de depender de el para una recuperacion.
-- La base principal local esta en 024; no existe migracion 025. INV-A e INV-B
-  permanecen cerrados.
+- La base principal local conocida continua en 024. El repositorio ya define la
+  migracion 025 para identidad Google; no se considera aplicada hasta ejecutar
+  el migrador sobre un destino expresamente autorizado. INV-A e INV-B permanecen cerrados.
 - La optimizacion operativa de Codex, PREPROD-1 y REGRESION GENERAL estan
   cerrados. Confirmar el hash real con Git y el CI remoto antes de continuar.
 
@@ -49,7 +50,7 @@ Si la rama, el HEAD o el estado difieren, detenerse y entender los cambios exist
 | `routes/` | Contratos HTTP de autenticacion, administracion y modulos comerciales. |
 | `services/` | Reglas de negocio, transacciones, reportes, POS, stock, clientes y cobranza. |
 | `public/` | Aplicacion web, administracion, login, estilos y JavaScript del navegador. |
-| `database/migrations/` | Migraciones historicas y modernas, numeradas de 001 a 024; la base principal local validada esta en 024 y no existe 025. |
+| `database/migrations/` | Migraciones historicas y modernas, numeradas de 001 a 025; la base principal local conocida permanece validada en 024 hasta aplicar 025 de forma autorizada. |
 | `database/tienda_abarrotes.sql` | Esquema inicial equivalente al estado final esperado. |
 | `scripts/` | Migrador, comprobadores, pruebas, administracion local y backups. |
 | `utils/` | Utilidades compartidas, incluidas fechas locales y errores. |
@@ -230,7 +231,8 @@ Un downgrade no borra ni oculta deuda existente. Se mantiene la consulta histori
 ## 5. Migraciones
 
 No renumerar, editar ni reemplazar migraciones aplicadas. La base local principal
-conocida `tienda_abarrotes_pruebas` esta validada en 024; no existe 025.
+conocida `tienda_abarrotes_pruebas` esta validada en 024; el repositorio define
+025, pendiente de aplicacion autorizada.
 
 | Migracion | Objetivo principal |
 | --- | --- |
@@ -258,6 +260,7 @@ conocida `tienda_abarrotes_pruebas` esta validada en 024; no existe 025.
 | `022_ciclo_vida_suscripciones.sql` | Contrato de gracia, snapshot por periodo, historial append-only e idempotencia futura de suscripciones. |
 | `023_estructura_pagos_suscripcion.sql` | Catalogo Basic/Standard/Pro, precios USD versionados, tasa manual USD/BOB y estructura de pagos manuales. |
 | `024_corregir_idempotencia_y_snapshot_pagos.sql` | Idempotencia global/tenant, resultados tipados y snapshot textual del plan actual. |
+| `025_google_oauth_identities.sql` | Vinculacion unica de propietario con la identidad estable de Google, sin tokens OAuth persistidos. |
 
 Reglas:
 
@@ -266,7 +269,7 @@ Reglas:
 - Las modernas usan inspeccion pre/parcial/post y registro tardio.
 - Una migracion registrada pero fisicamente incompleta debe bloquear el proceso.
 - Una estructura completa no registrada solo puede adoptarse despues de validarla.
-- `database/tienda_abarrotes.sql` debe conservar equivalencia con el estado post-024 para instalaciones nuevas.
+- `database/tienda_abarrotes.sql` debe conservar equivalencia con el estado post-025 para instalaciones nuevas.
 - Antes de cualquier futura migracion: backup verificado, ensayo sobre copia, revision del SQL y comprobacion posterior.
 
 ## 6. Scripts npm y nivel de seguridad
@@ -679,8 +682,8 @@ En ambos casos, conservar el repositorio o base anterior hasta completar smoke t
 ### Base local
 
 - Base de pruebas esperada: `tienda_abarrotes_pruebas`.
-- Migraciones registradas en la base principal conocida: 001 a 024; no existe
-  migracion 025.
+- Migraciones registradas en la base principal conocida: 001 a 024. La 025
+  existe en el repositorio y sigue pendiente de aplicacion autorizada.
 - El estado operativo local es `APP_ENV=local`, `localhost /
   tienda_abarrotes_pruebas` y `BACKUP_OK`.
 - No deberian existir bases `tmp_tienda_restore_*` ni

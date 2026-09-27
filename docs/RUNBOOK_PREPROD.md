@@ -65,7 +65,7 @@ copiar respuestas crudas del proveedor: conservar solo el codigo sanitizado de
 la aplicacion. Production permanece con correo deshabilitado y rechaza el modo
 externo.
 
-## Migraciones 001-024
+## Migraciones 001-025
 
 Las migraciones son solo hacia adelante. En local/CI, `db:init` y `db:migrate`
 solo usan `APP_ENV=local` y `DB_HOST=localhost`. Una futura base remota exige
@@ -181,7 +181,7 @@ otro metodo o cualquier otra ruta siguen fallando cerrados.
 Despues de un despliegue autorizado, validar en este orden:
 
 1. liveness 200 y readiness saludable;
-2. migraciones `001-024` y ausencia de `025`;
+2. migraciones `001-025`, incluida la identidad OAuth sin tokens persistidos;
 3. cookie segura, origen permitido y rate limits desde el proxy real;
 4. login y una operacion sintetica aislada por tenant;
 5. carga y descarga autenticada de un comprobante sintetico;

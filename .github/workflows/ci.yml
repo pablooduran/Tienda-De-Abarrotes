@@ -62,6 +62,7 @@ jobs:
         run: |
           npm run test:staging-configuration
           npm run test:email-delivery
+          npm run test:google-oauth
           npm run test:public-auth-ui
       - name: Validate JavaScript syntax
         run: |
@@ -73,7 +74,7 @@ jobs:
           npm run test:web-security
           git diff --check
           npm run codex:precommit -- --allow .github/workflows/ci.yml package.json scripts/check-ci-environment.js scripts/check-ci-workflow.js scripts/codex-precommit.js scripts/test-codex-precommit.js scripts/test-e2e-critical-business.js docs/MAPA_PRUEBAS.md docs/PRODUCTO_0_DECISIONES.md docs/CONTINUIDAD_PROYECTO.md docs/PENDIENTES_Y_MEJORAS_FUTURAS.md README.md
-      - name: Prepare ephemeral schema 001-024
+      - name: Prepare ephemeral schema 001-025
         run: |
           npm run db:init
           npm run db:migrate

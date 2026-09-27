@@ -5,6 +5,13 @@ const menu = document.getElementById('menu');
 const message = document.getElementById('message');
 const modalRoot = document.getElementById('modalRoot');
 const helpButton = document.getElementById('helpBtn');
+const appLayout = document.getElementById('appLayout');
+const navigationToggle = document.getElementById('navigationToggle');
+const sidebarScrim = document.getElementById('sidebarScrim');
+const accountMenu = document.getElementById('accountMenu');
+const viewProgress = document.getElementById('viewProgress');
+const helpBackTopbar = document.getElementById('helpBackTopbar');
+const quickActions = document.getElementById('quickActions');
 
 let state = { productos: [], clientes: [], proveedores: [], fiados: [], ventas: [], categorias: [], context: null, lotAccess: null };
 let debtFocus = null;
@@ -27,6 +34,10 @@ let storeConfigurationUi = null;
 let activeView = 'inicio';
 let helpReturnView = 'inicio';
 let requestedHelpTopic = null;
+let viewRequest = 0;
+let catalogCacheAt = 0;
+let catalogRefreshPromise = null;
+let catalogClientsLoaded = false;
 
 const sections = [
   ['inicio', 'Inicio', 'Resumen general del negocio'],
@@ -57,8 +68,7 @@ const navigationFamilies = [
   { id: 'inventario', label: 'Inventario', sections: ['productos', 'movimientosStock', 'compras', 'proveedores', 'inventarioInteligente', 'inventarioOperativo', 'lotesVencimientos'] },
   { id: 'clientes', label: 'Clientes', sections: ['clientes'] },
   { id: 'reportes', label: 'Reportes', sections: ['reportes', 'finanzas', 'gastos', 'cierreCaja'] },
-  { id: 'administracion', label: 'Administracion y configuracion', sections: ['configuracion', 'auditoria'] },
-  { id: 'plan', label: 'Mi plan', links: [{ href: '/suscripcion.html', label: 'Suscripcion, planes y pagos' }] }
+  { id: 'administracion', label: 'Administracion y configuracion', sections: ['configuracion', 'auditoria'] }
 ];
 
 const inventoryWorkspaceSections = ['productos', 'compras', 'movimientosStock', 'proveedores', 'lotesVencimientos', 'inventarioInteligente', 'inventarioOperativo'];
@@ -251,6 +261,7 @@ async function api(url, options = {}) {
     }
     throw error;
   }
+  if (url.startsWith('/api/') && !['GET', 'HEAD', 'OPTIONS'].includes(method)) invalidateCatalogCache();
   return data;
 }
 function formData(form) { return Object.fromEntries(new FormData(form).entries()); }
@@ -279,6 +290,11 @@ function renderSubscriptionContext() {
   } else {
     banner.hidden = true;
   }
+}
+
+function invalidateCatalogCache() {
+  catalogCacheAt = 0;
+  catalogClientsLoaded = false;
 }
 
 function applyReadOnlyUi() {
@@ -480,10 +496,83 @@ function ayuda() {
     onWelcome: () => {
       window.WelcomeGuide?.show(state.context);
       requestedHelpTopic = null;
-      return loadView('inicio');
-    }
+      return startGuidedHelp('agregar-producto');
+    },
+    onGuide: (topic) => startGuidedHelp(topic)
   });
   requestedHelpTopic = null;
+}
+
+const guidedHelp = Object.freeze({
+  'agregar-producto': [
+    { view: 'productos', selector: '#addProduct', title: 'Agrega un producto', text: 'Este botón abre el formulario para registrar lo que vendes. La guía no guardará nada por ti.' }
+  ],
+  'registrar-stock': [
+    { view: 'compras', selector: '#comprasProvider', title: 'Elige el proveedor', text: 'Selecciona quién entrega la mercadería. También puedes continuar sin proveedor cuando corresponda.' },
+    { view: 'compras', selector: '#comprasSearch', title: 'Busca el producto', text: 'Escribe el nombre del producto y agrégalo a la compra.' },
+    { view: 'compras', selector: '#comprasForm button[type="submit"]', title: 'Confirma después de revisar', text: 'Revisa cantidades, costos y vencimientos. Este botón registra la compra; la guía nunca lo pulsará automáticamente.' }
+  ],
+  compras: [
+    { view: 'compras', selector: '#comprasProvider', title: 'Proveedor de la compra', text: 'Empieza indicando el proveedor que entrega los productos.' },
+    { view: 'compras', selector: '#comprasSearch', title: 'Productos recibidos', text: 'Busca cada producto que llegó a la tienda y agrégalo al carrito.' },
+    { view: 'compras', selector: '#comprasForm button[type="submit"]', title: 'Registrar compra', text: 'Confirma solamente cuando cantidades y costos sean correctos.' }
+  ],
+  'primera-venta': [
+    { view: 'ventas', selector: '#posSearch', title: 'Busca un producto', text: 'Escribe el nombre o escanea el código para agregarlo a la venta.' },
+    { view: 'ventas', selector: '#posPaymentMode', title: 'Elige cómo pagará', text: 'Selecciona efectivo, QR, pago mixto o fiado según corresponda.' },
+    { view: 'ventas', selector: '#posSubmit', title: 'Revisa y registra', text: 'Este botón confirma la venta. La guía lo señala, pero nunca registra una operación por sí sola.' }
+  ],
+  'realizar-venta': [
+    { view: 'ventas', selector: '#posSearch', title: 'Busca o escanea', text: 'Aquí encuentras los productos disponibles para la venta.' },
+    { view: 'ventas', selector: '#posPaymentMode', title: 'Forma de cobro', text: 'Indica cómo recibiste el pago y revisa el resumen.' },
+    { view: 'ventas', selector: '#posSubmit', title: 'Registrar venta', text: 'Confirma solo después de revisar el carrito y el cobro.' }
+  ]
+});
+
+async function startGuidedHelp(topic) {
+  const steps = guidedHelp[topic];
+  if (!steps?.length) return;
+  let current = 0;
+  const returnFocus = document.activeElement;
+
+  const close = () => {
+    modalRoot.innerHTML = '';
+    returnFocus?.focus?.();
+  };
+
+  const render = async () => {
+    const step = steps[current];
+    if (activeView !== step.view) await loadView(step.view);
+    await new Promise((resolve) => globalThis.requestAnimationFrame(() => globalThis.requestAnimationFrame(resolve)));
+    const target = document.querySelector(step.selector);
+    if (!target) {
+      close();
+      return showError('La opción de esta guía no está disponible con el acceso actual.');
+    }
+    target.scrollIntoView({ block: 'center', inline: 'nearest' });
+    await new Promise((resolve) => globalThis.requestAnimationFrame(resolve));
+    const rect = target.getBoundingClientRect();
+    modalRoot.innerHTML = `<div class="guided-tour" role="dialog" aria-modal="true" aria-labelledby="guidedTourTitle">
+      <div class="guided-tour-shade"></div>
+      <div class="guided-tour-highlight" style="top:${Math.max(6, rect.top - 6)}px;left:${Math.max(6, rect.left - 6)}px;width:${Math.max(36, rect.width + 12)}px;height:${Math.max(36, rect.height + 12)}px"></div>
+      <section class="guided-tour-card">
+        <span class="eyebrow">Paso ${current + 1} de ${steps.length}</span>
+        <h3 id="guidedTourTitle">${escapeHtml(step.title)}</h3>
+        <p>${escapeHtml(step.text)}</p>
+        <div class="guided-tour-actions">
+          <button type="button" class="secondary" data-tour-close data-modal-cancel>${current + 1 === steps.length ? 'Cerrar' : 'Salir'}</button>
+          ${current > 0 ? '<button type="button" class="secondary" data-tour-back>Anterior</button>' : ''}
+          ${current + 1 < steps.length ? '<button type="button" data-tour-next>Siguiente</button>' : ''}
+        </div>
+      </section>
+    </div>`;
+    modalRoot.querySelector('[data-tour-close]')?.addEventListener('click', close);
+    modalRoot.querySelector('[data-tour-back]')?.addEventListener('click', () => { current -= 1; void render(); });
+    modalRoot.querySelector('[data-tour-next]')?.addEventListener('click', () => { current += 1; void render(); });
+    modalRoot.querySelector('[data-tour-next], [data-tour-close]')?.focus();
+  };
+
+  await render();
 }
 
 function sectionById(id) {
@@ -492,6 +581,23 @@ function sectionById(id) {
 
 function familyForSection(id) {
   return navigationFamilies.find((family) => family.sections?.includes(id))?.id || null;
+}
+
+function mobileNavigation() {
+  return window.matchMedia('(max-width: 900px)').matches;
+}
+
+function closeMobileNavigation() {
+  if (!mobileNavigation()) return;
+  appLayout?.classList.remove('sidebar-open');
+  if (sidebarScrim) sidebarScrim.hidden = true;
+  navigationToggle?.setAttribute('aria-expanded', 'false');
+  navigationToggle?.setAttribute('aria-label', 'Mostrar navegación');
+}
+
+function navigateFromMenu(id) {
+  closeMobileNavigation();
+  return loadView(id);
 }
 
 function renderMenu(activeView = 'inicio') {
@@ -513,7 +619,7 @@ function renderMenu(activeView = 'inicio') {
         item.type = 'button';
         item.dataset.view = id;
         item.classList.toggle('active', id === activeView);
-        item.addEventListener('click', () => loadView(id));
+        item.addEventListener('click', () => navigateFromMenu(id));
       } else {
         item.href = family.links[0].href;
       }
@@ -547,7 +653,7 @@ function renderMenu(activeView = 'inicio') {
       button.dataset.view = id;
       button.className = 'nav-destination';
       button.classList.toggle('active', id === activeView);
-      button.addEventListener('click', () => loadView(id));
+      button.addEventListener('click', () => navigateFromMenu(id));
       items.appendChild(button);
     });
     (family.links || []).forEach((link) => {
@@ -562,22 +668,38 @@ function renderMenu(activeView = 'inicio') {
   });
 }
 
-document.getElementById('logoutBtn').addEventListener('click', async () => {
+document.getElementById('logoutBtn')?.addEventListener('click', async () => {
   if (!await confirmAction('¿Seguro que deseas cerrar sesión?')) return;
   await api('/auth/logout', { method: 'POST' });
   window.location.href = '/login.html';
 });
 
-async function refreshCatalogs({ includeClients = true } = {}) {
-  const [productos, clientes, proveedores, fiados, ventas, categorias] = await Promise.all([
-    api('/api/productos'),
-    includeClients ? api('/api/clientes') : Promise.resolve(state.clientes),
-    api('/api/proveedores'),
-    api('/api/fiados'),
-    api('/api/ventas'),
-    api('/api/categorias')
-  ]);
-  state = { ...state, productos, clientes, proveedores, fiados, ventas, categorias };
+async function refreshCatalogs({ includeClients = true, force = false } = {}) {
+  const cacheIsFresh = Date.now() - catalogCacheAt < 45000;
+  if (!force && cacheIsFresh && (!includeClients || catalogClientsLoaded)) return state;
+  if (catalogRefreshPromise) {
+    await catalogRefreshPromise;
+    if (!includeClients || catalogClientsLoaded) return state;
+  }
+  catalogRefreshPromise = (async () => {
+    const [productos, clientes, proveedores, fiados, ventas, categorias] = await Promise.all([
+      api('/api/productos'),
+      includeClients ? api('/api/clientes') : Promise.resolve(state.clientes),
+      api('/api/proveedores'),
+      api('/api/fiados'),
+      api('/api/ventas'),
+      api('/api/categorias')
+    ]);
+    state = { ...state, productos, clientes, proveedores, fiados, ventas, categorias };
+    catalogCacheAt = Date.now();
+    catalogClientsLoaded = catalogClientsLoaded || includeClients;
+    return state;
+  })();
+  try {
+    return await catalogRefreshPromise;
+  } finally {
+    catalogRefreshPromise = null;
+  }
 }
 
 function options(rows, id, label, empty = 'Seleccione', selected = '') {
@@ -588,6 +710,7 @@ function categoryOptions(value = '') {
 }
 
 async function loadView(id) {
+  const request = ++viewRequest;
   showMessage('');
   const section = sectionById(id);
   if (!section || !sectionAllowed(id)) {
@@ -599,19 +722,80 @@ async function loadView(id) {
   renderMenu(id);
   title.textContent = section[1];
   subtitle.textContent = section[2];
-  if (!['ventas', 'clientes', 'configuracion', 'ayuda'].includes(id)) {
-    await refreshCatalogs({ includeClients: !['ventas', 'clientes'].includes(id) });
+  if (helpButton) helpButton.hidden = id === 'ayuda';
+  if (helpBackTopbar) helpBackTopbar.hidden = id !== 'ayuda';
+  if (quickActions) quickActions.hidden = id === 'ayuda';
+  accountMenu?.removeAttribute('open');
+  view.setAttribute('aria-busy', 'true');
+  view.classList.add('view-is-loading');
+  if (viewProgress) viewProgress.hidden = false;
+  try {
+    if (!['ventas', 'clientes', 'configuracion', 'ayuda'].includes(id)) {
+      await refreshCatalogs({ includeClients: !['ventas', 'clientes'].includes(id) });
+    }
+    if (request !== viewRequest) return;
+    const handlers = { inicio, productos, movimientosStock, inventarioInteligente, inventarioOperativo, lotesVencimientos, clientes, proveedores, ventas, compras, historialVentas, pagos, gastos, finanzas, compensaciones, configuracion, auditoria, cierreCaja, reportes, ayuda };
+    if (!handlers[id]) return loadView('inicio');
+    await handlers[id]();
+    if (request !== viewRequest) return;
+    renderInventoryWorkspace(id);
+    renderSalesWorkspace(id);
+    renderContextualHelp(id);
+    applyReadOnlyUi();
+  } finally {
+    if (request === viewRequest) {
+      view.removeAttribute('aria-busy');
+      view.classList.remove('view-is-loading');
+      if (viewProgress) viewProgress.hidden = true;
+    }
   }
-  const handlers = { inicio, productos, movimientosStock, inventarioInteligente, inventarioOperativo, lotesVencimientos, clientes, proveedores, ventas, compras, historialVentas, pagos, gastos, finanzas, compensaciones, configuracion, auditoria, cierreCaja, reportes, ayuda };
-  if (!handlers[id]) return loadView('inicio');
-  await handlers[id]();
-  renderInventoryWorkspace(id);
-  renderSalesWorkspace(id);
-  renderContextualHelp(id);
-  applyReadOnlyUi();
 }
 
 helpButton?.addEventListener('click', () => openHelp());
+helpBackTopbar?.addEventListener('click', () => loadView(helpReturnView || 'inicio'));
+
+function setDesktopSidebarCollapsed(collapsed, persist = true) {
+  appLayout?.classList.toggle('sidebar-collapsed', collapsed);
+  navigationToggle?.setAttribute('aria-expanded', String(!collapsed));
+  navigationToggle?.setAttribute('aria-label', collapsed ? 'Mostrar navegación' : 'Ocultar navegación');
+  if (!persist) return;
+  try { window.localStorage.setItem('tienda-sidebar-collapsed', collapsed ? 'true' : 'false'); } catch (_) { /* La preferencia visual no es crítica. */ }
+}
+
+function initializeShell() {
+  let collapsed = false;
+  try { collapsed = window.localStorage.getItem('tienda-sidebar-collapsed') === 'true'; } catch (_) { /* Mantener el valor seguro. */ }
+  if (mobileNavigation()) {
+    appLayout?.classList.remove('sidebar-collapsed', 'sidebar-open');
+    navigationToggle?.setAttribute('aria-expanded', 'false');
+    navigationToggle?.setAttribute('aria-label', 'Mostrar navegación');
+    if (sidebarScrim) sidebarScrim.hidden = true;
+  } else {
+    setDesktopSidebarCollapsed(collapsed, false);
+  }
+}
+
+navigationToggle?.addEventListener('click', () => {
+  if (mobileNavigation()) {
+    const open = !appLayout?.classList.contains('sidebar-open');
+    appLayout?.classList.toggle('sidebar-open', open);
+    navigationToggle.setAttribute('aria-expanded', String(open));
+    navigationToggle.setAttribute('aria-label', open ? 'Ocultar navegación' : 'Mostrar navegación');
+    if (sidebarScrim) sidebarScrim.hidden = !open;
+    return;
+  }
+  setDesktopSidebarCollapsed(!appLayout?.classList.contains('sidebar-collapsed'));
+});
+
+sidebarScrim?.addEventListener('click', closeMobileNavigation);
+window.matchMedia('(max-width: 900px)').addEventListener?.('change', initializeShell);
+
+document.querySelectorAll('[data-quick-view]').forEach((button) => button.addEventListener('click', () => loadView(button.dataset.quickView)));
+document.querySelectorAll('[data-settings-view]').forEach((button) => button.addEventListener('click', () => loadView(button.dataset.settingsView)));
+document.addEventListener('click', (event) => {
+  if (!accountMenu?.open || accountMenu.contains(event.target)) return;
+  accountMenu.removeAttribute('open');
+});
 
 function renderInventoryWorkspace(activeId) {
   if (!inventoryWorkspaceSections.includes(activeId) || view.querySelector('.inventory-workspace-nav')) return;
@@ -962,17 +1146,32 @@ async function inicio() {
         <strong>Bs ${money(data.ventasHoy)}</strong>
       </div>
     </div>
-    <div class="cards dashboard-cards">
-      <div class="card metric-card"><span>Ventas de ayer</span><strong>Bs ${money(data.ventasAyer)}</strong></div>
-      <div class="card metric-card"><span>Semana actual</span><strong>Bs ${money(data.ventasSemana)}</strong></div>
-      <div class="card metric-card"><span>Mes actual</span><strong>Bs ${money(data.ventasMes)}</strong></div>
-      <div class="card metric-card"><span>${finance?.rentabilidadCompleta === false ? 'Ganancia bruta calculable' : 'Ganancia bruta hoy'}</span><strong>Bs ${money(financeGross)}</strong></div>
-      ${finance ? `<div class="card metric-card collected"><span>Cobrado hoy</span><strong>Bs ${money(finance.dineroCobrado)}</strong></div>
-      <div class="card metric-card debt"><span>Fiado generado hoy</span><strong>Bs ${money(finance.fiadoGenerado)}</strong></div>
-      <div class="card metric-card expense"><span>Gastos hoy</span><strong>Bs ${money(finance.gastos)}</strong></div>
-      <div class="card metric-card net ${Number(financeNet) < 0 ? 'negative' : ''}"><span>${finance.rentabilidadCompleta ? 'Ganancia neta hoy' : 'Ganancia neta calculable'}</span><strong>Bs ${money(financeNet)}</strong></div>` : ''}
-      <div class="card metric-card"><span>Bajo stock</span><strong>${data.bajoStock}</strong></div>
-      <div class="card metric-card"><span>Fiados activos</span><strong>${activeDebts}</strong></div>
+    <div class="dashboard-metric-groups">
+      <section class="dashboard-metric-group" aria-labelledby="salesMetricsTitle">
+        <div class="dashboard-group-heading"><div><span class="eyebrow">Ventas</span><h4 id="salesMetricsTitle">Rendimiento comercial</h4></div><button type="button" class="link-button" data-dashboard-view="ventas">Registrar venta</button></div>
+        <div class="cards dashboard-cards">
+          <div class="card metric-card"><span>Ventas de ayer</span><strong>Bs ${money(data.ventasAyer)}</strong></div>
+          <div class="card metric-card"><span>Semana actual</span><strong>Bs ${money(data.ventasSemana)}</strong></div>
+          <div class="card metric-card"><span>Mes actual</span><strong>Bs ${money(data.ventasMes)}</strong></div>
+          <div class="card metric-card"><span>${finance?.rentabilidadCompleta === false ? 'Ganancia bruta calculable' : 'Ganancia bruta hoy'}</span><strong>Bs ${money(financeGross)}</strong></div>
+          ${finance ? `<div class="card metric-card net ${Number(financeNet) < 0 ? 'negative' : ''}"><span>${finance.rentabilidadCompleta ? 'Ganancia neta hoy' : 'Ganancia neta calculable'}</span><strong>Bs ${money(financeNet)}</strong></div>` : ''}
+        </div>
+      </section>
+      <section class="dashboard-metric-group" aria-labelledby="collectionMetricsTitle">
+        <div class="dashboard-group-heading"><div><span class="eyebrow">Dinero</span><h4 id="collectionMetricsTitle">Cobranza y gastos</h4></div><button type="button" class="link-button" data-dashboard-view="pagos">Ir a cobranza</button></div>
+        <div class="cards dashboard-cards dashboard-cards-compact">
+          ${finance ? `<div class="card metric-card collected"><span>Cobrado hoy</span><strong>Bs ${money(finance.dineroCobrado)}</strong></div>
+          <div class="card metric-card debt"><span>Fiado generado hoy</span><strong>Bs ${money(finance.fiadoGenerado)}</strong></div>
+          <div class="card metric-card expense"><span>Gastos hoy</span><strong>Bs ${money(finance.gastos)}</strong></div>` : ''}
+          <div class="card metric-card"><span>Fiados activos</span><strong>${activeDebts}</strong></div>
+        </div>
+      </section>
+      <section class="dashboard-metric-group dashboard-metric-group-inventory" aria-labelledby="inventoryMetricsTitle">
+        <div class="dashboard-group-heading"><div><span class="eyebrow">Inventario</span><h4 id="inventoryMetricsTitle">Stock que requiere atención</h4></div><button type="button" class="link-button" data-dashboard-view="productos">Ver productos</button></div>
+        <div class="cards dashboard-cards dashboard-cards-compact">
+          <div class="card metric-card"><span>Productos con bajo stock</span><strong>${data.bajoStock}</strong></div>
+        </div>
+      </section>
     </div>
     ${welcome}
     <div class="dashboard-grid modern-dashboard">
@@ -1004,6 +1203,7 @@ async function inicio() {
     `<strong>Mes pasado</strong><br>Ventas: Bs ${money(data.ventasMesPasado)}`,
     `<strong>Mes actual</strong><br>Ventas: Bs ${money(data.ventasMes)}`
   ]);
+  view.querySelectorAll('[data-dashboard-view]').forEach((button) => button.addEventListener('click', () => loadView(button.dataset.dashboardView)));
   window.WelcomeGuide?.bind(view, {
     context: state.context,
     products: state.productos,
@@ -4396,6 +4596,7 @@ readOnlyObserver.observe(view, { childList: true, subtree: true });
 readOnlyObserver.observe(modalRoot, { childList: true, subtree: true });
 
 async function initializeApp() {
+  initializeShell();
   await loadContext();
   renderMenu();
   const topic = new URLSearchParams(window.location.search).get('help');
