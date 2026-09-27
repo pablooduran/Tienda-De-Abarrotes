@@ -2764,7 +2764,7 @@ td.actions { position: relative; }
 }
 .auth-google-button > span { font-weight: 650; }
 .google-logo { width: 20px; height: 20px; flex: 0 0 20px; }
-.auth-google-button:hover { transform: translateY(-2px); border-color: var(--brand); box-shadow: 0 10px 22px rgba(9, 32, 18, .12); }
+.auth-google-button:hover { color: var(--ink); background: var(--panel); transform: translateY(-2px); border-color: var(--brand); box-shadow: 0 10px 22px rgba(9, 32, 18, .12); }
 .auth-divider { display: flex; align-items: center; gap: 10px; margin: 3px 0; color: var(--muted); font-size: 12px; text-align: center; }
 .auth-divider::before, .auth-divider::after { content: ''; flex: 1; height: 1px; background: var(--line); }
 .auth-link {
