@@ -1271,6 +1271,11 @@ const migrationRequirements = {
       ['identidadOauthAdministrador', 'fk_identidadOauth_administrador',
         ['idAdministrador'], 'administrador', ['idAdministrador'], 'RESTRICT', 'RESTRICT']
     ]
+  },
+  '026_proveedor_sugerido_catalogo_maestro.sql': {
+    columns: {
+      productoMaestro: ['proveedorSugerido']
+    }
   }
 };
 
@@ -3960,7 +3965,8 @@ async function main() {
               '022_ciclo_vida_suscripciones.sql',
               '023_estructura_pagos_suscripcion.sql',
               '024_corregir_idempotencia_y_snapshot_pagos.sql',
-              '025_google_oauth_identities.sql'
+              '025_google_oauth_identities.sql',
+              '026_proveedor_sugerido_catalogo_maestro.sql'
             ].includes(file)
             && !await requirementsSatisfied(connection, file);
         if (registeredMigrationIsIncomplete) {
@@ -3996,7 +4002,8 @@ async function main() {
           '022_ciclo_vida_suscripciones.sql',
           '023_estructura_pagos_suscripcion.sql',
           '024_corregir_idempotencia_y_snapshot_pagos.sql',
-          '025_google_oauth_identities.sql'
+          '025_google_oauth_identities.sql',
+          '026_proveedor_sugerido_catalogo_maestro.sql'
         ].includes(file)) {
           await connection.query('INSERT IGNORE INTO schema_migrations (nombre) VALUES (?)', [file]);
           const [finalRecord] = await connection.query(
