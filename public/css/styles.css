@@ -3448,6 +3448,23 @@ td.actions { position: relative; }
 .payment-quote,
 .payment-instructions,
 .payment-observation { padding: 13px; border-left: 4px solid #1f5f8b; background: #eaf4fb; }
+.payment-qr-card {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 20px;
+  align-items: center;
+  margin: 0;
+  padding: 20px;
+  border: 1px solid #4aae6b;
+  border-radius: 12px;
+  color: #effaf2;
+  background: linear-gradient(135deg, #0d5925, #1a7a2e);
+}
+.payment-qr-card figcaption { display: grid; gap: 7px; max-width: 360px; }
+.payment-qr-card figcaption strong { font-size: 20px; }
+.payment-qr-card figcaption span { line-height: 1.5; color: #d8f0df; }
+.payment-qr-frame { display: grid; width: min(230px, 42vw); padding: 12px; border-radius: 10px; background: #fff; box-shadow: 0 12px 26px rgba(0, 0, 0, .24); }
+.payment-qr-frame img { display: block; width: 100%; height: auto; image-rendering: pixelated; }
 .payment-quote { display: grid; gap: 4px; }
 .payment-quote strong { font-size: 22px; }
 .payment-quote span,
