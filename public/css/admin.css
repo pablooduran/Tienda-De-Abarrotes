@@ -845,12 +845,13 @@ tbody tr:hover {
   padding: 9px 10px;
   border: 1px solid var(--line);
   border-radius: 6px;
-  background: #fbfcfb;
+  color: var(--ink);
+  background: var(--surface);
 }
 
 .taxonomy-item.is-inactive {
   color: var(--muted);
-  background: #f2f4f3;
+  background: var(--brand-soft);
 }
 
 .taxonomy-actions {
