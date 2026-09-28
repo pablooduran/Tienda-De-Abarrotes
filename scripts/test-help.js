@@ -24,6 +24,7 @@ const checks = [
   ['La ayuda contextual cubre las superficies operativas', ['ventas', 'productos', 'clientes', 'configuracion'].every((section) => app.includes(`${section}: { topic:`))],
   ['Mi plan enlaza con su tema de ayuda', subscription.includes('/app.html?help=mi-plan')],
   ['La guia Welcome se reutiliza sin duplicar su checklist', help.includes('data-help-welcome') && welcome.includes('function show(context)')],
+  ['El centro mantiene un solo tema abierto a la vez', help.includes("article.addEventListener('toggle'") && help.includes("if (other !== article) other.open = false;")],
   ['La ayuda no controla tenant ni expone rutas privadas', !help.includes('idTienda') && !help.includes('/api/')],
   ['HELP conserva estilos responsive y foco nativo', css.includes('.help-center') && css.includes('.help-article > summary') && css.includes('.help-categories')],
   ['La documentacion registra WELCOME publicado y HELP implementado', docs.includes('31808668518') && docs.includes('HELP queda implementado')]

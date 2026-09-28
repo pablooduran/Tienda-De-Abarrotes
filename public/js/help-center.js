@@ -125,6 +125,12 @@
       list.innerHTML = rows.length
         ? rows.map(renderArticle).join('')
         : '<section class="help-empty" role="status"><strong>Sin resultados</strong><p>Prueba con otra palabra o revisa una categoria.</p></section>';
+      list.querySelectorAll('[data-help-article]').forEach((article) => article.addEventListener('toggle', () => {
+        if (!article.open) return;
+        list.querySelectorAll('[data-help-article]').forEach((other) => {
+          if (other !== article) other.open = false;
+        });
+      }));
       if (focusTopic) {
         const target = root.querySelector(`[data-help-article="${focusTopic}"]`);
         if (target) {

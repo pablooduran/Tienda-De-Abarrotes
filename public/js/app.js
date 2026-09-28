@@ -512,23 +512,23 @@ const guidedHelp = Object.freeze({
     { view: 'productos', selector: '#addProduct', title: 'Agrega un producto', text: 'Este botón abre el formulario para registrar lo que vendes. La guía no guardará nada por ti.' }
   ],
   'registrar-stock': [
-    { view: 'compras', selector: '#comprasProvider', advanceEvent: 'change', title: 'Elige el proveedor', text: 'Selecciona aquí quién entrega la mercadería. Al elegirlo, continuaremos al siguiente paso.' },
-    { view: 'compras', selector: '#comprasSearch', advanceEvent: 'input', title: 'Busca el producto', text: 'Escribe aquí el nombre del producto y agrégalo a la compra.' },
+    { view: 'compras', selector: '#comprasProvider', title: 'Elige el proveedor', text: 'Aquí se indica quién entrega la mercadería.' },
+    { view: 'compras', selector: '#comprasSearch', title: 'Busca el producto', text: 'Aquí puedes buscar el producto que agregarás a la compra.' },
     { view: 'compras', selector: '#comprasForm button[type="submit"]', title: 'Confirma después de revisar', text: 'Revisa cantidades, costos y vencimientos. Este botón registra la compra; la guía nunca lo pulsará automáticamente.' }
   ],
   compras: [
-    { view: 'compras', selector: '#comprasProvider', advanceEvent: 'change', title: 'Proveedor de la compra', text: 'Empieza indicando el proveedor que entrega los productos.' },
-    { view: 'compras', selector: '#comprasSearch', advanceEvent: 'input', title: 'Productos recibidos', text: 'Busca cada producto que llegó a la tienda y agrégalo al carrito.' },
+    { view: 'compras', selector: '#comprasProvider', title: 'Proveedor de la compra', text: 'Aquí indicas quién entrega los productos.' },
+    { view: 'compras', selector: '#comprasSearch', title: 'Productos recibidos', text: 'Aquí buscas cada producto recibido para agregarlo al carrito.' },
     { view: 'compras', selector: '#comprasForm button[type="submit"]', title: 'Registrar compra', text: 'Confirma solamente cuando cantidades y costos sean correctos.' }
   ],
   'primera-venta': [
-    { view: 'ventas', selector: '#posSearch', advanceEvent: 'guided-pos-product-added', advanceTarget: 'document', title: 'Busca un producto', text: 'Escribe el nombre, escanea el código o elige el producto de la lista para agregarlo a la venta.' },
-    { view: 'ventas', selector: '#posPaymentMode', advanceEvent: 'change', title: 'Elige cómo pagará', text: 'Selecciona efectivo, QR, pago mixto o fiado según corresponda.' },
+    { view: 'ventas', selector: '#posSearch', title: 'Busca un producto', text: 'Escribe el nombre, escanea el código o elige el producto de la lista para agregarlo a la venta.' },
+    { view: 'ventas', selector: '#posPaymentMode', title: 'Elige cómo pagará', text: 'Aquí seleccionas efectivo, QR, pago mixto o fiado según corresponda.' },
     { view: 'ventas', selector: '#posSubmit', title: 'Revisa y registra', text: 'Este botón confirma la venta. La guía lo señala, pero nunca registra una operación por sí sola.' }
   ],
   'realizar-venta': [
-    { view: 'ventas', selector: '#posSearch', advanceEvent: 'guided-pos-product-added', advanceTarget: 'document', title: 'Busca un producto', text: 'Escribe el nombre, escanea el código o elige el producto de la lista para agregarlo a la venta.' },
-    { view: 'ventas', selector: '#posPaymentMode', advanceEvent: 'change', title: 'Forma de cobro', text: 'Indica cómo recibiste el pago y revisa el resumen.' },
+    { view: 'ventas', selector: '#posSearch', title: 'Busca un producto', text: 'Escribe el nombre, escanea el código o elige el producto de la lista para agregarlo a la venta.' },
+    { view: 'ventas', selector: '#posPaymentMode', title: 'Forma de cobro', text: 'Aquí indicas cómo recibiste el pago y revisas el resumen.' },
     { view: 'ventas', selector: '#posSubmit', title: 'Registrar venta', text: 'Confirma solo después de revisar el carrito y el cobro.' }
   ]
 });
@@ -539,19 +539,14 @@ async function startGuidedHelp(topic) {
   let current = 0;
   const returnFocus = document.activeElement;
   let highlightedTarget = null;
-  let removeAdvanceListener = null;
 
   const close = () => {
-    removeAdvanceListener?.();
-    removeAdvanceListener = null;
     highlightedTarget?.classList.remove('guided-tour-target');
     modalRoot.innerHTML = '';
     returnFocus?.focus?.();
   };
 
   const render = async () => {
-    removeAdvanceListener?.();
-    removeAdvanceListener = null;
     highlightedTarget?.classList.remove('guided-tour-target');
     highlightedTarget = null;
     const step = steps[current];
@@ -571,16 +566,17 @@ async function startGuidedHelp(topic) {
     const bubbleHeight = 220;
     const bubbleGap = 32;
     const clamp = (value, min, max) => Math.min(Math.max(value, min), max);
+    const centeredLeft = clamp(rect.left + rect.width / 2 - bubbleWidth / 2, 16, window.innerWidth - bubbleWidth - 16);
     const centeredTop = clamp(rect.top + rect.height / 2 - bubbleHeight / 2, 18, window.innerHeight - bubbleHeight - 18);
     let cardPosition;
-    if (rect.right + bubbleGap + bubbleWidth <= window.innerWidth) {
+    if (rect.bottom + bubbleHeight + bubbleGap <= window.innerHeight) {
+      cardPosition = `left:${centeredLeft}px;top:${rect.bottom + bubbleGap}px`;
+    } else if (rect.top - bubbleHeight - bubbleGap >= 18) {
+      cardPosition = `left:${centeredLeft}px;top:${rect.top - bubbleHeight - bubbleGap}px`;
+    } else if (rect.right + bubbleGap + bubbleWidth <= window.innerWidth) {
       cardPosition = `left:${rect.right + bubbleGap}px;top:${centeredTop}px`;
-    } else if (rect.left - bubbleGap - bubbleWidth >= 16) {
-      cardPosition = `left:${rect.left - bubbleWidth - bubbleGap}px;top:${centeredTop}px`;
-    } else if (rect.bottom + bubbleHeight + bubbleGap <= window.innerHeight) {
-      cardPosition = `left:${clamp(rect.left, 16, window.innerWidth - bubbleWidth - 16)}px;top:${rect.bottom + bubbleGap}px`;
     } else {
-      cardPosition = `left:${clamp(rect.left, 16, window.innerWidth - bubbleWidth - 16)}px;top:${Math.max(18, rect.top - bubbleHeight - bubbleGap)}px`;
+      cardPosition = `left:${Math.max(16, rect.left - bubbleWidth - bubbleGap)}px;top:${centeredTop}px`;
     }
     modalRoot.innerHTML = `<div class="guided-tour" role="dialog" aria-modal="true" aria-labelledby="guidedTourTitle">
       <div class="guided-tour-shade"></div>
@@ -599,15 +595,6 @@ async function startGuidedHelp(topic) {
     modalRoot.querySelector('[data-tour-close]')?.addEventListener('click', close);
     modalRoot.querySelector('[data-tour-back]')?.addEventListener('click', () => { current -= 1; void render(); });
     modalRoot.querySelector('[data-tour-next]')?.addEventListener('click', () => { current += 1; void render(); });
-    if (step.advanceEvent && current + 1 < steps.length) {
-      const eventTarget = step.advanceTarget === 'document' ? document : target;
-      const advance = () => {
-        current += 1;
-        void render();
-      };
-      eventTarget.addEventListener(step.advanceEvent, advance, { once: true });
-      removeAdvanceListener = () => eventTarget.removeEventListener(step.advanceEvent, advance);
-    }
     modalRoot.querySelector('[data-tour-next], [data-tour-close]')?.focus();
   };
 
@@ -2645,7 +2632,6 @@ function addPosProduct(product) {
     posCart.push({ producto: product, cantidad: 1, presentacion });
   }
   renderPosCart();
-  document.dispatchEvent(new CustomEvent('guided-pos-product-added'));
 }
 
 function renderPosCart() {

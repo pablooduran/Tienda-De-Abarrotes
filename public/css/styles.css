@@ -2651,7 +2651,7 @@ td.actions { position: relative; }
   to { opacity: 1; transform: translateY(0) scale(1); }
 }
 
-.guided-tour { position: fixed; z-index: 80; inset: 0; pointer-events: none; }
+.guided-tour { position: fixed; z-index: 80; inset: 0; pointer-events: auto; }
 .guided-tour-shade { position: absolute; z-index: 1; inset: 0; pointer-events: none; }
 .guided-tour-highlight {
   position: fixed;
@@ -2671,6 +2671,7 @@ td.actions { position: relative; }
   border-radius: 10px;
   box-shadow: 0 0 0 8px rgba(74, 222, 128, .26) !important;
   animation: guidedTargetPulse 1.2s ease-in-out infinite;
+  pointer-events: none !important;
 }
 
 @keyframes guidedTargetPulse {
