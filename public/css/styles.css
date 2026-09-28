@@ -70,6 +70,11 @@ body {
     border-radius: 10px;
     box-shadow: 0 4px 14px rgba(3, 20, 9, .28);
   }
+  .layout:not(.sidebar-collapsed):not(.settings-workspace) .sidebar > * {
+    opacity: 1;
+    transform: translateX(0);
+    transition-delay: .08s;
+  }
 }
 .sidebar {
   background: var(--sidebar-bg);
@@ -86,7 +91,11 @@ body {
   z-index: 35;
   transition: transform .22s ease, opacity .18s ease;
 }
+.sidebar > * {
+  transition: opacity .16s ease, transform .22s cubic-bezier(.22, .75, .25, 1);
+}
 .layout.sidebar-collapsed .sidebar { transform: translateX(-100%); opacity: 0; pointer-events: none; }
+.layout.sidebar-collapsed .sidebar > * { opacity: 0; transform: translateX(-16px); transition-delay: 0s; }
 .layout.settings-workspace .sidebar { display: none; }
 .layout.settings-workspace .content { width: min(1180px, 100%); margin: 0 auto; }
 .sidebar-heading { display: flex; align-items: center; gap: 10px; min-width: 0; }
@@ -2613,13 +2622,13 @@ td.actions { position: relative; }
   display: grid;
   place-items: center;
   padding: 18px;
-  z-index: 30;
+  z-index: 90;
 }
 .modal {
   width: min(760px, calc(100vw - 24px));
   max-height: 88vh;
   overflow: auto;
-  background: white;
+  background: var(--panel);
   border-radius: 8px;
   border: 1px solid var(--line);
   box-shadow: 0 18px 60px rgba(0, 0, 0, 0.22);
@@ -2679,7 +2688,6 @@ td.actions { position: relative; }
 }
 .guided-tour-card h3 { margin: 5px 0 8px; }
 .guided-tour-card p { margin: 0; color: var(--muted); line-height: 1.5; }
-.guided-tour-card .guided-tour-instruction { margin-top: 9px; color: var(--ink); font-weight: 700; }
 .guided-tour-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 16px; }
 
 .login-page {
@@ -2951,6 +2959,8 @@ td.actions { position: relative; }
     transform: translateX(-102%);
   }
   .layout.sidebar-open .sidebar { opacity: 1; pointer-events: auto; transform: translateX(0); }
+  .layout.sidebar-open .sidebar > * { opacity: 1; transform: translateX(0); transition-delay: .1s; }
+  .layout:not(.sidebar-open) .sidebar > * { opacity: 0; transform: translateX(-16px); transition-delay: 0s; }
   .layout.sidebar-collapsed .sidebar { opacity: 0; pointer-events: none; transform: translateX(-102%); }
   .navigation-toggle { top: 30px; left: 0; }
   .layout.sidebar-open .navigation-toggle {
@@ -3361,7 +3371,7 @@ td.actions { position: relative; }
 .subscription-error { padding: 24px; background: #fff; border: 1px solid var(--line); border-radius: 6px; }
 .subscription-error { display: grid; gap: 12px; }
 .subscription-error h1, .subscription-error p { margin: 0; }
-.payment-subscription-section { border-bottom: 0; }
+.payment-subscription-section { border-bottom: 1px solid var(--line); }
 .payment-subscription-shell,
 .payment-request-detail { display: grid; gap: 16px; }
 .payment-subscription-shell { padding: 20px; border: 1px solid var(--line); border-radius: 8px; background: #fff; }
@@ -3968,6 +3978,7 @@ html[data-theme="dark"] {
   html[data-theme="dark"] .receipt,
   html[data-theme="dark"] .dashboard-period-detail,
   html[data-theme="dark"] .inventory-stock-metrics div { background: var(--panel); color: var(--ink); border-color: var(--line); }
+  html[data-theme="dark"] .modal :is(.credit-policy-help, .whatsapp-preview, .template-inactive, .readonly-note, .form-error, .inventory-note, .purchase-step, .summary-row) { background: var(--surface); color: var(--ink); border-color: var(--line); }
   html[data-theme="dark"] .welcome-step.is-complete,
   html[data-theme="dark"] .hero-total,
   html[data-theme="dark"] .pos-credit-card,

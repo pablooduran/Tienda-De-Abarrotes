@@ -53,6 +53,10 @@ check('El control para ocultar navegacion permanece disponible al desplazarse',
   && css.includes('border-radius: 10px;')
   && app.includes('function setNavigationToggleState(open)')
   && app.includes("navigationToggle.textContent = open ? '‹' : '›'"));
+check('La apertura de la barra revela su contenido de forma gradual',
+  css.includes('.sidebar > * {\n  transition: opacity .16s ease, transform .22s cubic-bezier(.22, .75, .25, 1);')
+  && css.includes('.layout.sidebar-open .sidebar > * { opacity: 1; transform: translateX(0); transition-delay: .1s; }')
+  && css.includes('transition-delay: .08s;'));
 check('Superadmin conserva su navegacion independiente',
   admin.includes('Navegación administrativa')
   && admin.includes('Suscripciones SaaS')

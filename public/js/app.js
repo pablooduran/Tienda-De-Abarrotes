@@ -562,17 +562,20 @@ async function startGuidedHelp(topic) {
     target.classList.add('guided-tour-target');
     highlightedTarget = target;
     const rect = target.getBoundingClientRect();
+    const cardPosition = rect.top >= 264
+      ? `bottom:${Math.max(24, window.innerHeight - rect.top + 20)}px`
+      : `top:${Math.min(Math.max(18, window.innerHeight - 240), rect.bottom + 20)}px`;
     modalRoot.innerHTML = `<div class="guided-tour" role="dialog" aria-modal="true" aria-labelledby="guidedTourTitle">
       <div class="guided-tour-shade"></div>
       <div class="guided-tour-highlight" style="top:${Math.max(6, rect.top - 6)}px;left:${Math.max(6, rect.left - 6)}px;width:${Math.max(36, rect.width + 12)}px;height:${Math.max(36, rect.height + 12)}px"></div>
-      <section class="guided-tour-card">
+      <section class="guided-tour-card" style="${cardPosition}">
         <span class="eyebrow">Paso ${current + 1} de ${steps.length}</span>
         <h3 id="guidedTourTitle">${escapeHtml(step.title)}</h3>
-        <p>${escapeHtml(step.text)}</p><p class="guided-tour-instruction">Busca el control resaltado en verde: ese es el siguiente paso.</p>
+        <p>${escapeHtml(step.text)}</p>
         <div class="guided-tour-actions">
           ${current > 0 ? '<button type="button" class="secondary" data-tour-back>Anterior</button>' : ''}
-          ${current + 1 < steps.length ? '<button type="button" data-tour-next>Siguiente</button>' : ''}
-          <button type="button" class="secondary" data-tour-close data-modal-cancel>${current + 1 === steps.length ? 'Cerrar' : 'Salir'}</button>
+          ${current + 1 < steps.length ? '<button type="button" class="secondary" data-tour-close data-modal-cancel>Salir</button>' : ''}
+          ${current + 1 < steps.length ? '<button type="button" data-tour-next>Siguiente</button>' : '<button type="button" data-tour-close data-modal-cancel>Cerrar</button>'}
         </div>
       </section>
     </div>`;
@@ -2255,10 +2258,10 @@ function operationView(kind) {
   const isSale = kind === 'ventas';
   const isPurchase = kind === 'compras';
   view.innerHTML = `
-    ${isPurchase ? '<section class="inventory-section-heading purchase-flow-heading"><div><h3>Registrar compra</h3><p>Completa el proveedor, agrega productos con sus cantidades y costos, y confirma el abastecimiento.</p></div></section>' : ''}
+    ${isPurchase ? '<section class="inventory-section-heading purchase-flow-heading"><div><h3>Registrar compra</h3></div></section>' : ''}
     <form id="${kind}Form" class="cart-layout ${isPurchase ? 'inventory-purchase-flow' : ''}" data-operation-key="${newOperationKey()}">
       <section class="panel product-picker">
-        ${isPurchase ? '<p class="purchase-step"><strong>1. Proveedor y productos</strong><span>Busca y agrega los productos que recibiste.</span></p>' : ''}
+        ${isPurchase ? '<p class="purchase-step"><strong>1. Proveedor y productos</strong></p>' : ''}
         <div class="form-grid compact-fields">
           ${isSale ? `
             <label>Proveedor<select id="${kind}Provider">${options(state.proveedores, 'idProveedor', 'nombre', 'Todos')}</select></label>
@@ -2270,7 +2273,6 @@ function operationView(kind) {
             <label class="check"><input id="showAllProducts" type="checkbox"> Incluir productos de otros proveedores</label>
           `}
         </div>
-        ${isSale ? '' : '<p class="hint">El proveedor elegido se registrará en esta compra. Por defecto verás solo sus productos; activa «Incluir productos de otros proveedores» si también le compras productos asociados a otro proveedor. Si no eliges proveedor, verás productos sin proveedor asignado.</p>'}
         ${autocompleteBox(kind)}
       </section>
       <aside class="panel cart-panel">
@@ -2285,14 +2287,14 @@ function operationView(kind) {
             <label>Tipo de venta<select name="tipo"><option value="pagada">Venta pagada</option><option value="fiada">Venta fiada</option></select></label>
             <label>Cliente<select name="idCliente">${options(state.clientes, 'idCliente', 'nombre', 'Cliente ocasional')}</select></label>
           </div>
-        ` : '<p class="purchase-step"><strong>2. Cantidades y costos</strong><span>Revisa cada producto antes de confirmar la compra.</span></p><p class="hint">Cada producto muestra su proveedor asociado. Si controla vencimientos, al agregarlo aparecerá el campo de fecha de cada lote.</p>'}
+        ` : '<p class="purchase-step"><strong>2. Cantidades y costos</strong></p>'}
         <div id="items" class="cart-items"></div>
         <div id="cartWarnings" class="cart-warnings"></div>
         <div class="cart-total">
           <span>Total</span>
           <strong id="total">Bs 0.00</strong>
         </div>
-        ${isPurchase ? '<p class="purchase-step purchase-confirmation"><strong>3. Confirmación</strong><span>La compra registrará sus movimientos de inventario.</span></p>' : ''}
+        ${isPurchase ? '<p class="purchase-step purchase-confirmation"><strong>3. Confirmación</strong></p>' : ''}
         <button type="submit" class="wide-button">${isSale ? 'Registrar venta' : 'Registrar compra'}</button>
       </aside>
     </form>`;
