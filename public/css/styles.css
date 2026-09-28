@@ -2541,8 +2541,10 @@ button.is-busy { cursor: wait; opacity: .72; }
 .inventory-secondary-actions > div {
   position: absolute;
   top: calc(100% + 6px);
-  right: 0;
-  z-index: 20;
+  left: 0;
+  right: auto;
+  z-index: 60;
+  width: min(280px, calc(100vw - 32px));
   min-width: 220px;
   display: flex;
   align-items: stretch;
@@ -2578,7 +2580,7 @@ td.actions { position: relative; }
   padding-top: 8px;
   color: var(--muted);
 }
-.inventory-product-toolbar { grid-template-columns: auto minmax(180px, 2fr); align-items: start; }
+.inventory-product-toolbar { position: relative; z-index: 36; overflow: visible; grid-template-columns: auto minmax(180px, 2fr); align-items: start; }
 .inventory-product-toolbar .filter-disclosure { grid-column: 1 / -1; }
 .inventory-filter-disclosure { width: 100%; }
 .movement-filters { grid-template-columns: minmax(180px, 1.5fr) auto; }
