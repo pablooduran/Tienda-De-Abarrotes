@@ -2656,27 +2656,35 @@ td.actions { position: relative; }
 .guided-tour-highlight {
   position: fixed;
   z-index: 2;
-  border: 3px solid #4ade80;
+  border: 4px solid #4ade80;
   border-radius: 10px;
   background: transparent;
-  box-shadow: 0 0 0 9999px rgba(3, 10, 6, .48), 0 0 0 6px rgba(74, 222, 128, .28);
+  box-shadow: 0 0 0 9999px rgba(3, 10, 6, .48), 0 0 0 9px rgba(74, 222, 128, .3);
   pointer-events: none;
   transition: inset .18s ease, width .18s ease, height .18s ease;
 }
 .guided-tour-target {
   position: relative !important;
   z-index: 81 !important;
-  outline: 3px solid #4ade80 !important;
-  outline-offset: 4px;
-  border-radius: 8px;
-  box-shadow: 0 0 0 6px rgba(74, 222, 128, .22) !important;
+  outline: 4px solid #4ade80 !important;
+  outline-offset: 6px;
+  border-radius: 10px;
+  box-shadow: 0 0 0 8px rgba(74, 222, 128, .26) !important;
+  animation: guidedTargetPulse 1.2s ease-in-out infinite;
 }
+
+@keyframes guidedTargetPulse {
+  0%, 100% { box-shadow: 0 0 0 8px rgba(74, 222, 128, .26) !important; }
+  50% { box-shadow: 0 0 0 15px rgba(74, 222, 128, .08) !important; }
+}
+
 .guided-tour-card {
   position: fixed;
   z-index: 3;
-  left: 50%;
-  bottom: 24px;
-  width: min(520px, calc(100vw - 28px));
+  left: auto;
+  top: auto;
+  bottom: auto;
+  width: min(380px, calc(100vw - 32px));
   padding: 18px;
   border: 1px solid var(--line);
   border-radius: 12px;
@@ -2684,7 +2692,7 @@ td.actions { position: relative; }
   background: var(--panel);
   box-shadow: 0 24px 70px rgba(0, 0, 0, .35);
   pointer-events: auto;
-  transform: translateX(-50%);
+  transform: none;
 }
 .guided-tour-card h3 { margin: 5px 0 8px; }
 .guided-tour-card p { margin: 0; color: var(--muted); line-height: 1.5; }

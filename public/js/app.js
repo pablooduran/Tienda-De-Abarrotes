@@ -517,18 +517,18 @@ const guidedHelp = Object.freeze({
     { view: 'compras', selector: '#comprasForm button[type="submit"]', title: 'Confirma después de revisar', text: 'Revisa cantidades, costos y vencimientos. Este botón registra la compra; la guía nunca lo pulsará automáticamente.' }
   ],
   compras: [
-    { view: 'compras', selector: '#comprasProvider', title: 'Proveedor de la compra', text: 'Empieza indicando el proveedor que entrega los productos.' },
-    { view: 'compras', selector: '#comprasSearch', title: 'Productos recibidos', text: 'Busca cada producto que llegó a la tienda y agrégalo al carrito.' },
+    { view: 'compras', selector: '#comprasProvider', advanceEvent: 'change', title: 'Proveedor de la compra', text: 'Empieza indicando el proveedor que entrega los productos.' },
+    { view: 'compras', selector: '#comprasSearch', advanceEvent: 'input', title: 'Productos recibidos', text: 'Busca cada producto que llegó a la tienda y agrégalo al carrito.' },
     { view: 'compras', selector: '#comprasForm button[type="submit"]', title: 'Registrar compra', text: 'Confirma solamente cuando cantidades y costos sean correctos.' }
   ],
   'primera-venta': [
-    { view: 'ventas', selector: '#posSearch', title: 'Busca un producto', text: 'Escribe el nombre o escanea el código para agregarlo a la venta.' },
-    { view: 'ventas', selector: '#posPaymentMode', title: 'Elige cómo pagará', text: 'Selecciona efectivo, QR, pago mixto o fiado según corresponda.' },
+    { view: 'ventas', selector: '#posSearch', advanceEvent: 'input', title: 'Busca un producto', text: 'Escribe el nombre o escanea el código para agregarlo a la venta.' },
+    { view: 'ventas', selector: '#posPaymentMode', advanceEvent: 'change', title: 'Elige cómo pagará', text: 'Selecciona efectivo, QR, pago mixto o fiado según corresponda.' },
     { view: 'ventas', selector: '#posSubmit', title: 'Revisa y registra', text: 'Este botón confirma la venta. La guía lo señala, pero nunca registra una operación por sí sola.' }
   ],
   'realizar-venta': [
-    { view: 'ventas', selector: '#posSearch', title: 'Busca o escanea', text: 'Aquí encuentras los productos disponibles para la venta.' },
-    { view: 'ventas', selector: '#posPaymentMode', title: 'Forma de cobro', text: 'Indica cómo recibiste el pago y revisa el resumen.' },
+    { view: 'ventas', selector: '#posSearch', advanceEvent: 'input', title: 'Busca o escanea', text: 'Aquí encuentras los productos disponibles para la venta.' },
+    { view: 'ventas', selector: '#posPaymentMode', advanceEvent: 'change', title: 'Forma de cobro', text: 'Indica cómo recibiste el pago y revisa el resumen.' },
     { view: 'ventas', selector: '#posSubmit', title: 'Registrar venta', text: 'Confirma solo después de revisar el carrito y el cobro.' }
   ]
 });
@@ -562,9 +562,20 @@ async function startGuidedHelp(topic) {
     target.classList.add('guided-tour-target');
     highlightedTarget = target;
     const rect = target.getBoundingClientRect();
-    const cardPosition = rect.top >= 264
-      ? `bottom:${Math.max(24, window.innerHeight - rect.top + 20)}px`
-      : `top:${Math.min(Math.max(18, window.innerHeight - 240), rect.bottom + 20)}px`;
+    const bubbleWidth = Math.min(380, window.innerWidth - 32);
+    const bubbleHeight = 220;
+    const clamp = (value, min, max) => Math.min(Math.max(value, min), max);
+    const centeredTop = clamp(rect.top + rect.height / 2 - bubbleHeight / 2, 18, window.innerHeight - bubbleHeight - 18);
+    let cardPosition;
+    if (rect.right + 22 + bubbleWidth <= window.innerWidth) {
+      cardPosition = `left:${rect.right + 22}px;top:${centeredTop}px`;
+    } else if (rect.left - 22 - bubbleWidth >= 16) {
+      cardPosition = `left:${rect.left - bubbleWidth - 22}px;top:${centeredTop}px`;
+    } else if (rect.bottom + bubbleHeight + 22 <= window.innerHeight) {
+      cardPosition = `left:${clamp(rect.left, 16, window.innerWidth - bubbleWidth - 16)}px;top:${rect.bottom + 22}px`;
+    } else {
+      cardPosition = `left:${clamp(rect.left, 16, window.innerWidth - bubbleWidth - 16)}px;top:${Math.max(18, rect.top - bubbleHeight - 22)}px`;
+    }
     modalRoot.innerHTML = `<div class="guided-tour" role="dialog" aria-modal="true" aria-labelledby="guidedTourTitle">
       <div class="guided-tour-shade"></div>
       <div class="guided-tour-highlight" style="top:${Math.max(6, rect.top - 6)}px;left:${Math.max(6, rect.left - 6)}px;width:${Math.max(36, rect.width + 12)}px;height:${Math.max(36, rect.height + 12)}px"></div>
