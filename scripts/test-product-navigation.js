@@ -57,6 +57,11 @@ check('La apertura de la barra revela su contenido de forma gradual',
   css.includes('.sidebar > * {\n  transition: opacity .16s ease, transform .22s cubic-bezier(.22, .75, .25, 1);')
   && css.includes('.layout.sidebar-open .sidebar > * { opacity: 1; transform: translateX(0); transition-delay: .1s; }')
   && css.includes('transition-delay: .08s;'));
+check('La pantalla activa se conserva al refrescar sin persistir formularios',
+  app.includes("const ACTIVE_VIEW_STORAGE_KEY = 'tienda-active-view'")
+  && app.includes('window.sessionStorage.setItem(ACTIVE_VIEW_STORAGE_KEY, id)')
+  && app.includes("window.sessionStorage.getItem(ACTIVE_VIEW_STORAGE_KEY) || 'inicio'")
+  && app.includes('await loadView(rememberedView);'));
 check('Superadmin conserva su navegacion independiente',
   admin.includes('Navegación administrativa')
   && admin.includes('Suscripciones SaaS')

@@ -35,6 +35,7 @@ let administrativeAuditUi = null;
 let inventoryAdjustmentUi = null;
 let storeConfigurationUi = null;
 let activeView = 'inicio';
+const ACTIVE_VIEW_STORAGE_KEY = 'tienda-active-view';
 let helpReturnView = 'inicio';
 let requestedHelpTopic = null;
 let viewRequest = 0;
@@ -562,26 +563,10 @@ async function startGuidedHelp(topic) {
     target.classList.add('guided-tour-target');
     highlightedTarget = target;
     const rect = target.getBoundingClientRect();
-    const bubbleWidth = Math.min(360, window.innerWidth - 32);
-    const bubbleHeight = 220;
-    const bubbleGap = 32;
-    const clamp = (value, min, max) => Math.min(Math.max(value, min), max);
-    const centeredLeft = clamp(rect.left + rect.width / 2 - bubbleWidth / 2, 16, window.innerWidth - bubbleWidth - 16);
-    const centeredTop = clamp(rect.top + rect.height / 2 - bubbleHeight / 2, 18, window.innerHeight - bubbleHeight - 18);
-    let cardPosition;
-    if (rect.bottom + bubbleHeight + bubbleGap <= window.innerHeight) {
-      cardPosition = `left:${centeredLeft}px;top:${rect.bottom + bubbleGap}px`;
-    } else if (rect.top - bubbleHeight - bubbleGap >= 18) {
-      cardPosition = `left:${centeredLeft}px;top:${rect.top - bubbleHeight - bubbleGap}px`;
-    } else if (rect.right + bubbleGap + bubbleWidth <= window.innerWidth) {
-      cardPosition = `left:${rect.right + bubbleGap}px;top:${centeredTop}px`;
-    } else {
-      cardPosition = `left:${Math.max(16, rect.left - bubbleWidth - bubbleGap)}px;top:${centeredTop}px`;
-    }
     modalRoot.innerHTML = `<div class="guided-tour" role="dialog" aria-modal="true" aria-labelledby="guidedTourTitle">
       <div class="guided-tour-shade"></div>
       <div class="guided-tour-highlight" style="top:${Math.max(6, rect.top - 6)}px;left:${Math.max(6, rect.left - 6)}px;width:${Math.max(36, rect.width + 12)}px;height:${Math.max(36, rect.height + 12)}px"></div>
-      <section class="guided-tour-card" style="${cardPosition}">
+      <section class="guided-tour-card">
         <span class="eyebrow">Paso ${current + 1} de ${steps.length}</span>
         <h3 id="guidedTourTitle">${escapeHtml(step.title)}</h3>
         <p>${escapeHtml(step.text)}</p>
@@ -774,6 +759,7 @@ async function loadView(id) {
   }
   if (id === 'ayuda' && activeView !== 'ayuda') helpReturnView = activeView;
   activeView = id;
+  try { window.sessionStorage.setItem(ACTIVE_VIEW_STORAGE_KEY, id); } catch (_) { /* La navegación sigue funcionando sin almacenamiento. */ }
   applyWorkspaceMode(id);
   renderMenu(id);
   title.textContent = section[1];
@@ -4766,7 +4752,9 @@ async function initializeApp() {
     await loadView('ayuda');
     return;
   }
-  await loadView('inicio');
+  let rememberedView = 'inicio';
+  try { rememberedView = window.sessionStorage.getItem(ACTIVE_VIEW_STORAGE_KEY) || 'inicio'; } catch (_) { /* Usar inicio cuando el navegador no permite almacenamiento. */ }
+  await loadView(rememberedView);
 }
 
 initializeApp().catch((error) => showError(error.message));
