@@ -138,12 +138,22 @@
       </section>`;
     }
 
+    function checkoutScreen(data, plans, paymentPlans, code) {
+      const plan = plans?.planes?.find((item) => item.codigo === code);
+      const paymentPlan = paymentPlans?.planes?.find((item) => item.referencia === code);
+      if (!plan || !paymentPlan?.operacionesDisponibles?.includes('upgrade')) return false;
+      const features = Array.isArray(plan.funcionalidades) ? plan.funcionalidades : [];
+      const periods = (paymentPlan.periodos || []).map((item) => `<article class="subscription-checkout-period"><strong>${escapeHtml(item.periodo[0].toUpperCase() + item.periodo.slice(1))}</strong><span>USD ${escapeHtml(item.monto)}</span><small>${escapeHtml(item.meses)} ${Number(item.meses) === 1 ? 'mes' : 'meses'}</small></article>`).join('');
+      root.innerHTML = `<div class="subscription-shell subscription-checkout-shell"><header class="subscription-heading subscription-current-card"><div><a class="button-link secondary subscription-back-link" href="/subscription.html">← Volver a planes</a><p class="subscription-eyebrow">Mejorar plan</p><div class="subscription-title-row"><h1>${escapeHtml(plan.nombre)}</h1><span class="subscription-status" data-status="activa">Plan seleccionado</span></div><p>${escapeHtml(plan.descripcion || 'Revisa las funciones y elige el periodo de pago.')}</p></div></header><section class="subscription-checkout-overview"><article><h2>Lo que incluye</h2><ul class="subscription-features">${features.map((feature) => `<li>${escapeHtml(featureLabel(feature))}</li>`).join('') || '<li>Consulta las funciones disponibles al solicitar el plan.</li>'}</ul></article><article><h2>Periodos disponibles</h2><div class="subscription-checkout-periods">${periods}</div></article></section><section id="paymentSubscriptionRoot" class="subscription-section payment-subscription-section subscription-checkout-payment" aria-live="polite"></section></div>`;
+      return true;
+    }
+
     function bindPlanActions() {
       root.querySelectorAll('[data-plan-action]:not([disabled])').forEach((button) => {
         button.addEventListener('click', async () => {
           const action = button.dataset.planAction;
           if (action === 'payment') {
-            global.document.dispatchEvent(new CustomEvent('subscription:select-plan', { detail: { code: button.dataset.planCode } }));
+            navigate(`/subscription.html?checkout=${encodeURIComponent(button.dataset.planCode)}`);
             return;
           }
           const feedback = root.querySelector('[data-plan-feedback]');
@@ -174,6 +184,8 @@
     }
 
     function renderData(data, plans = null, paymentPlans = null) {
+      const checkoutPlan = new URLSearchParams(global.location.search).get('checkout');
+      if (checkoutPlan && checkoutScreen(data, plans, paymentPlans, checkoutPlan)) return;
       const access = data.acceso || {};
       const restricted = access.nivel === 'restringido';
       const grace = access.nivel === 'solo_lectura';

@@ -46,6 +46,7 @@ let catalogClientsLoaded = false;
 const sections = [
   ['inicio', 'Inicio', 'Resumen general del negocio'],
   ['productos', 'Productos', 'Catálogo, stock y presentaciones'],
+  ['catalogoMaestro', 'Catálogo maestro', 'Elige productos para agregarlos a tu inventario'],
   ['movimientosStock', 'Movimientos de stock', 'Entradas, salidas y ajustes del inventario'],
   ['inventarioInteligente', 'Inteligencia de inventario', 'Alertas, rotación y decisiones de abastecimiento'],
   ['inventarioOperativo', 'Conciliación de inventario', 'Stock físico, vendible y ajustes trazables'],
@@ -784,7 +785,7 @@ async function loadView(id) {
   try {
     await refreshCatalogsForView(id, request);
     if (request !== viewRequest) return;
-    const handlers = { inicio, productos, movimientosStock, inventarioInteligente, inventarioOperativo, lotesVencimientos, clientes, proveedores, ventas, compras, historialVentas, pagos, gastos, finanzas, compensaciones, configuracion, auditoria, cierreCaja, reportes, ayuda };
+    const handlers = { inicio, productos, catalogoMaestro, movimientosStock, inventarioInteligente, inventarioOperativo, lotesVencimientos, clientes, proveedores, ventas, compras, historialVentas, pagos, gastos, finanzas, compensaciones, configuracion, auditoria, cierreCaja, reportes, ayuda };
     if (!handlers[id]) return loadView('inicio');
     await handlers[id]();
     if (request !== viewRequest) return;
@@ -1835,8 +1836,8 @@ async function productos() {
     <div class="panel" id="productTable"></div>`;
   wireUppercase(view);
   document.getElementById('addProduct')?.addEventListener('click', () => openProductModal());
-  document.getElementById('addFromCatalog').addEventListener('click', openMasterCatalogPicker);
-  document.getElementById('showHiddenProducts').addEventListener('click', openHiddenProducts);
+  document.getElementById('addFromCatalog')?.addEventListener('click', () => loadView('catalogoMaestro'));
+  document.getElementById('showHiddenProducts')?.addEventListener('click', openHiddenProducts);
   document.getElementById('openLots')?.addEventListener('click', () => loadView('lotesVencimientos'));
   ['productSearch', 'productCategory', 'productProvider', 'productLowStock', 'productSort'].forEach((id) => {
     document.getElementById(id).addEventListener('input', updateProductFilterCount);
@@ -2618,6 +2619,126 @@ function addPosProduct(product) {
     posCart.push({ producto: product, cantidad: 1, presentacion });
   }
   renderPosCart();
+}
+
+function catalogFamilyFor(product) {
+  const brand = String(product.marca || '').trim();
+  if (brand && !/^sin marca$/i.test(brand)) return brand;
+  return String(product.nombre || 'Otros productos').trim();
+}
+
+function catalogVariantFor(product) {
+  return String(product.nombre || 'Presentación disponible').trim();
+}
+
+function catalogSizeFor(product) {
+  const quantity = product.contenidoCantidad ? `${Number(product.contenidoCantidad)} ${product.contenidoUnidad || ''}`.trim() : '';
+  return [product.presentacion, quantity].filter(Boolean).join(' · ') || 'Presentación sin especificar';
+}
+
+function groupMasterCatalog(rows) {
+  const families = new Map();
+  rows.forEach((product) => {
+    const familyName = catalogFamilyFor(product);
+    if (!families.has(familyName)) families.set(familyName, new Map());
+    const variants = families.get(familyName);
+    const variantName = catalogVariantFor(product);
+    if (!variants.has(variantName)) variants.set(variantName, []);
+    variants.get(variantName).push(product);
+  });
+  return [...families.entries()];
+}
+
+async function catalogoMaestro() {
+  const picker = { page: 1, pages: 1, total: 0, request: 0, rows: [], categories: [], brands: [], selected: new Map() };
+  view.innerHTML = `
+    <section class="master-catalog-heading">
+      <div><button type="button" class="button-link secondary" id="backToProducts">← Volver a productos</button><p class="eyebrow">Catálogo maestro</p><h3>Agrega productos a tu inventario</h3><p>Busca, filtra y despliega solo la familia, versión y tamaño que necesitas.</p></div>
+      <div class="master-catalog-selection-count" id="catalogSelectedCount">0 seleccionados</div>
+    </section>
+    <section class="panel master-catalog-filters">
+      <label>Buscar<input id="catalogPickerSearch" type="search" placeholder="Producto, marca o código"></label>
+      <label>Categoría<select id="catalogPickerCategory"><option value="">Todas</option></select></label>
+      <label>Marca<select id="catalogPickerBrand"><option value="">Todas</option></select></label>
+    </section>
+    <section class="master-catalog-layout">
+      <section class="panel master-catalog-browser" aria-labelledby="masterCatalogResultsTitle">
+        <div class="panel-title"><div><h4 id="masterCatalogResultsTitle">Productos disponibles</h4><p id="catalogPickerPage" class="hint"></p></div></div>
+        <div id="catalogPickerResults" class="master-catalog-results"></div>
+        <div class="catalog-picker-pagination"><button type="button" class="secondary" id="catalogPickerPrevious">Anterior</button><button type="button" class="secondary" id="catalogPickerNext">Siguiente</button></div>
+      </section>
+      <aside class="panel master-catalog-selection" aria-labelledby="masterCatalogSelectionTitle">
+        <div class="panel-title"><div><h4 id="masterCatalogSelectionTitle">Para agregar</h4><p class="hint">Completa los datos de venta de cada producto que elijas.</p></div></div>
+        <div id="catalogSelectedProducts" class="catalog-selected-products"><p class="muted">Todavía no seleccionaste productos.</p></div>
+        <p id="catalogPickerError" class="text-danger" hidden></p>
+        <div class="master-catalog-actions"><button type="button" class="secondary" id="cancelCatalogSelection">Cancelar</button><button type="button" id="catalogAddSelected">Agregar al inventario</button></div>
+      </aside>
+    </section>`;
+  const search = view.querySelector('#catalogPickerSearch');
+  const category = view.querySelector('#catalogPickerCategory');
+  const brand = view.querySelector('#catalogPickerBrand');
+  const results = view.querySelector('#catalogPickerResults');
+  const selectedTarget = view.querySelector('#catalogSelectedProducts');
+  const pickerError = view.querySelector('#catalogPickerError');
+  const showPickerError = (text = '') => { pickerError.textContent = text; pickerError.hidden = !text; };
+  const captureSelectedConfiguration = () => {
+    selectedTarget.querySelectorAll('[data-master-config]').forEach((card) => {
+      const product = picker.selected.get(Number(card.dataset.masterConfig));
+      if (!product) return;
+      product.localConfig = {
+        nombreLocal: card.querySelector('[name="nombreLocal"]').value, categoriaLocal: card.querySelector('[name="categoriaLocal"]').value,
+        idProveedor: card.querySelector('[name="idProveedor"]').value, precioCompra: card.querySelector('[name="precioCompra"]').value,
+        precioVenta: card.querySelector('[name="precioVenta"]').value, stockInicial: card.querySelector('[name="stockInicial"]').value,
+        stockMinimo: card.querySelector('[name="stockMinimo"]').value, unidadesPorPaquete: card.querySelector('[name="unidadesPorPaquete"]').value,
+        permiteVentaPorUnidad: card.querySelector('[name="permiteVentaPorUnidad"]').checked,
+        permiteVentaPorPaquete: card.querySelector('[name="permiteVentaPorPaquete"]').checked
+      };
+    });
+  };
+  const renderSelected = () => {
+    captureSelectedConfiguration();
+    view.querySelector('#catalogSelectedCount').textContent = `${picker.selected.size} seleccionados`;
+    if (!picker.selected.size) { selectedTarget.innerHTML = '<p class="muted">Todavía no seleccionaste productos.</p>'; return; }
+    selectedTarget.innerHTML = [...picker.selected.values()].map((product) => {
+      const config = product.localConfig || { nombreLocal: product.nombre, categoriaLocal: suggestedLocalCategory(product.categoriaMaestra), idProveedor: '', precioCompra: '0', precioVenta: '', stockInicial: '0', stockMinimo: '5', unidadesPorPaquete: String(Number(product.unidadesPorPaquete || 1)), permiteVentaPorUnidad: Boolean(product.permiteVentaPorUnidad), permiteVentaPorPaquete: Boolean(product.permiteVentaPorPaquete) };
+      return `<article class="catalog-selected-item" data-master-config="${product.idProductoMaestro}"><div class="catalog-selected-heading"><div><strong>${escapeHtml(product.nombre)}</strong><span>${escapeHtml(catalogSizeFor(product))}</span></div><button type="button" class="small danger" data-remove-master="${product.idProductoMaestro}">Quitar</button></div><div class="catalog-config-grid"><label>Nombre local<input name="nombreLocal" required value="${escapeHtml(config.nombreLocal)}"></label><label>Categoría local<select name="categoriaLocal">${categoryOptions(config.categoriaLocal)}</select></label><label>Proveedor<select name="idProveedor">${options(state.proveedores, 'idProveedor', 'nombre', 'Sin proveedor', config.idProveedor)}</select></label><label>Precio de compra<input name="precioCompra" type="number" min="0" step="0.01" value="${escapeHtml(config.precioCompra)}" required></label><label>Precio de venta<input name="precioVenta" type="number" min="0.01" step="0.01" value="${escapeHtml(config.precioVenta)}" required></label><label>Stock inicial<input name="stockInicial" type="number" min="0" step="1" value="${escapeHtml(config.stockInicial)}" required></label><label>Stock mínimo<input name="stockMinimo" type="number" min="1" step="1" value="${escapeHtml(config.stockMinimo)}" required></label><label>Unidades por paquete<input name="unidadesPorPaquete" type="number" min="1" step="1" value="${escapeHtml(config.unidadesPorPaquete)}" required></label><label class="check"><input name="permiteVentaPorUnidad" type="checkbox" ${config.permiteVentaPorUnidad ? 'checked' : ''}> Vender por unidad</label><label class="check"><input name="permiteVentaPorPaquete" type="checkbox" ${config.permiteVentaPorPaquete ? 'checked' : ''}> Vender por paquete</label></div></article>`;
+    }).join('');
+    selectedTarget.querySelectorAll('[data-remove-master]').forEach((button) => button.addEventListener('click', () => { picker.selected.delete(Number(button.dataset.removeMaster)); renderSelected(); renderResults(); }));
+  };
+  const closeSiblings = (details) => {
+    details.addEventListener('toggle', () => { if (details.open) details.parentElement.querySelectorAll(':scope > details[open]').forEach((other) => { if (other !== details) other.open = false; }); });
+  };
+  const renderResults = () => {
+    const groups = groupMasterCatalog(picker.rows);
+    results.innerHTML = groups.length ? groups.map(([family, variants]) => `<details class="master-catalog-family"><summary><span><strong>${escapeHtml(family)}</strong><small>${variants.size} ${variants.size === 1 ? 'versión' : 'versiones'} disponibles</small></span><span class="master-catalog-expand">Ver</span></summary><div class="master-catalog-variants">${[...variants.entries()].map(([variant, products]) => `<details class="master-catalog-variant"><summary><span><strong>${escapeHtml(variant)}</strong><small>${products.length} ${products.length === 1 ? 'tamaño' : 'tamaños'}</small></span></summary><div class="master-catalog-sizes">${products.map((product) => { const chosen = picker.selected.has(Number(product.idProductoMaestro)); const unavailable = Boolean(product.agregadoEnTienda); return `<label class="master-catalog-size"><span><strong>${escapeHtml(catalogSizeFor(product))}</strong><small>${escapeHtml([product.categoriaMaestra, product.codigoBarras].filter(Boolean).join(' · ') || 'Sin código')}</small></span><input type="checkbox" data-select-master="${product.idProductoMaestro}" ${chosen ? 'checked' : ''} ${unavailable || (!chosen && picker.selected.size >= 50) ? 'disabled' : ''}><em>${unavailable ? 'Ya agregado' : 'Agregar'}</em></label>`; }).join('')}</div></details>`).join('')}</div></details>`).join('') : '<p class="muted">No hay coincidencias.</p>';
+    view.querySelector('#catalogPickerPage').textContent = `Página ${picker.page} de ${picker.pages} · ${picker.total} productos`;
+    view.querySelector('#catalogPickerPrevious').disabled = picker.page <= 1; view.querySelector('#catalogPickerNext').disabled = picker.page >= picker.pages;
+    results.querySelectorAll('.master-catalog-family').forEach(closeSiblings);
+    results.querySelectorAll('.master-catalog-variants').forEach((container) => container.querySelectorAll(':scope > details').forEach(closeSiblings));
+    results.querySelectorAll('[data-select-master]').forEach((checkbox) => checkbox.addEventListener('change', () => { const product = picker.rows.find((row) => String(row.idProductoMaestro) === checkbox.dataset.selectMaster); if (!product) return; if (checkbox.checked) picker.selected.set(Number(product.idProductoMaestro), product); else picker.selected.delete(Number(product.idProductoMaestro)); renderSelected(); renderResults(); }));
+  };
+  const loadRows = async (page = 1) => {
+    const request = ++picker.request; const query = new URLSearchParams({ page: String(page), limit: '50' });
+    if (search.value.trim()) query.set('q', search.value.trim()); if (category.value) query.set('idCategoriaMaestra', category.value); if (brand.value) query.set('idMarcaMaestra', brand.value);
+    const response = await api(`/api/catalogo-maestro?${query}`); if (request !== picker.request) return;
+    picker.rows = response.rows; picker.page = response.page; picker.pages = response.pages; picker.total = response.total; showPickerError(); renderResults();
+  };
+  try {
+    [picker.categories, picker.brands] = await Promise.all([api('/api/catalogo-maestro/categorias'), api('/api/catalogo-maestro/marcas')]);
+    category.innerHTML = options(picker.categories, 'idCategoriaMaestra', 'nombre', 'Todas'); brand.innerHTML = options(picker.brands, 'idMarcaMaestra', 'nombre', 'Todas'); await loadRows();
+  } catch (error) { return showError(error.message); }
+  let searchTimer;
+  search.addEventListener('input', () => { window.clearTimeout(searchTimer); searchTimer = window.setTimeout(() => loadRows().catch((error) => showPickerError(error.message)), 250); });
+  [category, brand].forEach((filter) => filter.addEventListener('change', () => loadRows().catch((error) => showPickerError(error.message))));
+  view.querySelector('#catalogPickerPrevious').addEventListener('click', () => loadRows(picker.page - 1).catch((error) => showPickerError(error.message)));
+  view.querySelector('#catalogPickerNext').addEventListener('click', () => loadRows(picker.page + 1).catch((error) => showPickerError(error.message)));
+  view.querySelector('#backToProducts').addEventListener('click', () => loadView('productos')); view.querySelector('#cancelCatalogSelection').addEventListener('click', () => loadView('productos'));
+  view.querySelector('#catalogAddSelected').addEventListener('click', async () => {
+    if (!picker.selected.size) return showPickerError('Selecciona al menos un producto maestro.');
+    const invalidInput = selectedTarget.querySelector(':invalid'); if (invalidInput) { invalidInput.reportValidity(); return showPickerError('Revisa los datos comerciales de los productos seleccionados.'); }
+    const items = [...selectedTarget.querySelectorAll('[data-master-config]')].map((card) => ({ idProductoMaestro: Number(card.dataset.masterConfig), nombreLocal: card.querySelector('[name="nombreLocal"]').value.trim(), categoriaLocal: card.querySelector('[name="categoriaLocal"]').value, idProveedor: card.querySelector('[name="idProveedor"]').value || null, precioCompra: Number(card.querySelector('[name="precioCompra"]').value), precioVenta: Number(card.querySelector('[name="precioVenta"]').value), stockInicial: Number(card.querySelector('[name="stockInicial"]').value), stockMinimo: Number(card.querySelector('[name="stockMinimo"]').value), unidadesPorPaquete: Number(card.querySelector('[name="unidadesPorPaquete"]').value), permiteVentaPorUnidad: card.querySelector('[name="permiteVentaPorUnidad"]').checked, permiteVentaPorPaquete: card.querySelector('[name="permiteVentaPorPaquete"]').checked, unidadMedida: 'unidad', activo: true }));
+    try { const result = await api('/api/catalogo-maestro/agregar', { method: 'POST', body: JSON.stringify({ items }) }); await showSuccess(result.message); await loadView('productos'); } catch (error) { showPickerError(error.message); }
+  });
 }
 
 function renderPosCart() {
