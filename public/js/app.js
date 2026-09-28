@@ -975,9 +975,13 @@ function drawChart(canvas, labels, values, color = '#286a59', tooltips = []) {
     ctx.fillStyle = ink;
     if (values.length <= 6) ctx.fillText(String(Number(value).toFixed(0)), x, Math.max(14, y - 8));
     if (index % labelStep === 0) {
+      const labelWords = String(labels[index] || '').trim().split(/\s+/).filter(Boolean);
+      const labelLines = labelWords.length > 1
+        ? [labelWords.slice(0, Math.ceil(labelWords.length / 2)).join(' '), labelWords.slice(Math.ceil(labelWords.length / 2)).join(' ')]
+        : [String(labels[index] || '').slice(0, 12)];
       ctx.fillStyle = muted;
       ctx.textAlign = 'center';
-      ctx.fillText(String(labels[index] || '').slice(0, 12), x + barWidth / 2, 190);
+      labelLines.forEach((line, lineIndex) => ctx.fillText(line.slice(0, 12), x + barWidth / 2, 184 + lineIndex * 13));
       ctx.textAlign = 'left';
     }
     hitAreas.push({
