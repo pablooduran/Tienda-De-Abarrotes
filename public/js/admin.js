@@ -828,6 +828,7 @@ async function toggleTaxonomy(kind, row) {
 function masterProductFields(product = {}) {
   return [
     { name: 'nombre', label: 'Nombre', value: product.nombre || '', required: true, full: true },
+    { name: 'proveedorSugerido', label: 'Proveedor sugerido', value: product.proveedorSugerido || '', placeholder: 'Se crea en la tienda al agregar el producto' },
     { name: 'idCategoriaMaestra', label: 'Categoría maestra', type: 'select', value: String(product.idCategoriaMaestra || ''), options: optionList(state.masterCategories, 'idCategoriaMaestra') },
     { name: 'idMarcaMaestra', label: 'Marca maestra', type: 'select', value: String(product.idMarcaMaestra || ''), options: optionList(state.masterBrands, 'idMarcaMaestra') },
     { name: 'codigoBarras', label: 'Código de barras opcional', value: product.codigoBarras || '' },

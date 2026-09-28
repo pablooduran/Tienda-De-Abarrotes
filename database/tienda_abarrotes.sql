@@ -681,6 +681,7 @@ CREATE TABLE IF NOT EXISTS productoMaestro (
   nombre VARCHAR(160) NOT NULL,
   nombreNormalizado VARCHAR(180) NOT NULL,
   descripcion VARCHAR(500) NULL,
+  proveedorSugerido VARCHAR(100) NULL,
   idCategoriaMaestra INT NULL,
   idMarcaMaestra INT NULL,
   codigoBarras VARCHAR(64) NULL,

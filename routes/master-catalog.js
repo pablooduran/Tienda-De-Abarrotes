@@ -98,7 +98,7 @@ router.get('/', asyncRoute(async (req, res) => {
       params
     ),
     pool.query(
-      `SELECT pm.idProductoMaestro, pm.nombre, pm.descripcion, pm.codigoBarras, pm.presentacion,
+      `SELECT pm.idProductoMaestro, pm.nombre, pm.descripcion, pm.proveedorSugerido, pm.codigoBarras, pm.presentacion,
          pm.contenidoCantidad, pm.contenidoUnidad, pm.unidadesPorPaquete,
          pm.permiteVentaPorUnidad, pm.permiteVentaPorPaquete,
          c.nombre categoriaMaestra, m.nombre marca,
@@ -119,7 +119,7 @@ router.get('/', asyncRoute(async (req, res) => {
 router.get('/:idProductoMaestro', asyncRoute(async (req, res) => {
   const id = parseId(req.params.idProductoMaestro, 'El producto maestro');
   const [rows] = await pool.query(
-    `SELECT pm.idProductoMaestro, pm.nombre, pm.descripcion, pm.codigoBarras, pm.presentacion,
+    `SELECT pm.idProductoMaestro, pm.nombre, pm.descripcion, pm.proveedorSugerido, pm.codigoBarras, pm.presentacion,
        pm.contenidoCantidad, pm.contenidoUnidad, pm.unidadesPorPaquete,
        pm.permiteVentaPorUnidad, pm.permiteVentaPorPaquete,
        c.nombre categoriaMaestra, m.nombre marca,
@@ -165,12 +165,13 @@ router.post('/agregar', asyncRoute(async (req, res) => {
     if (existing.length) throw catalogError(409, 'Uno o mas productos ya fueron agregados a esta tienda.', 'MASTER_ALREADY_ADDED');
 
     const providerCache = new Set();
+    const suggestedProviderCache = new Map();
     const created = [];
     const fechaInicioSeguimiento = formatLocalDateTime();
     for (let index = 0; index < items.length; index += 1) {
       const item = items[index];
       const master = masterMap.get(ids[index]);
-      const idProveedor = parseId(item.idProveedor, 'El proveedor');
+      let idProveedor = parseId(item.idProveedor, 'El proveedor');
       if (idProveedor && !providerCache.has(idProveedor)) {
         const [providers] = await connection.query(
           'SELECT idProveedor FROM proveedor WHERE idProveedor=? AND idTienda=?',
@@ -178,6 +179,28 @@ router.post('/agregar', asyncRoute(async (req, res) => {
         );
         if (!providers.length) throw catalogError(400, `El proveedor del producto ${index + 1} no pertenece a la tienda.`);
         providerCache.add(idProveedor);
+      }
+      const proveedorSugerido = cleanText(item.proveedorSugerido || master.proveedorSugerido, 100);
+      if (!idProveedor && proveedorSugerido) {
+        const providerKey = proveedorSugerido.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+        if (suggestedProviderCache.has(providerKey)) {
+          idProveedor = suggestedProviderCache.get(providerKey);
+        } else {
+          const [providers] = await connection.query(
+            'SELECT idProveedor FROM proveedor WHERE idTienda=? AND LOWER(TRIM(nombre))=LOWER(TRIM(?)) LIMIT 1 FOR UPDATE',
+            [idTienda, proveedorSugerido]
+          );
+          if (providers.length) {
+            idProveedor = providers[0].idProveedor;
+          } else {
+            const [createdProvider] = await connection.query(
+              'INSERT INTO proveedor (idTienda, nombre) VALUES (?, ?)', [idTienda, proveedorSugerido]
+            );
+            idProveedor = createdProvider.insertId;
+          }
+          suggestedProviderCache.set(providerKey, idProveedor);
+          providerCache.add(idProveedor);
+        }
       }
       const unidadesPorPaquete = positiveInteger(
         item.unidadesPorPaquete, 'Unidades por paquete', Number(master.unidadesPorPaquete || 1)

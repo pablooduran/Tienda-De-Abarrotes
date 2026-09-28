@@ -117,6 +117,7 @@ async function normalizeMasterPayload(connection, input, options = {}) {
     nombre,
     nombreNormalizado: normalizeText(nombre),
     descripcion: cleanText(input.descripcion, 500) || null,
+    proveedorSugerido: cleanText(input.proveedorSugerido, 100) || null,
     idCategoriaMaestra: categoria?.id || null,
     idMarcaMaestra: marca?.id || null,
     codigoBarras: normalizeBarcode(input.codigoBarras),
@@ -176,11 +177,11 @@ async function createMasterProduct(connection, input, idAdministrador) {
   const localDateTime = formatLocalDateTime();
   const [result] = await connection.query(
     `INSERT INTO productoMaestro
-      (nombre, nombreNormalizado, descripcion, idCategoriaMaestra, idMarcaMaestra, codigoBarras,
+      (nombre, nombreNormalizado, descripcion, proveedorSugerido, idCategoriaMaestra, idMarcaMaestra, codigoBarras,
        presentacion, contenidoCantidad, contenidoUnidad, unidadesPorPaquete,
        permiteVentaPorUnidad, permiteVentaPorPaquete, huellaDuplicado, activo, creadoEn, actualizadoEn)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    [data.nombre, data.nombreNormalizado, data.descripcion, data.idCategoriaMaestra, data.idMarcaMaestra,
+    [data.nombre, data.nombreNormalizado, data.descripcion, data.proveedorSugerido, data.idCategoriaMaestra, data.idMarcaMaestra,
       data.codigoBarras, data.presentacion, data.contenidoCantidad, data.contenidoUnidad,
       data.unidadesPorPaquete, data.permiteVentaPorUnidad, data.permiteVentaPorPaquete,
       data.huellaDuplicado, data.activo, localDateTime, localDateTime]
@@ -210,11 +211,11 @@ async function updateMasterProduct(connection, idProductoMaestro, input, idAdmin
     throw catalogError(409, 'Se encontraron productos maestros posiblemente duplicados.', 'POSSIBLE_DUPLICATE', duplicates);
   }
   await connection.query(
-    `UPDATE productoMaestro SET nombre=?, nombreNormalizado=?, descripcion=?, idCategoriaMaestra=?,
+    `UPDATE productoMaestro SET nombre=?, nombreNormalizado=?, descripcion=?, proveedorSugerido=?, idCategoriaMaestra=?,
        idMarcaMaestra=?, codigoBarras=?, presentacion=?, contenidoCantidad=?, contenidoUnidad=?,
        unidadesPorPaquete=?, permiteVentaPorUnidad=?, permiteVentaPorPaquete=?, huellaDuplicado=?, activo=?, actualizadoEn=?
      WHERE idProductoMaestro=?`,
-    [data.nombre, data.nombreNormalizado, data.descripcion, data.idCategoriaMaestra, data.idMarcaMaestra,
+    [data.nombre, data.nombreNormalizado, data.descripcion, data.proveedorSugerido, data.idCategoriaMaestra, data.idMarcaMaestra,
       data.codigoBarras, data.presentacion, data.contenidoCantidad, data.contenidoUnidad,
       data.unidadesPorPaquete, data.permiteVentaPorUnidad, data.permiteVentaPorPaquete,
       data.huellaDuplicado, data.activo, formatLocalDateTime(), id]

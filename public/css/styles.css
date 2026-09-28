@@ -1266,6 +1266,10 @@ tr.low-stock { background: var(--warn); }
 .master-catalog-layout { display: grid; grid-template-columns: minmax(0, 1.3fr) minmax(320px, .9fr); gap: 14px; align-items: start; }
 .master-catalog-browser, .master-catalog-selection { display: grid; gap: 14px; }
 .master-catalog-selection { position: sticky; top: 14px; }
+.catalog-selected-actions { display: flex; align-items: center; gap: 7px; }
+.catalog-collapse-toggle { min-width: 34px; padding-inline: 8px; font-size: 18px; line-height: 1; }
+.catalog-selected-item.is-collapsed .catalog-config-grid { display: none; }
+.catalog-selected-item.is-collapsed { padding-bottom: 10px; }
 .master-catalog-results { display: grid; gap: 9px; }
 .master-catalog-path { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; min-height: 20px; margin: 0 0 5px; color: var(--muted); font-size: 13px; }
 .master-catalog-back { min-height: auto; padding: 0; border: 0; border-radius: 0; background: transparent; color: var(--brand); font: inherit; font-weight: 700; }
