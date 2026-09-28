@@ -2684,7 +2684,7 @@ td.actions { position: relative; }
   left: auto;
   top: auto;
   bottom: auto;
-  width: min(380px, calc(100vw - 32px));
+  width: min(360px, calc(100vw - 32px));
   padding: 18px;
   border: 1px solid var(--line);
   border-radius: 12px;
