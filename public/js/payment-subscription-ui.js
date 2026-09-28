@@ -42,7 +42,7 @@
 
   function create({ root, api = null } = {}) {
     if (!root) throw new Error('El contenedor de pagos es obligatorio.');
-    const state = { plans: [], methods: [], requests: [], page: 1, pages: 1, selected: null, loading: false, quotedSelection: null };
+    const state = { plans: [], methods: [], requests: [], page: 1, pages: 1, selected: null, loading: false, quotedSelection: null, checkoutPeriod: '', checkoutMethod: '' };
     let detailReturnFocus = null;
 
     async function request(url, options = {}) {
@@ -69,13 +69,13 @@
       form.elements.plan.value = code;
       renderPlanOptions();
       invalidateQuote();
-      form.hidden = false;
+      state.checkoutPeriod = '';
+      state.checkoutMethod = '';
+      form.hidden = true;
       const checkout = root.querySelector('[data-payment-checkout]');
       if (checkout) checkout.hidden = false;
-      root.querySelector('[data-payment-choice]').textContent = state.methods.length
-        ? `Elegiste ${plan.nombre}. Selecciona el periodo y la forma de pago; después podrás revisar el monto.`
-        : `Elegiste ${plan.nombre}, pero aún no hay una forma de pago disponible.`;
-      form.elements.periodo.focus({ preventScroll: true });
+      root.querySelector('[data-payment-choice]').textContent = `Elegiste ${plan.nombre}. Primero selecciona el periodo y luego la forma de pago.`;
+      renderCheckoutChoices();
       return true;
     }
     root.__selectPaymentPlan = choosePlan;
@@ -90,6 +90,20 @@
       root.querySelector('[data-payment-plan-description]').textContent = plan?.descripcion || 'Selecciona un plan disponible.';
       root.querySelector('[data-payment-form]').querySelectorAll('button[type="submit"]').forEach((button) => { button.disabled = !operations.length || !state.methods.length; });
       invalidateQuote();
+    }
+
+    function renderCheckoutChoices() {
+      const target = root.querySelector('[data-payment-step]');
+      const form = root.querySelector('[data-payment-form]');
+      const plan = selectedPlan();
+      if (!target || !form || !plan) return;
+      const qrMethod = state.methods.find((item) => item.codigo === 'qr_manual') || null;
+      const periods = (plan.periodos || []).map((item) => `<button type="button" class="payment-choice-card ${state.checkoutPeriod === item.periodo ? 'is-selected' : ''}" data-select-payment-period="${escapeHtml(item.periodo)}"><strong>${escapeHtml(item.periodo[0].toUpperCase() + item.periodo.slice(1))}</strong><span>USD ${escapeHtml(item.monto)}</span><small>${escapeHtml(item.meses)} ${Number(item.meses) === 1 ? 'mes' : 'meses'}</small></button>`).join('');
+      const methods = state.checkoutPeriod ? `<div class="payment-choice-grid payment-method-grid"><button type="button" class="payment-choice-card payment-card-unavailable" disabled><strong>Tarjeta Visa</strong><span>Próximamente</span><small>La pasarela bancaria aún no está disponible.</small></button><button type="button" class="payment-choice-card ${state.checkoutMethod === 'qr_manual' ? 'is-selected' : ''}" data-select-payment-method="${qrMethod ? escapeHtml(qrMethod.referencia) : ''}" ${qrMethod ? '' : 'disabled'}><strong>Pagar con QR</strong><span>Disponible</span><small>${qrMethod ? 'Escanea el QR desde tu aplicación bancaria.' : 'Se habilitará al configurar el método manual.'}</small></button></div>` : '';
+      const qrPreview = state.checkoutMethod === 'qr_manual' ? `${manualQrMarkup({ codigo: 'qr_manual' })}<p class="payment-qr-note">El QR es visible para la prueba. La suscripción no se activa hasta que se verifique el pago.</p>` : '';
+      target.innerHTML = `<section class="payment-choice-step"><div><p class="subscription-eyebrow">1. Periodo</p><h4>¿Cada cuánto quieres pagar?</h4></div><div class="payment-choice-grid">${periods}</div></section>${state.checkoutPeriod ? `<section class="payment-choice-step"><div><p class="subscription-eyebrow">2. Forma de pago</p><h4>Elige cómo pagar</h4></div>${methods}${qrPreview}</section>` : ''}`;
+      target.querySelectorAll('[data-select-payment-period]').forEach((button) => button.addEventListener('click', () => { state.checkoutPeriod = button.dataset.selectPaymentPeriod; state.checkoutMethod = ''; form.elements.periodo.value = state.checkoutPeriod; form.hidden = true; renderCheckoutChoices(); }));
+      target.querySelectorAll('[data-select-payment-method]').forEach((button) => button.addEventListener('click', () => { if (!button.dataset.selectPaymentMethod) return; state.checkoutMethod = 'qr_manual'; form.elements.metodo.value = button.dataset.selectPaymentMethod; form.elements.periodo.value = state.checkoutPeriod; form.hidden = false; form.querySelectorAll('[data-checkout-selection]').forEach((label) => { label.hidden = true; }); renderCheckoutChoices(); form.querySelector('button[type="submit"]')?.focus({ preventScroll: true }); }));
     }
 
     function requestRow(item) {
@@ -193,7 +207,7 @@
     }
 
     function renderShell() {
-      root.innerHTML = `<div class="payment-subscription-shell"><div class="payment-section-heading"><div><p class="subscription-eyebrow">Facturación</p><h2>Planes y pagos</h2><p data-payment-choice>Elige un plan de los cuadros de arriba. Las opciones de periodo y pago aparecerán después.</p></div></div><section data-payment-checkout class="payment-checkout-screen" aria-labelledby="payment-checkout-title"><div class="payment-detail-heading"><div><p class="subscription-eyebrow">Cambiar plan</p><h3 id="payment-checkout-title">Elige cómo quieres pagar</h3><p>Revisa el periodo, la forma de pago y el precio antes de enviar la solicitud.</p></div><button type="button" class="button-link secondary" data-close-payment-checkout>Volver a planes</button></div><form data-payment-form data-payment-action="quote" class="payment-config-form" hidden><label class="payment-internal-choice" hidden><span>Plan</span><select name="plan" required></select></label><label class="payment-internal-choice" hidden><span>Qué quieres hacer</span><select name="operacion" required></select></label><label><span>Periodo de pago</span><select name="periodo" required></select></label><label><span>Forma de pago</span><select name="metodo" required></select></label><p data-payment-plan-description class="payment-muted"></p><div class="payment-form-actions"><button type="submit" class="button-link payment-primary">Ver precio</button><button type="button" class="button-link secondary" data-create-payment disabled>Solicitar este plan</button></div></form><div data-payment-quote></div><p data-payment-feedback role="status" aria-live="polite"></p></section><details class="payment-request-list"><summary><span><strong>Facturación e historial</strong><small>Consulta solicitudes, comprobantes y revisiones.</small></span></summary><section aria-labelledby="payment-request-list-title"><div class="payment-section-heading"><h3 id="payment-request-list-title">Solicitudes de pago</h3><div><button type="button" class="button-link" data-payment-previous>Anterior</button><span data-payment-page></span><button type="button" class="button-link" data-payment-next>Siguiente</button></div></div><div data-payment-requests></div></section></details><dialog data-payment-detail class="payment-request-dialog" aria-labelledby="payment-request-title"></dialog></div>`;
+      root.innerHTML = `<div class="payment-subscription-shell"><div class="payment-section-heading"><div><p class="subscription-eyebrow">Facturación</p><h2>Planes y pagos</h2><p data-payment-choice>Elige un plan de los cuadros de arriba. Las opciones de periodo y pago aparecerán después.</p></div></div><section data-payment-checkout class="payment-checkout-screen" aria-labelledby="payment-checkout-title"><div class="payment-detail-heading"><div><p class="subscription-eyebrow">Cambiar plan</p><h3 id="payment-checkout-title">Elige cómo quieres pagar</h3><p>Primero selecciona el periodo. Después podrás elegir QR o revisar la futura opción de tarjeta.</p></div><button type="button" class="button-link secondary" data-close-payment-checkout>Volver a planes</button></div><div data-payment-step></div><form data-payment-form data-payment-action="quote" class="payment-config-form" hidden><label class="payment-internal-choice" hidden><span>Plan</span><select name="plan" required></select></label><label class="payment-internal-choice" hidden><span>Qué quieres hacer</span><select name="operacion" required></select></label><label data-checkout-selection><span>Periodo de pago</span><select name="periodo" required></select></label><label data-checkout-selection><span>Forma de pago</span><select name="metodo" required></select></label><p data-payment-plan-description class="payment-muted"></p><div class="payment-form-actions"><button type="submit" class="button-link payment-primary">Ver precio</button><button type="button" class="button-link secondary" data-create-payment disabled>Solicitar este plan</button></div></form><div data-payment-quote></div><p data-payment-feedback role="status" aria-live="polite"></p></section><details class="payment-request-list"><summary><span><strong>Facturación e historial</strong><small>Consulta solicitudes, comprobantes y revisiones.</small></span></summary><section aria-labelledby="payment-request-list-title"><div class="payment-section-heading"><h3 id="payment-request-list-title">Solicitudes de pago</h3><div><button type="button" class="button-link" data-payment-previous>Anterior</button><span data-payment-page></span><button type="button" class="button-link" data-payment-next>Siguiente</button></div></div><div data-payment-requests></div></section></details><dialog data-payment-detail class="payment-request-dialog" aria-labelledby="payment-request-title"></dialog></div>`;
       const checkout = root.querySelector('[data-payment-checkout]');
       root.querySelector('[data-close-payment-checkout]').addEventListener('click', () => { global.location.href = '/subscription.html'; });
       const detail = root.querySelector('[data-payment-detail]');
