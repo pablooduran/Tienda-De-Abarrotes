@@ -47,10 +47,11 @@ check('Movil conserva una navegacion compacta sin scroll horizontal',
   && css.includes('overflow-x: hidden;'));
 check('El control para ocultar navegacion permanece disponible al desplazarse',
   css.includes('.navigation-toggle {\n  position: fixed;')
-  && css.includes('left: 32px;')
+  && css.includes('left: 0;')
+  && css.includes('.layout.sidebar-collapsed .content { padding-left: max(56px, clamp(12px, 2.5vw, 24px)); }')
   && css.includes('.layout.sidebar-open .navigation-toggle')
   && app.includes('function setNavigationToggleState(open)')
-  && app.includes("navigationToggle.textContent = open ? '‹' : '☰'"));
+  && app.includes("navigationToggle.textContent = open ? '‹' : '›'"));
 check('Superadmin conserva su navegacion independiente',
   admin.includes('Navegación administrativa')
   && admin.includes('Suscripciones SaaS')

@@ -42,29 +42,32 @@ body {
 .navigation-toggle {
   position: fixed;
   z-index: 50;
-  top: 44px;
-  left: 32px;
-  width: 42px;
-  min-width: 42px;
+  top: 30px;
+  left: 0;
+  width: 34px;
+  min-width: 34px;
   height: 42px;
   padding: 0;
   color: var(--brand-dark);
   background: var(--panel);
   border-color: var(--line);
+  border-radius: 0 10px 10px 0;
   box-shadow: 0 4px 14px rgba(13, 21, 13, .14);
   transition: background .18s ease, color .18s ease, border-color .18s ease, box-shadow .18s ease;
 }
-.layout.sidebar-collapsed .topbar-heading { padding-left: 60px; }
+.layout.sidebar-collapsed .content { padding-left: max(56px, clamp(12px, 2.5vw, 24px)); }
+.layout.sidebar-collapsed .topbar-heading { padding-left: 0; }
 @media (min-width: 901px) {
   .layout:not(.sidebar-collapsed):not(.settings-workspace) .navigation-toggle {
-    top: 18px;
+    top: 30px;
     left: 224px;
-    width: 32px;
-    min-width: 32px;
+    width: 34px;
+    min-width: 34px;
     height: 40px;
     color: #fff;
     background: var(--sidebar-active);
     border-color: #4ade80;
+    border-radius: 10px 0 0 10px;
     box-shadow: 0 4px 14px rgba(3, 20, 9, .28);
   }
 }
@@ -2926,19 +2929,21 @@ td.actions { position: relative; }
   }
   .layout.sidebar-open .sidebar { opacity: 1; pointer-events: auto; transform: translateX(0); }
   .layout.sidebar-collapsed .sidebar { opacity: 0; pointer-events: none; transform: translateX(-102%); }
-  .navigation-toggle { top: 38px; left: 26px; }
+  .navigation-toggle { top: 30px; left: 0; }
   .layout.sidebar-open .navigation-toggle {
-    top: 18px;
+    top: 30px;
     left: min(calc(310px - 16px), calc(88vw - 16px));
-    width: 32px;
-    min-width: 32px;
+    width: 34px;
+    min-width: 34px;
     height: 40px;
     color: #fff;
     background: var(--sidebar-active);
     border-color: #4ade80;
+    border-radius: 10px 0 0 10px;
     box-shadow: 0 4px 14px rgba(3, 20, 9, .28);
   }
-  .topbar-heading { padding-left: 58px; }
+  .layout.sidebar-collapsed .content { padding-left: 56px; }
+  .topbar-heading { padding-left: 0; }
   .sidebar-scrim {
     position: fixed;
     z-index: 40;
