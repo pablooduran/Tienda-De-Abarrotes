@@ -19,6 +19,8 @@ const checks = [
       && css.includes('th { color: var(--muted); font-size: 13px; font-weight: 700; }')
       && css.includes('td { line-height: 1.4; }')],
   ['El detalle de período conserva foco y estado visible', css.includes('.dashboard-period-detail > summary') && css.includes('.dashboard-period-detail[open] > summary::after')],
+  ['Los gráficos usan curvas suaves, área y barras redondeadas', app.includes('ctx.bezierCurveTo') && app.includes('ctx.createLinearGradient') && app.includes('Math.min(10, barWidth / 2)')],
+  ['El detalle circular reserva su propia leyenda sin invadir la torta', app.includes('const legendX = Math.max(146') && app.includes('ctx.arc(cx, cy, radius, start + gap, end - gap)') && css.includes('.dashboard-period-detail canvas { display: block; width: 100%; max-width: 100%; }')],
   ['UX-005 se registra como resuelto en P7E', pending.includes('| UX-005 |') && pending.includes('Resuelto en P7E')],
   ['TECH-026 queda resuelto tras P8', pending.includes('| TECH-026 |') && pending.includes('Resuelto: local 3/3 PASS')],
   ['El frontend no controla tenant', !app.includes('idTienda')]

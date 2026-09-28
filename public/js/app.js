@@ -917,7 +917,7 @@ function drawChart(canvas, labels, values, color = '#286a59', tooltips = []) {
   const ctx = canvas.getContext('2d');
   const ratio = devicePixelRatio || 1;
   const displayWidth = canvas.clientWidth || 320;
-  const displayHeight = 196;
+  const displayHeight = 210;
   canvas.width = displayWidth * ratio;
   canvas.height = displayHeight * ratio;
   canvas.style.height = `${displayHeight}px`;
@@ -928,40 +928,57 @@ function drawChart(canvas, labels, values, color = '#286a59', tooltips = []) {
   ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
   ctx.clearRect(0, 0, displayWidth, displayHeight);
   const max = Math.max(...values.map(Number), 1);
-  const chartHeight = 120;
-  const bottom = 152;
+  const top = 18;
+  const bottom = 164;
+  const chartHeight = bottom - top;
   const left = 34;
-  const plotWidth = Math.max(40, displayWidth - left - 12);
-  const gap = Math.min(10, Math.max(2, plotWidth / Math.max(values.length, 1) / 4));
-  const barWidth = Math.min(72, Math.max(2, (plotWidth - gap * Math.max(0, values.length - 1)) / Math.max(values.length, 1)));
+  const right = displayWidth - 16;
+  const plotWidth = Math.max(40, right - left);
+  const gap = Math.min(18, Math.max(8, plotWidth / Math.max(values.length, 1) / 3));
+  const barWidth = Math.min(52, Math.max(12, (plotWidth - gap * Math.max(0, values.length - 1)) / Math.max(values.length, 1)));
   const usedWidth = values.length * barWidth + Math.max(0, values.length - 1) * gap;
   const startX = left + Math.max(0, (plotWidth - usedWidth) / 2);
   const labelStep = Math.max(1, Math.ceil(values.length / 6));
   const hitAreas = [];
+  const muted = getComputedStyle(document.documentElement).getPropertyValue('--muted').trim();
+  const ink = getComputedStyle(document.documentElement).getPropertyValue('--ink').trim();
+  const grid = getComputedStyle(document.documentElement).getPropertyValue('--chart-grid').trim();
+  ctx.lineWidth = 1;
+  ctx.setLineDash([3, 4]);
+  for (let row = 0; row < 4; row += 1) {
+    const y = top + (chartHeight / 3) * row;
+    ctx.strokeStyle = grid;
+    ctx.beginPath();
+    ctx.moveTo(left, y);
+    ctx.lineTo(right, y);
+    ctx.stroke();
+  }
+  ctx.setLineDash([]);
   ctx.font = '12px "Segoe UI", Arial';
-  ctx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--muted').trim();
-  ctx.fillText('0', 8, bottom + 5);
+  ctx.fillStyle = muted;
+  ctx.fillText('0', 8, bottom + 4);
   values.forEach((value, index) => {
     const x = startX + index * (barWidth + gap);
     const h = (Number(value) / max) * chartHeight;
     const y = bottom - h;
-    ctx.fillStyle = color;
+    const gradient = ctx.createLinearGradient(x, y, x, bottom);
+    gradient.addColorStop(0, color);
+    gradient.addColorStop(1, `${color}B8`);
+    ctx.fillStyle = gradient;
     ctx.beginPath();
     if (typeof ctx.roundRect === 'function') {
-      ctx.roundRect(x, y, barWidth, h || 2, 6);
+      ctx.roundRect(x, y, barWidth, h || 2, Math.min(10, barWidth / 2));
     } else {
       ctx.rect(x, y, barWidth, h || 2);
     }
     ctx.fill();
-    ctx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--ink').trim();
-    if (values.length <= 6) ctx.fillText(String(Number(value).toFixed(0)), x, Math.max(18, y - 8));
+    ctx.fillStyle = ink;
+    if (values.length <= 6) ctx.fillText(String(Number(value).toFixed(0)), x, Math.max(14, y - 8));
     if (index % labelStep === 0) {
-      ctx.save();
-      ctx.translate(x + 2, 181);
-      ctx.rotate(-0.35);
-      ctx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--muted').trim();
-      ctx.fillText(String(labels[index] || '').slice(0, 12), 0, 0);
-      ctx.restore();
+      ctx.fillStyle = muted;
+      ctx.textAlign = 'center';
+      ctx.fillText(String(labels[index] || '').slice(0, 12), x + barWidth / 2, 190);
+      ctx.textAlign = 'left';
     }
     hitAreas.push({
       x,
@@ -992,21 +1009,52 @@ function drawLineChart(canvas, labels, values, color = '#286a59', tooltips = [])
   if (!numbers.length) return bindChartTooltip(canvas, []);
   const left = 34;
   const right = width - 14;
-  const top = 24;
-  const bottom = 152;
+  const top = 18;
+  const bottom = 158;
   const min = Math.min(0, ...numbers);
   const max = Math.max(1, ...numbers);
   const y = (value) => bottom - ((value - min) / (max - min)) * (bottom - top);
   const x = (index) => numbers.length === 1 ? (left + right) / 2 : left + index * (right - left) / (numbers.length - 1);
-  ctx.strokeStyle = getComputedStyle(document.documentElement).getPropertyValue('--chart-grid').trim();
-  ctx.beginPath();
-  ctx.moveTo(left, y(0));
-  ctx.lineTo(right, y(0));
-  ctx.stroke();
+  const muted = getComputedStyle(document.documentElement).getPropertyValue('--muted').trim();
+  const grid = getComputedStyle(document.documentElement).getPropertyValue('--chart-grid').trim();
+  ctx.lineWidth = 1;
+  ctx.setLineDash([3, 4]);
+  for (let row = 0; row < 4; row += 1) {
+    const gridY = top + ((bottom - top) / 3) * row;
+    ctx.strokeStyle = grid;
+    ctx.beginPath();
+    ctx.moveTo(left, gridY);
+    ctx.lineTo(right, gridY);
+    ctx.stroke();
+  }
+  ctx.setLineDash([]);
+  const points = numbers.map((value, index) => ({ x: x(index), y: y(value) }));
+  const smoothPath = () => {
+    ctx.beginPath();
+    points.forEach((point, index) => {
+      if (index === 0) {
+        ctx.moveTo(point.x, point.y);
+        return;
+      }
+      const previous = points[index - 1];
+      const midpointX = (previous.x + point.x) / 2;
+      ctx.bezierCurveTo(midpointX, previous.y, midpointX, point.y, point.x, point.y);
+    });
+  };
+  const area = ctx.createLinearGradient(0, top, 0, bottom);
+  area.addColorStop(0, `${color}44`);
+  area.addColorStop(1, `${color}06`);
+  smoothPath();
+  ctx.lineTo(points[points.length - 1].x, bottom);
+  ctx.lineTo(points[0].x, bottom);
+  ctx.closePath();
+  ctx.fillStyle = area;
+  ctx.fill();
   ctx.strokeStyle = color;
-  ctx.lineWidth = 2.5;
-  ctx.beginPath();
-  numbers.forEach((value, index) => index ? ctx.lineTo(x(index), y(value)) : ctx.moveTo(x(index), y(value)));
+  ctx.lineWidth = 3;
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
+  smoothPath();
   ctx.stroke();
   const labelStep = Math.max(1, Math.ceil(numbers.length / 6));
   const hitAreas = [];
@@ -1016,9 +1064,11 @@ function drawLineChart(canvas, labels, values, color = '#286a59', tooltips = [])
     ctx.arc(x(index), y(value), 4, 0, Math.PI * 2);
     ctx.fill();
     if (index % labelStep === 0) {
-      ctx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--muted').trim();
+      ctx.fillStyle = muted;
       ctx.font = '11px "Segoe UI", Arial';
-      ctx.fillText(String(labels[index] || '').slice(0, 10), Math.max(2, x(index) - 18), 181);
+      ctx.textAlign = 'center';
+      ctx.fillText(String(labels[index] || '').slice(0, 10), x(index), 188);
+      ctx.textAlign = 'left';
     }
     hitAreas.push({ type: 'circle', x: x(index), y: y(value), r: 18,
       text: tooltips[index] || `<strong>${escapeHtml(labels[index] || '')}</strong><br>Bs ${money(value)}` });
@@ -1031,24 +1081,30 @@ function drawPieChart(canvas, labels, values, colors, tooltips = []) {
   const ratio = devicePixelRatio || 1;
   const displayWidth = canvas.clientWidth || 320;
   canvas.width = displayWidth * ratio;
-  canvas.height = 240 * ratio;
+  const displayHeight = 226;
+  canvas.height = displayHeight * ratio;
+  canvas.style.height = `${displayHeight}px`;
   canvas.setAttribute('role', 'img');
   canvas.setAttribute('aria-label', labels.length
     ? labels.map((label, index) => `${label}: ${money(values[index])}`).join(', ')
     : 'Sin datos para graficar');
   ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
-  ctx.clearRect(0, 0, displayWidth, 240);
+  ctx.clearRect(0, 0, displayWidth, displayHeight);
   const total = values.reduce((sum, value) => sum + Number(value || 0), 0);
-  const cx = Math.min(116, displayWidth * 0.38);
-  const cy = 112;
-  const radius = 78;
+  const cx = Math.min(82, Math.max(70, displayWidth * 0.27));
+  const cy = 104;
+  const radius = 48;
+  const legendX = Math.max(146, cx + radius + 22);
+  const muted = getComputedStyle(document.documentElement).getPropertyValue('--muted').trim();
+  const ink = getComputedStyle(document.documentElement).getPropertyValue('--ink').trim();
+  const grid = getComputedStyle(document.documentElement).getPropertyValue('--chart-grid').trim();
   const hitAreas = [];
   if (!total) {
     ctx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--surface-2').trim();
     ctx.beginPath();
     ctx.arc(cx, cy, radius, 0, Math.PI * 2);
     ctx.fill();
-    ctx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--muted').trim();
+    ctx.fillStyle = muted;
     ctx.font = '13px "Segoe UI", Arial';
     ctx.textAlign = 'center';
     ctx.fillText('Sin ventas', cx, cy + 4);
@@ -1057,13 +1113,15 @@ function drawPieChart(canvas, labels, values, colors, tooltips = []) {
     let start = -Math.PI / 2;
     values.forEach((value, index) => {
       const slice = (Number(value || 0) / total) * Math.PI * 2;
+      const gap = Math.min(0.055, slice / 5);
       const end = start + slice;
       ctx.fillStyle = colors[index % colors.length];
       ctx.beginPath();
-      ctx.moveTo(cx, cy);
-      ctx.arc(cx, cy, radius, start, end);
-      ctx.closePath();
-      ctx.fill();
+      ctx.lineWidth = 18;
+      ctx.lineCap = 'butt';
+      ctx.arc(cx, cy, radius, start + gap, end - gap);
+      ctx.strokeStyle = colors[index % colors.length];
+      ctx.stroke();
       const mid = start + slice / 2;
       hitAreas.push({
         type: 'circle',
@@ -1074,15 +1132,44 @@ function drawPieChart(canvas, labels, values, colors, tooltips = []) {
       });
       start = end;
     });
+    ctx.fillStyle = ink;
+    ctx.font = '700 12px "Segoe UI", Arial';
+    ctx.textAlign = 'center';
+    ctx.fillText('Ventas', cx, cy - 4);
+    ctx.fillStyle = muted;
+    ctx.font = '11px "Segoe UI", Arial';
+    ctx.fillText(`Bs ${money(total)}`, cx, cy + 14);
+    ctx.textAlign = 'left';
   }
-  const legendX = Math.min(displayWidth - 150, cx + radius + 28);
   ctx.font = '12px "Segoe UI", Arial';
   labels.forEach((label, index) => {
-    const y = 42 + index * 28;
+    const y = 32 + index * 32;
     ctx.fillStyle = colors[index % colors.length];
-    ctx.fillRect(legendX, y, 10, 10);
-    ctx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--ink').trim();
-    ctx.fillText(String(label).slice(0, 16), legendX + 16, y + 9);
+    ctx.beginPath();
+    ctx.arc(legendX, y, 4, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = ink;
+    ctx.fillText(String(label).slice(0, 12), legendX + 10, y + 4);
+    const percent = total ? Math.round((Number(values[index] || 0) / total) * 100) : 0;
+    const lineStart = legendX + 10;
+    const lineEnd = Math.max(lineStart + 34, displayWidth - 34);
+    ctx.lineWidth = 2;
+    ctx.lineCap = 'round';
+    ctx.strokeStyle = grid;
+    ctx.beginPath();
+    ctx.moveTo(lineStart, y + 13);
+    ctx.lineTo(lineEnd, y + 13);
+    ctx.stroke();
+    ctx.strokeStyle = colors[index % colors.length];
+    ctx.beginPath();
+    ctx.moveTo(lineStart, y + 13);
+    ctx.lineTo(lineStart + (lineEnd - lineStart) * (percent / 100), y + 13);
+    ctx.stroke();
+    ctx.fillStyle = colors[index % colors.length];
+    ctx.font = '700 11px "Segoe UI", Arial';
+    ctx.textAlign = 'right';
+    ctx.fillText(`${percent}%`, displayWidth - 4, y + 4);
+    ctx.textAlign = 'left';
   });
   bindChartTooltip(canvas, hitAreas);
 }
