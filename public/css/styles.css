@@ -264,6 +264,7 @@ body {
 .topbar-actions { justify-content: flex-end; flex-wrap: wrap; }
 .quick-actions { flex-wrap: wrap; }
 .quick-actions button { min-height: 40px; white-space: nowrap; }
+.quick-actions button.quick-action-active { color: #fff; background: var(--brand); border-color: var(--brand); }
 .icon-button {
   display: inline-grid;
   place-items: center;
@@ -1221,7 +1222,9 @@ tr.low-stock { background: var(--warn); }
   font-size: 12px;
   font-weight: 700;
   border: 1px solid transparent;
+  white-space: nowrap;
 }
+.badge.normal { color: #12603d; background: #e6f4ee; border-color: #b8e0cc; }
 .badge.pendiente {
   color: var(--danger);
   background: #ffe8e5;
@@ -2582,10 +2585,14 @@ td.actions { position: relative; }
 .purchase-step span { color: var(--muted); }
 .purchase-confirmation { margin: 14px 0 10px; }
 .inventory-purchase-flow .cart-panel { align-self: start; }
+.expense-toolbar { grid-template-columns: minmax(0, 1fr) auto; align-items: start; }
+.expense-toolbar .actions { justify-content: flex-end; }
 .ui-empty button { margin-top: 12px; }
 @media (max-width: 900px) {
   .inventory-product-toolbar { grid-template-columns: 1fr; }
   .movement-filters { grid-template-columns: 1fr; }
+  .expense-toolbar { grid-template-columns: 1fr; }
+  .expense-toolbar .actions { justify-content: flex-start; }
 }
 @media (max-width: 560px) {
   .inventory-product-heading,
@@ -2647,6 +2654,14 @@ td.actions { position: relative; }
   pointer-events: none;
   transition: inset .18s ease, width .18s ease, height .18s ease;
 }
+.guided-tour-target {
+  position: relative !important;
+  z-index: 81 !important;
+  outline: 3px solid #4ade80 !important;
+  outline-offset: 4px;
+  border-radius: 8px;
+  box-shadow: 0 0 0 6px rgba(74, 222, 128, .22) !important;
+}
 .guided-tour-card {
   position: fixed;
   z-index: 3;
@@ -2664,6 +2679,7 @@ td.actions { position: relative; }
 }
 .guided-tour-card h3 { margin: 5px 0 8px; }
 .guided-tour-card p { margin: 0; color: var(--muted); line-height: 1.5; }
+.guided-tour-card .guided-tour-instruction { margin-top: 9px; color: var(--ink); font-weight: 700; }
 .guided-tour-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 16px; }
 
 .login-page {
@@ -4043,8 +4059,12 @@ html[data-theme="dark"] {
     .lot-balance-strip, .lot-result, .compensation-preview, .compensation-expected,
     .segmentation-result, .customer-hidden, .whatsapp-preview, .credit-policy-help,
     .export-menu summary, .export-menu > div, .readonly-note, .template-inactive,
-    .product-result, .autocomplete-results button, .pos-credit-card
+    .product-result, .autocomplete-results button, .pos-credit-card, .purchase-step, .summary-row
   ) { background: var(--surface); color: var(--ink); border-color: var(--line); }
+  html[data-theme="dark"] .purchase-step { border-left-color: #4ade80; }
+  html[data-theme="dark"] .content .badge.normal { color: #95e3a5; background: #143422; border-color: #316c42; }
+  html[data-theme="dark"] .subscription-actions { background: var(--panel); border-color: var(--line); }
+  html[data-theme="dark"] .subscription-actions .button-link { color: var(--ink); background: var(--surface-2); border-color: var(--line); }
   html[data-theme="dark"] .content .pos-product:hover { background: var(--hover-surface); border-color: var(--brand); }
   html[data-theme="dark"] .content :is(.inventory-metric.metric-danger, .inventory-error, .form-error) { background: #371d1b; color: #ffc4bc; }
   html[data-theme="dark"] .content :is(.inventory-metric.metric-warning, .readonly-note, .pos-credit-warning) { background: #342a13; color: #f3d891; }

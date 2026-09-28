@@ -538,13 +538,17 @@ async function startGuidedHelp(topic) {
   if (!steps?.length) return;
   let current = 0;
   const returnFocus = document.activeElement;
+  let highlightedTarget = null;
 
   const close = () => {
+    highlightedTarget?.classList.remove('guided-tour-target');
     modalRoot.innerHTML = '';
     returnFocus?.focus?.();
   };
 
   const render = async () => {
+    highlightedTarget?.classList.remove('guided-tour-target');
+    highlightedTarget = null;
     const step = steps[current];
     if (activeView !== step.view) await loadView(step.view);
     await new Promise((resolve) => globalThis.requestAnimationFrame(() => globalThis.requestAnimationFrame(resolve)));
@@ -555,6 +559,8 @@ async function startGuidedHelp(topic) {
     }
     target.scrollIntoView({ block: 'center', inline: 'nearest' });
     await new Promise((resolve) => globalThis.requestAnimationFrame(resolve));
+    target.classList.add('guided-tour-target');
+    highlightedTarget = target;
     const rect = target.getBoundingClientRect();
     modalRoot.innerHTML = `<div class="guided-tour" role="dialog" aria-modal="true" aria-labelledby="guidedTourTitle">
       <div class="guided-tour-shade"></div>
@@ -562,7 +568,7 @@ async function startGuidedHelp(topic) {
       <section class="guided-tour-card">
         <span class="eyebrow">Paso ${current + 1} de ${steps.length}</span>
         <h3 id="guidedTourTitle">${escapeHtml(step.title)}</h3>
-        <p>${escapeHtml(step.text)}</p>
+        <p>${escapeHtml(step.text)}</p><p class="guided-tour-instruction">Busca el control resaltado en verde: ese es el siguiente paso.</p>
         <div class="guided-tour-actions">
           ${current > 0 ? '<button type="button" class="secondary" data-tour-back>Anterior</button>' : ''}
           ${current + 1 < steps.length ? '<button type="button" data-tour-next>Siguiente</button>' : ''}
@@ -765,7 +771,15 @@ async function loadView(id) {
   if (helpButton) helpButton.hidden = id === 'ayuda';
   if (helpBackTopbar) helpBackTopbar.hidden = id !== 'ayuda';
   if (settingsBackTopbar) settingsBackTopbar.hidden = !settingsViews.has(id);
-  if (quickActions) quickActions.hidden = id === 'ayuda' || settingsViews.has(id);
+  if (quickActions) {
+    quickActions.hidden = id === 'ayuda' || settingsViews.has(id);
+    quickActions.querySelectorAll('[data-quick-view]').forEach((button) => {
+      const selected = button.dataset.quickView === id;
+      button.classList.toggle('secondary', !selected);
+      button.classList.toggle('quick-action-active', selected);
+      button.setAttribute('aria-current', selected ? 'page' : 'false');
+    });
+  }
   accountMenu?.removeAttribute('open');
   view.setAttribute('aria-busy', 'true');
   view.classList.add('view-is-loading');
@@ -1794,7 +1808,7 @@ function renderProductTable(rows) {
     <tbody>${rows.map((p) => `<tr class="${p.bajoStock ? 'low-stock' : ''}">
       <td>${escapeHtml(p.nombre)}</td><td>${escapeHtml(p.proveedor || 'SIN PROVEEDOR')}</td><td>${escapeHtml(p.categoria)}</td>
       <td>Bs ${money(p.precioVenta)}</td><td>${stockLabel(p)}</td><td>${packageText(p)}</td>
-      <td>${p.bajoStock ? '<span class="badge pendiente">Bajo stock</span>' : '<span class="badge pagado">Normal</span>'}${Number(p.controlaLotes) ? `<span class="lot-control-label">Lotes${Number(p.controlaVencimiento) ? ' y vencimiento' : ''}</span>` : ''}</td>
+      <td>${p.bajoStock ? '<span class="badge pendiente">Bajo stock</span>' : '<span class="badge normal">Normal</span>'}${Number(p.controlaLotes) ? `<span class="lot-control-label">Lotes${Number(p.controlaVencimiento) ? ' y vencimiento' : ''}</span>` : ''}</td>
       <td class="actions"><button class="small secondary" data-edit="${p.idProducto}">Editar</button><details class="row-actions"><summary>Más opciones</summary><div class="row-actions-menu">${hasFeature('ajuste_stock') && !state.context?.soloLectura ? `<button class="small" data-adjust-stock="${p.idProducto}">Ajustar stock</button>` : ''}<button class="small secondary" data-product-movements="${p.idProducto}">Ver movimientos</button>${Number(p.controlaLotes) || hasFeature('control_lotes') ? `<button class="small secondary" data-lot-config="${p.idProducto}">${Number(p.controlaLotes) ? 'Configurar lotes' : 'Activar lotes'}</button>` : ''}<button class="small danger" data-delete="${p.idProducto}">Ocultar</button><button type="button" class="small secondary secondary-actions-close" data-secondary-actions-close>Cerrar</button></div></details></td>
     </tr>`).join('')}</tbody></table></div>`;
   target.querySelectorAll('[data-edit]').forEach((btn) => btn.addEventListener('click', () => openProductModal(state.productos.find((p) => String(p.idProducto) === btn.dataset.edit))));
@@ -3335,7 +3349,7 @@ async function loadExpenses(query = expenseAppliedFilters) {
 
 async function gastos() {
   const categories = await api('/api/gastos/categorias');
-  view.innerHTML = `<div class="toolbar"><div><h3>Gastos operativos</h3><p class="muted">Compras de mercadería y gastos del negocio se mantienen separados.</p></div><div class="actions"><button type="button" id="openExpenseFilters" class="secondary">Filtros</button><button id="expenseCategories" class="secondary">Categorías</button><button id="addExpense" data-finance-write>Añadir gasto</button></div></div>
+  view.innerHTML = `<div class="toolbar expense-toolbar"><div><h3>Gastos operativos</h3><p class="muted">Compras de mercadería y gastos del negocio se mantienen separados.</p></div><div class="actions"><button type="button" id="openExpenseFilters" class="secondary">Filtros</button><button id="expenseCategories" class="secondary">Categorías</button><button id="addExpense" data-finance-write>Añadir gasto</button></div></div>
     <dialog id="expenseFilterDialog" class="owner-filter-dialog" aria-labelledby="expenseFilterTitle"><div class="owner-filter-heading"><h3 id="expenseFilterTitle">Filtrar gastos</h3><button type="button" class="secondary" id="closeExpenseFilters">Cerrar</button></div><form id="expenseFilters" class="filter-bar">
       <label>Desde<input name="desde" type="date" value="${monthStartValue()}"></label><label>Hasta<input name="hasta" type="date" value="${localDateValue()}"></label>
       <label>Categoría<select name="idCategoriaGasto">${options(categories, 'idCategoriaGasto', 'nombre', 'Todas')}</select></label>
