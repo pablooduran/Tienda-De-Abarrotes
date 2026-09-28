@@ -1823,9 +1823,9 @@ function renderProductTable(rows) {
 
 async function productos() {
   view.innerHTML = `
-    <section class="inventory-product-heading"><div><h3>Productos</h3><p>Tu punto principal para consultar el catálogo y decidir el siguiente paso de inventario.</p></div>${state.context?.soloLectura ? '<span class="muted">Modo solo lectura</span>' : '<button id="addProduct">Agregar producto</button>'}</section>
+    <section class="inventory-product-heading"><div><h3>Productos</h3><p>Tu punto principal para consultar el catálogo y decidir el siguiente paso de inventario.</p></div>${state.context?.soloLectura ? '<span class="muted">Modo solo lectura</span>' : '<details class="product-add-actions"><summary>Agregar producto</summary><div><button id="addProduct" type="button">Agregar manualmente</button><button id="addFromCatalog" type="button" class="secondary">Agregar desde catálogo</button></div></details>'}</section>
     <div class="panel toolbar inventory-product-toolbar">
-      <details class="inventory-secondary-actions"><summary>Más opciones</summary><div><button id="addFromCatalog" class="secondary">Agregar desde catálogo</button><button id="showHiddenProducts" class="secondary">Ver productos ocultos</button>${hasLotOperationalAccess() ? '<button id="openLots" class="secondary">Lotes y vencimientos</button>' : ''}<button type="button" class="secondary secondary-actions-close" data-secondary-actions-close>Cerrar</button></div></details>
+      <div class="inventory-product-utilities"><button id="showHiddenProducts" class="secondary">Ver productos ocultos</button>${hasLotOperationalAccess() ? '<button id="openLots" class="secondary">Lotes y vencimientos</button>' : ''}</div>
       <label>Buscar<input id="productSearch" placeholder="Buscar producto"></label>
       <label>Categoría<select id="productCategory"><option value="">Todas</option>${categoryOptions()}</select></label>
       <label>Proveedor<select id="productProvider">${options(state.proveedores, 'idProveedor', 'nombre', 'Todos')}</select></label>
