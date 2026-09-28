@@ -12,6 +12,8 @@ const checks = [
   ['skeleton y estados vacios reutilizables', ui.includes('function skeleton') && ui.includes('function empty')],
   ['mutaciones bloquean doble envio', ui.includes('button.disabled = true') && app.includes('UiPatterns.mutation')],
   ['skeleton respeta reduced motion', css.includes('prefers-reduced-motion') && css.includes('.ui-skeleton')],
+  ['la navegacion muestra respuesta inmediata mientras carga', app.includes('function showViewLoading(section)') && app.includes('showViewLoading(section);') && css.includes('.view-loading-placeholder')],
+  ['la navegacion reutiliza catalogos y actualiza datos vencidos sin bloquear', app.includes('function refreshCatalogsForView(id, request)') && app.includes("if (!catalogIsReady) return refreshCatalogs({ includeClients });") && app.includes('void loadView(id)')],
   ['filtros compactos tienen indicador y limpieza', css.includes('.filter-disclosure') && css.includes('.filter-count')],
   ['foco visible y estados accesibles', css.includes('.filter-disclosure > summary') && ui.includes('role="status"')]
 ];

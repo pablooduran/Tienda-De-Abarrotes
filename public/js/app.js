@@ -720,11 +720,32 @@ async function refreshCatalogs({ includeClients = true, force = false } = {}) {
   }
 }
 
+function refreshCatalogsForView(id, request) {
+  if (['ventas', 'clientes', 'configuracion', 'ayuda'].includes(id)) return null;
+  const includeClients = !['ventas', 'clientes'].includes(id);
+  const catalogIsReady = catalogCacheAt > 0 && (!includeClients || catalogClientsLoaded);
+  if (!catalogIsReady) return refreshCatalogs({ includeClients });
+  if (Date.now() - catalogCacheAt < 45000) return null;
+  refreshCatalogs({ includeClients }).then(() => {
+    if (request === viewRequest && activeView === id) void loadView(id);
+  }).catch(() => { /* La pantalla ya muestra datos válidos en caché. */ });
+  return null;
+}
+
 function options(rows, id, label, empty = 'Seleccione', selected = '') {
   return `<option value="">${empty}</option>` + rows.map((row) => `<option value="${row[id]}" ${String(selected || '') === String(row[id]) ? 'selected' : ''}>${escapeHtml(row[label])}</option>`).join('');
 }
 function categoryOptions(value = '') {
   return state.categorias.map((cat) => `<option value="${cat}" ${value === cat ? 'selected' : ''}>${cat}</option>`).join('');
+}
+
+function showViewLoading(section) {
+  view.innerHTML = `<section class="view-loading-placeholder" role="status" aria-live="polite">
+    <span class="eyebrow">Abriendo sección</span>
+    <h3>${escapeHtml(section[1])}</h3>
+    <p>Preparando los datos de esta pantalla.</p>
+    ${UiPatterns.skeleton('rows', 4)}
+  </section>`;
 }
 
 async function loadView(id) {
@@ -748,11 +769,10 @@ async function loadView(id) {
   accountMenu?.removeAttribute('open');
   view.setAttribute('aria-busy', 'true');
   view.classList.add('view-is-loading');
+  showViewLoading(section);
   if (viewProgress) viewProgress.hidden = false;
   try {
-    if (!['ventas', 'clientes', 'configuracion', 'ayuda'].includes(id)) {
-      await refreshCatalogs({ includeClients: !['ventas', 'clientes'].includes(id) });
-    }
+    await refreshCatalogsForView(id, request);
     if (request !== viewRequest) return;
     const handlers = { inicio, productos, movimientosStock, inventarioInteligente, inventarioOperativo, lotesVencimientos, clientes, proveedores, ventas, compras, historialVentas, pagos, gastos, finanzas, compensaciones, configuracion, auditoria, cierreCaja, reportes, ayuda };
     if (!handlers[id]) return loadView('inicio');
