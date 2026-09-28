@@ -107,9 +107,38 @@ button {
   flex: 1 1 auto;
   min-width: 0;
   min-height: 0;
+  padding-right: 4px;
   overflow-x: hidden;
   overflow-y: auto;
   overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(188, 235, 216, .48) transparent;
+}
+
+.admin-sidebar nav::-webkit-scrollbar,
+.admin-main::-webkit-scrollbar {
+  width: 9px;
+}
+
+.admin-sidebar nav::-webkit-scrollbar-track,
+.admin-main::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.admin-sidebar nav::-webkit-scrollbar-thumb,
+.admin-main::-webkit-scrollbar-thumb {
+  border: 2px solid transparent;
+  border-radius: 999px;
+  background-clip: padding-box;
+}
+
+.admin-sidebar nav::-webkit-scrollbar-thumb {
+  background-color: rgba(188, 235, 216, .48);
+}
+
+.admin-sidebar nav::-webkit-scrollbar-thumb:hover {
+  background-color: rgba(188, 235, 216, .72);
 }
 
 .nav-link {
@@ -161,6 +190,16 @@ button {
   overflow-x: hidden;
   overscroll-behavior: contain;
   scrollbar-gutter: stable;
+  scrollbar-width: thin;
+  scrollbar-color: #8ea59a transparent;
+}
+
+.admin-main::-webkit-scrollbar-thumb {
+  background-color: #8ea59a;
+}
+
+html[data-theme="dark"] .admin-main::-webkit-scrollbar-thumb {
+  background-color: #55705f;
 }
 .admin-main[data-active-view] > [data-admin-view] { display: none; }
 .admin-main[data-active-view="tiendas"] > [data-admin-view="tiendas"]:not([hidden]),
