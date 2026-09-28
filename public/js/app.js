@@ -2635,7 +2635,7 @@ function catalogVariantFor(product) {
   const name = String(product.nombre || '').trim();
   const normalized = name.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
   if (/\bcoca[ -]?cola\b/.test(normalized)) {
-    if (/\bzero\b/.test(normalized)) return 'Coca-Cola Zero';
+    if (/\bzero\b|sin\s+azucar/.test(normalized)) return 'Coca-Cola Zero';
     if (/\bretornable\b/.test(normalized)) return 'Coca-Cola retornable';
     return 'Coca-Cola normal';
   }
@@ -2666,7 +2666,7 @@ function groupMasterCatalog(rows) {
 }
 
 async function catalogoMaestro() {
-  const picker = { page: 1, pages: 1, total: 0, request: 0, rows: [], categories: [], brands: [], selected: new Map(), family: null, variant: null };
+  const picker = { page: 1, pages: 1, total: 0, request: 0, rows: [], categories: [], brands: [], selected: new Map(), openFamily: null, openVariant: null };
   view.innerHTML = `
     <section class="master-catalog-heading">
       <div><button type="button" class="button-link secondary" id="backToProducts">← Volver a productos</button><p class="eyebrow">Catálogo maestro</p><h3>Agrega productos a tu inventario</h3><p>Busca, filtra y despliega solo la familia, versión y tamaño que necesitas.</p></div>
@@ -2737,29 +2737,46 @@ async function catalogoMaestro() {
     const path = view.querySelector('#catalogPickerPath');
     const title = view.querySelector('#masterCatalogResultsTitle');
     const sizeMarkup = (products) => products.map((product) => { const chosen = picker.selected.has(Number(product.idProductoMaestro)); const unavailable = Boolean(product.agregadoEnTienda); return `<label class="master-catalog-size"><span><strong>${escapeHtml(catalogSizeFor(product))}</strong><small>${escapeHtml([product.categoriaMaestra, product.codigoBarras].filter(Boolean).join(' · ') || 'Sin código')}</small></span><input type="checkbox" data-select-master="${product.idProductoMaestro}" ${chosen ? 'checked' : ''} ${unavailable || (!chosen && picker.selected.size >= 50) ? 'disabled' : ''}><em>${unavailable ? 'Ya agregado' : 'Agregar'}</em></label>`; }).join('');
-    if (!groups.length) {
-      picker.family = null; picker.variant = null; path.textContent = 'Productos'; title.textContent = 'Productos disponibles'; results.innerHTML = '<p class="muted">No hay coincidencias.</p>';
-    } else if (!picker.family) {
-      path.textContent = 'Productos'; title.textContent = 'Elige un producto';
-      results.innerHTML = groups.map(([family, variants]) => `<button type="button" class="master-catalog-level-card" data-open-family="${escapeHtml(family)}"><span><strong>${escapeHtml(family)}</strong><small>${variants.size === 1 ? 'Una versión disponible' : `${variants.size} versiones disponibles`}</small></span><span class="master-catalog-expand">Ver</span></button>`).join('');
-      results.querySelectorAll('[data-open-family]').forEach((button) => button.addEventListener('click', () => { picker.family = button.dataset.openFamily; const variants = new Map(groups.find(([name]) => name === picker.family)?.[1] || []); picker.variant = variants.size === 1 ? [...variants.keys()][0] : null; renderResults(); }));
-    } else {
-      const variants = new Map(groups.find(([name]) => name === picker.family)?.[1] || []);
-      if (!variants.size) { picker.family = null; picker.variant = null; renderResults(); return; }
-      if (!picker.variant) {
-        path.innerHTML = `<button type="button" class="master-catalog-back" data-catalog-back="families">Productos</button><span>›</span><strong>${escapeHtml(picker.family)}</strong>`;
-        title.textContent = 'Elige una versión';
-        results.innerHTML = [...variants.entries()].map(([variant, products]) => `<button type="button" class="master-catalog-level-card" data-open-variant="${escapeHtml(variant)}"><span><strong>${escapeHtml(variant)}</strong><small>${products.length === 1 ? 'Un tamaño disponible' : `${products.length} tamaños disponibles`}</small></span><span class="master-catalog-expand">Ver</span></button>`).join('');
-        results.querySelector('[data-catalog-back]')?.addEventListener('click', () => { picker.family = null; renderResults(); });
-        results.querySelectorAll('[data-open-variant]').forEach((button) => button.addEventListener('click', () => { picker.variant = button.dataset.openVariant; renderResults(); }));
-      } else {
-        const products = variants.get(picker.variant) || [];
-        path.innerHTML = `<button type="button" class="master-catalog-back" data-catalog-back="variants">Productos</button><span>›</span><button type="button" class="master-catalog-back" data-catalog-back="variants">${escapeHtml(picker.family)}</button><span>›</span><strong>${escapeHtml(picker.variant)}</strong>`;
-        title.textContent = 'Elige un tamaño';
-        results.innerHTML = `<div class="master-catalog-sizes">${sizeMarkup(products)}</div>`;
-        results.querySelectorAll('[data-catalog-back]').forEach((button) => button.addEventListener('click', () => { picker.variant = null; if (button.dataset.catalogBack === 'families') picker.family = null; renderResults(); }));
+    const familyMarkup = ([family, variants]) => {
+      const entries = [...variants.entries()];
+      const productCount = entries.reduce((total, [, products]) => total + products.length, 0);
+      if (entries.length === 1 && entries[0][1].length === 1) {
+        return `<article class="master-catalog-single"><div class="master-catalog-single-heading"><span><strong>${escapeHtml(family)}</strong><small>Presentación disponible</small></span></div>${sizeMarkup(entries[0][1])}</article>`;
       }
-    }
+      const content = entries.length === 1
+        ? `<div class="master-catalog-sizes">${sizeMarkup(entries[0][1])}</div>`
+        : `<div class="master-catalog-variants">${entries.map(([variant, products]) => {
+          if (products.length === 1) {
+            return `<article class="master-catalog-variant-single"><div><strong>${escapeHtml(variant)}</strong><small>Un tamaño disponible</small></div><div class="master-catalog-sizes">${sizeMarkup(products)}</div></article>`;
+          }
+          const open = picker.openFamily === family && picker.openVariant === variant ? ' open' : '';
+          return `<details class="master-catalog-variant" data-catalog-variant="${escapeHtml(variant)}"${open}><summary><span><strong>${escapeHtml(variant)}</strong><small>${products.length} tamaños disponibles</small></span><span class="master-catalog-expand">Ver tamaños</span></summary><div class="master-catalog-sizes">${sizeMarkup(products)}</div></details>`;
+        }).join('')}</div>`;
+      const open = picker.openFamily === family ? ' open' : '';
+      return `<details class="master-catalog-family" data-catalog-family="${escapeHtml(family)}"${open}><summary><span><strong>${escapeHtml(family)}</strong><small>${entries.length === 1 ? `${productCount} tamaños disponibles` : `${entries.length} versiones disponibles`}</small></span><span class="master-catalog-expand">Ver</span></summary>${content}</details>`;
+    };
+    path.textContent = 'Productos';
+    title.textContent = 'Elige un producto';
+    results.innerHTML = groups.length ? groups.map(familyMarkup).join('') : '<p class="muted">No hay coincidencias.</p>';
+    results.querySelectorAll('[data-catalog-family]').forEach((familyPanel) => familyPanel.addEventListener('toggle', () => {
+      if (!familyPanel.open) {
+        if (picker.openFamily === familyPanel.dataset.catalogFamily) { picker.openFamily = null; picker.openVariant = null; }
+        return;
+      }
+      results.querySelectorAll('[data-catalog-family]').forEach((other) => { if (other !== familyPanel) other.open = false; });
+      picker.openFamily = familyPanel.dataset.catalogFamily;
+      picker.openVariant = null;
+    }));
+    results.querySelectorAll('[data-catalog-variant]').forEach((variantPanel) => variantPanel.addEventListener('toggle', () => {
+      if (!variantPanel.open) {
+        if (picker.openVariant === variantPanel.dataset.catalogVariant) picker.openVariant = null;
+        return;
+      }
+      const familyPanel = variantPanel.closest('[data-catalog-family]');
+      familyPanel?.querySelectorAll('[data-catalog-variant]').forEach((other) => { if (other !== variantPanel) other.open = false; });
+      picker.openFamily = familyPanel?.dataset.catalogFamily || null;
+      picker.openVariant = variantPanel.dataset.catalogVariant;
+    }));
     view.querySelector('#catalogPickerPage').textContent = `Página ${picker.page} de ${picker.pages} · ${picker.total} productos`;
     view.querySelector('#catalogPickerPrevious').disabled = picker.page <= 1; view.querySelector('#catalogPickerNext').disabled = picker.page >= picker.pages;
     results.querySelectorAll('[data-select-master]').forEach((checkbox) => checkbox.addEventListener('change', () => { const product = picker.rows.find((row) => String(row.idProductoMaestro) === checkbox.dataset.selectMaster); if (!product) return; if (checkbox.checked) picker.selected.set(Number(product.idProductoMaestro), product); else picker.selected.delete(Number(product.idProductoMaestro)); renderSelected(); renderResults(); }));
@@ -2768,7 +2785,7 @@ async function catalogoMaestro() {
     const request = ++picker.request; const query = new URLSearchParams({ page: String(page), limit: '50' });
     if (search.value.trim()) query.set('q', search.value.trim()); if (category.value) query.set('idCategoriaMaestra', category.value); if (brand.value) query.set('idMarcaMaestra', brand.value);
     const response = await api(`/api/catalogo-maestro?${query}`); if (request !== picker.request) return;
-    picker.rows = response.rows; picker.page = response.page; picker.pages = response.pages; picker.total = response.total; picker.family = null; picker.variant = null; showPickerError(); renderResults();
+    picker.rows = response.rows; picker.page = response.page; picker.pages = response.pages; picker.total = response.total; picker.openFamily = null; picker.openVariant = null; showPickerError(); renderResults();
   };
   try {
     [picker.categories, picker.brands] = await Promise.all([api('/api/catalogo-maestro/categorias'), api('/api/catalogo-maestro/marcas')]);
