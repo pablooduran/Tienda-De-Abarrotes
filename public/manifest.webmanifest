@@ -1,0 +1,24 @@
+{
+  "name": "Control de negocio",
+  "short_name": "Mi negocio",
+  "description": "Ventas, inventario, clientes y reportes desde un solo lugar.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#07130d",
+  "theme_color": "#16883a",
+  "icons": [
+    {
+      "src": "/assets/pwa-icon.svg",
+      "sizes": "192x192",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    },
+    {
+      "src": "/assets/pwa-icon.svg",
+      "sizes": "512x512",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

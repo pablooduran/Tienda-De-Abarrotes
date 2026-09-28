@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-labelledby="title">
+  <title id="title">Control de negocio</title>
+  <rect width="512" height="512" rx="112" fill="#0b2e1a"/>
+  <path d="M116 210h280v190a42 42 0 0 1-42 42H158a42 42 0 0 1-42-42V210Z" fill="#f5fff8"/>
+  <path d="M96 178c0-25 20-46 46-46h228c26 0 46 21 46 46v42H96v-42Z" fill="#20b85a"/>
+  <path d="M119 132h274v74H119z" fill="#16883a"/>
+  <path d="M143 132h34v74h-34zm68 0h34v74h-34zm68 0h34v74h-34zm68 0h34v74h-34z" fill="#f5fff8" opacity=".94"/>
+  <path d="M208 442V302a48 48 0 0 1 96 0v140h-96Z" fill="#16883a"/>
+  <circle cx="282" cy="372" r="8" fill="#f5fff8"/>
+  <path d="M154 274h28v28h-28zm176 0h28v28h-28z" fill="#f0b947"/>
+</svg>

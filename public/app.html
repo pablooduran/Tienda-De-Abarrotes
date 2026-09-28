@@ -3,6 +3,10 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#16883a">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <link rel="manifest" href="/manifest.webmanifest">
+  <link rel="icon" href="/assets/pwa-icon.svg" type="image/svg+xml">
   <title>Administración de tienda</title>
   <script src="/js/store-theme.js"></script>
   <link rel="stylesheet" href="/css/styles.css">
@@ -43,6 +47,7 @@
               <button id="settingsAuditButton" type="button" data-settings-view="auditoria">Auditoría</button>
               <a href="/suscripcion.html">Mi plan y facturación</a>
               <button id="helpBtn" type="button">Centro de ayuda</button>
+              <button type="button" data-pwa-install hidden>Instalar aplicación</button>
               <button type="button" data-toggle-theme aria-pressed="false">Modo oscuro</button>
               <button id="logoutBtn" type="button" class="account-logout">Cerrar sesión</button>
             </div>
@@ -66,6 +71,7 @@
   <script src="/js/product-analytics.js"></script>
   <script src="/js/welcome-guide.js"></script>
   <script src="/js/help-center.js"></script>
+  <script src="/js/pwa-install.js"></script>
   <script src="/js/app.js"></script>
 </body>
 </html>

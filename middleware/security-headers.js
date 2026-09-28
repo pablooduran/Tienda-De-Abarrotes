@@ -14,7 +14,7 @@ function securityHeaders({ production }) {
     frameSrc: ["'none'"],
     formAction: ["'self'"],
     manifestSrc: ["'self'"],
-    workerSrc: ["'none'"]
+    workerSrc: ["'self'"]
   };
   if (production) directives.upgradeInsecureRequests = [];
   return helmet({
