@@ -33,6 +33,7 @@ const loginPanel = html.split('data-auth-panel="login"')[1].split('data-auth-pan
 const registerPanel = html.split('data-auth-panel="register"')[1].split('data-auth-panel="verify"')[0];
 assert(!loginPanel.includes('data-auth-target="verify"'), 'El login no debe mostrar verificacion antes de solicitar codigo.');
 assert(registerPanel.includes('data-auth-target="verify"'), 'El registro debe permitir retomar una verificacion pendiente.');
+assert(registerPanel.includes('data-auth-target="recovery"'), 'El registro debe guiar a recuperar acceso cuando una cuenta ya fue creada con Google.');
 assert(html.includes('aria-live="polite"'), 'El feedback asincrono debe anunciarse de forma accesible.');
 assert(!/<script[^>]*>[^<]/i.test(html), 'No se permite JavaScript inline en el acceso publico.');
 assert(!/\son[a-z]+\s*=/i.test(html), 'No se permiten handlers inline.');
@@ -50,6 +51,8 @@ for (const id of [
 
 assert(script.includes("'Idempotency-Key': registrationKey"), 'El registro debe conservar idempotencia.');
 assert(script.includes('delete data.confirmacionRegistro'), 'La confirmacion local no debe salir al backend.');
+assert(script.includes('REGISTRATION_UNAVAILABLE') && script.includes('Recuperar acceso'),
+  'Un conflicto de registro debe orientar a definir una contrasena sin confirmar que exista una cuenta.');
 assert(script.includes('SecurityHttp.secureFetch'), 'Las mutaciones publicas deben usar el cliente seguro.');
 assert(script.includes("form.getAttribute('aria-busy') === 'true'"), 'Las mutaciones deben impedir doble envio.');
 assert(script.includes("button.disabled = true"), 'El submit debe quedar deshabilitado durante la mutacion.');

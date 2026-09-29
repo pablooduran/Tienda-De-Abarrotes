@@ -223,7 +223,15 @@
       }
       delete data.confirmacionRegistro;
       registrationKey = registrationKey || operationKey();
-      const result = await requestJson('/auth/registro', data, { 'Idempotency-Key': registrationKey });
+      let result;
+      try {
+        result = await requestJson('/auth/registro', data, { 'Idempotency-Key': registrationKey });
+      } catch (error) {
+        if (error?.code === 'REGISTRATION_UNAVAILABLE') {
+          throw new Error('No pudimos crear la cuenta con esos datos. Si ya la creaste antes o con Google, usa Recuperar acceso para definir una contraseña e ingresar directamente.');
+        }
+        throw error;
+      }
       document.getElementById('resend-email').value = data.correo;
       document.getElementById('recovery-email').value = data.correo;
       document.getElementById('login-user').value = data.usuario;

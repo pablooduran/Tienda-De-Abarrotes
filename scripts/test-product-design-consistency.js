@@ -16,6 +16,8 @@ const checks = [
   ['Productos usa acciones concretas de guardado', app.includes("confirmText: isEdit ? 'Guardar cambios' : 'Agregar producto'")],
   ['Mi plan mantiene revisar precio como accion primaria', paymentUi.includes('button-link payment-primary') && paymentUi.includes('Ver precio') && paymentUi.includes('Solicitar este plan')],
   ['La accion primaria de pagos tiene estilo compartido', styles.includes('.payment-form-actions .payment-primary')],
+  ['El punto de venta calcula descuentos por porcentaje', app.includes('id="posDiscountPercentage"') && app.includes('subtotal * (discountPercentage / 100)') && app.includes('id="posDiscountTotal"')],
+  ['El comprobante conserva contraste en modo oscuro', styles.includes('html[data-theme="dark"] .receipt { --ink: #172027;') && styles.includes('background: #fff; color: #172027;')],
   ['Superadmin agrupa acciones poco frecuentes', admin.includes('function adminMoreActions(buttons)') && admin.includes("summary.textContent = 'Mas opciones'")],
   ['El menu administrativo conserva foco visible', adminStyles.includes('.admin-more-actions summary:focus-visible')],
   ['Superadmin mantiene el documento fijo y desplaza solo el contenido', adminStyles.includes('scrollbar-gutter: stable') && adminStyles.includes('overscroll-behavior: contain') && /html,\s*body\s*\{[\s\S]*?overflow:\s*hidden/.test(adminStyles)],

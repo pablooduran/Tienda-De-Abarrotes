@@ -2541,8 +2541,10 @@ function posSubtotal() {
 
 function posTotals() {
   const subtotal = posSubtotal();
-  const discount = Math.min(subtotal, Math.max(0, Number(document.getElementById('posDiscount')?.value || 0)));
-  return { subtotal, discount, total: Math.max(0, subtotal - discount) };
+  const enteredPercentage = Number(document.getElementById('posDiscountPercentage')?.value || 0);
+  const discountPercentage = Math.min(100, Math.max(0, Number.isFinite(enteredPercentage) ? enteredPercentage : 0));
+  const discount = Math.round((subtotal * (discountPercentage / 100)) * 100) / 100;
+  return { subtotal, discount, discountPercentage, total: Math.max(0, subtotal - discount) };
 }
 
 function posAvailableStock(product) {
@@ -2921,6 +2923,9 @@ function renderPosPaymentSummary() {
   if (automaticCash) automaticCash.value = money(totals.total);
   const payment = posPaymentDraft();
   document.getElementById('posSubtotal').textContent = `Bs ${money(totals.subtotal)}`;
+  document.getElementById('posDiscountTotal').textContent = totals.discount > 0
+    ? `${money(totals.discountPercentage)}% · Bs ${money(totals.discount)}`
+    : '0.00% · Bs 0.00';
   document.getElementById('posTotal').textContent = `Bs ${money(totals.total)}`;
   summary.innerHTML = `
     <span>Pagado <strong>Bs ${money(payment.paid)}</strong></span>
@@ -3210,13 +3215,14 @@ async function ventas() {
         </div>
         <div id="posCreditSummary" class="pos-credit-summary" aria-live="polite"></div>
         <div class="pos-charge-box">
-          <label>Descuento general (Bs)<input id="posDiscount" type="number" min="0" step="0.01" value="0"></label>
+          <label>Descuento general (%)<input id="posDiscountPercentage" type="number" min="0" max="100" step="0.01" value="0" inputmode="decimal" aria-describedby="posDiscountHelp"></label>
+          <small id="posDiscountHelp" class="hint">Se calcula automáticamente sobre el subtotal.</small>
           <label>Forma de cobro<select id="posPaymentMode">
             <option value="efectivo">Efectivo</option><option value="qr">QR</option>
             <option value="mixto">Mixto o parcial</option><option value="fiado">Totalmente fiado</option>
           </select></label>
           <div id="posPaymentFields" class="pos-payment-fields"></div>
-          <div class="pos-total-grid"><span>Subtotal <strong id="posSubtotal">Bs 0.00</strong></span><span>Total <strong id="posTotal">Bs 0.00</strong></span></div>
+          <div class="pos-total-grid"><span>Subtotal <strong id="posSubtotal">Bs 0.00</strong></span><span>Descuento <strong id="posDiscountTotal">0.00% · Bs 0.00</strong></span><span>Total <strong id="posTotal">Bs 0.00</strong></span></div>
           <div id="posPaymentSummary" class="pos-payment-summary"></div>
         </div>
         <button type="submit" id="posSubmit" class="wide-button">Registrar venta</button>
@@ -3250,7 +3256,7 @@ async function ventas() {
   document.getElementById('posCategory').addEventListener('change', () => loadPosProducts());
   view.querySelectorAll('[data-pos-view]').forEach((button) => button.addEventListener('click', () => loadPosProducts(button.dataset.posView)));
   document.getElementById('posPaymentMode').addEventListener('change', renderPosPaymentFields);
-  document.getElementById('posDiscount').addEventListener('input', renderPosPaymentSummary);
+  document.getElementById('posDiscountPercentage').addEventListener('input', renderPosPaymentSummary);
   document.getElementById('posClient').addEventListener('change', () => {
     creditUi().resetPosCredit();
     creditUi().refreshPosCredit(posPaymentDraft().balance);

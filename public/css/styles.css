@@ -4135,9 +4135,10 @@ html[data-theme="dark"] {
   html[data-theme="dark"] .autocomplete-results button,
   html[data-theme="dark"] .pos-customer-option,
   html[data-theme="dark"] .help-article,
-  html[data-theme="dark"] .receipt,
   html[data-theme="dark"] .dashboard-period-detail,
   html[data-theme="dark"] .inventory-stock-metrics div { background: var(--panel); color: var(--ink); border-color: var(--line); }
+  /* El comprobante conserva apariencia de papel: se lee igual en ambos temas y al imprimir. */
+  html[data-theme="dark"] .receipt { --ink: #172027; --muted: #59656f; --line: #d9dfe3; background: #fff; color: #172027; border-color: #aabbb4; }
   html[data-theme="dark"] .modal :is(.credit-policy-help, .whatsapp-preview, .template-inactive, .readonly-note, .form-error, .inventory-note, .purchase-step, .summary-row) { background: var(--surface); color: var(--ink); border-color: var(--line); }
   html[data-theme="dark"] .welcome-step.is-complete,
   html[data-theme="dark"] .hero-total,
