@@ -961,6 +961,9 @@ tr.low-stock { background: var(--warn); }
   gap: 9px;
   margin-top: 12px;
 }
+.catalog-provider-summary { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; align-items: end; }
+.catalog-provider-change { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 9px; grid-column: 1 / -1; }
+.catalog-provider-change[hidden], .catalog-package-units[hidden] { display: none; }
 .product-picker {
   min-height: 420px;
 }
@@ -1527,6 +1530,7 @@ tr.low-stock { background: var(--warn); }
 .pos-customer-mode button { color: var(--muted); background: var(--surface); }
 .pos-customer-mode button[aria-pressed="true"] { color: #fff; border-color: var(--brand); background: var(--brand); }
 .pos-frequent-client-picker { display: grid; gap: 5px; }
+.pos-frequent-client-picker[hidden] { display: none; }
 .pos-customer-selection { margin: 0; color: var(--muted); font-size: 13px; }
 .pos-charge-box {
   display: grid;
@@ -2322,7 +2326,7 @@ body:has([data-compensation-filter-form]) { overflow: hidden; }
 }
 .collection-filters { grid-template-columns: minmax(0, 1fr) auto; }
 .credit-filter-actions { display: flex; gap: 8px; }
-.credit-filter-actions button { flex: 1; }
+.credit-filter-actions button { min-width: 78px; white-space: nowrap; }
 .credit-pagination {
   display: flex;
   justify-content: center;
@@ -2465,7 +2469,18 @@ body:has([data-compensation-filter-form]) { overflow: hidden; }
 .template-variables code { display: inline-block; margin: 5px 4px 0 0; padding: 3px 6px; border-radius: 4px; background: var(--surface-2); }
 .template-preview pre { margin: 8px 0 0; white-space: pre-wrap; overflow-wrap: anywhere; font-family: inherit; }
 .timeline-actions { display: flex; align-items: center; justify-content: flex-end; gap: 8px; flex-wrap: wrap; }
-.collection-receipt { --ink: #172027; --muted: #59656f; --line: #d9dfe3; color: var(--ink); background: #fff; }
+.collection-receipt,
+.account-statement {
+  --ink: #172027;
+  --muted: #59656f;
+  --line: #d9dfe3;
+  color: var(--ink);
+  background: #fff;
+  border: 1px solid #aab8c1;
+  border-radius: 8px;
+  overflow: hidden;
+  box-shadow: 0 8px 20px rgba(5, 27, 16, .12);
+}
 .collection-receipt > header { display: flex; justify-content: space-between; gap: 18px; padding-bottom: 16px; border-bottom: 2px solid #263a43; }
 .collection-receipt > header h2 { margin: 4px 0; }
 .collection-receipt > header p { margin: 0; color: #59656f; }
@@ -2481,7 +2496,6 @@ body:has([data-compensation-filter-form]) { overflow: hidden; }
 .receipt-observation, .legacy-receipt-note { margin-top: 14px; padding: 12px; background: #fff8dc; border-left: 4px solid #d3a81d; }
 .receipt-observation p, .legacy-receipt-note { white-space: pre-wrap; overflow-wrap: anywhere; }
 .receipt-thanks { margin-top: 20px; font-weight: 700; text-align: center; }
-.account-statement { --ink: #172027; --muted: #59656f; --line: #d9dfe3; color: var(--ink); background: #fff; }
 .account-statement > header { display: flex; justify-content: space-between; gap: 18px; padding-bottom: 16px; border-bottom: 2px solid #263a43; }
 .account-statement > header h2 { margin: 4px 0; }
 .account-statement > header p { margin: 0; color: #59656f; }
@@ -3680,8 +3694,8 @@ td.actions { position: relative; }
   body > .layout, #message, .no-print { display: none !important; }
   #modalRoot, .modal-backdrop { position: static; display: block; padding: 0; background: #fff; }
   .statement-modal, .receipt-modal { width: 100%; max-height: none; overflow: visible; padding: 0; border: 0; box-shadow: none; }
-  .account-statement { width: 190mm; max-width: 100%; margin: 0 auto; font-size: 11pt; }
-  .collection-receipt { width: 110mm; max-width: 100%; margin: 0 auto; font-size: 10pt; }
+  .account-statement { width: 190mm; max-width: 100%; margin: 0 auto; font-size: 11pt; border: 0; border-radius: 0; box-shadow: none; }
+  .collection-receipt { width: 110mm; max-width: 100%; margin: 0 auto; font-size: 10pt; border: 0; border-radius: 0; box-shadow: none; }
   .collection-receipt .receipt-distribution { break-inside: avoid; }
   .statement-row { break-inside: avoid; }
   body.printing-receipt > * { display: none !important; }
@@ -4252,5 +4266,5 @@ html[data-theme="dark"] {
   html[data-theme="dark"] .content :is(.credit-status.status-activo, .credit-status.status-pagado, .credit-status.status-al_dia, .lot-vigente, .lot-disponible) { color: #95e3a5; background: #143422; border-color: #316c42; }
   html[data-theme="dark"] .content :is(.credit-status.status-vence_hoy, .credit-status.status-proximo_a_vencer, .credit-status.status-fiado_bloqueado, .lot-vence_hoy, .lot-proximo_a_vencer) { color: #f3d891; background: #342a13; border-color: #8c701f; }
   html[data-theme="dark"] .content :is(.credit-status.status-vencido, .credit-status.status-inactivo, .credit-status.status-oculto, .lot-vencido) { color: #ffc4bc; background: #371d1b; border-color: #a75b55; }
-  html[data-theme="dark"] .modal :is(.collection-receipt, .account-statement) { background: #fff; color: #172027; }
+  html[data-theme="dark"] .modal :is(.collection-receipt, .account-statement) { background: #fff; color: #172027; border-color: #aab8c1; }
 }

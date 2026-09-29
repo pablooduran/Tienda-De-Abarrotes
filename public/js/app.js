@@ -82,6 +82,17 @@ function newOperationKey() {
   return window.crypto?.randomUUID?.() || `${Date.now()}-${Math.random().toString(16).slice(2)}`;
 }
 function normalizeSearch(value) { return String(value || '').trim().toLocaleLowerCase(); }
+function normalizedProviderName(value) {
+  return String(value || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .trim()
+    .toLocaleLowerCase();
+}
+function matchingStoreProvider(name) {
+  const key = normalizedProviderName(name);
+  return key ? state.proveedores.find((provider) => normalizedProviderName(provider.nombre) === key) : null;
+}
 function escapeHtml(value) {
   return String(value ?? '').replace(/[&<>"']/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char]));
 }
@@ -2716,8 +2727,37 @@ async function catalogoMaestro() {
     view.querySelector('#catalogSelectedCount').textContent = `${picker.selected.size} seleccionados`;
     if (!picker.selected.size) { selectedTarget.innerHTML = '<p class="muted">Todavía no seleccionaste productos.</p>'; return; }
     selectedTarget.innerHTML = [...picker.selected.values()].map((product) => {
-      const config = product.localConfig || { nombreLocal: product.nombre, categoriaLocal: suggestedLocalCategory(product.categoriaMaestra), idProveedor: '', proveedorSugerido: product.proveedorSugerido || '', precioCompra: '0', precioVenta: '', stockInicial: '0', stockMinimo: '5', unidadesPorPaquete: String(Number(product.unidadesPorPaquete || 1)), permiteVentaPorUnidad: Boolean(product.permiteVentaPorUnidad), permiteVentaPorPaquete: Boolean(product.permiteVentaPorPaquete), collapsed: false };
-      return `<article class="catalog-selected-item ${config.collapsed ? 'is-collapsed' : ''}" data-master-config="${product.idProductoMaestro}"><div class="catalog-selected-heading"><div><strong>${escapeHtml(product.nombre)}</strong><span>${escapeHtml(catalogSizeFor(product))}</span></div><div class="catalog-selected-actions"><button type="button" class="small secondary catalog-collapse-toggle" data-toggle-master="${product.idProductoMaestro}" aria-expanded="${config.collapsed ? 'false' : 'true'}" title="${config.collapsed ? 'Abrir datos' : 'Minimizar datos'}">${config.collapsed ? '⌄' : '⌃'}</button><button type="button" class="small danger" data-remove-master="${product.idProductoMaestro}">Quitar</button></div></div><div class="catalog-config-grid"><label>Nombre local<input name="nombreLocal" required value="${escapeHtml(config.nombreLocal)}"></label><label>Categoría local<select name="categoriaLocal">${categoryOptions(config.categoriaLocal)}</select></label><label>Proveedor ya registrado<select name="idProveedor">${options(state.proveedores, 'idProveedor', 'nombre', 'Sin proveedor', config.idProveedor)}</select></label><label>Proveedor sugerido<input name="proveedorSugerido" maxlength="100" value="${escapeHtml(config.proveedorSugerido)}" placeholder="Se agregará si no existe"></label><label>Precio de compra<input name="precioCompra" type="number" min="0" step="0.01" value="${escapeHtml(config.precioCompra)}" required></label><label>Precio de venta<input name="precioVenta" type="number" min="0.01" step="0.01" value="${escapeHtml(config.precioVenta)}" required></label><label>Stock inicial<input name="stockInicial" type="number" min="0" step="1" value="${escapeHtml(config.stockInicial)}" required></label><label>Stock mínimo<input name="stockMinimo" type="number" min="1" step="1" value="${escapeHtml(config.stockMinimo)}" required></label><label>Unidades por paquete<input name="unidadesPorPaquete" type="number" min="1" step="1" value="${escapeHtml(config.unidadesPorPaquete)}" required></label><label class="check"><input name="permiteVentaPorUnidad" type="checkbox" ${config.permiteVentaPorUnidad ? 'checked' : ''}> Vender por unidad</label><label class="check"><input name="permiteVentaPorPaquete" type="checkbox" ${config.permiteVentaPorPaquete ? 'checked' : ''}> Vender por paquete</label></div></article>`;
+      const masterProvider = product.proveedorSugerido || '';
+      const existingProvider = matchingStoreProvider(masterProvider);
+      const config = product.localConfig || {
+        nombreLocal: product.nombre,
+        categoriaLocal: suggestedLocalCategory(product.categoriaMaestra),
+        idProveedor: existingProvider?.idProveedor || '',
+        proveedorSugerido: masterProvider,
+        precioCompra: '0', precioVenta: '', stockInicial: '0', stockMinimo: '5',
+        unidadesPorPaquete: String(Number(product.unidadesPorPaquete || 1)),
+        permiteVentaPorUnidad: Boolean(product.permiteVentaPorUnidad),
+        permiteVentaPorPaquete: Boolean(product.permiteVentaPorPaquete), collapsed: false
+      };
+      const chosenProvider = state.proveedores.find((provider) => String(provider.idProveedor) === String(config.idProveedor));
+      const providerLabel = chosenProvider?.nombre || config.proveedorSugerido || 'Sin proveedor sugerido';
+      const packageUnitsHidden = config.permiteVentaPorPaquete ? '' : ' hidden';
+      return `<article class="catalog-selected-item ${config.collapsed ? 'is-collapsed' : ''}" data-master-config="${product.idProductoMaestro}">
+        <div class="catalog-selected-heading"><div><strong>${escapeHtml(product.nombre)}</strong><span>${escapeHtml(catalogSizeFor(product))}</span></div><div class="catalog-selected-actions"><button type="button" class="small secondary catalog-collapse-toggle" data-toggle-master="${product.idProductoMaestro}" aria-expanded="${config.collapsed ? 'false' : 'true'}" title="${config.collapsed ? 'Abrir datos' : 'Minimizar datos'}">${config.collapsed ? '⌄' : '⌃'}</button><button type="button" class="small danger" data-remove-master="${product.idProductoMaestro}">Quitar</button></div></div>
+        <div class="catalog-config-grid">
+          <label>Nombre local<input name="nombreLocal" required value="${escapeHtml(config.nombreLocal)}"></label>
+          <label>Categoría local<select name="categoriaLocal">${categoryOptions(config.categoriaLocal)}</select></label>
+          <div class="catalog-provider-summary"><label>Proveedor<input value="${escapeHtml(providerLabel)}" readonly></label><button type="button" class="small secondary" data-change-provider="${product.idProductoMaestro}" aria-expanded="false">Cambiar proveedor</button></div>
+          <div class="catalog-provider-change" data-provider-change hidden><label>Proveedor registrado<select name="idProveedor">${options(state.proveedores, 'idProveedor', 'nombre', 'Mantener proveedor mostrado', config.idProveedor)}</select></label><label>Proveedor nuevo o sugerido<input name="proveedorSugerido" maxlength="100" value="${escapeHtml(config.proveedorSugerido)}" placeholder="Se registrará automáticamente si no existe"></label></div>
+          <label>Precio de compra<input name="precioCompra" type="number" min="0" step="0.01" value="${escapeHtml(config.precioCompra)}" required></label>
+          <label>Precio de venta<input name="precioVenta" type="number" min="0.01" step="0.01" value="${escapeHtml(config.precioVenta)}" required></label>
+          <label>Stock inicial<input name="stockInicial" type="number" min="0" step="1" value="${escapeHtml(config.stockInicial)}" required></label>
+          <label>Stock mínimo<input name="stockMinimo" type="number" min="1" step="1" value="${escapeHtml(config.stockMinimo)}" required></label>
+          <label class="catalog-package-units" data-package-units${packageUnitsHidden}>Unidades por paquete<input name="unidadesPorPaquete" type="number" min="2" step="1" value="${escapeHtml(config.unidadesPorPaquete)}" ${config.permiteVentaPorPaquete ? 'required' : ''}></label>
+          <label class="check"><input name="permiteVentaPorUnidad" type="checkbox" ${config.permiteVentaPorUnidad ? 'checked' : ''}> Vender por unidad</label>
+          <label class="check"><input class="catalog-package-sale-toggle" name="permiteVentaPorPaquete" type="checkbox" ${config.permiteVentaPorPaquete ? 'checked' : ''}> Vender por paquete</label>
+        </div>
+      </article>`;
     }).join('');
     selectedTarget.querySelectorAll('[data-remove-master]').forEach((button) => button.addEventListener('click', () => { picker.selected.delete(Number(button.dataset.removeMaster)); renderSelected(); renderResults(); }));
     selectedTarget.querySelectorAll('[data-toggle-master]').forEach((button) => button.addEventListener('click', () => {
@@ -2728,6 +2768,24 @@ async function catalogoMaestro() {
       card.classList.toggle('is-collapsed', collapsed);
       product.localConfig = { ...(product.localConfig || {}), collapsed };
       button.textContent = collapsed ? '⌄' : '⌃'; button.title = collapsed ? 'Abrir datos' : 'Minimizar datos'; button.setAttribute('aria-expanded', String(!collapsed));
+    }));
+    selectedTarget.querySelectorAll('[data-change-provider]').forEach((button) => button.addEventListener('click', () => {
+      const controls = button.closest('[data-master-config]')?.querySelector('[data-provider-change]');
+      if (!controls) return;
+      const expanded = controls.hidden;
+      controls.hidden = !expanded;
+      button.setAttribute('aria-expanded', String(expanded));
+      button.textContent = expanded ? 'Mantener proveedor' : 'Cambiar proveedor';
+    }));
+    selectedTarget.querySelectorAll('.catalog-package-sale-toggle').forEach((toggle) => toggle.addEventListener('change', () => {
+      const card = toggle.closest('[data-master-config]');
+      const unitsField = card?.querySelector('[data-package-units]');
+      const units = card?.querySelector('[name="unidadesPorPaquete"]');
+      if (!unitsField || !units) return;
+      unitsField.hidden = !toggle.checked;
+      units.required = toggle.checked;
+      if (!toggle.checked) units.value = '1';
+      else if (Number(units.value) < 2) units.value = '2';
     }));
   };
   const renderResults = () => {
@@ -2862,7 +2920,9 @@ function renderPosPaymentFields() {
   if (!fields) return;
   const { total } = posTotals();
   if (mode === 'efectivo') {
-    fields.innerHTML = `<label>Efectivo recibido<input id="posCashReceived" data-auto-cash="true" type="number" min="0" step="0.01" value="${money(total)}"></label>`;
+    fields.innerHTML = `
+      <button type="button" class="secondary" id="posCashReceivedToggle" aria-expanded="false" aria-controls="posCashReceivedControl">Ingresar efectivo recibido</button>
+      <div id="posCashReceivedControl" hidden><label>Efectivo recibido<input id="posCashReceived" type="number" min="0" step="0.01" inputmode="decimal" placeholder="Solo si recibes un monto mayor"></label><small class="hint">Si no lo ingresas, se toma el total exacto. Úsalo para calcular el cambio.</small></div>`;
   } else if (mode === 'qr') {
     fields.innerHTML = `<label>Referencia QR (opcional)<input id="posQrReference" maxlength="120" placeholder="Número o nota del pago"></label>`;
   } else if (mode === 'mixto') {
@@ -2875,9 +2935,15 @@ function renderPosPaymentFields() {
     fields.innerHTML = '<p class="pos-credit-note" id="posCreditNote"></p>';
   }
   fields.querySelectorAll('input').forEach((input) => input.addEventListener('input', () => {
-    if (input.id === 'posCashReceived') input.dataset.autoCash = 'false';
     renderPosPaymentSummary();
   }));
+  fields.querySelector('#posCashReceivedToggle')?.addEventListener('click', () => {
+    const control = fields.querySelector('#posCashReceivedControl');
+    const expanded = control.hidden;
+    control.hidden = !expanded;
+    fields.querySelector('#posCashReceivedToggle').setAttribute('aria-expanded', String(expanded));
+    if (expanded) fields.querySelector('#posCashReceived')?.focus();
+  });
   renderPosPaymentSummary();
   updatePosCreditNote();
 }
@@ -2897,7 +2963,8 @@ function posPaymentDraft() {
   let cashReceived = 0;
   if (mode === 'efectivo') {
     if (total > 0) payments.push({ metodoPago: 'efectivo', monto: total });
-    cashReceived = Number(document.getElementById('posCashReceived')?.value || 0);
+    const cashField = document.getElementById('posCashReceived');
+    cashReceived = cashField?.value === '' || !cashField ? total : Math.max(0, Number(cashField.value || 0));
   } else if (mode === 'qr') {
     if (total > 0) payments.push({ metodoPago: 'qr', monto: total, referencia: document.getElementById('posQrReference')?.value || '' });
   } else if (mode === 'mixto') {
@@ -2915,8 +2982,6 @@ function renderPosPaymentSummary() {
   const summary = document.getElementById('posPaymentSummary');
   if (!summary) return;
   const totals = posTotals();
-  const automaticCash = document.querySelector('#posCashReceived[data-auto-cash="true"]');
-  if (automaticCash) automaticCash.value = money(totals.total);
   const payment = posPaymentDraft();
   document.getElementById('posSubtotal').textContent = `Bs ${money(totals.subtotal)}`;
   document.getElementById('posDiscountTotal').textContent = totals.discount > 0
@@ -2928,8 +2993,8 @@ function renderPosPaymentSummary() {
   document.getElementById('posDiscountRow').hidden = totals.discount <= 0;
   const frequentCustomer = Boolean(document.getElementById('posClient')?.value);
   summary.innerHTML = frequentCustomer
-    ? `<span>Pagado <strong>Bs ${money(payment.paid)}</strong></span>${payment.balance > 0 ? `<span>Por cobrar <strong class="text-danger">Bs ${money(payment.balance)}</strong></span>` : ''}`
-    : `<span>Pago de esta venta <strong>Bs ${money(totals.total)}</strong></span>`;
+    ? `<span>Pagado <strong>Bs ${money(payment.paid)}</strong></span>${payment.change > 0 ? `<span>Cambio <strong>Bs ${money(payment.change)}</strong></span>` : ''}${payment.balance > 0 ? `<span>Por cobrar <strong class="text-danger">Bs ${money(payment.balance)}</strong></span>` : ''}`
+    : `<span>Pago de esta venta <strong>Bs ${money(totals.total)}</strong></span>${payment.change > 0 ? `<span>Cambio <strong>Bs ${money(payment.change)}</strong></span>` : ''}`;
   creditUi().refreshPosCredit(payment.balance);
 }
 
@@ -3100,6 +3165,17 @@ function setPosCustomerMode(mode) {
   } else {
     selected.focus();
   }
+  updatePosPaymentOptions(frequent);
+}
+
+function updatePosPaymentOptions(frequent) {
+  const paymentMode = document.getElementById('posPaymentMode');
+  const creditOption = paymentMode?.querySelector('option[value="fiado"]');
+  if (!paymentMode || !creditOption) return;
+  creditOption.hidden = !frequent;
+  creditOption.disabled = !frequent;
+  if (!frequent && paymentMode.value === 'fiado') paymentMode.value = 'efectivo';
+  renderPosPaymentFields();
 }
 
 async function loadPosFrequentCustomers() {
@@ -3194,7 +3270,10 @@ async function ventas() {
   });
   document.getElementById('posCategory').addEventListener('change', () => loadPosProducts());
   view.querySelectorAll('[data-pos-view]').forEach((button) => button.addEventListener('click', () => loadPosProducts(button.dataset.posView)));
-  document.getElementById('posPaymentMode').addEventListener('change', renderPosPaymentFields);
+  document.getElementById('posPaymentMode').addEventListener('change', (event) => {
+    if (event.target.value === 'fiado' && !document.getElementById('posClient').value) setPosCustomerMode('frecuente');
+    else renderPosPaymentFields();
+  });
   document.getElementById('posDiscountPercentage').addEventListener('input', renderPosPaymentSummary);
   document.getElementById('posDiscountToggle').addEventListener('click', () => {
     const control = document.getElementById('posDiscountControl');
@@ -3212,6 +3291,7 @@ async function ventas() {
   document.getElementById('posForm').addEventListener('submit', submitPosSale);
   renderPosCart();
   renderPosPaymentFields();
+  updatePosPaymentOptions(false);
   loadPosFrequentCustomers();
   await loadPosProducts('recientes');
 }
