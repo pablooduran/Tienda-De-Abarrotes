@@ -21,10 +21,6 @@ let debtFocus = null;
 let posCart = [];
 let posOperationKey = null;
 let posSearchTimer = null;
-let posClientSearchTimer = null;
-let posClientSearchRequest = 0;
-let posClientSearchOptions = [];
-let posClientActiveIndex = -1;
 let lastBarcodeScan = { value: '', at: 0 };
 let inventoryUi = { level: 'simple', activeTab: 'resumen', rankingMode: 'ingresos', movementClass: '', page: 1, request: 0, data: {} };
 let reportRequest = 0;
@@ -2926,11 +2922,14 @@ function renderPosPaymentSummary() {
   document.getElementById('posDiscountTotal').textContent = totals.discount > 0
     ? `${money(totals.discountPercentage)}% · Bs ${money(totals.discount)}`
     : '0.00% · Bs 0.00';
+  document.getElementById('posDiscountToggle').textContent = totals.discount > 0 ? 'Editar descuento' : 'Agregar descuento';
   document.getElementById('posTotal').textContent = `Bs ${money(totals.total)}`;
-  summary.innerHTML = `
-    <span>Pagado <strong>Bs ${money(payment.paid)}</strong></span>
-    <span>Saldo <strong class="${payment.balance > 0 ? 'text-danger' : 'text-ok'}">Bs ${money(payment.balance)}</strong></span>
-    <span>Cambio <strong>Bs ${money(payment.change)}</strong></span>`;
+  document.getElementById('posSubtotalRow').hidden = totals.discount <= 0;
+  document.getElementById('posDiscountRow').hidden = totals.discount <= 0;
+  const frequentCustomer = Boolean(document.getElementById('posClient')?.value);
+  summary.innerHTML = frequentCustomer
+    ? `<span>Pagado <strong>Bs ${money(payment.paid)}</strong></span>${payment.balance > 0 ? `<span>Por cobrar <strong class="text-danger">Bs ${money(payment.balance)}</strong></span>` : ''}`
+    : `<span>Pago de esta venta <strong>Bs ${money(totals.total)}</strong></span>`;
   creditUi().refreshPosCredit(payment.balance);
 }
 
@@ -3086,106 +3085,43 @@ async function submitPosSale(event) {
   }
 }
 
-function posCustomerLabel(customer) {
-  return `${customer.nombre}${customer.telefono ? ` · ${customer.telefono}` : ''}`;
-}
-
-function setPosCustomerSelection(customer = null) {
+function setPosCustomerMode(mode) {
+  const frequent = mode === 'frecuente';
+  const picker = document.getElementById('posFrequentClientPicker');
   const selected = document.getElementById('posClient');
-  const search = document.getElementById('posClientSearch');
-  const summary = document.getElementById('posClientSelection');
-  const clear = document.getElementById('posClientClear');
-  if (!selected || !search || !summary || !clear) return;
-  selected.value = customer?.idCliente ? String(customer.idCliente) : '';
-  search.value = customer ? posCustomerLabel(customer) : '';
-  summary.textContent = customer ? `Cliente seleccionado: ${posCustomerLabel(customer)}` : 'Cliente ocasional';
-  clear.hidden = !customer;
-  clear.disabled = !customer;
-  posClientSearchOptions = [];
-  posClientActiveIndex = -1;
-  renderPosCustomerResults();
-  selected.dispatchEvent(new Event('change'));
+  if (!picker || !selected) return;
+  picker.hidden = !frequent;
+  document.querySelectorAll('[data-pos-customer-mode]').forEach((button) => {
+    button.setAttribute('aria-pressed', String(button.dataset.posCustomerMode === mode));
+  });
+  if (!frequent) {
+    selected.value = '';
+    selected.dispatchEvent(new Event('change'));
+  } else {
+    selected.focus();
+  }
 }
 
-function clearPosCustomerSelection() {
+async function loadPosFrequentCustomers() {
   const selected = document.getElementById('posClient');
-  const summary = document.getElementById('posClientSelection');
-  const clear = document.getElementById('posClientClear');
-  if (!selected || !summary || !clear) return;
-  selected.value = '';
-  summary.textContent = 'Cliente ocasional';
-  clear.hidden = true;
-  clear.disabled = true;
-  selected.dispatchEvent(new Event('change'));
-}
-
-function renderPosCustomerResults({ loading = false, message = '' } = {}) {
-  const search = document.getElementById('posClientSearch');
-  const results = document.getElementById('posClientResults');
-  const status = document.getElementById('posClientStatus');
-  if (!search || !results || !status) return;
-  if (loading) {
-    results.hidden = false;
-    results.innerHTML = UiPatterns.skeleton('rows', 2);
-    status.textContent = 'Buscando clientes...';
-    search.setAttribute('aria-expanded', 'true');
-    return;
-  }
-  if (message) {
-    results.hidden = false;
-    results.innerHTML = `<p class="pos-customer-empty">${escapeHtml(message)}</p>`;
-    status.textContent = message;
-    search.setAttribute('aria-expanded', 'true');
-    search.removeAttribute('aria-activedescendant');
-    return;
-  }
-  if (!posClientSearchOptions.length) {
-    results.hidden = true;
-    results.innerHTML = '';
-    status.textContent = '';
-    search.setAttribute('aria-expanded', 'false');
-    search.removeAttribute('aria-activedescendant');
-    return;
-  }
-  results.hidden = false;
-  results.innerHTML = posClientSearchOptions.map((customer, index) => `<button type="button" role="option" id="pos-client-option-${index}" aria-selected="${index === posClientActiveIndex}" class="pos-customer-option ${index === posClientActiveIndex ? 'active' : ''}" data-pos-client-option="${index}"><strong>${escapeHtml(customer.nombre)}</strong><span>${escapeHtml(customer.telefono || 'Sin teléfono')}</span></button>`).join('');
-  results.querySelectorAll('[data-pos-client-option]').forEach((button) => button.addEventListener('click', () => {
-    setPosCustomerSelection(posClientSearchOptions[Number(button.dataset.posClientOption)]);
-  }));
-  status.textContent = `${posClientSearchOptions.length} cliente${posClientSearchOptions.length === 1 ? '' : 's'} encontrado${posClientSearchOptions.length === 1 ? '' : 's'}.`;
-  search.setAttribute('aria-expanded', 'true');
-  if (posClientActiveIndex >= 0) search.setAttribute('aria-activedescendant', `pos-client-option-${posClientActiveIndex}`);
-  else search.removeAttribute('aria-activedescendant');
-}
-
-async function searchPosCustomers(query) {
-  const normalized = String(query || '').trim();
-  const request = ++posClientSearchRequest;
-  if (normalized.length < 2) {
-    posClientSearchOptions = [];
-    posClientActiveIndex = -1;
-    renderPosCustomerResults({ message: normalized ? 'Escribe al menos 2 caracteres para buscar.' : '' });
-    return;
-  }
-  renderPosCustomerResults({ loading: true });
+  const status = document.getElementById('posFrequentClientStatus');
+  if (!selected || !status) return;
+  selected.disabled = true;
+  status.textContent = 'Cargando clientes registrados…';
   try {
-    const data = await api(`/api/pos/clientes?q=${encodeURIComponent(normalized)}&page=1&limit=15`);
-    if (request !== posClientSearchRequest) return;
-    posClientSearchOptions = data.clientes || [];
-    posClientActiveIndex = -1;
-    renderPosCustomerResults({ message: posClientSearchOptions.length ? '' : 'No encontramos clientes con esos datos.' });
+    const customers = await api('/api/clientes');
+    state = { ...state, clientes: customers };
+    selected.innerHTML = `<option value="">Elige un cliente</option>${customers.map((customer) => `<option value="${customer.idCliente}">${escapeHtml(customer.nombre)}${customer.telefono ? ` · ${escapeHtml(customer.telefono)}` : ''}</option>`).join('')}`;
+    selected.disabled = false;
+    status.textContent = customers.length ? `${customers.length} cliente${customers.length === 1 ? '' : 's'} disponible${customers.length === 1 ? '' : 's'}.` : 'Aún no tienes clientes registrados.';
   } catch (error) {
-    if (request !== posClientSearchRequest) return;
-    posClientSearchOptions = [];
-    posClientActiveIndex = -1;
-    renderPosCustomerResults({ message: UiPatterns.messageFor(error) });
+    selected.innerHTML = '<option value="">No se pudieron cargar los clientes</option>';
+    status.textContent = UiPatterns.messageFor(error);
   }
 }
 
 async function ventas() {
   posOperationKey = posOperationKey || newOperationKey();
-  posClientSearchOptions = [];
-  posClientActiveIndex = -1;
   view.innerHTML = `
     <section class="sales-section-heading"><div><h3>Registrar venta</h3><p>Agrega productos, confirma la forma de cobro y registra la venta sin pasos innecesarios.</p></div></section>
     <form id="posForm" class="pos-layout sales-pos-layout">
@@ -3206,23 +3142,26 @@ async function ventas() {
         <div class="cart-head"><div><h3>Venta actual</h3><p class="muted" id="posCartCount">0 productos</p></div></div>
         <div id="posCartItems" class="pos-cart-items"></div>
         <div class="pos-customer-picker">
-          <label for="posClientSearch">Cliente opcional</label>
-          <div class="pos-customer-search-control"><input id="posClientSearch" type="search" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="posClientResults" autocomplete="off" placeholder="Busca por nombre o teléfono"><button type="button" class="secondary" id="posClientClear" hidden disabled>Limpiar</button></div>
-          <input id="posClient" type="hidden" value="">
-          <p id="posClientSelection" class="pos-customer-selection">Cliente ocasional</p>
-          <p id="posClientStatus" class="sr-only" role="status" aria-live="polite"></p>
-          <div id="posClientResults" class="pos-customer-results" role="listbox" aria-label="Resultados de clientes" hidden></div>
+          <span>Cliente</span>
+          <div class="pos-customer-mode" role="group" aria-label="Tipo de cliente">
+            <button type="button" class="secondary" data-pos-customer-mode="ocasional" aria-pressed="true">Cliente ocasional</button>
+            <button type="button" class="secondary" data-pos-customer-mode="frecuente" aria-pressed="false">Cliente frecuente</button>
+          </div>
+          <div id="posFrequentClientPicker" class="pos-frequent-client-picker" hidden>
+            <label for="posClient">Elige un cliente registrado<select id="posClient" disabled><option value="">Cargando clientes…</option></select></label>
+            <p id="posFrequentClientStatus" class="pos-customer-selection" aria-live="polite"></p>
+          </div>
         </div>
         <div id="posCreditSummary" class="pos-credit-summary" aria-live="polite"></div>
         <div class="pos-charge-box">
-          <label>Descuento general (%)<input id="posDiscountPercentage" type="number" min="0" max="100" step="0.01" value="0" inputmode="decimal" aria-describedby="posDiscountHelp"></label>
-          <small id="posDiscountHelp" class="hint">Se calcula automáticamente sobre el subtotal.</small>
+          <button type="button" class="secondary" id="posDiscountToggle" aria-expanded="false" aria-controls="posDiscountControl">Agregar descuento</button>
+          <div id="posDiscountControl" hidden><label>Descuento general (%)<input id="posDiscountPercentage" type="number" min="0" max="100" step="0.01" value="0" inputmode="decimal" aria-describedby="posDiscountHelp"></label><small id="posDiscountHelp" class="hint">Se calcula automáticamente sobre el subtotal.</small></div>
           <label>Forma de cobro<select id="posPaymentMode">
             <option value="efectivo">Efectivo</option><option value="qr">QR</option>
             <option value="mixto">Mixto o parcial</option><option value="fiado">Totalmente fiado</option>
           </select></label>
           <div id="posPaymentFields" class="pos-payment-fields"></div>
-          <div class="pos-total-grid"><span>Subtotal <strong id="posSubtotal">Bs 0.00</strong></span><span>Descuento <strong id="posDiscountTotal">0.00% · Bs 0.00</strong></span><span>Total <strong id="posTotal">Bs 0.00</strong></span></div>
+          <div class="pos-total-grid"><span id="posSubtotalRow" hidden>Subtotal <strong id="posSubtotal">Bs 0.00</strong></span><span id="posDiscountRow" hidden>Descuento <strong id="posDiscountTotal">0.00% · Bs 0.00</strong></span><span>Total <strong id="posTotal">Bs 0.00</strong></span></div>
           <div id="posPaymentSummary" class="pos-payment-summary"></div>
         </div>
         <button type="submit" id="posSubmit" class="wide-button">Registrar venta</button>
@@ -3257,53 +3196,23 @@ async function ventas() {
   view.querySelectorAll('[data-pos-view]').forEach((button) => button.addEventListener('click', () => loadPosProducts(button.dataset.posView)));
   document.getElementById('posPaymentMode').addEventListener('change', renderPosPaymentFields);
   document.getElementById('posDiscountPercentage').addEventListener('input', renderPosPaymentSummary);
+  document.getElementById('posDiscountToggle').addEventListener('click', () => {
+    const control = document.getElementById('posDiscountControl');
+    const expanded = control.hidden;
+    control.hidden = !expanded;
+    document.getElementById('posDiscountToggle').setAttribute('aria-expanded', String(expanded));
+    if (expanded) document.getElementById('posDiscountPercentage').focus();
+  });
   document.getElementById('posClient').addEventListener('change', () => {
     creditUi().resetPosCredit();
     creditUi().refreshPosCredit(posPaymentDraft().balance);
     updatePosCreditNote();
   });
-  const clientSearch = document.getElementById('posClientSearch');
-  clientSearch.addEventListener('input', (event) => {
-    const query = event.target.value;
-    if (document.getElementById('posClient').value) clearPosCustomerSelection();
-    clearTimeout(posClientSearchTimer);
-    posClientSearchTimer = setTimeout(() => searchPosCustomers(query), 250);
-  });
-  clientSearch.addEventListener('keydown', (event) => {
-    if (event.key === 'Escape') {
-      clearTimeout(posClientSearchTimer);
-      posClientSearchRequest += 1;
-      posClientSearchOptions = [];
-      posClientActiveIndex = -1;
-      renderPosCustomerResults();
-      return;
-    }
-    if (!posClientSearchOptions.length) return;
-    if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
-      event.preventDefault();
-      const direction = event.key === 'ArrowDown' ? 1 : -1;
-      posClientActiveIndex = (posClientActiveIndex + direction + posClientSearchOptions.length) % posClientSearchOptions.length;
-      renderPosCustomerResults();
-      return;
-    }
-    if (event.key === 'Enter' && posClientActiveIndex >= 0) {
-      event.preventDefault();
-      setPosCustomerSelection(posClientSearchOptions[posClientActiveIndex]);
-    }
-  });
-  document.getElementById('posClientClear').addEventListener('click', () => {
-    clientSearch.value = '';
-    clearPosCustomerSelection();
-    clearTimeout(posClientSearchTimer);
-    posClientSearchRequest += 1;
-    posClientSearchOptions = [];
-    posClientActiveIndex = -1;
-    renderPosCustomerResults();
-    clientSearch.focus();
-  });
+  view.querySelectorAll('[data-pos-customer-mode]').forEach((button) => button.addEventListener('click', () => setPosCustomerMode(button.dataset.posCustomerMode)));
   document.getElementById('posForm').addEventListener('submit', submitPosSale);
   renderPosCart();
   renderPosPaymentFields();
+  loadPosFrequentCustomers();
   await loadPosProducts('recientes');
 }
 async function compras() { operationView('compras'); }

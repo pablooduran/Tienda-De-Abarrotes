@@ -37,7 +37,8 @@
       posBalance: 0,
       posRequest: 0,
       collectionRequest: 0,
-      collectionSearchTimer: null
+      collectionSearchTimer: null,
+      collectionPlanNoticeHidden: false
     };
 
     const state = () => getState();
@@ -798,7 +799,7 @@
         const total = Number(data.total || rows.length);
         view.innerHTML = `<div class="credit-heading"><div><span class="eyebrow">Cobranza</span><h3>Deudas y compromisos en un solo lugar</h3><p>Los cobros se registran sin volver a afectar inventario.</p></div><div class="actions">${can('recordatorios_fiado') ? '<button type="button" class="secondary" data-manage-templates>Plantillas de cobranza</button>' : ''}${can('limites_credito') ? '<button type="button" class="secondary" data-credit-config>Configurar credito</button>' : ''}${can('exportacion_clientes_fiados') ? `<button type="button" class="secondary" data-export-debts ${readOnly() ? 'disabled title="La suscripcion debe estar activa para exportar."' : ''}>Exportar fiados</button>` : ''}</div></div>
           <div class="cards collection-summary-cards"><article class="card"><span>Deuda total filtrada</span><strong>Bs ${money(summary.deudaTotal || 0)}</strong></article><article class="card"><span>Vencidos filtrados</span><strong>${Number(summary.vencidos || 0)}</strong></article><article class="card"><span>Vence hoy</span><strong>${Number(summary.venceHoy || 0)}</strong></article><article class="card"><span>Proximos</span><strong>${Number(summary.proximos || 0)}</strong></article><article class="card"><span>Sin fecha</span><strong>${Number(summary.sinFecha || 0)}</strong></article></div>
-          ${advancedAlerts ? '' : '<div class="panel plan-note"><strong>Tu plan actual no incluye alertas ni recordatorios por WhatsApp.</strong><p>El pago y consulta de deuda existente siguen disponibles.</p></div>'}
+          ${advancedAlerts || ui.collectionPlanNoticeHidden ? '' : '<div class="panel collection-plan-notice" role="status"><div><strong>Tu plan actual no incluye alertas ni recordatorios por WhatsApp.</strong><p>El pago y consulta de deuda existente siguen disponibles.</p></div><button type="button" class="secondary collection-plan-notice-dismiss" data-dismiss-collection-plan-notice>Ocultar</button></div>'}
           ${readOnly() ? '<div class="panel plan-note"><strong>Suscripcion inactiva: solo consulta.</strong><p>Puedes revisar clientes y deuda historica, pero no registrar pagos ni cambios hasta renovar.</p></div>' : ''}
           ${collectionFiltersMarkup()}<p class="hint collection-page-count">Mostrando ${rows.length} de ${total} resultados filtrados.</p><div id="collectionResults">${collectionRowsMarkup(rows)}</div>${pagerMarkup(Number(data.page || data.pagina || ui.collectionPage), Number(data.pageSize || data.limite || 20), total, 'collection')}`;
         wireCollectionView(rows);
@@ -810,6 +811,10 @@
     }
 
     function wireCollectionView(rows) {
+      view.querySelector('[data-dismiss-collection-plan-notice]')?.addEventListener('click', (event) => {
+        ui.collectionPlanNoticeHidden = true;
+        event.currentTarget.closest('.collection-plan-notice')?.remove();
+      });
       view.querySelector('[data-credit-config]')?.addEventListener('click', openCreditConfiguration);
       view.querySelector('[data-manage-templates]')?.addEventListener('click', openTemplateManager);
       view.querySelector('[data-export-debts]:not([disabled])')?.addEventListener('click', (event) => {

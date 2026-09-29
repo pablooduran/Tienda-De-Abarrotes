@@ -1523,26 +1523,11 @@ tr.low-stock { background: var(--warn); }
   gap: 10px;
 }
 .pos-customer-picker { position: relative; display: grid; gap: 7px; }
-.pos-customer-search-control { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; }
+.pos-customer-mode { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.pos-customer-mode button { color: var(--muted); background: var(--surface); }
+.pos-customer-mode button[aria-pressed="true"] { color: #fff; border-color: var(--brand); background: var(--brand); }
+.pos-frequent-client-picker { display: grid; gap: 5px; }
 .pos-customer-selection { margin: 0; color: var(--muted); font-size: 13px; }
-.pos-customer-results {
-  position: absolute;
-  z-index: 4;
-  top: 76px;
-  left: 0;
-  right: 0;
-  max-height: 238px;
-  overflow-y: auto;
-  padding: 6px;
-  border: 1px solid var(--line);
-  border-radius: 6px;
-  background: #fff;
-  box-shadow: 0 8px 18px rgba(25, 43, 38, .14);
-}
-.pos-customer-option { display: grid; width: 100%; gap: 2px; padding: 9px 10px; color: var(--ink); text-align: left; background: #fff; border: 0; border-radius: 4px; }
-.pos-customer-option:hover, .pos-customer-option.active { color: var(--ink); background: #edf5f1; }
-.pos-customer-option span, .pos-customer-empty { color: var(--muted); font-size: 13px; }
-.pos-customer-empty { margin: 6px; }
 .pos-charge-box {
   display: grid;
   gap: 10px;
@@ -2409,6 +2394,19 @@ body:has([data-compensation-filter-form]) { overflow: hidden; }
 .plan-note,
 .readonly-note { border-left: 4px solid #d3a72b; background: #fffbeb; }
 .plan-note p, .readonly-note p { margin-bottom: 0; }
+.collection-plan-notice {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  border-color: #d3a72b;
+  border-left: 4px solid #d3a72b;
+  color: #5f4800;
+  background: #fff8dc;
+}
+.collection-plan-notice strong { color: inherit; }
+.collection-plan-notice p { margin: 10px 0 0; color: inherit; }
+.collection-plan-notice-dismiss { flex: 0 0 auto; }
 .profile-heading h3 { margin: 4px 0; }
 .profile-heading p { margin: 0; color: var(--muted); }
 .profile-actions,
@@ -4153,6 +4151,9 @@ html[data-theme="dark"] {
   html[data-theme="dark"] .subscription-warning,
   html[data-theme="dark"] .pos-credit-warning,
   html[data-theme="dark"] .overdue-confirmation { color: #f3d891; background: #342a13; border-color: #8c701f; }
+  html[data-theme="dark"] .collection-plan-notice { color: #ffebad; background: #3d300f; border-color: #d3a72b; }
+  html[data-theme="dark"] .collection-plan-notice-dismiss { color: #ffebad; border-color: #d3a72b; background: #4a3a0f; }
+  html[data-theme="dark"] .collection-plan-notice-dismiss:hover { color: #fff7d6; background: #5a4714; }
   html[data-theme="dark"] .subscription-blocked { color: #ffc4bc; background: #371d1b; border-color: #a75b55; }
   html[data-theme="dark"] .financial-cards .metric-card.negative { background: #261614; }
 }
