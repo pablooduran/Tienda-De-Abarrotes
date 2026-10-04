@@ -105,6 +105,7 @@ body {
   width: 38px;
   height: 38px;
 }
+.navigation-toggle[hidden] { display: none !important; }
 .store-mark img {
   display: block;
   width: 100%;
@@ -2402,6 +2403,13 @@ body:has([data-compensation-filter-form]) { overflow: hidden; }
 .profile-heading p { margin: 0; color: var(--muted); }
 .profile-actions,
 .profile-tabs { display: flex; flex-wrap: wrap; gap: 8px; margin: 14px 0; }
+.customer-debt-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin: 18px 0 10px; }
+.customer-debt-heading h4 { margin: 0; }
+.customer-debt-heading p { margin: 4px 0 0; }
+.customer-debt-list { display: grid; gap: 8px; }
+.customer-debt-item { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); }
+.customer-debt-item div { display: grid; gap: 3px; }
+.customer-debt-item span { color: var(--muted); font-size: 13px; }
 .profile-tabs { padding-bottom: 10px; border-bottom: 1px solid var(--line); }
 .profile-tabs button.active { background: var(--brand); }
 .profile-summary { margin-bottom: 14px; }
@@ -3218,6 +3226,7 @@ td.actions { position: relative; }
   .credit-filter-actions, .credit-pagination, .profile-actions, .profile-tabs,
   .timeline-row, .statement-row, .account-statement > header, .template-row,
   .collection-receipt > header, .receipt-details { display: grid; grid-template-columns: 1fr; }
+  .customer-debt-heading, .customer-debt-item { display: grid; grid-template-columns: 1fr; }
   .credit-filter-actions button, .credit-pagination button, .profile-actions button, .profile-tabs button { width: 100%; }
   .account-statement > header > div:last-child { text-align: left; }
   .collection-receipt > header > div:last-child { text-align: left; }

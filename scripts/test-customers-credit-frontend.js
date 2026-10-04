@@ -40,21 +40,17 @@ check('Cobranza no promociona el plan avanzado legado',
     'Tu plan actual no incluye alertas ni recordatorios por WhatsApp.',
     'El pago y consulta de deuda existente siguen disponibles.'
   ]));
-check('Cobro individual y de varias deudas se distinguen sin exponer claves tecnicas',
-  includesAll(creditJs, [
-    'data-debt-pay="${row.idFiado}">Pagar esta deuda',
-    'data-customer-pay-accum="${row.idCliente}">Pagar varias deudas',
-    'Este pago se aplicara solo a la deuda seleccionada.',
-    'Este pago se repartira entre las deudas del cliente, empezando por las mas antiguas.',
-    'puedes intentar de nuevo desde esta ventana sin duplicar el cobro'
-  ]) && !creditJs.includes('La operacion conserva la misma clave durante un reintento'));
-check('Formulario y ficha aclaran referencia, observacion y credito', includesAll(creditJs, [
-  'Referencia (opcional)<input name="referencia"',
-  'Aparece en el comprobante.',
-  'Observacion (opcional)<textarea name="observacion"',
-  'Tambien aparece en el comprobante.',
-  'El credito disponible es lo que queda de ese limite tras restar la deuda actual.'
+check('Cobranza agrupa por cliente y permite elegir deudas concretas', includesAll(creditJs, [
+  'groupedCollectionRows', 'data-customer-debts="${row.idCliente}"',
+  'Elige una deuda para pagarla, o registra un pago para todas.',
+  'data-profile-pay-all', 'data-profile-pay-debt'
 ]));
+check('Pago de deuda usa formulario mínimo', includesAll(creditJs, [
+  'Monto pagado<input name="monto"', 'Forma de pago<select name="metodoPago"',
+  "['efectivo', 'qr']", 'montoRecibido: method === \'efectivo\' ? money(amount) : null'
+]) && !creditJs.includes('name="referencia"')
+  && !creditJs.includes('name="observacion"')
+  && !creditJs.includes('name="cambioVisual"'));
 check('Endpoint de segmentacion exige permisos basico y avanzado',
   creditRoutes.includes("'/clientes/segmentacion'")
   && creditRoutes.indexOf("requirePlanFeature('clientes_basico')", creditRoutes.indexOf("'/clientes/segmentacion'")) > 0
@@ -132,7 +128,7 @@ check('Servicio central preserva el historial', creditService.includes('async fu
 check('POS excluye y valida clientes ocultos', posRoutes.includes('FROM cliente WHERE idTienda=? AND activo=1')
   && posService.includes("lockCustomer(connection, idTienda, idCliente, { requireActive: true })"));
 check('Cobranza identifica clientes ocultos sin perder pagos', creditRoutes.includes('c.activo clienteActivo')
-  && creditJs.includes('row.clienteActivo') && creditJs.includes('data-debt-pay'));
+  && creditJs.includes('row.clienteActivo') && creditJs.includes('data-customer-debts'));
 check('Codigo visual heredado de clientes ocultos retirado',
   !appJs.includes('showHiddenClients') && !appJs.includes('data-restore-client'));
 check('No envia idTienda', !/idTienda\s*:/.test(creditJs));
@@ -143,7 +139,7 @@ check('Clave de operacion estable por formulario',
   creditJs.includes('const operationKey = `cobro-ui:${newOperationKey()}`')
   && creditJs.includes('name="claveOperacion"'));
 check('Prevencion de doble envio', includesAll(creditJs, ['setBusy(button, true)', 'button.disabled = true']));
-check('Calculo visual de cambio', creditJs.includes('Math.max(0, tendered - applied)'));
+check('Pago simple registra el monto exacto como efectivo recibido', creditJs.includes("montoRecibido: method === 'efectivo' ? money(amount) : null"));
 check('Fecha prometida', creditJs.includes('/fecha-prometida'));
 check('Seguimiento inmutable sin editar o borrar',
   creditJs.includes('/api/cobranza/seguimientos')
@@ -206,10 +202,10 @@ check('Modo solo lectura bloquea cobros y conserva consulta',
   creditJs.includes("if (readOnly()) return showError('La suscripcion esta inactiva")
   && !creditJs.includes('allowReadOnlyWrite: true')
   && !creditJs.includes('data-readonly-operational'));
-check('Seguimiento depende de capacidad devuelta por backend',
+check('Seguimiento conserva la capacidad de backend sin recargar la lista principal',
   creditJs.includes('data.permisos?.seguimientoCobranza')
   && creditRoutes.includes('permisos: { seguimientoCobranza: canReadFollowups }')
-  && creditJs.includes("can('seguimiento_cobranza') && !readOnly() ? `<button type=\"button\" class=\"small secondary\" data-debt-promise"));
+  && creditJs.includes('/api/cobranza/seguimientos'));
 check('Permisos explicitos por endpoint', includesAll(creditRoutes + apiRoutes, [
   "requirePlanFeature('clientes_basico')",
   "requirePlanFeature('fiados_basico')",
@@ -220,7 +216,7 @@ check('Permisos explicitos por endpoint', includesAll(creditRoutes + apiRoutes, 
 ]));
 check('Totales de cobranza vienen del backend',
   creditJs.includes('const summary = data.resumen || {}')
-  && creditJs.includes('Deuda total filtrada')
+  && creditJs.includes('Deuda pendiente')
   && !creditJs.includes('rows.reduce((sum, row) => sum + Number(row.saldoPendiente'));
 check('Filtros globales no se aplican sobre la pagina',
   creditJs.includes("Object.entries(ui.collectionFilters)")

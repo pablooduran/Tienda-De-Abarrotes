@@ -598,7 +598,7 @@
         const returnFocus = document.activeElement;
         const [data, debts] = await Promise.all([
           api(`/api/clientes/${idCliente}`),
-          api(`/api/fiados?cliente=${encodeURIComponent(idCliente)}&pagina=1&limite=20`)
+          api(`/api/fiados?cliente=${encodeURIComponent(idCliente)}&pagina=1&limite=100`)
         ]);
         data.fiados = debts.fiados || debts;
         data.historial = data.historial || {};
@@ -609,30 +609,19 @@
           truncado: Number(debts.total || data.fiados.length) > data.fiados.length
         };
         const customer = data.cliente;
-        const tabs = ['resumen', 'compras', 'fiados', 'pagos'];
-        if (data.permisos?.seguimientoCobranza) tabs.push('seguimiento');
+        const openDebts = data.fiados.filter((row) => Number(row.saldoPendiente || 0) > 0);
         modalRoot.innerHTML = `<div class="modal-backdrop"><section class="modal modal-wide customer-profile-modal" role="dialog" aria-modal="true" aria-label="Ficha de ${e(customer.nombre)}">
-          <div class="profile-heading"><div><span class="eyebrow">Ficha de cliente</span><h3>${e(customer.nombre)}</h3><p>${e(customer.telefono || 'Sin telefono')} · ${e(customer.documentoIdentidad || 'Sin documento')}</p></div>${statusBadge(customer.activo ? 'activo' : 'oculto')}</div>
+          <div class="profile-heading"><div><span class="eyebrow">Cliente</span><h3>${e(customer.nombre)}</h3><p>${e(customer.telefono || 'Sin telefono')}</p></div>${statusBadge(customer.activo ? 'activo' : 'oculto')}</div>
           ${customer.activo ? '' : `<div class="hidden-customer-note"><strong>Cliente oculto.</strong><p>Su historial y sus deudas se conservan${customer.eliminadoEn ? ` desde ${e(formatDate(customer.eliminadoEn))}` : ''}. Restauralo antes de editarlo o usarlo en una venta nueva.</p></div>`}
-          <div class="profile-actions"><button type="button" class="secondary" data-profile-statement>Estado de cuenta</button>${customer.activo && Number(customer.deudaActual) > 0 && !readOnly() ? '<button type="button" data-profile-pay>Registrar pago</button>' : ''}${customer.activo && can('recordatorios_fiado') && customer.aceptaRecordatorios ? '<button type="button" class="secondary" data-profile-whatsapp>WhatsApp</button>' : ''}${!customer.activo && !readOnly() ? '<button type="button" data-profile-restore>Restaurar cliente</button>' : ''}</div>
-          <nav class="profile-tabs" aria-label="Secciones de la ficha">${tabs.map((tab) => `<button type="button" class="secondary" data-profile-tab="${tab}">${e(statusText(tab))}</button>`).join('')}</nav>
-          <div class="modal-body" data-profile-content>${profileTabBody(data, 'resumen')}</div>
+          <div class="modal-body customer-debt-detail"><div class="cards profile-summary"><article class="card"><span>Deuda pendiente</span><strong>Bs ${money(customer.deudaActual)}</strong></article><article class="card"><span>Deudas abiertas</span><strong>${openDebts.length}</strong></article></div>
+            ${openDebts.length ? `<div class="customer-debt-heading"><div><h4>Deudas pendientes</h4><p class="hint">Elige una deuda para pagarla, o registra un pago para todas.</p></div>${customer.activo && !readOnly() ? '<button type="button" data-profile-pay-all>Pagar todas</button>' : ''}</div><div class="customer-debt-list">${openDebts.map((row) => `<article class="customer-debt-item"><div><strong>Deuda de Bs ${money(row.saldoPendiente)}</strong><span>${row.fechaVencimiento ? `Vence ${e(dateText(row.fechaVencimiento))}` : 'Sin fecha de vencimiento'}</span></div>${customer.activo && !readOnly() ? `<button type="button" class="small secondary" data-profile-pay-debt="${row.idFiado}">Pagar esta deuda</button>` : ''}</article>`).join('')}</div>` : '<div class="empty-state"><strong>No tiene deudas pendientes.</strong></div>'}
+          </div>
           <div class="modal-actions"><button type="button" class="secondary" data-modal-cancel>Cerrar</button></div>
         </section></div>`;
         const close = () => { modalRoot.innerHTML = ''; returnFocus?.focus?.(); };
         modalRoot.querySelector('[data-modal-cancel]').addEventListener('click', close);
-        const wireProfileContent = () => {
-          modalRoot.querySelectorAll('[data-receipt-id]').forEach((button) => button.addEventListener('click', () => openReceipt(button.dataset.receiptId)));
-        };
-        modalRoot.querySelectorAll('[data-profile-tab]').forEach((button) => button.addEventListener('click', () => {
-          modalRoot.querySelectorAll('[data-profile-tab]').forEach((item) => item.classList.toggle('active', item === button));
-          modalRoot.querySelector('[data-profile-content]').innerHTML = profileTabBody(data, button.dataset.profileTab);
-          wireProfileContent();
-        }));
-        modalRoot.querySelector('[data-profile-tab="resumen"]').classList.add('active');
-        modalRoot.querySelector('[data-profile-statement]').addEventListener('click', () => openStatement(idCliente));
-        modalRoot.querySelector('[data-profile-pay]')?.addEventListener('click', () => openPayment({ idCliente }));
-        modalRoot.querySelector('[data-profile-whatsapp]')?.addEventListener('click', () => openWhatsApp({ idCliente }));
+        modalRoot.querySelector('[data-profile-pay-all]')?.addEventListener('click', () => openPayment({ idCliente }));
+        modalRoot.querySelectorAll('[data-profile-pay-debt]').forEach((button) => button.addEventListener('click', () => openPayment({ idFiado: button.dataset.profilePayDebt })));
         modalRoot.querySelector('[data-profile-restore]')?.addEventListener('click', (event) => changeCustomerState(customer, true, event.currentTarget));
         focusCurrentModal();
       } catch (error) { showError(error.message); }
@@ -641,15 +630,11 @@
     function paymentFields(debt, customer, customerId, operationKey) {
       return `<input type="hidden" name="claveOperacion" value="${e(operationKey)}"><input type="hidden" name="idCliente" value="${e(customerId || debt?.idCliente || '')}">
         <div class="payment-balance"><span>${debt ? 'Saldo actual' : 'Deuda total del cliente'}</span><strong>Bs ${money(debt?.saldoPendiente ?? customer?.deudaActual)}</strong></div>
-        <p class="hint">${debt ? 'Este pago se aplicara solo a la deuda seleccionada.' : 'Este pago se repartira entre las deudas del cliente, empezando por las mas antiguas.'}</p>
+        <p class="hint">${debt ? 'Este pago se aplicará solo a esta deuda.' : 'El pago se repartirá entre las deudas pendientes, empezando por las más antiguas.'}</p>
         <div class="form-grid">
-          <label>Monto<input name="monto" type="number" min="0.01" step="0.01" required ${debt ? `max="${e(debt.saldoPendiente)}"` : ''}></label>
-          <label>Metodo<select name="metodoPago" required>${PAYMENT_METHODS.map((item) => option(item, statusText(item), 'efectivo')).join('')}</select></label>
-          <label data-cash-received>Monto recibido<input name="montoRecibido" type="number" min="0" step="0.01"></label>
-          <label>Cambio<input name="cambioVisual" readonly value="0.00"></label>
-          <label>Referencia (opcional)<input name="referencia" maxlength="160"><small class="hint">Numero o dato para identificar el pago, por ejemplo de un QR o transferencia. Aparece en el comprobante.</small></label>
-          <label class="wide">Observacion (opcional)<textarea name="observacion" maxlength="1000"></textarea><small class="hint">Nota adicional sobre el cobro. Tambien aparece en el comprobante.</small></label>
-        </div><div class="payment-key-note">Si falla el envio, puedes intentar de nuevo desde esta ventana sin duplicar el cobro.</div>`;
+          <label>Monto pagado<input name="monto" type="number" min="0.01" step="0.01" required ${debt ? `max="${e(debt.saldoPendiente)}"` : ''}></label>
+          <label>Forma de pago<select name="metodoPago" required>${['efectivo', 'qr'].map((item) => option(item, statusText(item), 'efectivo')).join('')}</select></label>
+        </div>`;
     }
 
     async function openPayment({ idFiado = null, idCliente = null } = {}) {
@@ -665,24 +650,6 @@
         const paymentResult = await openFormModal({
           title: debt ? 'Pagar esta deuda' : `Pagar varias deudas de ${customer.nombre}`,
           body: paymentFields(debt, customer, customerId, operationKey), wide: true, submitText: 'Registrar pago',
-          onOpen: (form) => {
-            const method = form.elements.metodoPago;
-            const amount = form.elements.monto;
-            const received = form.elements.montoRecibido;
-            const change = form.elements.cambioVisual;
-            const sync = () => {
-              const cash = method.value === 'efectivo';
-              form.querySelector('[data-cash-received]').hidden = !cash;
-              received.disabled = !cash;
-              const applied = Math.max(0, Number(amount.value || 0));
-              const tendered = Math.max(0, Number(received.value || 0));
-              change.value = money(cash ? Math.max(0, tendered - applied) : 0);
-            };
-            method.addEventListener('change', sync);
-            amount.addEventListener('input', sync);
-            received.addEventListener('input', sync);
-            sync();
-          },
           onSubmit: async (form) => {
             const fd = new FormData(form);
             const amount = Number(fd.get('monto'));
@@ -690,11 +657,8 @@
             if (debt && amount > Number(debt.saldoPendiente)) throw new Error('El pago no puede superar el saldo.');
             if (!debt && amount > Number(customer.deudaActual)) throw new Error('El pago no puede superar la deuda total del cliente.');
             const method = fd.get('metodoPago');
-            const received = method === 'efectivo' ? Number(fd.get('montoRecibido') || amount) : null;
-            if (method === 'efectivo' && received < amount) throw new Error('El monto recibido no alcanza para el pago.');
             const payload = {
-              monto: money(amount), metodoPago: method, montoRecibido: received === null ? null : money(received),
-              referencia: nullable(fd.get('referencia')), observacion: nullable(fd.get('observacion')),
+              monto: money(amount), metodoPago: method, montoRecibido: method === 'efectivo' ? money(amount) : null,
               claveOperacion: fd.get('claveOperacion')
             };
             if (!debt) payload.idCliente = customerId;
@@ -758,23 +722,30 @@
       form.querySelector('select, input')?.focus();
     }
 
+    function groupedCollectionRows(rows) {
+      const grouped = new Map();
+      rows.forEach((row) => {
+        const key = String(row.idCliente || row.cliente || row.idFiado);
+        const customer = grouped.get(key) || { ...row, saldoPendiente: 0, cantidadDeudas: 0 };
+        customer.saldoPendiente += Number(row.saldoPendiente || 0);
+        customer.cantidadDeudas += 1;
+        grouped.set(key, customer);
+      });
+      return Array.from(grouped.values());
+    }
+
     function collectionActions(row) {
-      return `<div class="actions">
-        ${Number(row.saldoPendiente || 0) > 0 && !readOnly() ? `<button type="button" class="small" data-debt-pay="${row.idFiado}">Pagar esta deuda</button>` : ''}
-        ${Number(row.saldoPendiente || 0) > 0 && !readOnly() ? `<button type="button" class="small secondary" data-customer-pay-accum="${row.idCliente}">Pagar varias deudas</button>` : ''}
-        ${row.clienteActivo && Number(row.saldoPendiente || 0) > 0 && can('seguimiento_cobranza') && !readOnly() ? `<button type="button" class="small secondary" data-debt-promise="${row.idFiado}">Registrar promesa</button>` : ''}
-        ${row.clienteActivo && can('seguimiento_cobranza') && !readOnly() ? `<button type="button" class="small secondary" data-debt-followup="${row.idFiado}" data-customer="${row.idCliente}">Seguimiento</button>` : ''}
-        ${row.clienteActivo && can('recordatorios_fiado') && row.aceptaRecordatorios !== false ? `<button type="button" class="small secondary" data-debt-whatsapp="${row.idFiado}" data-customer="${row.idCliente}">WhatsApp</button>` : ''}
-        <button type="button" class="small secondary" data-debt-statement="${row.idCliente}">Estado de cuenta</button>
-        <button type="button" class="small secondary" data-debt-customer="${row.idCliente}">Ver cliente</button>
-      </div>`;
+      return Number(row.saldoPendiente || 0) > 0
+        ? `<div class="actions"><button type="button" class="small" data-customer-debts="${row.idCliente}">Ver deudas${row.cantidadDeudas > 1 ? ` (${row.cantidadDeudas})` : ''}</button></div>`
+        : '<span class="muted">Sin deudas pendientes</span>';
     }
 
     function collectionRowsMarkup(rows) {
       if (!rows.length) return '<div class="panel empty-state"><strong>No hay cuentas en este estado.</strong><p>Los filtros actuales no devolvieron resultados.</p></div>';
-      return `<div class="panel collection-desktop-table table-wrap"><table><thead><tr><th>Cliente</th><th>Telefono</th><th>Saldo</th><th>Vencimiento</th><th>Promesa</th><th>Estado</th><th>Tiempo</th><th>Acciones</th></tr></thead><tbody>${rows.map((row) => `<tr>
-        <td><strong>${e(row.cliente)}</strong>${row.clienteActivo ? '' : `<small>${statusBadge('oculto')}</small>`}</td><td>${e(row.telefono || 'Sin telefono')}</td><td>Bs ${money(row.saldoPendiente)}</td><td>${e(dateText(row.fechaVencimiento) || 'Sin fecha')}</td><td>${e(dateText(row.fechaPrometidaPago) || 'Sin promesa')}</td><td>${statusBadge(debtDisplayState(row))}</td><td>${row.diasAtraso ? `${e(row.diasAtraso)} dias de atraso` : row.diasRestantes !== null && row.diasRestantes !== undefined ? `${e(row.diasRestantes)} dias restantes` : 'Sin calculo'}</td><td>${collectionActions(row)}</td></tr>`).join('')}</tbody></table></div>
-        <div class="collection-mobile-list">${rows.map((row) => `<article class="collection-card ${row.clienteActivo ? '' : 'customer-hidden'}"><header><div><strong>${e(row.cliente)}</strong><span>${e(row.telefono || 'Sin telefono')}</span>${row.clienteActivo ? '' : '<span>Cliente oculto</span>'}</div>${statusBadge(debtDisplayState(row))}</header><dl><div><dt>Saldo</dt><dd>Bs ${money(row.saldoPendiente)}</dd></div><div><dt>Vencimiento</dt><dd>${e(dateText(row.fechaVencimiento) || 'Sin fecha')}</dd></div><div><dt>Promesa</dt><dd>${e(dateText(row.fechaPrometidaPago) || 'Sin promesa')}</dd></div></dl>${collectionActions(row)}</article>`).join('')}</div>`;
+      const customers = groupedCollectionRows(rows);
+      return `<div class="panel collection-desktop-table table-wrap"><table><thead><tr><th>Cliente</th><th>Telefono</th><th>Deuda pendiente</th><th>Acciones</th></tr></thead><tbody>${customers.map((row) => `<tr>
+        <td><strong>${e(row.cliente)}</strong>${row.clienteActivo ? '' : `<small>${statusBadge('oculto')}</small>`}</td><td>${e(row.telefono || 'Sin telefono')}</td><td><strong>Bs ${money(row.saldoPendiente)}</strong>${row.cantidadDeudas > 1 ? `<small>${row.cantidadDeudas} deudas pendientes</small>` : ''}</td><td>${collectionActions(row)}</td></tr>`).join('')}</tbody></table></div>
+        <div class="collection-mobile-list">${customers.map((row) => `<article class="collection-card ${row.clienteActivo ? '' : 'customer-hidden'}"><header><div><strong>${e(row.cliente)}</strong><span>${e(row.telefono || 'Sin telefono')}</span>${row.clienteActivo ? '' : '<span>Cliente oculto</span>'}</div></header><dl><div><dt>Deuda pendiente</dt><dd>Bs ${money(row.saldoPendiente)}</dd></div><div><dt>Deudas</dt><dd>${row.cantidadDeudas}</dd></div></dl>${collectionActions(row)}</article>`).join('')}</div>`;
     }
 
     async function renderCollections(focus = null) {
@@ -795,13 +766,14 @@
         const data = await api(`${endpoint}?${query}`);
         if (request !== ui.collectionRequest) return;
         const rows = data.alertas || data.fiados || data;
+        const customers = groupedCollectionRows(rows);
         const summary = data.resumen || {};
         const total = Number(data.total || rows.length);
-        view.innerHTML = `<div class="credit-heading"><div><span class="eyebrow">Cobranza</span><h3>Deudas y compromisos en un solo lugar</h3><p>Los cobros se registran sin volver a afectar inventario.</p></div><div class="actions">${can('recordatorios_fiado') ? '<button type="button" class="secondary" data-manage-templates>Plantillas de cobranza</button>' : ''}${can('limites_credito') ? '<button type="button" class="secondary" data-credit-config>Configurar credito</button>' : ''}${can('exportacion_clientes_fiados') ? `<button type="button" class="secondary" data-export-debts ${readOnly() ? 'disabled title="La suscripcion debe estar activa para exportar."' : ''}>Exportar fiados</button>` : ''}</div></div>
-          <div class="cards collection-summary-cards"><article class="card"><span>Deuda total filtrada</span><strong>Bs ${money(summary.deudaTotal || 0)}</strong></article><article class="card"><span>Vencidos filtrados</span><strong>${Number(summary.vencidos || 0)}</strong></article><article class="card"><span>Vence hoy</span><strong>${Number(summary.venceHoy || 0)}</strong></article><article class="card"><span>Proximos</span><strong>${Number(summary.proximos || 0)}</strong></article><article class="card"><span>Sin fecha</span><strong>${Number(summary.sinFecha || 0)}</strong></article></div>
+        view.innerHTML = `<div class="credit-heading"><div><span class="eyebrow">Cobranza</span><h3>Deudas pendientes</h3><p>Revisa las deudas de cada cliente y registra sus pagos.</p></div></div>
+          <div class="cards collection-summary-cards"><article class="card"><span>Deuda pendiente</span><strong>Bs ${money(summary.deudaTotal || 0)}</strong></article><article class="card"><span>Clientes con deuda</span><strong>${customers.length}</strong></article></div>
           ${advancedAlerts || ui.collectionPlanNoticeHidden ? '' : '<div class="panel collection-plan-notice" role="status"><div><strong>Tu plan actual no incluye alertas ni recordatorios por WhatsApp.</strong><p>El pago y consulta de deuda existente siguen disponibles.</p></div><button type="button" class="secondary collection-plan-notice-dismiss" data-dismiss-collection-plan-notice>Ocultar</button></div>'}
           ${readOnly() ? '<div class="panel plan-note"><strong>Suscripcion inactiva: solo consulta.</strong><p>Puedes revisar clientes y deuda historica, pero no registrar pagos ni cambios hasta renovar.</p></div>' : ''}
-          ${collectionFiltersMarkup()}<p class="hint collection-page-count">Mostrando ${rows.length} de ${total} resultados filtrados.</p><div id="collectionResults">${collectionRowsMarkup(rows)}</div>${pagerMarkup(Number(data.page || data.pagina || ui.collectionPage), Number(data.pageSize || data.limite || 20), total, 'collection')}`;
+          ${collectionFiltersMarkup()}<p class="hint collection-page-count">Mostrando ${customers.length} cliente${customers.length === 1 ? '' : 's'} con deuda.</p><div id="collectionResults">${collectionRowsMarkup(rows)}</div>${pagerMarkup(Number(data.page || data.pagina || ui.collectionPage), Number(data.pageSize || data.limite || 20), total, 'collection')}`;
         wireCollectionView(rows);
       } catch (error) {
         if (request !== ui.collectionRequest) return;
@@ -846,13 +818,7 @@
       });
       view.querySelector('[data-open-collection-filters]')?.addEventListener('click', openCollectionFilters);
       view.querySelectorAll('[data-collection-page]').forEach((button) => button.addEventListener('click', () => { ui.collectionPage = Number(button.dataset.collectionPage); renderCollections(); }));
-      view.querySelectorAll('[data-debt-pay]').forEach((button) => button.addEventListener('click', () => openPayment({ idFiado: button.dataset.debtPay })));
-      view.querySelectorAll('[data-customer-pay-accum]').forEach((button) => button.addEventListener('click', () => openPayment({ idCliente: button.dataset.customerPayAccum })));
-      view.querySelectorAll('[data-debt-promise]').forEach((button) => button.addEventListener('click', () => openPromise(rows.find((row) => String(row.idFiado) === button.dataset.debtPromise))));
-      view.querySelectorAll('[data-debt-followup]').forEach((button) => button.addEventListener('click', () => openFollowup({ idCliente: button.dataset.customer, idFiado: button.dataset.debtFollowup })));
-      view.querySelectorAll('[data-debt-whatsapp]').forEach((button) => button.addEventListener('click', () => openWhatsApp({ idCliente: button.dataset.customer, idFiado: button.dataset.debtWhatsapp })));
-      view.querySelectorAll('[data-debt-statement]').forEach((button) => button.addEventListener('click', () => openStatement(button.dataset.debtStatement)));
-      view.querySelectorAll('[data-debt-customer]').forEach((button) => button.addEventListener('click', () => openCustomerProfile(button.dataset.debtCustomer)));
+      view.querySelectorAll('[data-customer-debts]').forEach((button) => button.addEventListener('click', () => openCustomerProfile(button.dataset.customerDebts)));
     }
 
     async function openPromise(debt) {
