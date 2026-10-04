@@ -2784,7 +2784,7 @@ async function catalogoMaestro() {
           <label>Precio de venta<input name="precioVenta" type="number" min="0.01" step="0.01" value="${escapeHtml(config.precioVenta)}" required></label>
           <label>Stock inicial<input name="stockInicial" type="number" min="0" step="1" value="${escapeHtml(config.stockInicial)}" required></label>
           <label>Stock mínimo<input name="stockMinimo" type="number" min="1" step="1" value="${escapeHtml(config.stockMinimo)}" required></label>
-          <label class="catalog-package-units" data-package-units${packageUnitsHidden}>Unidades por paquete<input name="unidadesPorPaquete" type="number" min="2" step="1" value="${escapeHtml(config.unidadesPorPaquete)}" ${config.permiteVentaPorPaquete ? 'required' : ''}></label>
+          <label class="catalog-package-units" data-package-units${packageUnitsHidden}>Unidades por paquete<input name="unidadesPorPaquete" type="number" min="${config.permiteVentaPorPaquete ? '2' : '1'}" step="1" value="${escapeHtml(config.unidadesPorPaquete)}" ${config.permiteVentaPorPaquete ? 'required' : ''}></label>
           <label class="check"><input name="permiteVentaPorUnidad" type="checkbox" ${config.permiteVentaPorUnidad ? 'checked' : ''}> Vender por unidad</label>
           <label class="check"><input class="catalog-package-sale-toggle" name="permiteVentaPorPaquete" type="checkbox" ${config.permiteVentaPorPaquete ? 'checked' : ''}> Vender por paquete</label>
         </div>
@@ -2815,6 +2815,7 @@ async function catalogoMaestro() {
       if (!unitsField || !units) return;
       unitsField.hidden = !toggle.checked;
       units.required = toggle.checked;
+      units.min = toggle.checked ? '2' : '1';
       if (!toggle.checked) units.value = '1';
       else if (Number(units.value) < 2) units.value = '2';
     }));
