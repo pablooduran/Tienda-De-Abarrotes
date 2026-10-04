@@ -2688,7 +2688,9 @@ function catalogVariantFor(product) {
 
 function catalogSizeFor(product) {
   const quantity = product.contenidoCantidad ? `${Number(product.contenidoCantidad)} ${product.contenidoUnidad || ''}`.trim() : '';
-  return [product.presentacion, quantity].filter(Boolean).join(' · ') || 'Presentación sin especificar';
+  const parts = [product.presentacion, quantity].filter(Boolean);
+  const unique = [...new Map(parts.map((part) => [String(part).trim().replace(/\s+/g, ' ').toLocaleLowerCase('es'), part])).values()];
+  return unique.join(' · ') || 'Presentación sin especificar';
 }
 
 function groupMasterCatalog(rows) {
