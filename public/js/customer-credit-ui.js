@@ -511,25 +511,19 @@
 
     function customerFormBody(customer = {}) {
       const advanced = can('limites_credito');
+      const creditEnabled = Boolean(customer.permiteFiado);
       return `<div class="customer-form-sections">
         <section><h4>Datos basicos</h4><div class="form-grid">
           <label>Nombre<input name="nombre" required maxlength="120" value="${e(customer.nombre || '')}"></label>
           <label>Telefono<input name="telefono" maxlength="30" value="${e(customer.telefono || '')}"></label>
-          <label>Telefono alternativo<input name="telefonoAlternativo" maxlength="30" value="${e(customer.telefonoAlternativo || '')}"></label>
-          <label>Documento<input name="documentoIdentidad" maxlength="50" value="${e(customer.documentoIdentidad || '')}"></label>
-          <label>Correo<input name="correo" type="email" maxlength="160" value="${e(customer.correo || '')}"></label>
-          <label class="wide">Direccion<input name="direccion" maxlength="255" value="${e(customer.direccion || '')}"></label>
+          <label class="wide">Direccion <span class="hint">(opcional)</span><input name="direccion" maxlength="255" value="${e(customer.direccion || '')}"></label>
         </div></section>
-        <section><h4>Credito</h4><div class="form-grid">
-          <label class="check"><input name="permiteFiado" type="checkbox" ${customer.permiteFiado !== false ? 'checked' : ''}> Permitir nuevos fiados</label>
-          ${advanced ? `<label>Limite de credito<input name="limiteCredito" type="number" min="0" step="0.01" value="${e(customer.limiteCredito ?? '')}" placeholder="Sin limite individual"></label><label>Dias de credito<input name="diasCreditoDefault" type="number" min="1" max="365" value="${e(customer.diasCreditoDefault ?? '')}" placeholder="Usar valor de tienda"></label>` : ''}
-          <label class="check"><input name="aceptaRecordatorios" type="checkbox" ${customer.aceptaRecordatorios !== false ? 'checked' : ''}> Acepta recordatorios</label>
-        </div>${advanced ? '' : '<p class="plan-note">Tu plan actual no incluye limites ni plazos personalizados.</p>'}</section>
-        <section><h4>Comunicacion</h4><div class="form-grid">
-          <label>Canal preferido<select name="canalPreferido">${CHANNELS.map((item) => option(item, statusText(item), customer.canalPreferido || 'ninguno')).join('')}</select></label>
-          <label>Horario preferido<input name="horarioPreferido" maxlength="120" value="${e(customer.horarioPreferido || '')}"></label>
-          <label class="wide">Notas<textarea name="notas" maxlength="1000" rows="3">${e(customer.notas || '')}</textarea></label>
-        </div></section>
+        <section class="customer-credit-disclosure"><label class="check"><input name="activarCredito" type="checkbox" ${creditEnabled ? 'checked' : ''}> Activar credito para este cliente</label>
+          <div class="form-grid" data-credit-fields ${creditEnabled ? '' : 'hidden'}>
+            <label class="check"><input name="permiteFiado" type="checkbox" ${creditEnabled ? 'checked' : ''}> Permitir compras a credito</label>
+            ${advanced ? `<label>Limite de credito<input name="limiteCredito" type="number" min="0" step="0.01" value="${e(customer.limiteCredito ?? '')}" placeholder="Sin limite individual"></label><label>Dias de credito<input name="diasCreditoDefault" type="number" min="1" max="365" value="${e(customer.diasCreditoDefault ?? '')}" placeholder="Usar valor de tienda"></label>` : '<p class="plan-note">Tu plan actual no incluye limites ni plazos personalizados.</p>'}
+          </div>
+        </section>
       </div>`;
     }
 
@@ -538,26 +532,32 @@
       await openFormModal({
         title: customer ? 'Editar cliente' : 'Agregar cliente',
         body: customerFormBody(customer || {}), wide: true, submitText: customer ? 'Guardar cambios' : 'Crear cliente',
+        onOpen: (form) => {
+          const toggle = form.elements.activarCredito;
+          const fields = form.querySelector('[data-credit-fields]');
+          const syncCreditFields = () => {
+            const enabled = Boolean(toggle?.checked);
+            fields.hidden = !enabled;
+            fields.querySelectorAll('input, select').forEach((field) => { field.disabled = !enabled; });
+            if (enabled) form.elements.permiteFiado.checked = true;
+          };
+          toggle?.addEventListener('change', syncCreditFields);
+          syncCreditFields();
+        },
         onSubmit: async (form) => {
           const fd = new FormData(form);
           const payload = {
             nombre: nullable(fd.get('nombre')),
             telefono: nullable(fd.get('telefono')),
-            telefonoAlternativo: nullable(fd.get('telefonoAlternativo')),
-            documentoIdentidad: nullable(fd.get('documentoIdentidad')),
-            correo: nullable(fd.get('correo')),
-            direccion: nullable(fd.get('direccion')),
-            canalPreferido: fd.get('canalPreferido') || 'ninguno',
-            horarioPreferido: nullable(fd.get('horarioPreferido')),
-            notas: nullable(fd.get('notas'))
+            direccion: nullable(fd.get('direccion'))
           };
           if (!payload.nombre) throw new Error('El nombre es obligatorio.');
+          const creditEnabled = booleanValue(form, 'activarCredito');
           if (can('limites_credito')) {
-            payload.limiteCredito = nullable(fd.get('limiteCredito'));
-            payload.diasCreditoDefault = nullable(fd.get('diasCreditoDefault'));
+            payload.limiteCredito = creditEnabled ? nullable(fd.get('limiteCredito')) : null;
+            payload.diasCreditoDefault = creditEnabled ? nullable(fd.get('diasCreditoDefault')) : null;
           }
-          payload.permiteFiado = booleanValue(form, 'permiteFiado');
-          payload.aceptaRecordatorios = booleanValue(form, 'aceptaRecordatorios');
+          payload.permiteFiado = creditEnabled && booleanValue(form, 'permiteFiado');
           const result = await api(`/api/clientes${customer ? `/${customer.idCliente}` : ''}`, {
             method: customer ? 'PATCH' : 'POST', body: JSON.stringify(payload)
           });
@@ -1017,7 +1017,8 @@
           const submitButton = form.querySelector('[data-modal-submit]');
           if (prepared) {
             if (prepared.url) {
-              window.open(prepared.url, '_blank', 'noopener');
+              const opened = window.open(prepared.url, '_blank');
+              if (!opened) window.location.assign(prepared.url);
               target.querySelector('[data-whatsapp-opened]')?.removeAttribute('hidden');
               submitButton.textContent = 'Abrir WhatsApp otra vez';
               return false;

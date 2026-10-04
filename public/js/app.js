@@ -2630,6 +2630,9 @@ function posAvailableStock(product) {
 }
 
 function posProductCard(product) {
+  const availableStock = posAvailableStock(product);
+  const minimumStock = Math.max(0, Number(product.stockMinimo || 0));
+  const stockState = availableStock <= 0 ? 'out' : (minimumStock > 0 && availableStock <= minimumStock ? 'low' : 'normal');
   const packagePrice = Number(product.precioVentaPaquete ?? (Number(product.precioVenta) * Number(product.unidadesPorPaquete || 1)));
   const presentations = [
     product.permiteVentaPorUnidad ? `Unidad Bs ${money(product.precioVenta)}` : '',
@@ -2638,16 +2641,16 @@ function posProductCard(product) {
       : ''
   ].filter(Boolean).join(' · ');
   return `
-    <article class="pos-product" data-pos-product="${product.idProducto}">
+    <article class="pos-product pos-stock-${stockState}" data-pos-product="${product.idProducto}">
       <button type="button" class="pos-favorite ${product.favoritoPos ? 'is-favorite' : ''}" data-pos-favorite="${product.idProducto}" title="${product.favoritoPos ? 'Quitar de favoritos' : 'Agregar a favoritos'}" aria-label="Favorito">★</button>
       <div>
         <strong>${escapeHtml(product.nombre)}</strong>
         <span>${escapeHtml(product.categoria)} · ${escapeHtml(product.proveedor || 'Sin proveedor')}</span>
-        <small>${escapeHtml(stockLabel(product))}</small>
+        <small class="pos-stock-label">${escapeHtml(stockState === 'out' ? 'Sin stock' : stockState === 'low' ? `Stock bajo · ${stockLabel(product)}` : stockLabel(product))}</small>
         ${Number(product.controlaLotes) ? `<small class="lot-pos-stock">Vendible: ${escapeHtml(posAvailableStock(product))} unidades · salida ${Number(product.controlaVencimiento) ? 'FEFO' : 'FIFO'}</small>${Number(product.stockUnidadesTotal) > posAvailableStock(product) ? '<small class="text-danger">Parte del stock está vencida o bloqueada.</small>' : ''}` : ''}
         <small>${escapeHtml(presentations)}</small>
       </div>
-      <button type="button" data-pos-add="${product.idProducto}">Agregar</button>
+      <button type="button" data-pos-add="${product.idProducto}" ${availableStock <= 0 ? 'disabled title="Producto sin stock"' : ''}>${availableStock <= 0 ? 'Sin stock' : 'Agregar'}</button>
     </article>`;
 }
 
@@ -2992,8 +2995,8 @@ function renderPosPaymentFields() {
   const { total } = posTotals();
   if (mode === 'efectivo') {
     fields.innerHTML = `
-      <button type="button" class="secondary" id="posCashReceivedToggle" aria-expanded="false" aria-controls="posCashReceivedControl">Ingresar efectivo recibido</button>
-      <div id="posCashReceivedControl" hidden><label>Efectivo recibido<input id="posCashReceived" type="number" min="0" step="0.01" inputmode="decimal" placeholder="Solo si recibes un monto mayor"></label><small class="hint">Si no lo ingresas, se toma el total exacto. Úsalo para calcular el cambio.</small></div>`;
+      <button type="button" class="secondary small pos-payment-toggle" id="posCashReceivedToggle" aria-expanded="false" aria-controls="posCashReceivedControl">Efectivo recibido</button>
+      <div id="posCashReceivedControl" hidden><label>Efectivo recibido<input id="posCashReceived" type="number" min="0" step="0.01" inputmode="decimal" placeholder="Monto entregado por el cliente"></label><small class="hint">Solo ingrésalo si recibes un monto distinto al total. Si es menor para un cliente frecuente, quedará saldo pendiente.</small></div>`;
   } else if (mode === 'qr') {
     fields.innerHTML = `<label>Referencia QR (opcional)<input id="posQrReference" maxlength="120" placeholder="Número o nota del pago"></label>`;
   } else if (mode === 'mixto') {
@@ -3022,8 +3025,9 @@ function renderPosPaymentFields() {
 function updatePosCreditNote() {
   const note = document.getElementById('posCreditNote');
   if (!note) return;
+  const balance = posPaymentDraft().balance;
   note.textContent = document.getElementById('posClient')?.value
-    ? 'El total quedará pendiente en la cuenta del cliente seleccionado.'
+    ? (balance > 0 ? `Pago parcial: Bs ${money(balance)} quedarán pendientes en la cuenta del cliente.` : 'El pago se registrará en la cuenta del cliente seleccionado.')
     : 'El total quedará pendiente. Selecciona un cliente registrado para continuar.';
 }
 
@@ -3033,9 +3037,12 @@ function posPaymentDraft() {
   const payments = [];
   let cashReceived = 0;
   if (mode === 'efectivo') {
-    if (total > 0) payments.push({ metodoPago: 'efectivo', monto: total });
     const cashField = document.getElementById('posCashReceived');
-    cashReceived = cashField?.value === '' || !cashField ? total : Math.max(0, Number(cashField.value || 0));
+    const enteredCash = cashField?.value === '' || !cashField ? null : Math.max(0, Number(cashField.value || 0));
+    const frequentCustomer = Boolean(document.getElementById('posClient')?.value);
+    const appliedCash = enteredCash === null ? total : (frequentCustomer ? Math.min(total, enteredCash) : total);
+    if (appliedCash > 0) payments.push({ metodoPago: 'efectivo', monto: appliedCash });
+    cashReceived = enteredCash === null ? total : enteredCash;
   } else if (mode === 'qr') {
     if (total > 0) payments.push({ metodoPago: 'qr', monto: total, referencia: document.getElementById('posQrReference')?.value || '' });
   } else if (mode === 'mixto') {
@@ -3064,7 +3071,7 @@ function renderPosPaymentSummary() {
   document.getElementById('posDiscountRow').hidden = totals.discount <= 0;
   const frequentCustomer = Boolean(document.getElementById('posClient')?.value);
   summary.innerHTML = frequentCustomer
-    ? `<span>Pagado <strong>Bs ${money(payment.paid)}</strong></span>${payment.change > 0 ? `<span>Cambio <strong>Bs ${money(payment.change)}</strong></span>` : ''}${payment.balance > 0 ? `<span>Por cobrar <strong class="text-danger">Bs ${money(payment.balance)}</strong></span>` : ''}`
+    ? `<span>Pagado <strong>Bs ${money(payment.paid)}</strong></span>${payment.change > 0 ? `<span>Cambio <strong>Bs ${money(payment.change)}</strong></span>` : ''}${payment.balance > 0 ? `<span class="pos-partial-payment">Pago parcial: queda pendiente <strong>Bs ${money(payment.balance)}</strong></span>` : ''}`
     : `<span>Pago de esta venta <strong>Bs ${money(totals.total)}</strong></span>${payment.change > 0 ? `<span>Cambio <strong>Bs ${money(payment.change)}</strong></span>` : ''}`;
   creditUi().refreshPosCredit(payment.balance);
 }
@@ -3146,6 +3153,10 @@ function showSaleReceipt(receipt) {
     window.addEventListener('afterprint', () => document.body.classList.remove('printing-receipt'), { once: true });
     window.print();
   };
+  const openWhatsApp = (url) => {
+    const opened = window.open(url, '_blank');
+    if (!opened) window.location.assign(url);
+  };
   const renderReceipt = () => {
     modalRoot.innerHTML = `
       <div class="modal-backdrop"><div class="modal receipt-modal" role="dialog" aria-modal="true" aria-label="Venta confirmada">
@@ -3218,7 +3229,7 @@ function showSaleReceipt(receipt) {
       </div></div>`;
     modalRoot.querySelector('[data-preview-back]').addEventListener('click', renderReceipt);
     modalRoot.querySelector('[data-preview-open]').addEventListener('click', (event) => {
-      window.open(whatsappUrl, '_blank', 'noopener');
+      openWhatsApp(whatsappUrl);
       event.currentTarget.textContent = 'WhatsApp abierto';
       event.currentTarget.disabled = true;
     });
@@ -3247,7 +3258,7 @@ async function submitPosSale(event) {
   } catch (error) {
     return showError(error.message);
   }
-  if (!await confirmAction(`Registrar venta por Bs ${money(totals.total)}${payment.balance > 0 ? ` con saldo Bs ${money(payment.balance)}` : ''}?`)) return;
+  if (!await confirmAction(`Registrar venta por Bs ${money(totals.total)}${payment.balance > 0 ? `. El pago será parcial y Bs ${money(payment.balance)} quedarán como saldo del cliente.` : ''}`)) return;
   const button = document.getElementById('posSubmit');
   const restoreMutation = UiPatterns.mutation(button, 'Procesando venta...');
   if (!restoreMutation) return;
@@ -3369,7 +3380,7 @@ async function ventas() {
         </div>
         <div id="posCreditSummary" class="pos-credit-summary" aria-live="polite"></div>
         <div class="pos-charge-box">
-          <button type="button" class="secondary" id="posDiscountToggle" aria-expanded="false" aria-controls="posDiscountControl">Agregar descuento</button>
+          <button type="button" class="secondary small pos-payment-toggle" id="posDiscountToggle" aria-expanded="false" aria-controls="posDiscountControl">Agregar descuento</button>
           <div id="posDiscountControl" hidden><label>Descuento general (%)<input id="posDiscountPercentage" type="number" min="0" max="100" step="0.01" value="0" inputmode="decimal" aria-describedby="posDiscountHelp"></label><small id="posDiscountHelp" class="hint">Se calcula automáticamente sobre el subtotal.</small></div>
           <label>Forma de cobro<select id="posPaymentMode">
             <option value="efectivo">Efectivo</option><option value="qr">QR</option>

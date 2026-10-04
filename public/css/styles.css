@@ -1429,6 +1429,10 @@ tr.low-stock { background: var(--warn); }
   border-color: #8eb9a8;
   box-shadow: 0 4px 16px rgba(26, 82, 61, .08);
 }
+.pos-product.pos-stock-out { border-color: #d96b63; background: #fff4f2; }
+.pos-product.pos-stock-low { border-color: #d7a83b; background: #fffbed; }
+.pos-product.pos-stock-out .pos-stock-label { color: #ae2e24; font-weight: 700; }
+.pos-product.pos-stock-low .pos-stock-label { color: #8a6511; font-weight: 700; }
 .pos-product div,
 .pos-product span,
 .pos-product small {
@@ -1502,6 +1506,9 @@ tr.low-stock { background: var(--warn); }
   grid-template-columns: 1fr 1fr;
   gap: 10px;
 }
+.pos-payment-toggle { width: fit-content; justify-self: start; align-self: end; }
+.pos-payment-fields #posCashReceivedControl { grid-column: 1 / -1; }
+.pos-partial-payment { color: #a63d28; font-weight: 700; }
 .pos-customer-picker { position: relative; display: grid; gap: 7px; }
 .pos-customer-mode { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
 .pos-customer-mode button { color: var(--muted); background: var(--surface); }
@@ -3718,7 +3725,7 @@ td.actions { position: relative; }
   body.printing-receipt #modalRoot,
   body.printing-receipt .modal-backdrop,
   body.printing-receipt .receipt-modal { position: static; width: 100%; max-width: none; max-height: none; overflow: visible; padding: 0; border: 0; box-shadow: none; }
-  body.printing-receipt .receipt { max-width: 80mm; margin: 0 auto; padding: 0; border: 0; }
+  body.printing-receipt .receipt { width: 72mm; max-width: 72mm; margin: 0; padding: 3mm 4mm; border: 0; font-size: 10pt; page: sale-ticket; }
   body.printing-receipt .receipt-actions,
   body.printing-receipt .receipt-modal > h3 { display: none !important; }
   body.printing-compensation > * { display: none !important; }
@@ -4265,6 +4272,10 @@ html[data-theme="dark"] {
   html[data-theme="dark"] .subscription-actions { background: var(--panel); border-color: var(--line); }
   html[data-theme="dark"] .subscription-actions .button-link { color: var(--ink); background: var(--surface-2); border-color: var(--line); }
   html[data-theme="dark"] .content .pos-product:hover { background: var(--hover-surface); border-color: var(--brand); }
+  html[data-theme="dark"] .content .pos-product.pos-stock-out { background: #371d1b; border-color: #a75b55; }
+  html[data-theme="dark"] .content .pos-product.pos-stock-low { background: #342a13; border-color: #8c701f; }
+  html[data-theme="dark"] .content .pos-product.pos-stock-out .pos-stock-label { color: #ffc4bc; }
+  html[data-theme="dark"] .content .pos-product.pos-stock-low .pos-stock-label { color: #f3d891; }
   html[data-theme="dark"] .content :is(.inventory-metric.metric-danger, .inventory-error, .form-error) { background: #371d1b; color: #ffc4bc; }
   html[data-theme="dark"] .content :is(.inventory-metric.metric-warning, .readonly-note, .pos-credit-warning) { background: #342a13; color: #f3d891; }
   html[data-theme="dark"] .content :is(.inventory-metric.metric-success, .welcome-step.is-complete) { background: #143422; }
@@ -4279,3 +4290,5 @@ html[data-theme="dark"] {
   html[data-theme="dark"] .content :is(.credit-status.status-vencido, .credit-status.status-inactivo, .credit-status.status-oculto, .lot-vencido) { color: #ffc4bc; background: #371d1b; border-color: #a75b55; }
   html[data-theme="dark"] .modal :is(.collection-receipt, .account-statement) { background: #fff; color: #172027; border-color: #aab8c1; }
 }
+
+@page sale-ticket { size: 80mm auto; margin: 0; }

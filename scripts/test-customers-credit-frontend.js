@@ -96,10 +96,15 @@ check('Segmentacion tiene carga, vacio, error y vista movil',
   && creditJs.includes('No hay clientes en este segmento.')
   && creditJs.includes('No se pudo calcular la segmentacion.')
   && css.includes('.segmentation-mobile-list'));
-check('Formulario ampliado de cliente', includesAll(creditJs, [
-  'telefonoAlternativo', 'documentoIdentidad', 'correo', 'direccion', 'limiteCredito',
-  'diasCreditoDefault', 'canalPreferido', 'aceptaRecordatorios', 'horarioPreferido', 'notas'
-]));
+check('Formulario de cliente prioriza datos esenciales y crédito opcional', includesAll(creditJs, [
+  'name="nombre"', 'name="telefono"', 'Direccion <span class="hint">(opcional)</span>',
+  'name="activarCredito"', 'data-credit-fields', 'limiteCredito', 'diasCreditoDefault'
+]) && !creditJs.includes('name="telefonoAlternativo"')
+  && !creditJs.includes('name="documentoIdentidad"')
+  && !creditJs.includes('name="correo"')
+  && !creditJs.includes('name="canalPreferido"')
+  && !creditJs.includes('name="horarioPreferido"')
+  && !creditJs.includes('name="notas"'));
 check('Filtro explicito de estado de clientes', includesAll(creditJs + creditRoutes + creditService, [
   "customerFilters: { estado: 'activos' }", "option('activos', 'Activos'", "option('ocultos', 'Ocultos'",
   "option('todos', 'Todos'", "new Set(['activos', 'ocultos', 'todos'])", "INVALID_CUSTOMER_STATE"
