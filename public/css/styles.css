@@ -1574,7 +1574,10 @@ tr.low-stock { background: var(--warn); }
 .receipt-totals { display: grid; }
 .receipt-grand-total { font-size: 18px; }
 .receipt footer { margin-top: 16px; }
-.receipt-actions { flex-wrap: wrap; }
+.receipt-actions { flex-wrap: wrap; gap: 12px; }
+.sales-history-actions { min-width: 218px; gap: 10px; }
+.receipt-whatsapp-recipient { display: grid; gap: 6px; margin-top: 14px; }
+.receipt-whatsapp-recipient small { color: var(--muted); font-weight: 400; }
 
 .financial-cards { margin-bottom: 14px; }
 .financial-cards .metric-card {

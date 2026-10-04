@@ -3113,8 +3113,9 @@ function showSaleReceipt(receipt) {
         <h3>Venta confirmada</h3>
         <div class="modal-body">${receiptHtml(receipt)}</div>
         <div class="modal-actions receipt-actions">
-          <details class="row-actions receipt-more-actions"><summary>Más opciones</summary><div class="row-actions-menu"><button type="button" class="secondary" data-receipt-copy>Copiar comprobante</button><button type="button" class="secondary" data-receipt-print>Imprimir</button></div></details>
-          ${whatsappUrl ? '<button type="button" data-receipt-whatsapp>Enviar por WhatsApp</button>' : '<button type="button" class="secondary" data-receipt-copy>Copiar mensaje</button>'}
+          <button type="button" class="secondary" data-receipt-copy>Copiar comprobante</button>
+          <button type="button" class="secondary" data-receipt-print>Imprimir</button>
+          <button type="button" data-receipt-whatsapp>Enviar por WhatsApp</button>
           <button type="button" class="secondary" data-modal-confirm>Cerrar</button>
         </div>
       </div></div>`;
@@ -3122,27 +3123,39 @@ function showSaleReceipt(receipt) {
     modalRoot.querySelectorAll('[data-receipt-copy]').forEach((button) => button.addEventListener('click', async () => {
       try {
         await copyReceiptText(text);
-        button.textContent = 'Mensaje copiado';
+        button.textContent = 'Comprobante copiado';
       } catch { showError('No se pudo copiar el comprobante.'); }
     }));
-    modalRoot.querySelector('[data-receipt-whatsapp]')?.addEventListener('click', renderWhatsAppPreview);
+    modalRoot.querySelector('[data-receipt-whatsapp]').addEventListener('click', renderWhatsAppPreview);
     modalRoot.querySelector('[data-receipt-print]')?.addEventListener('click', print);
-    modalRoot.querySelector('button:not([disabled])')?.focus();
+    modalRoot.querySelector('[data-receipt-whatsapp]')?.focus();
   };
   const renderWhatsAppPreview = () => {
+    let destinationUrl = whatsappUrl;
+    const recipientField = whatsappUrl
+      ? '<p class="hint">Se abrirá WhatsApp con el número registrado del cliente.</p>'
+      : '<label class="receipt-whatsapp-recipient">Número de WhatsApp del cliente<input type="tel" inputmode="numeric" autocomplete="tel" maxlength="16" placeholder="Ej. 59170000000" data-preview-phone><small>Incluye el código de país. Este número se usa solo para este envío.</small></label>';
     modalRoot.innerHTML = `
       <div class="modal-backdrop"><div class="modal receipt-modal" role="dialog" aria-modal="true" aria-label="Enviar comprobante por WhatsApp">
         <h3>Enviar por WhatsApp</h3>
-        <div class="modal-body"><section class="whatsapp-preview receipt-whatsapp-preview"><strong>Vista previa del mensaje</strong><p class="hint">Revisa el texto. Al continuar se abrirá WhatsApp con el mensaje listo; el envío se confirma allí.</p><textarea readonly rows="12" aria-label="Mensaje de WhatsApp">${escapeHtml(text)}</textarea></section></div>
-        <div class="modal-actions"><button type="button" class="secondary" data-preview-back>Volver al comprobante</button><button type="button" data-preview-open>Continuar a WhatsApp</button></div>
+        <div class="modal-body"><section class="whatsapp-preview receipt-whatsapp-preview"><strong>Vista previa del mensaje</strong><p class="hint">Revisa el texto. Al continuar se abrirá WhatsApp con el mensaje listo; el envío se confirma allí.</p>${recipientField}<textarea readonly rows="12" aria-label="Mensaje de WhatsApp">${escapeHtml(text)}</textarea></section></div>
+        <div class="modal-actions"><button type="button" class="secondary" data-preview-back>Volver al comprobante</button><button type="button" ${whatsappUrl ? '' : 'disabled'} data-preview-open>Continuar a WhatsApp</button></div>
       </div></div>`;
     modalRoot.querySelector('[data-preview-back]').addEventListener('click', renderReceipt);
     modalRoot.querySelector('[data-preview-open]').addEventListener('click', (event) => {
-      window.open(whatsappUrl, '_blank', 'noopener');
+      window.open(destinationUrl, '_blank', 'noopener');
       event.currentTarget.textContent = 'WhatsApp abierto';
       event.currentTarget.disabled = true;
     });
-    modalRoot.querySelector('[data-preview-open]')?.focus();
+    const phone = modalRoot.querySelector('[data-preview-phone]');
+    if (phone) {
+      phone.addEventListener('input', () => {
+        const digits = phone.value.replace(/\D/g, '');
+        destinationUrl = digits.length >= 9 ? `https://wa.me/${digits}?text=${encodeURIComponent(text)}` : '';
+        modalRoot.querySelector('[data-preview-open]').disabled = !destinationUrl;
+      });
+      phone.focus();
+    } else modalRoot.querySelector('[data-preview-open]')?.focus();
   };
   renderReceipt();
 }
@@ -3360,7 +3373,7 @@ async function historialVentas() {
   const rows = state.ventas || [];
   view.innerHTML = `<section class="sales-section-heading"><div><h3>Historial de ventas</h3><p>Revisa comprobantes, cobros y saldos sin perder el contexto de cada venta.</p></div></section>${rows.length ? `<div class="panel table-wrap"><table>
     <thead><tr><th>Comprobante</th><th>Fecha</th><th>Cliente</th><th>Total</th><th>Pagado</th><th>Saldo</th><th>Métodos</th><th>Estado</th><th>Acciones</th></tr></thead>
-    <tbody>${rows.map((v) => `<tr><td>${escapeHtml(v.codigoComprobante || `Venta #${v.idVenta}`)}</td><td>${formatDate(v.fecha)}</td><td>${escapeHtml(v.cliente)}</td><td>Bs ${money(v.total)}</td><td>Bs ${money(v.montoPagado)}</td><td class="${Number(v.saldoActualFiado ?? v.saldoPendiente) > 0 ? 'text-danger' : 'text-ok'}">Bs ${money(v.saldoActualFiado ?? v.saldoPendiente)}</td><td>${escapeHtml(String(v.metodosPago || 'No especificado').replaceAll(',', ', '))}</td><td>${statusBadge(v.estadoPago === 'pagada' ? 'pagado' : v.estadoPago)}</td><td><button class="small secondary" data-detail="${v.idVenta}">Ver detalle</button><button type="button" class="small secondary" data-receipt="${v.idVenta}">Comprobante</button></td></tr>`).join('')}</tbody>
+    <tbody>${rows.map((v) => `<tr><td>${escapeHtml(compactReceiptCode(v.codigoComprobante) || `Venta #${v.idVenta}`)}</td><td>${formatDate(v.fecha)}</td><td>${escapeHtml(v.cliente)}</td><td>Bs ${money(v.total)}</td><td>Bs ${money(v.montoPagado)}</td><td class="${Number(v.saldoActualFiado ?? v.saldoPendiente) > 0 ? 'text-danger' : 'text-ok'}">Bs ${money(v.saldoActualFiado ?? v.saldoPendiente)}</td><td>${escapeHtml(String(v.metodosPago || 'No especificado').replaceAll(',', ', '))}</td><td>${statusBadge(v.estadoPago === 'pagada' ? 'pagado' : v.estadoPago)}</td><td class="actions sales-history-actions"><button class="small secondary" data-detail="${v.idVenta}">Ver detalle</button><button type="button" class="small secondary" data-receipt="${v.idVenta}">Comprobante</button></td></tr>`).join('')}</tbody>
   </table></div>` : UiPatterns.empty('Aún no hay ventas registradas', 'Cuando completes una venta, su comprobante y estado de cobro aparecerán aquí.')}`;
   view.querySelectorAll('[data-detail]').forEach((btn) => btn.addEventListener('click', () => showSaleDetail(btn.dataset.detail)));
   view.querySelectorAll('[data-receipt]').forEach((btn) => btn.addEventListener('click', async () => {
@@ -3394,11 +3407,10 @@ async function showSaleDetail(idVenta) {
       wide: true,
       confirmText: 'Cerrar',
       body: `
-        <p>${escapeHtml(v.codigoComprobante || `Venta #${v.idVenta}`)} · ${formatDate(v.fecha)} · ${escapeHtml(v.cliente)} · Bs ${money(v.total)}</p>
+        <p>${escapeHtml(compactReceiptCode(v.codigoComprobante) || `Venta #${v.idVenta}`)} · ${formatDate(v.fecha)} · ${escapeHtml(v.cliente)} · Bs ${money(v.total)}</p>
         <p>Pagado: <strong>Bs ${money(v.montoPagado)}</strong> · Saldo actual: <strong class="${Number(v.saldoActualFiado ?? v.saldoPendiente) > 0 ? 'text-danger' : 'text-ok'}">Bs ${money(v.saldoActualFiado ?? v.saldoPendiente)}</strong> ${statusBadge(v.estadoPago === 'pagada' ? 'pagado' : v.estadoPago)}</p>
         <p>${data.pagos.length ? data.pagos.map((payment) => `${escapeHtml(payment.metodoPago)}: <strong>Bs ${money(payment.monto)}</strong>${payment.referencia ? ` (${escapeHtml(payment.referencia)})` : ''}`).join(' · ') : 'Sin desglose de pagos para esta venta histórica.'}</p>
         ${v.idFiado ? `<p><button type="button" class="secondary" data-open-debt="${v.idFiado}" data-client="${v.idCliente || ''}" data-client-name="${escapeHtml(v.cliente)}">Ver en Cobranza</button></p>` : ''}
-        <p><button type="button" class="secondary" data-open-receipt="${v.idVenta}">Ver comprobante</button></p>
         <div class="table-wrap"><table><thead><tr><th>Producto</th><th>Cantidad</th><th>Presentación</th><th>Unidades</th><th>Precio</th><th>Costo</th><th>Ganancia</th></tr></thead>
         <tbody>${data.detalle.map((d) => `<tr><td>${escapeHtml(d.nombre)}</td><td>${intValue(d.cantidad)}</td><td>${escapeHtml(d.presentacionVenta)}</td><td>${intValue(d.cantidadEquivalenteUnidades)}</td><td>Bs ${money(d.subtotal)}</td><td>Bs ${money(d.subtotalCosto)}</td><td>Bs ${money(d.ganancia)}</td></tr>`).join('')}</tbody></table></div>
         ${lotTrace.rows.length ? `<h4>Lotes utilizados</h4><div class="table-wrap"><table><thead><tr><th>Producto</th><th>Lote</th><th>Vencimiento</th><th>Unidades</th><th>Costo del lote</th></tr></thead><tbody>${lotTrace.rows.map((row) => `<tr><td>${escapeHtml(row.producto)}</td><td><button type="button" class="link-button" data-lot-detail="${row.idLoteProducto}">${escapeHtml(row.codigoLote || 'Sin código')}</button></td><td>${lotDate(row.fechaVencimiento)}</td><td>${escapeHtml(row.cantidadUnidades)}</td><td>${row.costoUnitarioBase === null ? 'Desconocido' : `Bs ${money(row.costoUnitarioBase)}`}</td></tr>`).join('')}</tbody></table></div>` : ''}`,
@@ -3412,9 +3424,6 @@ async function showSaleDetail(idVenta) {
           };
           modalRoot.innerHTML = '';
           loadView('pagos').catch((error) => showError(error.message));
-        });
-        root.querySelector('[data-open-receipt]').addEventListener('click', async () => {
-          try { showSaleReceipt(await api(`/api/ventas/${v.idVenta}/comprobante`)); } catch (error) { showError(error.message); }
         });
         wireLotRowActions(root);
       }
