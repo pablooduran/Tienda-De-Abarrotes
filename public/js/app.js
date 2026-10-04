@@ -3131,31 +3131,59 @@ function showSaleReceipt(receipt) {
     modalRoot.querySelector('[data-receipt-whatsapp]')?.focus();
   };
   const renderWhatsAppPreview = () => {
-    let destinationUrl = whatsappUrl;
-    const recipientField = whatsappUrl
-      ? '<p class="hint">Se abrirá WhatsApp con el número registrado del cliente.</p>'
-      : '<label class="receipt-whatsapp-recipient">Número de WhatsApp del cliente<input type="tel" inputmode="numeric" autocomplete="tel" maxlength="16" placeholder="Ej. 59170000000" data-preview-phone><small>Incluye el código de país. Este número se usa solo para este envío.</small></label>';
+    const sale = receipt.venta;
+    if (!whatsappUrl) {
+      if (!sale.idCliente) {
+        modalRoot.innerHTML = `
+          <div class="modal-backdrop"><div class="modal receipt-modal" role="dialog" aria-modal="true" aria-label="WhatsApp no disponible">
+            <h3>No hay cliente asociado</h3>
+            <div class="modal-body"><p>Esta venta fue registrada como cliente ocasional. No hay un cliente ni un número de WhatsApp asociado para enviarle el comprobante.</p></div>
+            <div class="modal-actions"><button type="button" class="secondary" data-preview-back>Volver al comprobante</button></div>
+          </div></div>`;
+        modalRoot.querySelector('[data-preview-back]').addEventListener('click', renderReceipt);
+        modalRoot.querySelector('[data-preview-back]')?.focus();
+        return;
+      }
+      modalRoot.innerHTML = `
+        <div class="modal-backdrop"><form class="modal receipt-modal" data-add-whatsapp-phone role="dialog" aria-modal="true" aria-label="Agregar número de WhatsApp">
+          <h3>Falta el número de WhatsApp</h3>
+          <div class="modal-body"><p>El cliente <strong>${escapeHtml(sale.cliente)}</strong> está registrado, pero todavía no tiene un número asociado.</p><label class="receipt-whatsapp-recipient">Número de WhatsApp<input name="telefono" type="tel" inputmode="numeric" autocomplete="tel" maxlength="30" required placeholder="Ej. 70000000"><small>Se guardará en la ficha del cliente para futuros comprobantes.</small></label><p class="form-error" data-whatsapp-phone-error role="alert" hidden></p></div>
+          <div class="modal-actions"><button type="button" class="secondary" data-preview-back>Volver al comprobante</button><button type="submit">Agregar número</button></div>
+        </form></div>`;
+      const form = modalRoot.querySelector('[data-add-whatsapp-phone]');
+      form.querySelector('[data-preview-back]').addEventListener('click', renderReceipt);
+      form.addEventListener('submit', async (event) => {
+        event.preventDefault();
+        const error = form.querySelector('[data-whatsapp-phone-error]');
+        const button = form.querySelector('button[type="submit"]');
+        error.hidden = true;
+        button.disabled = true;
+        try {
+          await api(`/api/clientes/${sale.idCliente}`, { method: 'PATCH', body: JSON.stringify({ telefono: new FormData(form).get('telefono') }) });
+          const updatedReceipt = await api(`/api/ventas/${sale.idVenta}/comprobante`);
+          showSaleReceipt(updatedReceipt);
+        } catch (requestError) {
+          error.textContent = requestError.message || 'No se pudo guardar el número.';
+          error.hidden = false;
+          button.disabled = false;
+        }
+      });
+      form.elements.telefono.focus();
+      return;
+    }
     modalRoot.innerHTML = `
       <div class="modal-backdrop"><div class="modal receipt-modal" role="dialog" aria-modal="true" aria-label="Enviar comprobante por WhatsApp">
         <h3>Enviar por WhatsApp</h3>
-        <div class="modal-body"><section class="whatsapp-preview receipt-whatsapp-preview"><strong>Vista previa del mensaje</strong><p class="hint">Revisa el texto. Al continuar se abrirá WhatsApp con el mensaje listo; el envío se confirma allí.</p>${recipientField}<textarea readonly rows="12" aria-label="Mensaje de WhatsApp">${escapeHtml(text)}</textarea></section></div>
-        <div class="modal-actions"><button type="button" class="secondary" data-preview-back>Volver al comprobante</button><button type="button" ${whatsappUrl ? '' : 'disabled'} data-preview-open>Continuar a WhatsApp</button></div>
+        <div class="modal-body"><section class="whatsapp-preview receipt-whatsapp-preview"><strong>Vista previa del mensaje</strong><p class="hint">Revisa el texto. Al continuar se abrirá WhatsApp con el mensaje listo; el envío se confirma allí.</p><p class="hint">Se abrirá WhatsApp con el número registrado del cliente.</p><textarea readonly rows="12" aria-label="Mensaje de WhatsApp">${escapeHtml(text)}</textarea></section></div>
+        <div class="modal-actions"><button type="button" class="secondary" data-preview-back>Volver al comprobante</button><button type="button" data-preview-open>Continuar a WhatsApp</button></div>
       </div></div>`;
     modalRoot.querySelector('[data-preview-back]').addEventListener('click', renderReceipt);
     modalRoot.querySelector('[data-preview-open]').addEventListener('click', (event) => {
-      window.open(destinationUrl, '_blank', 'noopener');
+      window.open(whatsappUrl, '_blank', 'noopener');
       event.currentTarget.textContent = 'WhatsApp abierto';
       event.currentTarget.disabled = true;
     });
-    const phone = modalRoot.querySelector('[data-preview-phone]');
-    if (phone) {
-      phone.addEventListener('input', () => {
-        const digits = phone.value.replace(/\D/g, '');
-        destinationUrl = digits.length >= 9 ? `https://wa.me/${digits}?text=${encodeURIComponent(text)}` : '';
-        modalRoot.querySelector('[data-preview-open]').disabled = !destinationUrl;
-      });
-      phone.focus();
-    } else modalRoot.querySelector('[data-preview-open]')?.focus();
+    modalRoot.querySelector('[data-preview-open]')?.focus();
   };
   renderReceipt();
 }
