@@ -203,6 +203,45 @@ document.addEventListener('click', (event) => {
   disclosure?.removeAttribute('open');
   disclosure?.querySelector(':scope > summary')?.focus();
 });
+
+const floatingDisclosureSelector = 'details.product-add-actions, details.inventory-secondary-actions, details.row-actions';
+
+function positionFloatingDisclosure(disclosure) {
+  const panel = disclosure.querySelector(':scope > div');
+  if (!panel || !disclosure.open) return;
+  disclosure.classList.remove('popover-align-start', 'popover-open-up');
+  requestAnimationFrame(() => {
+    if (!disclosure.open) return;
+    let bounds = panel.getBoundingClientRect();
+    if (bounds.left < 12) {
+      disclosure.classList.add('popover-align-start');
+      bounds = panel.getBoundingClientRect();
+    }
+    if (bounds.bottom > window.innerHeight - 12 && bounds.top > 12) {
+      disclosure.classList.add('popover-open-up');
+    }
+  });
+}
+
+document.addEventListener('toggle', (event) => {
+  const disclosure = event.target;
+  if (!(disclosure instanceof HTMLDetailsElement) || !disclosure.matches(floatingDisclosureSelector)) return;
+  if (disclosure.open) {
+    document.querySelectorAll(`${floatingDisclosureSelector}[open]`).forEach((item) => {
+      if (item !== disclosure) item.removeAttribute('open');
+    });
+    positionFloatingDisclosure(disclosure);
+  } else disclosure.classList.remove('popover-align-start', 'popover-open-up');
+}, true);
+
+document.addEventListener('click', (event) => {
+  if (event.target.closest(floatingDisclosureSelector)) return;
+  document.querySelectorAll(`${floatingDisclosureSelector}[open]`).forEach((item) => item.removeAttribute('open'));
+});
+
+window.addEventListener('resize', () => {
+  document.querySelectorAll(`${floatingDisclosureSelector}[open]`).forEach(positionFloatingDisclosure);
+});
 function showError(error) { return modal({ title: 'No se pudo completar', body: `<p>${escapeHtml(UiPatterns.messageFor(error))}</p>`, confirmText: 'Entendido', danger: true }); }
 function showSuccess(text) { return modal({ title: 'Listo', body: `<p>${escapeHtml(text)}</p>`, confirmText: 'Cerrar' }); }
 function confirmAction(text, danger = false) { return modal({ title: 'Confirmar acción', body: `<p>${escapeHtml(text)}</p>`, confirmText: 'Confirmar', cancelText: 'Cancelar', danger }); }

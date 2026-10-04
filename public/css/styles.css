@@ -2602,12 +2602,15 @@ button.is-busy { cursor: wait; opacity: .72; }
 .product-add-actions > summary::-webkit-details-marker { display: none; }
 .product-add-actions > div {
   position: absolute;
-  z-index: 40;
+  z-index: 80;
   right: 0;
   display: grid;
   gap: 6px;
-  width: max-content;
-  min-width: 230px;
+  width: min(280px, calc(100vw - 24px));
+  min-width: min(230px, calc(100vw - 24px));
+  max-height: min(60vh, 420px);
+  overflow-y: auto;
+  box-sizing: border-box;
   margin-top: 8px;
   padding: 8px;
   border: 1px solid var(--line);
@@ -2636,11 +2639,14 @@ button.is-busy { cursor: wait; opacity: .72; }
 .inventory-secondary-actions > div {
   position: absolute;
   top: calc(100% + 6px);
-  left: 0;
-  right: auto;
-  z-index: 60;
+  left: auto;
+  right: 0;
+  z-index: 80;
   width: min(280px, calc(100vw - 32px));
-  min-width: 220px;
+  min-width: min(220px, calc(100vw - 32px));
+  max-height: min(60vh, 420px);
+  overflow-y: auto;
+  box-sizing: border-box;
   display: flex;
   align-items: stretch;
   flex-direction: column;
@@ -2657,10 +2663,14 @@ button.is-busy { cursor: wait; opacity: .72; }
   position: absolute;
   top: calc(100% + 6px);
   right: 0;
-  z-index: 2;
+  z-index: 80;
   display: none;
   gap: 6px;
-  min-width: 152px;
+  width: min(280px, calc(100vw - 24px));
+  min-width: min(152px, calc(100vw - 24px));
+  max-height: min(60vh, 420px);
+  overflow-y: auto;
+  box-sizing: border-box;
   padding: 6px;
   border: 1px solid var(--line);
   border-radius: 6px;
@@ -2668,6 +2678,11 @@ button.is-busy { cursor: wait; opacity: .72; }
   box-shadow: 0 8px 18px rgba(25, 43, 38, .14);
 }
 .row-actions[open] > .row-actions-menu { display: grid; }
+.product-add-actions[open],
+.inventory-secondary-actions[open],
+.row-actions[open] { z-index: 81; }
+.popover-align-start > :is(div, .row-actions-menu) { right: auto !important; left: 0 !important; }
+.popover-open-up > :is(div, .row-actions-menu) { top: auto !important; bottom: calc(100% + 6px); }
 .actions,
 td.actions { position: relative; }
 .secondary-actions-close {
