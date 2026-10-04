@@ -5,14 +5,18 @@
     TIMEOUT: 'La solicitud tardó demasiado. Inténtalo nuevamente.',
     SUBSCRIPTION_GRACE_READ_ONLY: 'Tu suscripción está en gracia. Puedes consultar los datos, pero no registrar cambios.',
     LIMIT_REACHED: 'Alcanzaste el límite de tu plan para esta operación.',
+    PLAN_LIMIT_REACHED: 'Tu plan no tiene espacio suficiente para completar esta operación.',
     SUBSCRIPTION_SUSPENDED: 'Tu suscripción está suspendida. Consulta el estado de tu cuenta para continuar.',
     SUBSCRIPTION_CANCELLED: 'Tu suscripción está cancelada. Tus datos permanecen conservados.'
   };
   function messageFor(error) {
+    if (typeof error === 'string' && error.trim()) return error.trim();
     const code = error?.code;
+    if (code === 'PLAN_LIMIT_REACHED' && error?.message) return error.message;
     if (code && safeMessages[code]) return safeMessages[code];
     if (error?.name === 'AbortError' || code === 'TIMEOUT') return safeMessages.TIMEOUT;
     if (!navigator.onLine || /network|fetch|failed to fetch/i.test(String(error?.message || ''))) return safeMessages.NETWORK_ERROR;
+    if (Number(error?.status) >= 400 && Number(error?.status) < 500 && error?.message) return error.message;
     return 'No pudimos completar la operación. Inténtalo nuevamente.';
   }
   function skeleton(kind = 'rows', count = 3) {

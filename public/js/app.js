@@ -1400,7 +1400,7 @@ function renderCrud(type, rows, fields, idField, ui = {}) {
       await api(`/api/${type}/${btn.dataset.delete}`, { method: 'DELETE' });
       await showSuccess('Registro eliminado.');
       loadView(type);
-    } catch (error) { showError(error.message); }
+    } catch (error) { showError(error); }
   }));
 }
 
@@ -1505,7 +1505,7 @@ async function proveedores() {
       await showSuccess(result.message);
       await loadView('proveedores');
     } catch (error) {
-      showError(error.message);
+      showError(error);
     } finally {
       restore?.();
     }
