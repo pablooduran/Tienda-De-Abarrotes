@@ -101,15 +101,15 @@ body {
 .sidebar-heading { display: flex; align-items: center; gap: 10px; min-width: 0; }
 .sidebar h1 { min-width: 0; margin: 0; font-size: 22px; overflow-wrap: anywhere; }
 .store-mark {
-  display: grid;
-  place-items: center;
   flex: 0 0 38px;
   width: 38px;
   height: 38px;
-  border-radius: 10px;
-  color: #092012;
-  background: #4ade80;
-  font-weight: 900;
+}
+.store-mark img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
 }
 .sidebar-scrim { display: none; }
 .sidebar-scrim[hidden] { display: none; }
@@ -2829,11 +2829,12 @@ td.actions { position: relative; }
   width: 48px;
   height: 48px;
   flex: 0 0 48px;
-  border: 1px solid #4ade80;
-  border-radius: 6px;
-  background: #4ade80;
-  color: #0d150d;
-  font-weight: 800;
+}
+.auth-brand-mark img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
 }
 .auth-eyebrow {
   margin: 0 0 6px;
@@ -2845,6 +2846,13 @@ td.actions { position: relative; }
 .auth-welcome .auth-eyebrow { color: #a7e3b4; }
 .auth-brand h1 { margin: 0; font-size: 30px; line-height: 1.15; }
 .auth-welcome-copy { max-width: 40ch; margin: 0; color: #e2f0eb; font-size: 18px; line-height: 1.55; }
+.auth-growth-illustration {
+  display: block;
+  width: min(330px, 100%);
+  max-height: 340px;
+  margin: auto auto 0;
+  object-fit: contain;
+}
 .auth-store-scene {
   width: min(330px, 100%);
   margin: auto auto 0;
@@ -2982,7 +2990,7 @@ td.actions { position: relative; }
   .auth-shell { min-height: 100vh; grid-template-columns: 1fr; border: 0; border-radius: 0; box-shadow: none; }
   .auth-welcome { position: relative; min-height: 230px; padding: 26px 28px; gap: 14px; }
   .auth-welcome-copy { font-size: 16px; }
-  .auth-store-scene { position: absolute; width: 120px; right: 26px; top: 92px; border-width: 4px; border-bottom-width: 6px; }
+  .auth-growth-illustration { position: absolute; width: 120px; max-height: none; right: 26px; top: 92px; }
   .auth-store-awning { height: 15px; }
   .auth-store-front { grid-template-columns: 1fr 26px; gap: 4px; padding: 5px; }
   .auth-store-window { min-height: 48px; gap: 3px; padding: 6px 4px 3px; border-width: 2px; border-bottom-width: 4px; }
@@ -2997,7 +3005,7 @@ td.actions { position: relative; }
   .auth-welcome { min-height: 215px; padding: 22px 20px; }
   .auth-brand h1 { font-size: 24px; }
   .auth-brand-mark { width: 42px; height: 42px; flex-basis: 42px; }
-  .auth-store-scene { width: 100px; right: 18px; top: 102px; }
+  .auth-growth-illustration { width: 100px; right: 18px; top: 102px; }
   .auth-benefits { grid-template-columns: 1fr; max-width: calc(100% - 112px); gap: 5px; }
   .auth-workspace { padding: 20px 18px 26px; }
   .auth-switcher { margin-bottom: 24px; }

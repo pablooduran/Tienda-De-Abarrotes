@@ -1,7 +1,8 @@
-const STATIC_CACHE = 'control-negocio-static-v1';
+const STATIC_CACHE = 'administrau-static-v1';
 const STATIC_ASSETS = [
   '/manifest.webmanifest',
-  '/assets/pwa-icon.svg',
+  '/assets/administrau-icon.png',
+  '/assets/administrau-growth.png',
   '/css/styles.css',
   '/css/admin.css',
   '/js/pwa-install.js'
@@ -15,7 +16,7 @@ self.addEventListener('install', (event) => {
 self.addEventListener('activate', (event) => {
   event.waitUntil(
     caches.keys().then((keys) => Promise.all(
-      keys.filter((key) => key.startsWith('control-negocio-static-') && key !== STATIC_CACHE)
+      keys.filter((key) => /^(control-negocio-static-|administrau-static-)/.test(key) && key !== STATIC_CACHE)
         .map((key) => caches.delete(key))
     ))
   );

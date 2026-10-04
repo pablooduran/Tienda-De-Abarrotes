@@ -45,7 +45,7 @@
       if (!['login', 'register'].includes(button.dataset.authTarget)) continue;
       button.setAttribute('aria-pressed', String(button.dataset.authTarget === panelName));
     }
-    document.title = `${panelTitles[panelName]} | Tienda de abarrotes`;
+    document.title = `${panelTitles[panelName]} | Administrau`;
     if (focus) panels.get(panelName).querySelector('h2')?.focus();
   }
 
