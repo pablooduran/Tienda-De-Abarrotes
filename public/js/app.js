@@ -3030,11 +3030,17 @@ function renderPosPaymentSummary() {
   creditUi().refreshPosCredit(payment.balance);
 }
 
+function compactReceiptCode(code) {
+  const legacy = /^V-\d+-(\d+)$/i.exec(String(code || '').trim());
+  return legacy ? `V-${String(Number(legacy[1])).padStart(4, '0')}` : code;
+}
+
 function receiptText(receipt) {
   const sale = receipt.venta;
+  const receiptCode = compactReceiptCode(sale.codigoComprobante) || `Venta #${sale.idVenta}`;
   const lines = [
     sale.tienda,
-    `Comprobante ${sale.codigoComprobante || `Venta #${sale.idVenta}`}`,
+    `Comprobante ${receiptCode}`,
     formatDate(sale.fecha),
     sale.idCliente ? `Cliente: ${sale.cliente}` : 'Cliente ocasional',
     ''
@@ -3058,9 +3064,10 @@ function receiptText(receipt) {
 
 function receiptHtml(receipt) {
   const sale = receipt.venta;
+  const receiptCode = compactReceiptCode(sale.codigoComprobante) || `Venta #${sale.idVenta}`;
   return `
     <section class="receipt" id="saleReceipt">
-      <header><h2>${escapeHtml(sale.tienda)}</h2><strong>${escapeHtml(sale.codigoComprobante || `Venta #${sale.idVenta}`)}</strong><span>${escapeHtml(formatDate(sale.fecha))}</span></header>
+      <header><h2>${escapeHtml(sale.tienda)}</h2><strong>${escapeHtml(receiptCode)}</strong><span>${escapeHtml(formatDate(sale.fecha))}</span></header>
       <p>${sale.idCliente ? `Cliente: <strong>${escapeHtml(sale.cliente)}</strong>` : 'Cliente ocasional'}</p>
       <div class="receipt-lines">${receipt.detalle.map((item) => `
         <div><span>${escapeHtml(item.nombre)}<small>${intValue(item.cantidad)} ${escapeHtml(item.presentacionVenta)} × Bs ${money(item.precioVenta)}</small></span><strong>Bs ${money(item.subtotal)}</strong></div>`).join('')}</div>

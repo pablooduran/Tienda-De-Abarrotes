@@ -1,4 +1,5 @@
 const { centsToDecimal, creditError, moneyToCents } = require('./customer-credit-service');
+const { compactCollectionReceiptCode, compactSaleReceiptCode } = require('../utils/receipt-code');
 
 function positiveId(value) {
   const id = Number(value);
@@ -60,7 +61,7 @@ async function getCollectionReceipt(connection, idTienda, idCobroFiado) {
       idPagoFiado: row.idPagoFiado,
       idFiado: row.idFiado,
       idVenta: row.idVenta,
-      comprobanteVenta: row.codigoComprobante,
+      comprobanteVenta: compactSaleReceiptCode(row.codigoComprobante),
       fechaPago: row.fechaPago,
       fechaInicio: row.fechaInicio,
       fechaVencimiento: row.fechaVencimiento,
@@ -80,7 +81,7 @@ async function getCollectionReceipt(connection, idTienda, idCobroFiado) {
   const afterCents = distributions.reduce((sum, row) => sum + moneyToCents(row.saldoPosterior, 'El saldo posterior'), 0);
   return {
     comprobante: {
-      numero: `COB-${String(header.idCobroFiado).padStart(8, '0')}`,
+      numero: compactCollectionReceiptCode(header.idCobroFiado),
       idCobroFiado: header.idCobroFiado,
       fechaCobro: header.fechaCobro,
       montoTotal: header.montoTotal,

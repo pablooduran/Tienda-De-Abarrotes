@@ -19,6 +19,7 @@ const {
 const { administrativeAuditService } = require('./administrative-audit-service');
 const { businessAnalytics } = require('./product-analytics');
 const { formatLocalDate, formatLocalDateTime } = require('../utils/local-datetime');
+const { compactSaleReceiptCode } = require('../utils/receipt-code');
 
 const SALE_PRESENTATIONS = new Set(['unidad', 'paquete']);
 const PAYMENT_METHODS = new Set(['efectivo', 'qr']);
@@ -83,8 +84,9 @@ function normalizeBarcode(value) {
   return barcode;
 }
 
-function saleCode(idTienda, idVenta) {
-  return `V-${idTienda}-${String(idVenta).padStart(8, '0')}`;
+function saleCode(idVenta) {
+  // El identificador interno ya garantiza unicidad; el comprobante visible debe ser fácil de dictar y reconocer.
+  return `V-${String(idVenta).padStart(4, '0')}`;
 }
 
 function normalizeItems(items) {
@@ -295,7 +297,7 @@ async function registerSale({
       throw stockError(400, 'No se puede calcular cambio sin un pago en efectivo.');
     }
     const changeCents = cashPayment ? cashReceivedCents - cashPayment.montoCents : 0;
-    const code = saleCode(idTienda, idVenta);
+    const code = saleCode(idVenta);
     const saleType = balanceCents > 0 ? 'fiada' : 'pagada';
 
     await connection.query(
@@ -477,19 +479,20 @@ async function getSaleReceipt(idTienda, idVenta) {
     pool.query('SELECT codigoPaisWhatsApp FROM configuracionCreditoTienda WHERE idTienda=?', [idTienda])
   ]);
   if (!sales.length) throw stockError(404, 'Venta no encontrada.');
-  const receipt = { venta: sales[0], detalle: details, pagos: payments };
+  const sale = { ...sales[0], codigoComprobante: compactSaleReceiptCode(sales[0].codigoComprobante) };
+  const receipt = { venta: sale, detalle: details, pagos: payments };
   const countryCode = String(creditConfigurations[0]?.codigoPaisWhatsApp || '').replace(/\D/g, '');
   const normalizedPhone = String(sales[0].telefonoNormalizado || '').replace(/\D/g, '');
   if (!countryCode || !normalizedPhone) return { ...receipt, whatsappUrl: null };
   const phone = normalizedPhone.startsWith(countryCode) ? normalizedPhone : `${countryCode}${normalizedPhone}`;
   const lines = [
-    sales[0].tienda,
-    `Comprobante ${sales[0].codigoComprobante || `Venta #${sales[0].idVenta}`}`,
-    `Cliente: ${sales[0].cliente}`,
+    sale.tienda,
+    `Comprobante ${sale.codigoComprobante || `Venta #${sale.idVenta}`}`,
+    `Cliente: ${sale.cliente}`,
     ...details.map((item) => `${item.nombre}: ${item.cantidad} ${item.presentacionVenta} - Bs ${Number(item.subtotal).toFixed(2)}`),
-    `Total: Bs ${Number(sales[0].total).toFixed(2)}`,
-    `Pagado: Bs ${Number(sales[0].montoPagado).toFixed(2)}`,
-    `Saldo: Bs ${Number(sales[0].saldoActualFiado ?? sales[0].saldoPendiente).toFixed(2)}`
+    `Total: Bs ${Number(sale.total).toFixed(2)}`,
+    `Pagado: Bs ${Number(sale.montoPagado).toFixed(2)}`,
+    `Saldo: Bs ${Number(sale.saldoActualFiado ?? sale.saldoPendiente).toFixed(2)}`
   ];
   return { ...receipt, whatsappUrl: `https://wa.me/${phone}?text=${encodeURIComponent(lines.join('\n'))}` };
 }
