@@ -567,8 +567,8 @@ async function main() {
     await page.locator('[data-modal-submit]').click();
     await page.locator('[data-whatsapp-preview] textarea').waitFor();
     check((await page.locator('[data-whatsapp-preview] textarea').inputValue()).includes(`Cliente UI ${marker}`), 'WhatsApp sustituye variables con datos reales.');
-    const whatsappButton = page.locator('[data-open-whatsapp]');
-    check(await whatsappButton.count() === 1, 'WhatsApp solo ofrece apertura cuando el backend devuelve URL.');
+    const whatsappButton = page.locator('[data-credit-modal] [data-modal-submit]');
+    check(await whatsappButton.textContent() === 'Abrir WhatsApp', 'WhatsApp ofrece la apertura solo despues de revisar la vista previa.');
     await whatsappButton.click();
     const opened = await page.evaluate(() => window.__openedUrls.at(-1));
     check(/^https:\/\/wa\.me\/591\d+\?text=/.test(opened), 'La URL de WhatsApp usa HTTPS, numero normalizado y texto codificado.');

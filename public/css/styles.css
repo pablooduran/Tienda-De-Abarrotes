@@ -2424,6 +2424,14 @@ body:has([data-compensation-filter-form]) { overflow: hidden; }
 .promise-context strong { display: block; margin-top: 4px; color: var(--ink); }
 .whatsapp-preview { margin-top: 14px; padding: 12px; border: 1px solid var(--line); border-radius: 7px; background: #f8faf9; }
 .whatsapp-preview textarea { margin-top: 6px; resize: vertical; }
+.whatsapp-template-options { margin-top: 12px; }
+.whatsapp-template-options > summary { cursor: pointer; color: var(--brand-dark); font-weight: 700; }
+.whatsapp-template-options > div { margin-top: 10px; }
+.whatsapp-template-options label { display: grid; gap: 6px; }
+.receipt-more-actions { margin-right: auto; }
+.receipt-whatsapp-preview { margin-top: 0; }
+.receipt-whatsapp-preview > strong { display: block; }
+.receipt-whatsapp-preview .hint { margin: 6px 0 0; }
 .credit-policy-help { margin-top: 14px; padding: 12px; border-left: 4px solid var(--brand); background: #f4f8f6; }
 .credit-policy-help p { margin: 6px 0; }
 .template-list { display: grid; gap: 10px; }

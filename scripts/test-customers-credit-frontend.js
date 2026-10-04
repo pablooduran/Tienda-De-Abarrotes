@@ -145,13 +145,13 @@ check('Seguimiento inmutable sin editar o borrar',
   && !creditJs.includes("method: 'DELETE'"));
 check('WhatsApp se prepara en backend', creditJs.includes('/api/cobranza/mensaje-whatsapp/preparar'));
 check('Preparacion de WhatsApp usa lenguaje claro', includesAll(creditJs, [
-  'Guardar la preparacion en el historial',
-  'El mensaje aparecera aqui cuando prepares la vista previa.',
+  'Elige el motivo y revisa el mensaje antes de abrir WhatsApp.',
+  'El mensaje aparecerá aquí antes de enviarlo.',
   'Elegir por mi: plantilla reciente o mensaje predeterminado',
   'No hay plantillas activas; se usara un mensaje predeterminado.'
 ]) && !creditJs.includes('El backend preparara el texto'));
 check('Abrir WhatsApp no marca envio',
-  creditJs.includes('Abrir WhatsApp no registra el mensaje como enviado.')
+  creditJs.includes('WhatsApp se abrió en otra pestaña.')
   && creditJs.includes('data-mark-manual'));
 check('CRUD logico de plantillas conectado', includesAll(creditRoutes + creditJs, [
   "router.get('/plantillas-cobranza'", "router.post('/plantillas-cobranza'",

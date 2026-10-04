@@ -1074,8 +1074,8 @@ router.post('/cobranza/mensaje-whatsapp/preparar', requirePlanFeature('recordato
   res.json({
     texto: text,
     url: phone ? `https://wa.me/${phone}?text=${encodeURIComponent(text)}` : null,
-    advertencia: phone ? 'El mensaje esta preparado; el usuario debe confirmar el envio en WhatsApp.'
-      : 'No hay codigo de pais y telefono confiables. Copie el texto manualmente.',
+    advertencia: phone ? 'Revisa el texto y el destinatario en WhatsApp antes de enviarlo. Administrau no envía mensajes automáticamente.'
+      : 'No hay un teléfono confiable con código de país. Copia el mensaje y envíalo manualmente.',
     enviado: false,
     plantilla: {
       idPlantillaCobranza: template.idPlantillaCobranza,

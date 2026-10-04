@@ -3091,33 +3091,53 @@ function showSaleReceipt(receipt) {
   const returnFocus = document.activeElement;
   const text = receiptText(receipt);
   const whatsappUrl = receipt.whatsappUrl || '';
-  modalRoot.innerHTML = `
-    <div class="modal-backdrop"><div class="modal receipt-modal" role="dialog" aria-modal="true" aria-label="Venta confirmada">
-      <h3>Venta confirmada</h3>
-      <div class="modal-body">${receiptHtml(receipt)}</div>
-      <div class="modal-actions receipt-actions">
-        <button type="button" class="secondary" data-receipt-copy>Copiar texto</button>
-        <button type="button" class="secondary" data-receipt-print>Imprimir</button>
-        <button type="button" ${whatsappUrl ? '' : 'disabled'} data-receipt-whatsapp>WhatsApp</button>
-        <button type="button" data-modal-confirm>Cerrar</button>
-      </div>
-    </div></div>`;
-  modalRoot.querySelector('[data-modal-confirm]').addEventListener('click', () => {
+  const close = () => {
     modalRoot.innerHTML = '';
     returnFocus?.focus?.();
-  });
-  modalRoot.querySelector('[data-receipt-copy]').addEventListener('click', async () => {
-    try { await copyReceiptText(text); showMessage('Comprobante copiado.'); } catch { showError('No se pudo copiar el comprobante.'); }
-  });
-  modalRoot.querySelector('[data-receipt-whatsapp]').addEventListener('click', () => {
-    if (whatsappUrl) window.open(whatsappUrl, '_blank', 'noopener');
-  });
-  modalRoot.querySelector('[data-receipt-print]').addEventListener('click', () => {
+  };
+  const print = () => {
     document.body.classList.add('printing-receipt');
     window.addEventListener('afterprint', () => document.body.classList.remove('printing-receipt'), { once: true });
     window.print();
-  });
-  modalRoot.querySelector('button:not([disabled])')?.focus();
+  };
+  const renderReceipt = () => {
+    modalRoot.innerHTML = `
+      <div class="modal-backdrop"><div class="modal receipt-modal" role="dialog" aria-modal="true" aria-label="Venta confirmada">
+        <h3>Venta confirmada</h3>
+        <div class="modal-body">${receiptHtml(receipt)}</div>
+        <div class="modal-actions receipt-actions">
+          <details class="row-actions receipt-more-actions"><summary>Más opciones</summary><div class="row-actions-menu"><button type="button" class="secondary" data-receipt-copy>Copiar comprobante</button><button type="button" class="secondary" data-receipt-print>Imprimir</button></div></details>
+          ${whatsappUrl ? '<button type="button" data-receipt-whatsapp>Enviar por WhatsApp</button>' : '<button type="button" class="secondary" data-receipt-copy>Copiar mensaje</button>'}
+          <button type="button" class="secondary" data-modal-confirm>Cerrar</button>
+        </div>
+      </div></div>`;
+    modalRoot.querySelector('[data-modal-confirm]').addEventListener('click', close);
+    modalRoot.querySelectorAll('[data-receipt-copy]').forEach((button) => button.addEventListener('click', async () => {
+      try {
+        await copyReceiptText(text);
+        button.textContent = 'Mensaje copiado';
+      } catch { showError('No se pudo copiar el comprobante.'); }
+    }));
+    modalRoot.querySelector('[data-receipt-whatsapp]')?.addEventListener('click', renderWhatsAppPreview);
+    modalRoot.querySelector('[data-receipt-print]')?.addEventListener('click', print);
+    modalRoot.querySelector('button:not([disabled])')?.focus();
+  };
+  const renderWhatsAppPreview = () => {
+    modalRoot.innerHTML = `
+      <div class="modal-backdrop"><div class="modal receipt-modal" role="dialog" aria-modal="true" aria-label="Enviar comprobante por WhatsApp">
+        <h3>Enviar por WhatsApp</h3>
+        <div class="modal-body"><section class="whatsapp-preview receipt-whatsapp-preview"><strong>Vista previa del mensaje</strong><p class="hint">Revisa el texto. Al continuar se abrirá WhatsApp con el mensaje listo; el envío se confirma allí.</p><textarea readonly rows="12" aria-label="Mensaje de WhatsApp">${escapeHtml(text)}</textarea></section></div>
+        <div class="modal-actions"><button type="button" class="secondary" data-preview-back>Volver al comprobante</button><button type="button" data-preview-open>Continuar a WhatsApp</button></div>
+      </div></div>`;
+    modalRoot.querySelector('[data-preview-back]').addEventListener('click', renderReceipt);
+    modalRoot.querySelector('[data-preview-open]').addEventListener('click', (event) => {
+      window.open(whatsappUrl, '_blank', 'noopener');
+      event.currentTarget.textContent = 'WhatsApp abierto';
+      event.currentTarget.disabled = true;
+    });
+    modalRoot.querySelector('[data-preview-open]')?.focus();
+  };
+  renderReceipt();
 }
 
 async function submitPosSale(event) {

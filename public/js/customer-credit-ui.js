@@ -998,9 +998,9 @@
       const activeTemplates = templateData.plantillas || [];
       const allowedTypes = idCobroFiado ? ['confirmacion_pago'] : TEMPLATE_TYPES.filter((item) => item !== 'confirmacion_pago');
       await openFormModal({
-        title: 'Preparar mensaje de WhatsApp',
-        body: `<div class="form-grid"><label>Tipo de mensaje<select name="tipoPlantilla">${allowedTypes.map((item) => option(item, statusText(item), idCobroFiado ? 'confirmacion_pago' : (idFiado ? 'recordatorio_previo' : 'estado_cuenta'))).join('')}</select></label><label>Plantilla<select name="idPlantillaCobranza"></select></label><label class="check"><input name="registrarPreparacion" type="checkbox"> Guardar la preparacion en el historial</label></div><p class="hint" data-template-choice></p><div class="whatsapp-preview" data-whatsapp-preview><p class="muted">El mensaje aparecera aqui cuando prepares la vista previa.</p></div>`,
-        submitText: 'Preparar vista previa', wide: true,
+        title: 'Enviar por WhatsApp',
+        body: `<p class="hint">Elige el motivo y revisa el mensaje antes de abrir WhatsApp.</p><div class="form-grid"><label>Motivo del mensaje<select name="tipoPlantilla">${allowedTypes.map((item) => option(item, statusText(item), idCobroFiado ? 'confirmacion_pago' : (idFiado ? 'recordatorio_previo' : 'estado_cuenta'))).join('')}</select></label></div><details class="whatsapp-template-options"><summary>Personalizar plantilla</summary><div><label>Plantilla<select name="idPlantillaCobranza"></select></label><p class="hint" data-template-choice></p></div></details><div class="whatsapp-preview" data-whatsapp-preview><p class="muted">El mensaje aparecerá aquí antes de enviarlo.</p></div>`,
+        submitText: 'Ver mensaje', wide: true,
         onOpen: (form) => {
           const sync = () => {
             const matches = activeTemplates.filter((item) => item.tipo === form.elements.tipoPlantilla.value);
@@ -1013,26 +1013,35 @@
           sync();
         },
         onSubmit: async (form) => {
-          const fd = new FormData(form);
-          prepared = await api('/api/cobranza/mensaje-whatsapp/preparar', { method: 'POST', body: JSON.stringify({ idCliente, idFiado, idCobroFiado, idPlantillaCobranza: nullable(fd.get('idPlantillaCobranza')), tipoPlantilla: fd.get('tipoPlantilla'), registrarPreparacion: booleanValue(form, 'registrarPreparacion') }) });
           const target = form.querySelector('[data-whatsapp-preview]');
-          target.innerHTML = `<p class="hint">Plantilla usada: ${e(prepared.plantilla?.nombre || 'Texto del sistema')}.</p><label>Texto preparado<textarea readonly rows="8">${e(prepared.texto)}</textarea></label><p class="hint">${e(prepared.advertencia || '')}</p><div class="actions"><button type="button" class="secondary" data-copy-whatsapp>Copiar texto</button>${prepared.url ? '<button type="button" data-open-whatsapp>Abrir WhatsApp</button>' : ''}${can('seguimiento_cobranza') && !readOnly() ? '<button type="button" class="secondary" data-mark-manual>Marcar como enviado manualmente</button>' : ''}</div><p class="manual-send-note">Abrir WhatsApp no registra el mensaje como enviado.</p>`;
-          target.querySelector('[data-copy-whatsapp]').addEventListener('click', async (event) => {
+          const submitButton = form.querySelector('[data-modal-submit]');
+          if (prepared) {
+            if (prepared.url) {
+              window.open(prepared.url, '_blank', 'noopener');
+              target.querySelector('[data-whatsapp-opened]')?.removeAttribute('hidden');
+              submitButton.textContent = 'Abrir WhatsApp otra vez';
+              return false;
+            }
             await copyText(prepared.texto);
-            event.currentTarget.textContent = 'Texto copiado';
-          });
-          target.querySelector('[data-open-whatsapp]')?.addEventListener('click', () => window.open(prepared.url, '_blank', 'noopener'));
+            submitButton.textContent = 'Mensaje copiado';
+            submitButton.disabled = true;
+            return false;
+          }
+          const fd = new FormData(form);
+          prepared = await api('/api/cobranza/mensaje-whatsapp/preparar', { method: 'POST', body: JSON.stringify({ idCliente, idFiado, idCobroFiado, idPlantillaCobranza: nullable(fd.get('idPlantillaCobranza')), tipoPlantilla: fd.get('tipoPlantilla') }) });
+          target.innerHTML = `<p class="hint">Plantilla usada: ${e(prepared.plantilla?.nombre || 'Texto del sistema')}.</p><label>Vista previa del mensaje<textarea readonly rows="8">${e(prepared.texto)}</textarea></label><p class="hint">${e(prepared.advertencia || '')}</p><div data-whatsapp-opened hidden><p class="manual-send-note">WhatsApp se abrió en otra pestaña. Envía el mensaje allí y vuelve solo si quieres registrarlo en el seguimiento.</p>${can('seguimiento_cobranza') && !readOnly() ? '<button type="button" class="secondary" data-mark-manual>Ya envié el mensaje</button>' : ''}</div>`;
           target.querySelector('[data-mark-manual]')?.addEventListener('click', async () => {
             const button = target.querySelector('[data-mark-manual]');
             if (button.dataset.confirmed !== 'true') {
               button.dataset.confirmed = 'true';
-              button.textContent = 'Confirmar envio manual';
+              button.textContent = 'Confirmar que lo envié';
               return;
             }
             await api('/api/cobranza/seguimientos', { method: 'POST', body: JSON.stringify({ idCliente, idFiado, tipo: 'mensaje_enviado_manual', canal: 'whatsapp', detalle: 'Envio manual confirmado por el usuario.' }) });
             await showSuccess('Envio manual registrado en seguimiento.');
           });
-          form.querySelector('[data-modal-submit]').textContent = 'Actualizar vista previa';
+          form.querySelector('[data-modal-cancel]').textContent = 'Cerrar';
+          submitButton.textContent = prepared.url ? 'Abrir WhatsApp' : 'Copiar mensaje';
           return false;
         }
       });
