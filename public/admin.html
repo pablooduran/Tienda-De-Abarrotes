@@ -312,6 +312,7 @@
             <p>Productos sugeridos para acelerar el alta de inventario sin compartir precios ni stock.</p>
           </div>
           <div class="button-row">
+            <button id="importSupplierSourceButton" class="button button-secondary" type="button">Cargar proveedores base</button>
             <button id="importCatalogButton" class="button button-secondary" type="button">Importar Excel</button>
             <button id="addMasterCategoryButton" class="button button-secondary" type="button">Nueva categoría</button>
             <button id="addMasterBrandButton" class="button button-secondary" type="button">Nueva marca</button>
@@ -400,6 +401,20 @@
         <p id="catalogImportError" class="form-error" hidden></p>
       </div>
       <footer><button id="cancelCatalogImport" class="button button-secondary" type="button">Cancelar</button><button id="confirmCatalogImport" class="button button-primary" type="button" disabled>Confirmar importación</button></footer>
+    </form>
+  </dialog>
+
+  <dialog id="supplierSourceImportDialog" class="modal modal-small">
+    <form method="dialog">
+      <header><div><p class="eyebrow">Catálogo maestro</p><h2>Cargar proveedores de la base</h2></div><button id="closeSupplierSourceImport" class="icon-button" type="button" aria-label="Cerrar">×</button></header>
+      <div class="import-body">
+        <p>Lee las hojas PRODUCTOS, PROVEEDORES y PROVEEDOR_PRODUCTO. Solo actualizará el proveedor sugerido del catálogo maestro; no modifica inventario, precios ni proveedores de una tienda.</p>
+        <label class="form-field full"><span>Archivo base .xlsx</span><input id="supplierSourceImportFile" type="file" accept=".xlsx" required></label>
+        <button id="previewSupplierSourceImport" class="button button-primary" type="button">Revisar archivo</button>
+        <p id="supplierSourceImportSummary" class="import-summary"></p>
+        <p id="supplierSourceImportError" class="form-error" role="alert" hidden></p>
+      </div>
+      <footer><button id="cancelSupplierSourceImport" class="button button-secondary" type="button">Cancelar</button><button id="confirmSupplierSourceImport" class="button button-primary" type="button" disabled>Actualizar catálogo</button></footer>
     </form>
   </dialog>
 

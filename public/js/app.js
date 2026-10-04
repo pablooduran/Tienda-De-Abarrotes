@@ -1469,6 +1469,12 @@ async function clientes() {
 }
 
 async function proveedores() {
+  let suggestions = { total: 0, proveedores: [] };
+  try {
+    suggestions = await api('/api/proveedores/catalogo-sugeridos');
+  } catch (error) {
+    showError(error.message);
+  }
   renderCrud('proveedores', state.proveedores, [
     { name: 'nombre', label: 'Nombre', required: true, upper: true },
     { name: 'telefono', label: 'Teléfono', phone: true },
@@ -1479,6 +1485,30 @@ async function proveedores() {
     primaryAction: 'Agregar proveedor',
     emptyTitle: 'Aún no tienes proveedores',
     emptyDescription: 'Registra un proveedor cuando necesites asociarlo a una compra o producto.'
+  });
+  if (!suggestions.total) return;
+  const heading = view.querySelector('.inventory-crud-heading');
+  const action = document.createElement('button');
+  action.type = 'button';
+  action.className = 'secondary';
+  action.textContent = `Importar ${suggestions.total} proveedores del catálogo`;
+  action.title = 'Registra solo los nombres sugeridos; podrás completar teléfono y dirección después.';
+  heading.appendChild(action);
+  action.addEventListener('click', async () => {
+    const names = suggestions.proveedores.slice(0, 6).join(', ');
+    const more = suggestions.total > 6 ? ` y ${suggestions.total - 6} más` : '';
+    if (!await confirmAction(`Se registrarán ${suggestions.total} proveedores sugeridos por el catálogo. Solo se guardará el nombre; podrás completar teléfono y dirección después.\n\n${names}${more}`, false)) return;
+    const restore = UiPatterns.mutation(action, 'Importando...');
+    try {
+      const result = await api('/api/proveedores/importar-catalogo', { method: 'POST' });
+      await refreshCatalogs();
+      await showSuccess(result.message);
+      await loadView('proveedores');
+    } catch (error) {
+      showError(error.message);
+    } finally {
+      restore?.();
+    }
   });
 }
 
@@ -2740,15 +2770,14 @@ async function catalogoMaestro() {
         permiteVentaPorPaquete: Boolean(product.permiteVentaPorPaquete), collapsed: false
       };
       const chosenProvider = state.proveedores.find((provider) => String(provider.idProveedor) === String(config.idProveedor));
-      const providerLabel = chosenProvider?.nombre || config.proveedorSugerido || 'Sin proveedor sugerido';
+      const providerLabel = chosenProvider?.nombre || config.proveedorSugerido || 'Sin proveedor';
       const packageUnitsHidden = config.permiteVentaPorPaquete ? '' : ' hidden';
       return `<article class="catalog-selected-item ${config.collapsed ? 'is-collapsed' : ''}" data-master-config="${product.idProductoMaestro}">
         <div class="catalog-selected-heading"><div><strong>${escapeHtml(product.nombre)}</strong><span>${escapeHtml(catalogSizeFor(product))}</span></div><div class="catalog-selected-actions"><button type="button" class="small secondary catalog-collapse-toggle" data-toggle-master="${product.idProductoMaestro}" aria-expanded="${config.collapsed ? 'false' : 'true'}" title="${config.collapsed ? 'Abrir datos' : 'Minimizar datos'}">${config.collapsed ? '⌄' : '⌃'}</button><button type="button" class="small danger" data-remove-master="${product.idProductoMaestro}">Quitar</button></div></div>
         <div class="catalog-config-grid">
           <label>Nombre local<input name="nombreLocal" required value="${escapeHtml(config.nombreLocal)}"></label>
           <label>Categoría local<select name="categoriaLocal">${categoryOptions(config.categoriaLocal)}</select></label>
-          <div class="catalog-provider-summary"><label>Proveedor<input value="${escapeHtml(providerLabel)}" readonly></label><button type="button" class="small secondary" data-change-provider="${product.idProductoMaestro}" aria-expanded="false">Cambiar proveedor</button></div>
-          <div class="catalog-provider-change" data-provider-change hidden><label>Proveedor registrado<select name="idProveedor">${options(state.proveedores, 'idProveedor', 'nombre', 'Mantener proveedor mostrado', config.idProveedor)}</select></label><label>Proveedor nuevo o sugerido<input name="proveedorSugerido" maxlength="100" value="${escapeHtml(config.proveedorSugerido)}" placeholder="Se registrará automáticamente si no existe"></label></div>
+          <div class="catalog-provider-panel"><div class="catalog-provider-summary"><label>Proveedor<input value="${escapeHtml(providerLabel)}" readonly></label><button type="button" class="secondary" data-change-provider="${product.idProductoMaestro}" aria-expanded="false">Cambiar proveedor</button></div><div class="catalog-provider-change" data-provider-change hidden><label>Proveedor registrado<select name="idProveedor">${options(state.proveedores, 'idProveedor', 'nombre', 'Mantener proveedor mostrado', config.idProveedor)}</select></label><label>Proveedor nuevo o sugerido<input name="proveedorSugerido" maxlength="100" value="${escapeHtml(config.proveedorSugerido)}" placeholder="Se registrará automáticamente si no existe"></label></div></div>
           <label>Precio de compra<input name="precioCompra" type="number" min="0" step="0.01" value="${escapeHtml(config.precioCompra)}" required></label>
           <label>Precio de venta<input name="precioVenta" type="number" min="0.01" step="0.01" value="${escapeHtml(config.precioVenta)}" required></label>
           <label>Stock inicial<input name="stockInicial" type="number" min="0" step="1" value="${escapeHtml(config.stockInicial)}" required></label>

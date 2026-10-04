@@ -14,6 +14,7 @@ const state = {
   catalogFilterApplying: false,
   importRows: [],
   importSelection: new Set(),
+  supplierSourceReady: false,
   formAction: null,
   formFields: [],
   auditUi: null
@@ -85,7 +86,12 @@ Object.assign(elements, {
   catalogImportSummary: document.getElementById('catalogImportSummary'),
   catalogImportPreview: document.getElementById('catalogImportPreview'),
   catalogImportError: document.getElementById('catalogImportError'),
-  confirmCatalogImport: document.getElementById('confirmCatalogImport')
+  confirmCatalogImport: document.getElementById('confirmCatalogImport'),
+  supplierSourceImportDialog: document.getElementById('supplierSourceImportDialog'),
+  supplierSourceImportFile: document.getElementById('supplierSourceImportFile'),
+  supplierSourceImportSummary: document.getElementById('supplierSourceImportSummary'),
+  supplierSourceImportError: document.getElementById('supplierSourceImportError'),
+  confirmSupplierSourceImport: document.getElementById('confirmSupplierSourceImport')
 });
 
 function isActive(value) {
@@ -990,6 +996,56 @@ async function confirmCatalogImport() {
   }
 }
 
+function openSupplierSourceImport() {
+  state.supplierSourceReady = false;
+  elements.supplierSourceImportFile.value = '';
+  elements.supplierSourceImportSummary.textContent = '';
+  elements.supplierSourceImportError.hidden = true;
+  elements.confirmSupplierSourceImport.disabled = true;
+  elements.supplierSourceImportDialog.showModal();
+}
+
+async function previewSupplierSourceImport() {
+  const file = elements.supplierSourceImportFile.files[0];
+  if (!file) {
+    elements.supplierSourceImportError.textContent = 'Selecciona el archivo base .xlsx.';
+    elements.supplierSourceImportError.hidden = false;
+    return;
+  }
+  const data = new FormData();
+  data.append('archivo', file);
+  elements.supplierSourceImportError.hidden = true;
+  elements.confirmSupplierSourceImport.disabled = true;
+  try {
+    const result = await api('/api/admin/catalogo/importaciones/proveedores/previsualizar', { method: 'POST', body: data });
+    elements.supplierSourceImportSummary.textContent = `${result.proveedoresFuente} proveedores · ${result.productosConProveedor} productos con proveedor · ${result.productosCoincidentes} coinciden con el catálogo · ${result.productosAActualizar} sugerencias para actualizar${result.productosConAlternativas ? ` · ${result.productosConAlternativas} con proveedor alternativo` : ''}.`;
+    state.supplierSourceReady = true;
+    elements.confirmSupplierSourceImport.disabled = result.productosAActualizar === 0;
+  } catch (error) {
+    state.supplierSourceReady = false;
+    elements.supplierSourceImportError.textContent = error.message;
+    elements.supplierSourceImportError.hidden = false;
+  }
+}
+
+async function confirmSupplierSourceImport() {
+  const file = elements.supplierSourceImportFile.files[0];
+  if (!state.supplierSourceReady || !file) return;
+  const data = new FormData();
+  data.append('archivo', file);
+  elements.confirmSupplierSourceImport.disabled = true;
+  try {
+    const result = await api('/api/admin/catalogo/importaciones/proveedores/confirmar', { method: 'POST', body: data });
+    showToast(`${result.productosAActualizar} productos ahora tienen proveedor sugerido.`);
+    elements.supplierSourceImportDialog.close();
+    await loadMasterCatalog();
+  } catch (error) {
+    elements.supplierSourceImportError.textContent = error.message;
+    elements.supplierSourceImportError.hidden = false;
+    elements.confirmSupplierSourceImport.disabled = false;
+  }
+}
+
 async function logout() {
   const confirmed = await openConfirmation(
     'Cerrar sesión',
@@ -1058,6 +1114,11 @@ document.getElementById('previewCatalogImport').addEventListener('click', previe
 elements.confirmCatalogImport.addEventListener('click', confirmCatalogImport);
 document.getElementById('closeCatalogImport').addEventListener('click', () => elements.catalogImportDialog.close());
 document.getElementById('cancelCatalogImport').addEventListener('click', () => elements.catalogImportDialog.close());
+document.getElementById('importSupplierSourceButton').addEventListener('click', openSupplierSourceImport);
+document.getElementById('previewSupplierSourceImport').addEventListener('click', previewSupplierSourceImport);
+elements.confirmSupplierSourceImport.addEventListener('click', confirmSupplierSourceImport);
+document.getElementById('closeSupplierSourceImport').addEventListener('click', () => elements.supplierSourceImportDialog.close());
+document.getElementById('cancelSupplierSourceImport').addEventListener('click', () => elements.supplierSourceImportDialog.close());
 elements.masterPreviousPage.addEventListener('click', () => loadMasterCatalog(state.masterPage - 1));
 elements.masterNextPage.addEventListener('click', () => loadMasterCatalog(state.masterPage + 1));
 let catalogSearchTimer;

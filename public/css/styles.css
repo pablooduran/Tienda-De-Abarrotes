@@ -961,8 +961,10 @@ tr.low-stock { background: var(--warn); }
   gap: 9px;
   margin-top: 12px;
 }
-.catalog-provider-summary { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; align-items: end; }
-.catalog-provider-change { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 9px; grid-column: 1 / -1; }
+.catalog-provider-panel { position: relative; grid-column: 1 / -1; min-height: 68px; }
+.catalog-provider-summary,
+.catalog-provider-change { position: absolute; inset: 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 9px; align-items: end; }
+.catalog-provider-summary button { width: 100%; min-height: 42px; }
 .catalog-provider-change[hidden], .catalog-package-units[hidden] { display: none; }
 .product-picker {
   min-height: 420px;

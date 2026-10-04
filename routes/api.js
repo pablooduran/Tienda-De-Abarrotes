@@ -575,6 +575,72 @@ function crudRoutes(base, table, idField, protectedDeleteMessage) {
   });
 }
 
+function providerNameKey(value) {
+  return cleanText(value).normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+}
+
+router.get('/proveedores/catalogo-sugeridos', async (req, res, next) => {
+  try {
+    const idTienda = tenantId(req);
+    const [[masterRows], [storeRows]] = await Promise.all([
+      pool.query(`SELECT DISTINCT proveedorSugerido
+                  FROM productoMaestro
+                  WHERE activo=1 AND proveedorSugerido IS NOT NULL AND proveedorSugerido<>''
+                  ORDER BY proveedorSugerido`),
+      pool.query('SELECT nombre FROM proveedor WHERE idTienda=?', [idTienda])
+    ]);
+    const existing = new Set(storeRows.map((row) => providerNameKey(row.nombre)));
+    const providers = [...new Map(masterRows
+      .map((row) => cleanText(row.proveedorSugerido))
+      .filter(Boolean)
+      .filter((name) => !existing.has(providerNameKey(name)))
+      .map((name) => [providerNameKey(name), name])).values()];
+    res.json({ total: providers.length, proveedores: providers });
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.post('/proveedores/importar-catalogo', async (req, res, next) => {
+  let connection;
+  try {
+    const idTienda = tenantId(req);
+    connection = await pool.getConnection();
+    await connection.beginTransaction();
+    await lockTenantForLimit(connection, idTienda);
+    const [[masterRows], [storeRows]] = await Promise.all([
+      connection.query(`SELECT DISTINCT proveedorSugerido
+                        FROM productoMaestro
+                        WHERE activo=1 AND proveedorSugerido IS NOT NULL AND proveedorSugerido<>''
+                        ORDER BY proveedorSugerido`),
+      connection.query('SELECT nombre FROM proveedor WHERE idTienda=? FOR UPDATE', [idTienda])
+    ]);
+    const existing = new Set(storeRows.map((row) => providerNameKey(row.nombre)));
+    const candidates = [...new Map(masterRows
+      .map((row) => cleanText(row.proveedorSugerido))
+      .filter(Boolean)
+      .filter((name) => !existing.has(providerNameKey(name)))
+      .map((name) => [providerNameKey(name), name])).values()];
+    if (candidates.length) {
+      await enforcePlanLimit(connection, idTienda, 'proveedores', candidates.length);
+      await connection.query(
+        `INSERT INTO proveedor (idTienda, nombre) VALUES ${candidates.map(() => '(?, ?)').join(',')}`,
+        candidates.flatMap((name) => [idTienda, name])
+      );
+    }
+    await connection.commit();
+    res.status(201).json({
+      message: candidates.length ? `${candidates.length} proveedores del catálogo fueron registrados.` : 'Ya tienes todos los proveedores sugeridos.',
+      creados: candidates.length
+    });
+  } catch (error) {
+    if (connection) await connection.rollback();
+    next(error);
+  } finally {
+    if (connection) connection.release();
+  }
+});
+
 crudRoutes('proveedores', 'proveedor', 'idProveedor', 'No se puede eliminar el proveedor porque tiene compras o productos asociados.');
 
 async function validateItems(connection, items, type, idTienda) {

@@ -1,6 +1,7 @@
 const path = require('path');
 const express = require('express');
 const ExcelJS = require('exceljs');
+const JSZip = require('jszip');
 const multer = require('multer');
 const pool = require('../config/db');
 const {
@@ -221,10 +222,16 @@ function importCell(cell) {
   return cell?.text ?? cell?.value ?? '';
 }
 
-const IMPORT_HEADERS = [
+const REQUIRED_IMPORT_HEADERS = [
   'nombre', 'marca', 'categoria', 'codigoBarras', 'presentacion', 'contenidoCantidad',
   'contenidoUnidad', 'unidadesPorPaquete', 'permiteVentaPorUnidad', 'permiteVentaPorPaquete', 'descripcion'
 ];
+const OPTIONAL_IMPORT_HEADERS = ['proveedorSugerido'];
+const IMPORT_HEADERS = [...REQUIRED_IMPORT_HEADERS, ...OPTIONAL_IMPORT_HEADERS];
+
+function importHeaderKey(value) {
+  return normalizeText(String(value || '')).replace(/[^a-z0-9]/g, '');
+}
 
 async function readWorkbookRows(buffer) {
   if (!buffer || buffer.length < 4 || buffer[0] !== 0x50 || buffer[1] !== 0x4B) {
@@ -235,9 +242,9 @@ async function readWorkbookRows(buffer) {
   const worksheet = workbook.worksheets[0];
   if (!worksheet) throw catalogError(400, 'El archivo no contiene hojas.');
   const headers = worksheet.getRow(1).values.slice(1).map((value) => cleanText(String(value), 80));
-  const headerMap = new Map(headers.map((header, index) => [normalizeText(header).replace(/ /g, ''), index + 1]));
-  for (const required of IMPORT_HEADERS) {
-    if (!headerMap.has(normalizeText(required).replace(/ /g, ''))) {
+  const headerMap = new Map(headers.map((header, index) => [importHeaderKey(header), index + 1]));
+  for (const required of REQUIRED_IMPORT_HEADERS) {
+    if (!headerMap.has(importHeaderKey(required))) {
       throw catalogError(400, `Falta la columna ${required}.`);
     }
   }
@@ -251,7 +258,8 @@ async function readWorkbookRows(buffer) {
     const readErrors = [];
     let hasValue = false;
     for (const header of IMPORT_HEADERS) {
-      const cell = row.getCell(headerMap.get(normalizeText(header).replace(/ /g, '')));
+      const column = headerMap.get(importHeaderKey(header));
+      const cell = column ? row.getCell(column) : null;
       try {
         if (header === 'codigoBarras' && typeof cell.value === 'number') {
           throw catalogError(400, 'El codigo de barras debe estar guardado como texto para conservar ceros iniciales.');
@@ -286,7 +294,8 @@ function normalizedImportInput(row) {
     permiteVentaPorPaquete: booleanValue(row.permiteVentaPorPaquete, false),
     descripcion: cleanText(row.descripcion, 500) || null,
     marca: cleanText(row.marca, 100) || null,
-    categoria: cleanText(row.categoria, 100) || null
+    categoria: cleanText(row.categoria, 100) || null,
+    proveedorSugerido: cleanText(row.proveedorSugerido, 100) || null
   };
   if (data.contenidoCantidad !== null && (!Number.isFinite(data.contenidoCantidad) || data.contenidoCantidad <= 0)) {
     throw catalogError(400, 'El contenido debe ser un numero positivo.');
@@ -461,6 +470,206 @@ router.post('/importaciones/confirmar', asyncRoute(async (req, res) => {
     return summary;
   });
   res.status(201).json({ message: 'Importacion procesada.', ...result });
+}));
+
+function sourceSheet(workbook, name) {
+  const sheet = workbook.worksheets.find((item) => importHeaderKey(item.name) === importHeaderKey(name));
+  if (!sheet) throw catalogError(400, `Falta la hoja ${name} en el archivo fuente.`);
+  return sheet;
+}
+
+function readSourceTable(worksheet, requiredColumns) {
+  const headers = worksheet.getRow(1).values.slice(1);
+  const columns = new Map(headers.map((header, index) => [importHeaderKey(header), index + 1]));
+  for (const name of requiredColumns) {
+    if (!columns.has(importHeaderKey(name))) {
+      throw catalogError(400, `La hoja ${worksheet.name} no tiene la columna ${name}.`);
+    }
+  }
+  if (worksheet.actualRowCount - 1 > MAX_IMPORT_ROWS) {
+    throw catalogError(413, `La hoja ${worksheet.name} supera el limite de ${MAX_IMPORT_ROWS} filas.`);
+  }
+  const rows = [];
+  for (let number = 2; number <= worksheet.actualRowCount; number += 1) {
+    const row = worksheet.getRow(number);
+    const data = {};
+    for (const name of requiredColumns) {
+      const value = importCell(row.getCell(columns.get(importHeaderKey(name))));
+      data[name] = cleanText(value === null || value === undefined ? '' : String(value), 500);
+    }
+    if (requiredColumns.some((name) => data[name])) rows.push(data);
+  }
+  return rows;
+}
+
+async function readProviderSource(buffer) {
+  if (!buffer || buffer.length < 4 || buffer[0] !== 0x50 || buffer[1] !== 0x4B) {
+    throw catalogError(400, 'El archivo no tiene una estructura .xlsx valida.');
+  }
+  try {
+    const workbook = new ExcelJS.Workbook();
+    await workbook.xlsx.load(buffer);
+    return {
+      products: readSourceTable(sourceSheet(workbook, 'PRODUCTOS'), ['ID_PRODUCTO', 'NOMBRE_COMPLETO']),
+      providers: readSourceTable(sourceSheet(workbook, 'PROVEEDORES'), ['ID_PROVEEDOR', 'NOMBRE_COMERCIAL']),
+      relations: readSourceTable(sourceSheet(workbook, 'PROVEEDOR_PRODUCTO'), ['ID_PRODUCTO', 'ID_PROVEEDOR'])
+    };
+  } catch (error) {
+    return readProviderSourceCompatibility(buffer);
+  }
+}
+
+function xmlAttribute(source, name) {
+  const match = String(source || '').match(new RegExp(`\\b${name.replace(':', '\\:')}=["']([^"']*)["']`, 'i'));
+  return match ? match[1] : '';
+}
+
+function decodeXml(value) {
+  return String(value || '')
+    .replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"')
+    .replace(/&apos;/g, "'").replace(/&amp;/g, '&')
+    .replace(/&#(x[\da-f]+|\d+);/gi, (_, code) => String.fromCodePoint(code[0].toLowerCase() === 'x' ? Number.parseInt(code.slice(1), 16) : Number.parseInt(code, 10)));
+}
+
+function xmlCellValue(source) {
+  const text = String(source || '');
+  const parts = [...text.matchAll(/<(?:\w+:)?t(?:\s[^>]*)?>([\s\S]*?)<\/(?:\w+:)?t>/gi)].map((match) => match[1]);
+  if (parts.length) return decodeXml(parts.join(''));
+  const value = text.match(/<(?:\w+:)?v(?:\s[^>]*)?>([\s\S]*?)<\/(?:\w+:)?v>/i);
+  return decodeXml(value ? value[1] : '');
+}
+
+function sheetColumn(reference) {
+  const letters = String(reference || '').match(/^[A-Z]+/i)?.[0]?.toUpperCase();
+  if (!letters) return 0;
+  return [...letters].reduce((value, letter) => value * 26 + letter.charCodeAt(0) - 64, 0);
+}
+
+async function readProviderSourceCompatibility(buffer) {
+  const zip = await JSZip.loadAsync(buffer);
+  const getXml = async (name) => {
+    const entry = zip.file(name);
+    if (!entry) throw catalogError(400, 'El archivo base no contiene la estructura esperada.');
+    return entry.async('string');
+  };
+  const [workbookXml, relationsXml, sharedXml] = await Promise.all([
+    getXml('xl/workbook.xml'), getXml('xl/_rels/workbook.xml.rels'),
+    zip.file('xl/sharedStrings.xml')?.async('string') || Promise.resolve('')
+  ]);
+  const sharedStrings = [...sharedXml.matchAll(/<(?:\w+:)?si(?:\s[^>]*)?>([\s\S]*?)<\/(?:\w+:)?si>/gi)].map((match) => xmlCellValue(match[1]));
+  const relationTargets = new Map([...relationsXml.matchAll(/<(?:\w+:)?Relationship\b([^>]*)\/?>(?:<\/(?:\w+:)?Relationship>)?/gi)]
+    .map((match) => [xmlAttribute(match[1], 'Id'), xmlAttribute(match[1], 'Target')]));
+  const sheets = new Map([...workbookXml.matchAll(/<(?:\w+:)?sheet\b([^>]*)\/?>(?:<\/(?:\w+:)?sheet>)?/gi)]
+    .map((match) => [xmlAttribute(match[1], 'name'), relationTargets.get(xmlAttribute(match[1], 'r:id'))]));
+  const readTable = async (sheetName, requiredColumns) => {
+    const target = sheets.get(sheetName);
+    if (!target) throw catalogError(400, `Falta la hoja ${sheetName} en el archivo fuente.`);
+    const xml = await getXml(target.startsWith('/') ? target.replace(/^\/+/, '') : `xl/${target}`);
+    const rows = [...xml.matchAll(/<(?:\w+:)?row\b[^>]*>([\s\S]*?)<\/(?:\w+:)?row>/gi)];
+    if (rows.length - 1 > MAX_IMPORT_ROWS) throw catalogError(413, `La hoja ${sheetName} supera el limite de ${MAX_IMPORT_ROWS} filas.`);
+    const parseRow = (markup) => {
+      const values = new Map();
+      for (const match of markup.matchAll(/<(?:\w+:)?c\b([^>]*)>([\s\S]*?)<\/(?:\w+:)?c>/gi)) {
+        const raw = xmlCellValue(match[2]);
+        const value = xmlAttribute(match[1], 't') === 's' ? (sharedStrings[Number(raw)] || '') : raw;
+        values.set(sheetColumn(xmlAttribute(match[1], 'r')), { value, formula: /<(?:\w+:)?f(?:\s[^>]*)?>/i.test(match[2]) });
+      }
+      return values;
+    };
+    const headers = parseRow(rows[0]?.[1] || '');
+    const columns = new Map([...headers.entries()].map(([column, cell]) => [importHeaderKey(cell.value), column]));
+    for (const name of requiredColumns) {
+      if (!columns.has(importHeaderKey(name))) throw catalogError(400, `La hoja ${sheetName} no tiene la columna ${name}.`);
+    }
+    return rows.slice(1).map((row) => {
+      const parsed = parseRow(row[1]);
+      return Object.fromEntries(requiredColumns.map((name) => {
+        const cell = parsed.get(columns.get(importHeaderKey(name)));
+        if (cell?.formula) throw catalogError(400, 'La base no puede contener formulas en las columnas requeridas.');
+        return [name, cleanText(String(cell?.value || ''), 500)];
+      }));
+    }).filter((row) => requiredColumns.some((name) => row[name]));
+  };
+  return {
+    products: await readTable('PRODUCTOS', ['ID_PRODUCTO', 'NOMBRE_COMPLETO']),
+    providers: await readTable('PROVEEDORES', ['ID_PROVEEDOR', 'NOMBRE_COMERCIAL']),
+    relations: await readTable('PROVEEDOR_PRODUCTO', ['ID_PRODUCTO', 'ID_PROVEEDOR'])
+  };
+}
+
+async function providerEnrichment(connection, source) {
+  const providerNames = new Map(source.providers
+    .filter((row) => row.ID_PROVEEDOR && row.NOMBRE_COMERCIAL)
+    .map((row) => [row.ID_PROVEEDOR, cleanText(row.NOMBRE_COMERCIAL, 100)]));
+  const productNames = new Map(source.products
+    .filter((row) => row.ID_PRODUCTO && row.NOMBRE_COMPLETO)
+    .map((row) => [row.ID_PRODUCTO, cleanText(row.NOMBRE_COMPLETO, 160)]));
+  const providerByProduct = new Map();
+  for (const relation of source.relations) {
+    const name = providerNames.get(relation.ID_PROVEEDOR);
+    if (!productNames.has(relation.ID_PRODUCTO) || !name) continue;
+    const current = providerByProduct.get(relation.ID_PRODUCTO) || [];
+    if (!current.includes(name)) current.push(name);
+    providerByProduct.set(relation.ID_PRODUCTO, current);
+  }
+  const suggestions = [...providerByProduct.entries()].map(([id, names]) => ({
+    nombre: productNames.get(id), proveedorSugerido: names[0], alternativas: names.slice(1)
+  })).filter((row) => row.nombre && row.proveedorSugerido);
+  const masters = new Map();
+  const keys = [...new Set(suggestions.map((row) => normalizeText(row.nombre)))];
+  for (let offset = 0; offset < keys.length; offset += 400) {
+    const batch = keys.slice(offset, offset + 400);
+    const placeholders = batch.map(() => '?').join(',');
+    const [rows] = await connection.query(
+      `SELECT idProductoMaestro, nombre, nombreNormalizado, proveedorSugerido
+       FROM productoMaestro WHERE nombreNormalizado IN (${placeholders})`, batch
+    );
+    rows.forEach((row) => masters.set(row.nombreNormalizado, row));
+  }
+  const matched = suggestions.map((row) => ({ ...row, master: masters.get(normalizeText(row.nombre)) || null }));
+  const updates = matched.filter((row) => row.master
+    && normalizeText(row.master.proveedorSugerido || '') !== normalizeText(row.proveedorSugerido));
+  return {
+    updates,
+    proveedores: [...new Set([...providerNames.values()].filter(Boolean))],
+    resumen: {
+      productosFuente: source.products.length,
+      relacionesProveedorProducto: source.relations.length,
+      proveedoresFuente: providerNames.size,
+      productosConProveedor: suggestions.length,
+      productosCoincidentes: matched.filter((row) => row.master).length,
+      productosSinCoincidencia: matched.filter((row) => !row.master).length,
+      productosConAlternativas: suggestions.filter((row) => row.alternativas.length).length,
+      productosAActualizar: updates.length
+    }
+  };
+}
+
+router.post('/importaciones/proveedores/previsualizar', upload.single('archivo'), asyncRoute(async (req, res) => {
+  if (!req.file) throw catalogError(400, 'Debe seleccionar el archivo base .xlsx.');
+  const result = await providerEnrichment(pool, await readProviderSource(req.file.buffer));
+  res.json(result.resumen);
+}));
+
+router.post('/importaciones/proveedores/confirmar', upload.single('archivo'), asyncRoute(async (req, res) => {
+  if (!req.file) throw catalogError(400, 'Debe seleccionar el archivo base .xlsx.');
+  const source = await readProviderSource(req.file.buffer);
+  const result = await transaction(async (connection) => {
+    const enrichment = await providerEnrichment(connection, source);
+    for (let offset = 0; offset < enrichment.updates.length; offset += 200) {
+      const batch = enrichment.updates.slice(offset, offset + 200);
+      const cases = batch.map(() => 'WHEN ? THEN ?').join(' ');
+      const ids = batch.map((row) => row.master.idProductoMaestro);
+      await connection.query(
+        `UPDATE productoMaestro SET proveedorSugerido = CASE idProductoMaestro ${cases} END
+         WHERE idProductoMaestro IN (${ids.map(() => '?').join(',')})`,
+        [...batch.flatMap((row) => [row.master.idProductoMaestro, row.proveedorSugerido]), ...ids]
+      );
+    }
+    await auditCatalog(connection, req.session.admin.id, 'proveedores_catalogo_importados', 'productoMaestro', null, enrichment.resumen);
+    return enrichment.resumen;
+  });
+  res.json({ message: 'Sugerencias de proveedores actualizadas en el catálogo maestro.', ...result });
 }));
 
 router.use((error, req, res, next) => {
