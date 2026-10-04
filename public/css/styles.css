@@ -2850,7 +2850,7 @@ td.actions { position: relative; }
   display: block;
   width: min(330px, 100%);
   max-height: 340px;
-  margin: auto auto 0;
+  margin: auto;
   object-fit: contain;
 }
 .auth-store-scene {
