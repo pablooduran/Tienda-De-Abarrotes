@@ -284,25 +284,21 @@ async function verifyViewport(browser, baseUrl, viewport) {
     assert.strictEqual(await page.locator('#catalogSelectedCount').textContent(), '1 de 50');
     await page.locator('.catalog-picker-modal [data-modal-cancel]').click();
     await page.locator('[data-view="inventarioInteligente"]').click();
-    await page.locator('#inventorySimpleTitle').waitFor();
-    assert.strictEqual((await page.locator('#inventoryContent').textContent()).includes('Se está agotando'), true);
+    await page.locator('#inventorySummaryTitle').waitFor();
+    assert.strictEqual((await page.locator('#inventoryContent').textContent()).includes('Panorama del inventario'), true);
     assert.strictEqual((await page.locator('#inventoryContent').textContent()).includes('hasta 22/09/2026'), true,
       'El período visible termina en el último día incluido.');
-    assert.strictEqual(await page.locator('[data-inventory-tab="rotacion"]').count(), 0,
-      'La vista simple no mezcla las métricas avanzadas.');
-    await page.locator('[data-inventory-simple-destination="alertas"]').click();
-    await page.locator('.inventory-simple-alert').waitFor();
-    assert.strictEqual((await page.locator('.inventory-simple-alert').textContent()).includes('Hay pocas unidades disponibles.'), true);
-    await page.locator('[data-inventory-level="avanzado"]').click();
+    assert.strictEqual(await page.locator('[data-inventory-tab="rotacion"]').count(), 1,
+      'Las consultas disponibles se muestran directamente como pestañas.');
+    await page.locator('[data-inventory-tab="alertas"]').click();
+    await page.locator('#inventoryContent').getByText('Alertas priorizadas').waitFor();
+    assert.strictEqual((await page.locator('#inventoryContent').textContent()).includes('Hay pocas unidades disponibles.'), true);
+    await page.locator('[data-inventory-tab="resumen"]').click();
     await page.locator('[data-inventory-tab="rotacion"]').waitFor();
     await page.locator('#inventoryContent').getByText('Valor a costo conocido').first().waitFor();
     assert.strictEqual((await page.locator('#inventoryContent').textContent()).includes('Valor a costo conocido'), true);
-    await page.locator('[data-inventory-level="simple"]').click();
-    assert.strictEqual(await page.locator('[data-inventory-tab="rotacion"]').count(), 0);
-    await page.locator('[data-inventory-simple-destination="sinMovimiento"]').click();
+    await page.locator('[data-inventory-tab="sinMovimiento"]').click();
     await page.locator('#inventoryContent').getByText('Productos sin movimiento').waitFor();
-    assert.strictEqual(await page.locator('[data-inventory-level="avanzado"]').getAttribute('aria-pressed'), 'true',
-      'La consulta de productos sin movimiento abre el nivel avanzado autorizado.');
     const reportsFamily = page.locator('[data-navigation-family="reportes"]');
     if (!await reportsFamily.evaluate((node) => node.open)) await reportsFamily.locator('> summary').click();
     await page.locator('[data-view="reportes"]').click();
@@ -354,9 +350,6 @@ async function verifyLimitedInventory(browser, baseUrl, plan) {
     const family = page.locator('[data-navigation-family="inventario"]');
     if (!await family.evaluate((node) => node.open)) await family.locator('> summary').click();
     await page.locator('[data-view="inventarioInteligente"]').click();
-    await page.locator('#inventorySimpleTitle').waitFor();
-    assert.strictEqual((await page.locator('#inventoryContent').textContent()).includes('Se está agotando'), true);
-    await page.locator('[data-inventory-level="avanzado"]').click();
     await page.locator('#inventorySummaryTitle').waitFor();
     if (plan === 'basic') await page.locator('#inventoryContent').getByText('Valor a costo conocido').first().waitFor();
     assert.strictEqual((await page.locator('#inventoryContent').textContent()).includes('Valor a costo conocido'), plan === 'basic',

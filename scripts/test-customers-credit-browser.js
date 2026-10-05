@@ -180,8 +180,8 @@ async function clickCustomerAction(page, selector) {
 }
 
 async function openCustomerFilters(page) {
-  const filters = page.locator('#customerFilters .customer-filter-disclosure');
-  if (!await filters.evaluate((node) => node.open)) await filters.locator('summary').click();
+  await page.locator('[data-open-customer-filters]').click();
+  await page.locator('[data-customer-filter-dialog]').waitFor({ state: 'visible' });
 }
 
 async function selectPosCustomer(page, name, expectedId) {

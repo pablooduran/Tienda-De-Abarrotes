@@ -213,18 +213,20 @@
       const f = ui.customerFilters;
       const filterCount = Object.entries(f).filter(([key, value]) => value !== '' && !(key === 'estado' && value === 'activos')).length;
       return `
-        <form class="panel credit-filters" id="customerFilters">
+        <form class="panel credit-filters" id="customerSearch">
           <label>Buscar<input name="texto" type="search" value="${e(f.texto || '')}" placeholder="Nombre, telefono o documento"></label>
-          <details class="filter-disclosure customer-filter-disclosure"><summary>Filtros${filterCount ? ` <span class="filter-count">${filterCount}</span>` : ''}</summary><div class="filter-disclosure-body">
-            <label>Telefono<input name="telefono" value="${e(f.telefono || '')}"></label>
-            <label>Documento<input name="documento" value="${e(f.documento || '')}"></label>
+          <div class="filter-actions"><button type="submit">Buscar</button><button type="button" class="secondary" data-open-customer-filters>Filtros${filterCount ? ` <span class="filter-count">${filterCount}</span>` : ''}</button></div>
+        </form>
+        <dialog class="owner-filter-dialog" data-customer-filter-dialog aria-labelledby="customerFilterTitle"><div class="owner-filter-heading"><h3 id="customerFilterTitle">Filtrar clientes</h3><button type="button" class="secondary" data-close-customer-filters>Cerrar</button></div>
+          <form id="customerFilters" class="filter-bar"><input type="hidden" name="texto" value="${e(f.texto || '')}">
+            <label>Teléfono<input name="telefono" value="${e(f.telefono || '')}"></label>
             <label>Estado<select name="estado">${option('activos', 'Activos', f.estado)}${option('ocultos', 'Ocultos', f.estado)}${option('todos', 'Todos', f.estado)}</select></label>
             <label>Fiado<select name="permiteFiado">${option('', 'Todos', f.permiteFiado)}${option('1', 'Permitido', f.permiteFiado)}${option('0', 'Bloqueado', f.permiteFiado)}</select></label>
             <label>Deuda<select name="conDeuda">${option('', 'Todos', f.conDeuda)}${option('1', 'Con deuda', f.conDeuda)}${option('0', 'Sin deuda', f.conDeuda)}</select></label>
             <label>Vencimiento<select name="vencido">${option('', 'Todos', f.vencido)}${option('1', 'Con deuda vencida', f.vencido)}${option('0', 'Sin deuda vencida', f.vencido)}</select></label>
-          </div></details>
-          <div class="filter-actions"><button type="submit">Aplicar</button><button type="button" class="secondary" data-clear-customer-filters>Limpiar filtros</button></div>
-        </form>`;
+            <div class="filter-actions"><button type="button" class="secondary" data-clear-customer-filters>Limpiar</button><button type="submit">Aplicar</button></div>
+          </form>
+        </dialog>`;
     }
 
     function customerActions(customer) {
@@ -462,10 +464,24 @@
           `clientes_${localDateValue()}.xlsx`
         );
       });
+      view.querySelector('#customerSearch')?.addEventListener('submit', (event) => {
+        event.preventDefault();
+        ui.customerFilters = { ...ui.customerFilters, texto: new FormData(event.currentTarget).get('texto') || '' };
+        ui.customerPage = 1;
+        renderCustomers();
+      });
+      view.querySelector('[data-open-customer-filters]')?.addEventListener('click', () => {
+        const dialog = view.querySelector('[data-customer-filter-dialog]');
+        dialog?.showModal();
+        dialog?.querySelector('input:not([type="hidden"]), select')?.focus();
+      });
+      view.querySelector('[data-close-customer-filters]')?.addEventListener('click', () => view.querySelector('[data-customer-filter-dialog]')?.close());
+      view.querySelector('[data-customer-filter-dialog]')?.addEventListener('close', (event) => event.currentTarget.querySelector('#customerFilters')?.reset());
       view.querySelector('#customerFilters')?.addEventListener('submit', (event) => {
         event.preventDefault();
         ui.customerFilters = Object.fromEntries(new FormData(event.currentTarget).entries());
         ui.customerPage = 1;
+        view.querySelector('[data-customer-filter-dialog]')?.close();
         renderCustomers();
       });
       view.querySelector('[data-clear-customer-filters]')?.addEventListener('click', () => {

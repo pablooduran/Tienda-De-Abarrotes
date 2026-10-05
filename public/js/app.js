@@ -1931,23 +1931,25 @@ async function productos() {
     <section class="inventory-product-heading"><div><h3>Productos</h3><p>Tu punto principal para consultar el catálogo y decidir el siguiente paso de inventario.</p></div>${state.context?.soloLectura ? '<span class="muted">Modo solo lectura</span>' : '<details class="product-add-actions"><summary>Agregar producto</summary><div><button id="addProduct" type="button">Agregar manualmente</button><button id="addFromCatalog" type="button" class="secondary">Agregar desde catálogo</button></div></details>'}</section>
     <div class="panel toolbar inventory-product-toolbar">
       <div class="inventory-product-utilities"><button id="showHiddenProducts" class="secondary">Ver productos ocultos</button>${hasLotOperationalAccess() ? '<button id="openLots" class="secondary">Lotes y vencimientos</button>' : ''}</div>
-      <label>Buscar<input id="productSearch" placeholder="Buscar producto"></label>
-      <label>Categoría<select id="productCategory"><option value="">Todas</option>${categoryOptions()}</select></label>
-      <label>Proveedor<select id="productProvider">${options(state.proveedores, 'idProveedor', 'nombre', 'Todos')}</select></label>
-      <label class="check"><input id="productLowStock" type="checkbox"> Bajo stock</label>
-      <label>Orden<select id="productSort"><option value="">Nombre</option><option value="precio_desc">Más caro</option><option value="precio_asc">Más barato</option></select></label>
+      <button type="button" class="secondary" id="openProductFilters">Filtros <span class="filter-count" data-product-filter-count>0</span></button>
     </div>
+    <dialog id="productFilterDialog" class="owner-filter-dialog" aria-labelledby="productFilterTitle"><div class="owner-filter-heading"><h3 id="productFilterTitle">Filtrar productos</h3><button type="button" class="secondary" id="closeProductFilters">Cerrar</button></div>
+      <form id="productFilters" class="filter-bar">
+        <label>Buscar<input id="productSearch" placeholder="Buscar producto"></label>
+        <label>Categoría<select id="productCategory"><option value="">Todas</option>${categoryOptions()}</select></label>
+        <label>Proveedor<select id="productProvider">${options(state.proveedores, 'idProveedor', 'nombre', 'Todos')}</select></label>
+        <label class="check"><input id="productLowStock" type="checkbox"> Solo bajo stock</label>
+        <label>Orden<select id="productSort"><option value="">Nombre</option><option value="precio_desc">Más caro</option><option value="precio_asc">Más barato</option></select></label>
+        <div class="filter-actions"><button type="button" class="secondary" data-clear-product-filters>Limpiar</button><button type="submit">Aplicar</button></div>
+      </form>
+    </dialog>
     <div class="panel" id="productTable"></div>`;
   wireUppercase(view);
   document.getElementById('addProduct')?.addEventListener('click', () => openProductModal());
   document.getElementById('addFromCatalog')?.addEventListener('click', () => loadView('catalogoMaestro'));
   document.getElementById('showHiddenProducts')?.addEventListener('click', openHiddenProducts);
   document.getElementById('openLots')?.addEventListener('click', () => loadView('lotesVencimientos'));
-  ['productSearch', 'productCategory', 'productProvider', 'productLowStock', 'productSort'].forEach((id) => {
-    document.getElementById(id).addEventListener('input', updateProductFilterCount);
-    document.getElementById(id).addEventListener('change', updateProductFilterCount);
-  });
-  collapseProductFilters();
+  setupProductFilters();
   renderProductTable(state.productos);
 }
 
@@ -1955,24 +1957,28 @@ function updateProductFilterCount() {
   const count = ['productSearch', 'productCategory', 'productProvider', 'productLowStock', 'productSort']
     .map((id) => document.getElementById(id))
     .filter((control) => control && (control.type === 'checkbox' ? control.checked : control.value)).length;
-  const target = document.querySelector('[data-filter-count]');
+  const target = document.querySelector('[data-product-filter-count]');
   if (target) target.textContent = count;
 }
 
-function collapseProductFilters() {
-  const toolbar = document.querySelector('#productSearch')?.closest('.toolbar');
-  if (!toolbar || toolbar.querySelector('.filter-disclosure')) return;
-  const controls = ['productSearch', 'productCategory', 'productProvider', 'productLowStock', 'productSort']
-    .map((id) => document.getElementById(id)?.closest('label')).filter(Boolean);
-  if (!controls.length) return;
-  const disclosure = document.createElement('details');
-  disclosure.className = 'filter-disclosure';
-  disclosure.innerHTML = '<summary>Filtros <span class="filter-count" data-filter-count>0</span></summary><div class="filter-disclosure-body"><div class="filter-actions"><button type="button" class="secondary" data-clear-product-filters>Limpiar filtros</button><button type="button" data-apply-product-filters>Aplicar</button></div></div>';
-  const body = disclosure.querySelector('.filter-disclosure-body');
-  controls.forEach((control) => body.insertBefore(control, body.firstChild));
-  toolbar.appendChild(disclosure);
-  document.querySelector('[data-apply-product-filters]').addEventListener('click', filterProductsLocal);
-  document.querySelector('[data-clear-product-filters]').addEventListener('click', () => {
+function setupProductFilters() {
+  const dialog = document.getElementById('productFilterDialog');
+  const form = document.getElementById('productFilters');
+  const trigger = document.getElementById('openProductFilters');
+  if (!dialog || !form || !trigger) return;
+  ['productSearch', 'productCategory', 'productProvider', 'productLowStock', 'productSort'].forEach((id) => {
+    document.getElementById(id)?.addEventListener('input', updateProductFilterCount);
+    document.getElementById(id)?.addEventListener('change', updateProductFilterCount);
+  });
+  trigger.addEventListener('click', () => { dialog.showModal(); document.getElementById('productSearch')?.focus(); });
+  document.getElementById('closeProductFilters')?.addEventListener('click', () => dialog.close());
+  dialog.addEventListener('close', () => trigger.focus());
+  form.addEventListener('submit', (event) => {
+    event.preventDefault();
+    filterProductsLocal();
+    dialog.close();
+  });
+  form.querySelector('[data-clear-product-filters]')?.addEventListener('click', () => {
     ['productSearch', 'productCategory', 'productProvider', 'productSort'].forEach((id) => { document.getElementById(id).value = ''; });
     document.getElementById('productLowStock').checked = false;
     updateProductFilterCount();
@@ -3912,7 +3918,7 @@ function inventoryAdvancedAvailable() {
     .some((code) => inventoryFeature(code));
 }
 
-function inventoryTabs(level = inventoryUi.level) {
+function inventoryTabs() {
   const tabs = [
     ['resumen', 'Resumen', 'inventario_resumen'],
     ['alertas', 'Alertas', 'alertas_stock'],
@@ -3923,8 +3929,7 @@ function inventoryTabs(level = inventoryUi.level) {
     ['sinMovimiento', 'Sin movimiento', 'inventario_sin_movimiento']
   ];
   if (inventoryAdvancedAvailable()) tabs.push(['configuracion', 'Configuración', 'inventario_resumen']);
-  return tabs.filter(([id, , feature]) => inventoryFeature(feature)
-    && (level === 'avanzado' || id === 'resumen' || id === 'alertas'));
+  return tabs.filter(([, , feature]) => inventoryFeature(feature));
 }
 
 function renderInventoryTabs() {
@@ -3932,11 +3937,6 @@ function renderInventoryTabs() {
   if (!tablist) return;
   const tabs = inventoryTabs();
   tablist.innerHTML = tabs.map(([id, label]) => `<button type="button" role="tab" data-inventory-tab="${id}" aria-selected="${inventoryUi.activeTab === id}" class="${inventoryUi.activeTab === id ? 'active' : ''}">${escapeHtml(label)}</button>`).join('');
-  document.querySelectorAll('[data-inventory-level]').forEach((button) => {
-    const active = button.dataset.inventoryLevel === inventoryUi.level;
-    button.classList.toggle('active', active);
-    button.setAttribute('aria-pressed', String(active));
-  });
   tablist.querySelectorAll('[data-inventory-tab]').forEach((button) => button.addEventListener('click', async () => {
     inventoryUi.activeTab = button.dataset.inventoryTab;
     inventoryUi.page = 1;
@@ -4036,7 +4036,6 @@ function inventoryRenderSimpleSummary() {
 }
 
 function inventoryRenderSummary() {
-  if (inventoryUi.level === 'simple') return inventoryRenderSimpleSummary();
   const summary = inventoryUi.data.resumen;
   const valuation = inventoryUi.data.resumenValoracion?.resumen;
   const lots = inventoryUi.data.resumenLotes;
@@ -4081,13 +4080,6 @@ function inventoryRenderAlertsLegacy() {
 function inventoryRenderAlerts() {
   const data = inventoryUi.data.alertas;
   if (!data?.rows?.length) return inventoryEmpty('No hay alertas de inventario para estos filtros.');
-  if (inventoryUi.level === 'simple') return `<div class="inventory-section-heading"><div><h3>Productos para revisar</h3><p>${escapeHtml(inventoryPeriod(data.periodo))} · ${escapeHtml(data.total)} resultados</p></div></div>
-    <div class="inventory-simple-alerts">${data.rows.map((row) => `<article class="inventory-simple-alert"><div><strong>${escapeHtml(row.nombre)}</strong><span>${escapeHtml(({
-      stock_vendible_bajo: 'Se está agotando', sin_stock_vendible: 'Sin stock para vender',
-      exceso_inventario: 'Stock de más', baja_rotacion: 'Se vende poco', sin_movimiento: 'No se vende',
-      proximo_vencimiento: 'Próximo a vencer', vencido: 'Vencido',
-      stock_no_vendible_alto: 'No vendible', conciliacion: 'Revisar conteo'
-    })[row.tipo] || 'Revisar')}</span></div><p>${escapeHtml(row.mensaje || 'Revisa este producto.')}</p><small>Disponible para vender: ${escapeHtml(row.stockVendible)} · No vendible: ${escapeHtml(row.stockNoVendible)}</small></article>`).join('')}</div>${inventoryPagination(data)}`;
   const canWrite = !state.context?.soloLectura;
   return `<div class="inventory-section-heading"><div><h3>Alertas priorizadas</h3><p>${escapeHtml(inventoryPeriod(data.periodo))} · ${escapeHtml(data.total)} resultados</p></div></div>
     <div class="table-wrap"><table class="inventory-table"><caption class="sr-only">Alertas priorizadas de inventario</caption><thead><tr><th>Prioridad</th><th>Producto</th><th>Alerta</th><th>Stock físico / vendible</th><th>Lectura</th><th>Acción</th></tr></thead><tbody>${data.rows.map((row) => `<tr><td><span class="inventory-status inventory-status-${escapeHtml(row.prioridad)}">${escapeHtml(row.prioridad)}</span></td><td><strong>${escapeHtml(row.nombre)}</strong><small>${escapeHtml(row.categoria)}</small></td><td>${escapeHtml(row.tipo)}</td><td>${escapeHtml(row.stockFisico)} / ${escapeHtml(row.stockVendible)}<small>No vendible: ${escapeHtml(row.stockNoVendible)}</small></td><td>${escapeHtml(row.mensaje)}</td><td>${canWrite ? `<button type="button" class="small secondary" data-inventory-product-config="${escapeHtml(row.idProducto)}">Configurar</button>` : '<span class="muted">Solo lectura</span>'}</td></tr>`).join('')}</tbody></table></div>${inventoryPagination(data)}`;
@@ -4193,7 +4185,7 @@ function inventoryRenderConfiguration() {
       ${inventoryConfigurationInput('diasCoberturaDefault', 'Cobertura por defecto', config.diasCoberturaDefault, 1, 365, 'Días adicionales de inventario.')}
       ${inventoryConfigurationInput('diasProductoNuevo', 'Producto nuevo durante', config.diasProductoNuevo, 1, 365, 'Evita marcar productos recientes como paralizados.')}
       <div class="actions wide"><button type="submit" data-inventory-write ${state.context?.soloLectura ? 'disabled' : ''}>Guardar configuración</button></div>
-      <p class="form-error wide" data-inventory-config-error aria-live="polite"></p>
+      <p class="form-error wide" data-inventory-config-error aria-live="polite" hidden></p>
     </form>`;
 }
 
@@ -4213,7 +4205,6 @@ function renderInventoryActiveTab() {
   target.querySelector('[data-open-lot-dashboard]')?.addEventListener('click', () => loadView('lotesVencimientos'));
   target.querySelectorAll('[data-inventory-simple-destination]').forEach((button) => button.addEventListener('click', async () => {
     const destination = button.dataset.inventorySimpleDestination;
-    if (destination === 'sinMovimiento') inventoryUi.level = 'avanzado';
     inventoryUi.activeTab = destination;
     inventoryUi.page = 1;
     renderInventoryTabs();
@@ -4240,8 +4231,7 @@ async function loadInventoryActiveTab(force = false, { filters = inventoryUi.app
   const tab = inventoryUi.activeTab;
   const content = document.getElementById('inventoryContent');
   if (!content) return false;
-  const needsAdvancedValuation = tab === 'resumen' && inventoryUi.level === 'avanzado'
-    && inventoryFeature('valor_inventario_basico') && !inventoryUi.data.resumenValoracion;
+  const needsAdvancedValuation = tab === 'resumen' && inventoryFeature('valor_inventario_basico') && !inventoryUi.data.resumenValoracion;
   if (!force && inventoryUi.data[tab] && !needsAdvancedValuation) { renderInventoryActiveTab(); return true; }
   if (!keepPrevious) content.innerHTML = inventoryLoading();
   content.setAttribute('aria-busy', 'true');
@@ -4249,12 +4239,11 @@ async function loadInventoryActiveTab(force = false, { filters = inventoryUi.app
   try {
     const query = inventoryFilterQuery(filters, commitFilters ? 1 : inventoryUi.page).toString();
     if (tab === 'resumen') {
-      const advanced = inventoryUi.level === 'avanzado';
       const [summary, valuation, lots] = await Promise.all([
         api(`/api/inventario-inteligente/resumen?${query}`),
-        advanced && inventoryFeature('valor_inventario_basico')
+        inventoryFeature('valor_inventario_basico')
           ? api(`/api/inventario-inteligente/valoracion?${query}`) : Promise.resolve(null),
-        advanced && hasLotOperationalAccess() ? api('/api/lotes/resumen') : Promise.resolve(null)
+        hasLotOperationalAccess() ? api('/api/lotes/resumen') : Promise.resolve(null)
       ]);
       if (request !== inventoryUi.request || inventoryUi.activeTab !== tab) return false;
       if (commitFilters) { inventoryUi.appliedFilters = filters; inventoryUi.page = 1; inventoryUi.data = {}; }
@@ -4302,11 +4291,13 @@ async function saveInventoryConfiguration(event) {
     || !Number.isInteger(values.diasCoberturaDefault) || values.diasCoberturaDefault < 1 || values.diasCoberturaDefault > 365
     || !Number.isInteger(values.diasProductoNuevo) || values.diasProductoNuevo < 1 || values.diasProductoNuevo > 365) {
     errorTarget.textContent = 'Revise los rangos. El historial mínimo no puede superar el período de análisis.';
+    errorTarget.hidden = false;
     return;
   }
   const submit = form.querySelector('button[type="submit"]');
   submit.disabled = true;
   errorTarget.textContent = '';
+  errorTarget.hidden = true;
   try {
     const result = await api('/api/inventario-inteligente/configuracion', { method: 'PUT', body: JSON.stringify(values) });
     inventoryUi.data = { configuracion: { ...inventoryUi.data.configuracion, configuracionTienda: result.configuracion } };
@@ -4314,6 +4305,7 @@ async function saveInventoryConfiguration(event) {
     renderInventoryActiveTab();
   } catch (error) {
     errorTarget.textContent = error.message;
+    errorTarget.hidden = false;
   } finally {
     submit.disabled = Boolean(state.context?.soloLectura);
   }
@@ -4437,7 +4429,6 @@ async function inventarioInteligente() {
       <div class="filter-actions"><button type="button" class="secondary" id="clearInventoryFilters">Limpiar</button><button type="submit">Aplicar</button></div>
     </form>
     <p class="hint">El período incluye ambos días elegidos. Máximo 365 días.</p><p class="form-error" id="inventoryFilterError" role="alert" hidden></p></dialog>
-  <div class="inventory-level-switch" role="group" aria-label="Nivel de análisis"><button type="button" data-inventory-level="simple" aria-pressed="true">Vista sencilla</button><button type="button" data-inventory-level="avanzado" aria-pressed="false">Más detalles</button></div>
   <div class="inventory-tabs" role="tablist" aria-label="Análisis de inventario"></div>
   ${!inventoryAdvancedAvailable() ? '<div class="inventory-plan-note"><strong>Análisis avanzado</strong><span>Algunas funciones de análisis no están incluidas en tu plan actual.</span></div>' : ''}
   <div class="panel inventory-content" id="inventoryContent"></div>`;
@@ -4490,13 +4481,6 @@ async function inventarioInteligente() {
     errorTarget.hidden = true;
   });
   document.getElementById('exportInventory')?.addEventListener('click', downloadInventoryExport);
-  document.querySelectorAll('[data-inventory-level]').forEach((button) => button.addEventListener('click', async () => {
-    inventoryUi.level = button.dataset.inventoryLevel;
-    inventoryUi.activeTab = 'resumen';
-    inventoryUi.page = 1;
-    renderInventoryTabs();
-    await loadInventoryActiveTab();
-  }));
   renderInventoryTabs();
   await loadInventoryActiveTab();
 }

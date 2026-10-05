@@ -94,8 +94,11 @@ async function verifyViewport(browser, baseUrl, viewport, requests) {
     await productActions.locator('[data-secondary-actions-close]').click();
     assert.strictEqual(await productActions.evaluate((node) => node.open), false, 'Cerrar deja el disparador en su sitio.');
     assert.strictEqual(await actionTrigger.evaluate((node) => document.activeElement === node), true, 'Cerrar devuelve el foco al disparador.');
-    await page.locator('.filter-disclosure > summary').click();
-    assert.strictEqual(await page.locator('[data-apply-product-filters]').count(), 1, 'Aplicar filtros de Productos.');
+    assert.strictEqual(await page.locator('#productFilterDialog').isVisible(), false, 'Filtros de productos cerrados inicialmente.');
+    await page.locator('#openProductFilters').click();
+    assert.strictEqual(await page.locator('#productFilterDialog').isVisible(), true, 'Filtros de productos en ventana.');
+    await page.locator('#productFilters button[type="submit"]').click();
+    await page.locator('#productFilterDialog').waitFor({ state: 'hidden' });
     assert.strictEqual(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 2), true, `Overflow a ${viewport.width}px.`);
     await inventoryView(page, 'movimientosStock');
     await page.locator('#view h3').filter({ hasText: 'Stock y movimientos' }).waitFor();
@@ -227,7 +230,7 @@ async function verifyViewport(browser, baseUrl, viewport, requests) {
     assert.strictEqual(exportUrl.searchParams.get('estadoCalculado'), 'proximo_a_vencer', 'Exportar conserva el estado aplicado por Alertas.');
     assert(exportUrl.searchParams.has('venceHasta'), 'Exportar conserva el rango rápido de vencimiento.');
     await inventoryView(page, 'inventarioInteligente');
-    await page.locator('#inventorySimpleTitle').waitFor();
+    await page.locator('#inventorySummaryTitle').waitFor();
     assert.strictEqual(await page.locator('#inventoryFilterDialog').isVisible(), false, 'Inteligencia inicia con filtros cerrados.');
     assert.strictEqual(await page.locator('#exportInventory').isVisible(), true, 'Exportar inteligencia queda fuera del filtro.');
     const intelligenceRequestStart = requests.length;

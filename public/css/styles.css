@@ -1,14 +1,14 @@
 :root {
-  --bg: #ffffff;
-  --panel: #ffffff;
-  --ink: #0d150d;
-  --muted: #4a6a4a;
-  --line: #d0dcd0;
+  --bg: #f5f1e8;
+  --panel: #fcfaf4;
+  --ink: #172017;
+  --muted: #4d624f;
+  --line: #d6d2c7;
   --brand: #1a7a2e;
   --brand-dark: #166a26;
-  --surface: #f4f7f4;
-  --surface-2: #eaf0ea;
-  --hover-surface: #dce8dc;
+  --surface: #f0eee6;
+  --surface-2: #e6e4da;
+  --hover-surface: #deddd2;
   --sidebar-bg: #0e2117;
   --sidebar-box: #173b29;
   --sidebar-active: #1a7a2e;
@@ -2461,6 +2461,8 @@ body:has([data-compensation-filter-form]) { overflow: hidden; }
 .payment-balance strong { font-size: 24px; }
 .payment-key-note, .manual-send-note { margin-top: 12px; color: var(--muted); font-size: 12px; }
 .form-error { padding: 10px; color: var(--danger); border: 1px solid #e7aaa5; background: #fff0ef; }
+.form-error:empty,
+.form-error[hidden] { display: none; }
 .promise-context { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; margin-bottom: 14px; }
 .promise-context > span { padding: 10px; color: var(--muted); border: 1px solid var(--line); border-radius: 6px; }
 .promise-context strong { display: block; margin-top: 4px; color: var(--ink); }
@@ -4317,6 +4319,39 @@ html[data-theme="dark"] {
   html[data-theme="dark"] .content :is(.inventory-metric.metric-danger, .inventory-error, .form-error) { background: #371d1b; color: #ffc4bc; }
   html[data-theme="dark"] .content :is(.inventory-metric.metric-warning, .readonly-note, .pos-credit-warning) { background: #342a13; color: #f3d891; }
   html[data-theme="dark"] .content :is(.inventory-metric.metric-success, .welcome-step.is-complete) { background: #143422; }
+  html[data-theme="dark"] .content .inventory-tabs button,
+  html[data-theme="dark"] .content .inventory-segmented button {
+    color: #dce9df;
+    background: #162016;
+    border-color: #315840;
+  }
+  html[data-theme="dark"] .content :is(.inventory-tabs button:hover, .inventory-tabs button.active, .inventory-segmented button:hover, .inventory-segmented button.active) {
+    color: #fff;
+    background: var(--brand);
+    border-color: var(--brand);
+  }
+  html[data-theme="dark"] .content .inventory-suggestion dl div,
+  html[data-theme="dark"] .content .lot-alert-strip > span {
+    color: var(--ink);
+    background: var(--surface-2);
+    border-color: var(--line);
+  }
+  html[data-theme="dark"] .content .inventory-reason { color: var(--muted); }
+  html[data-theme="dark"] .content .inventory-status {
+    color: #d5e2d8;
+    background: #17251b;
+    border-color: #315840;
+  }
+  html[data-theme="dark"] .content :is(.inventory-status-agotado, .inventory-status-critical, .inventory-status-urgente) {
+    color: #ffc4bc;
+    background: #371d1b;
+    border-color: #a75b55;
+  }
+  html[data-theme="dark"] .content :is(.inventory-status-bajo, .inventory-status-warning, .inventory-status-recomendada, .inventory-status-baja) {
+    color: #f3d891;
+    background: #342a13;
+    border-color: #8c701f;
+  }
   html[data-theme="dark"] .content :is(.segmentation-reason, .inventory-note p, .customer-hidden > td) { color: var(--muted); }
   html[data-theme="dark"] .content :is(.credit-status, .lot-control-label, .lot-bloqueado, .lot-aislado, .lot-tecnico, .lot-agotado, .lot-anulado) { color: var(--muted); background: var(--surface-2); border-color: var(--line); }
   html[data-theme="dark"] .content .compensation-status { color: var(--muted); background: var(--surface-2); border-color: var(--line); }
