@@ -624,11 +624,40 @@ summary,
   display: grid;
   align-items: start;
   padding: 14px;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  background: var(--surface-2);
+  gap: 14px;
+  border: 1px solid color-mix(in srgb, var(--brand) 48%, var(--line));
+  border-radius: 12px;
+  background: linear-gradient(145deg, color-mix(in srgb, var(--surface-2) 85%, var(--brand) 15%), var(--surface-2));
+  box-shadow: inset 3px 0 var(--brand);
 }
 .help-welcome-callout div { display: grid; gap: 4px; }
+.help-welcome-callout .eyebrow { color: var(--brand); }
+.help-welcome-steps {
+  display: grid;
+  gap: 6px;
+  margin: 8px 0 2px;
+  padding: 0;
+  list-style: none;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.35;
+}
+.help-welcome-steps li { display: flex; align-items: flex-start; gap: 7px; }
+.help-welcome-steps li::before {
+  content: '✓';
+  display: grid;
+  flex: 0 0 17px;
+  width: 17px;
+  height: 17px;
+  place-items: center;
+  margin-top: 1px;
+  border-radius: 50%;
+  color: #fff;
+  background: var(--brand);
+  font-size: 11px;
+  font-weight: 800;
+}
+.help-welcome-callout button { justify-content: center; }
 .help-welcome-callout span,
 .help-result-status { color: var(--muted); }
 .help-result-status { min-height: 1.4em; margin: 0; }
@@ -3048,6 +3077,56 @@ td.actions { position: relative; }
 }
 .guided-tour-card h3 { margin: 5px 0 8px; }
 .guided-tour-card p { margin: 0; color: var(--muted); line-height: 1.5; }
+.guided-tour-card.is-anchored {
+  left: var(--tour-left);
+  top: var(--tour-top);
+  bottom: auto;
+  width: min(420px, calc(100vw - 32px));
+  transform: none;
+}
+.guided-tour-card.is-anchored::before {
+  content: '';
+  position: absolute;
+  left: calc(var(--tour-arrow-left) - 10px);
+  width: 20px;
+  height: 20px;
+  border: inherit;
+  background: var(--panel);
+  transform: rotate(45deg);
+}
+.guided-tour-card[data-placement="below"]::before { top: -11px; border-right: 0; border-bottom: 0; }
+.guided-tour-card[data-placement="above"]::before { right: auto; bottom: -11px; border-top: 0; border-left: 0; }
+.guided-tour-hint {
+  margin-top: 10px !important;
+  padding: 8px 10px;
+  border-left: 3px solid #4ade80;
+  border-radius: 0 7px 7px 0;
+  color: var(--ink) !important;
+  background: color-mix(in srgb, var(--brand) 11%, var(--panel));
+  font-size: 13px;
+}
+.guided-tour-pointer {
+  position: fixed;
+  z-index: 4;
+  display: grid;
+  width: 36px;
+  height: 36px;
+  place-items: center;
+  border: 2px solid #dfffe7;
+  border-radius: 50%;
+  color: #fff;
+  background: var(--brand);
+  box-shadow: 0 6px 20px rgba(21, 122, 46, .52);
+  font-size: 24px;
+  font-weight: 900;
+  line-height: 1;
+  pointer-events: none;
+  animation: guidedPointerBounce .85s ease-in-out infinite alternate;
+}
+@keyframes guidedPointerBounce {
+  from { transform: translateY(0); }
+  to { transform: translateY(7px); }
+}
 .guided-tour-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 16px; }
 
 .login-page {

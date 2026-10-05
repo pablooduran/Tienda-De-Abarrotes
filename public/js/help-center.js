@@ -98,7 +98,7 @@
         <div class="help-layout">
           <aside class="help-navigation">
             <nav class="help-categories" aria-label="Categorías de ayuda">${categories.map(([id, label]) => `<button type="button" class="secondary" data-help-category="${escapeHtml(id)}">${escapeHtml(label)}</button>`).join('')}</nav>
-            <div class="help-welcome-callout"><div><strong>Recorrido inicial</strong><span>Producto, stock y primera venta en orden.</span></div><button type="button" class="secondary" data-help-welcome>Iniciar recorrido</button></div>
+            <div class="help-welcome-callout"><div><span class="eyebrow">Guía interactiva</span><strong>Recorrido inicial</strong><span>Producto, stock y primera venta en orden.</span><ol class="help-welcome-steps"><li>Te lleva a cada pantalla</li><li>Resalta el control con borde y flecha</li><li>Avanzas a tu ritmo, sin registrar nada</li></ol></div><button type="button" data-help-welcome>Iniciar recorrido guiado <span aria-hidden="true">→</span></button></div>
           </aside>
           <div class="help-results-panel">
             <p class="help-result-status" data-help-results role="status" aria-live="polite"></p>

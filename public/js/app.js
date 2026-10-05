@@ -609,7 +609,7 @@ function ayuda() {
     onWelcome: () => {
       window.WelcomeGuide?.show(state.context);
       requestedHelpTopic = null;
-      return startGuidedHelp('agregar-producto');
+      return startGuidedHelp('recorrido-inicial');
     },
     onGuide: (topic) => startGuidedHelp(topic)
   });
@@ -617,6 +617,13 @@ function ayuda() {
 }
 
 const guidedHelp = Object.freeze({
+  'recorrido-inicial': [
+    { view: 'productos', selector: '#addProduct', title: 'Agrega un producto', text: 'Empieza aquí. Este botón abre el formulario para registrar lo que vendes; la guía no guardará nada por ti.' },
+    { view: 'compras', selector: '#comprasProvider', title: 'Prepara la entrada de stock', text: 'Después de crear el producto, selecciona aquí quién te entrega la mercadería para registrar el ingreso.' },
+    { view: 'compras', selector: '#comprasSearch', title: 'Agrega el producto recibido', text: 'Busca el producto que acabas de crear y completa sus cantidades y costos antes de registrar la compra.' },
+    { view: 'ventas', selector: '#posSearch', title: 'Inicia la primera venta', text: 'Busca o escanea el producto aquí para añadirlo al carrito del punto de venta.' },
+    { view: 'ventas', selector: '#posSubmit', title: 'Revisa y registra la venta', text: 'Cuando el carrito y el cobro estén correctos, este botón confirma la venta. La guía nunca lo presiona por ti.' }
+  ],
   'agregar-producto': [
     { view: 'productos', selector: '#addProduct', title: 'Agrega un producto', text: 'Este botón abre el formulario para registrar lo que vendes. La guía no guardará nada por ti.' }
   ],
@@ -649,6 +656,24 @@ async function startGuidedHelp(topic) {
   const returnFocus = document.activeElement;
   let highlightedTarget = null;
 
+  const placeGuideCard = (card, rect) => {
+    if (!card) return;
+    if (window.innerWidth <= 640) return;
+    const padding = 16;
+    const cardWidth = Math.min(420, window.innerWidth - (padding * 2));
+    const cardHeight = Math.max(180, card.offsetHeight || 220);
+    const left = Math.min(window.innerWidth - cardWidth - padding, Math.max(padding, rect.left + (rect.width / 2) - (cardWidth / 2)));
+    const belowTop = rect.bottom + 32;
+    const aboveTop = rect.top - cardHeight - 32;
+    const placement = belowTop + cardHeight <= window.innerHeight - padding ? 'below' : (aboveTop >= padding ? 'above' : 'dock');
+    if (placement === 'dock') return;
+    card.classList.add('is-anchored');
+    card.dataset.placement = placement;
+    card.style.setProperty('--tour-left', `${Math.round(left)}px`);
+    card.style.setProperty('--tour-top', `${Math.round(placement === 'below' ? belowTop : aboveTop)}px`);
+    card.style.setProperty('--tour-arrow-left', `${Math.round(Math.min(cardWidth - 30, Math.max(30, rect.left + (rect.width / 2) - left)))}px`);
+  };
+
   const close = () => {
     highlightedTarget?.classList.remove('guided-tour-target');
     modalRoot.innerHTML = '';
@@ -671,13 +696,17 @@ async function startGuidedHelp(topic) {
     target.classList.add('guided-tour-target');
     highlightedTarget = target;
     const rect = target.getBoundingClientRect();
+    const pointerDown = rect.top >= 54;
+    const pointerTop = pointerDown ? rect.top - 42 : rect.bottom + 10;
     modalRoot.innerHTML = `<div class="guided-tour" role="dialog" aria-modal="true" aria-labelledby="guidedTourTitle">
       <div class="guided-tour-shade"></div>
       <div class="guided-tour-highlight" style="top:${Math.max(6, rect.top - 6)}px;left:${Math.max(6, rect.left - 6)}px;width:${Math.max(36, rect.width + 12)}px;height:${Math.max(36, rect.height + 12)}px"></div>
+      <span class="guided-tour-pointer ${pointerDown ? 'points-down' : 'points-up'}" style="top:${Math.max(8, pointerTop)}px;left:${Math.max(10, rect.left + (rect.width / 2) - 18)}px" aria-hidden="true">${pointerDown ? '↓' : '↑'}</span>
       <section class="guided-tour-card">
         <span class="eyebrow">Paso ${current + 1} de ${steps.length}</span>
         <h3 id="guidedTourTitle">${escapeHtml(step.title)}</h3>
         <p>${escapeHtml(step.text)}</p>
+        <p class="guided-tour-hint">Busca el borde verde y la flecha: ese es el control que usarás en este paso.</p>
         <div class="guided-tour-actions">
           ${current > 0 ? '<button type="button" class="secondary" data-tour-back>Anterior</button>' : ''}
           ${current + 1 < steps.length ? '<button type="button" class="secondary" data-tour-close data-modal-cancel>Salir</button>' : ''}
@@ -689,6 +718,7 @@ async function startGuidedHelp(topic) {
     modalRoot.querySelector('[data-tour-back]')?.addEventListener('click', () => { current -= 1; void render(); });
     modalRoot.querySelector('[data-tour-next]')?.addEventListener('click', () => { current += 1; void render(); });
     modalRoot.querySelector('[data-tour-next], [data-tour-close]')?.focus();
+    window.requestAnimationFrame(() => placeGuideCard(modalRoot.querySelector('.guided-tour-card'), rect));
   };
 
   await render();
