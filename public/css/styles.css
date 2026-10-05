@@ -698,6 +698,17 @@ summary,
   grid-row: auto;
 }
 .dashboard-period-chart { min-width: 0; }
+.dashboard-period-content { display: grid; grid-template-columns: minmax(150px, .72fr) minmax(190px, 1.28fr); align-items: center; gap: 14px; min-height: 226px; }
+.dashboard-period-chart .dashboard-period-content canvas { width: 100%; max-width: 100%; height: 226px; }
+.dashboard-period-legend { display: grid; gap: 8px; }
+.dashboard-period-legend-row { display: grid; grid-template-columns: 10px minmax(0, 1fr) auto; align-items: center; gap: 9px; min-height: 32px; padding: 7px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel); color: var(--ink); font-size: 13px; }
+.dashboard-period-legend-row strong { overflow: hidden; color: var(--ink); font-weight: 700; text-overflow: ellipsis; white-space: nowrap; }
+.dashboard-period-legend-row > span:last-child { color: var(--ink); font-weight: 800; font-variant-numeric: tabular-nums; }
+.dashboard-period-legend-dot { width: 9px; height: 9px; border-radius: 50%; background: #1a7a2e; box-shadow: 0 0 0 3px color-mix(in srgb, currentColor 14%, transparent); }
+.legend-tone-1 .dashboard-period-legend-dot { background: #22a83d; }
+.legend-tone-2 .dashboard-period-legend-dot { background: #4ade80; }
+.legend-tone-3 .dashboard-period-legend-dot { background: #2b9348; }
+.legend-tone-4 .dashboard-period-legend-dot { background: #7ca879; }
 .panel-title {
   display: flex;
   justify-content: space-between;
@@ -3197,6 +3208,8 @@ td.actions { position: relative; }
 }
 
 @media (max-width: 560px) {
+  .dashboard-period-content { grid-template-columns: 1fr; min-height: 0; }
+  .dashboard-period-chart .dashboard-period-content canvas { height: 190px; }
   .auth-welcome { min-height: 215px; padding: 22px 20px; }
   .auth-brand h1 { font-size: 24px; }
   .auth-brand-mark { width: 42px; height: 42px; flex-basis: 42px; }

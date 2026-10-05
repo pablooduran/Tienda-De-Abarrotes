@@ -1270,10 +1270,9 @@ function drawPieChart(canvas, labels, values, colors, tooltips = []) {
   ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
   ctx.clearRect(0, 0, displayWidth, displayHeight);
   const total = values.reduce((sum, value) => sum + Number(value || 0), 0);
-  const cx = Math.min(82, Math.max(70, displayWidth * 0.27));
-  const cy = 104;
-  const radius = 48;
-  const legendX = Math.max(146, cx + radius + 22);
+  const cx = displayWidth / 2;
+  const cy = 108;
+  const radius = Math.min(56, Math.max(42, displayWidth * .22));
   const darkTheme = document.documentElement.dataset.theme === 'dark';
   const muted = darkTheme ? '#c7d9ca' : '#4d624f';
   const ink = darkTheme ? '#f2fbf3' : '#172017';
@@ -1324,37 +1323,17 @@ function drawPieChart(canvas, labels, values, colors, tooltips = []) {
     ctx.fillText(`Bs ${money(total)}`, cx, cy + 14);
     ctx.textAlign = 'left';
   }
-  ctx.font = '12px "Segoe UI", Arial';
-  labels.forEach((label, index) => {
-    const y = 32 + index * 32;
-    ctx.fillStyle = readableColors[index % readableColors.length];
-    ctx.beginPath();
-    ctx.arc(legendX, y, 4, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.fillStyle = ink;
-    ctx.fillText(String(label).slice(0, 12), legendX + 10, y + 4);
-    const percent = total ? Math.round((Number(values[index] || 0) / total) * 100) : 0;
-    const lineStart = legendX + 10;
-    const lineEnd = Math.max(lineStart + 34, displayWidth - 34);
-    ctx.lineWidth = 2;
-    ctx.lineCap = 'round';
-    ctx.strokeStyle = grid;
-    ctx.beginPath();
-    ctx.moveTo(lineStart, y + 13);
-    ctx.lineTo(lineEnd, y + 13);
-    ctx.stroke();
-    ctx.strokeStyle = readableColors[index % readableColors.length];
-    ctx.beginPath();
-    ctx.moveTo(lineStart, y + 13);
-    ctx.lineTo(lineStart + (lineEnd - lineStart) * (percent / 100), y + 13);
-    ctx.stroke();
-    ctx.fillStyle = readableColors[index % readableColors.length];
-    ctx.font = '700 12px system-ui, -apple-system, "Segoe UI", Arial';
-    ctx.textAlign = 'right';
-    ctx.fillText(`${percent}%`, displayWidth - 4, y + 4);
-    ctx.textAlign = 'left';
-  });
   bindChartTooltip(canvas, hitAreas);
+}
+
+function renderDailyParticipationLegend(labels, values) {
+  const target = document.getElementById('dailyPieLegend');
+  if (!target) return;
+  const total = values.reduce((sum, value) => sum + Number(value || 0), 0);
+  target.innerHTML = labels.map((label, index) => {
+    const percent = total ? Math.round((Number(values[index] || 0) / total) * 100) : 0;
+    return `<div class="dashboard-period-legend-row legend-tone-${index % 5}"><span class="dashboard-period-legend-dot" aria-hidden="true"></span><strong>${escapeHtml(label)}</strong><span>${percent}%</span></div>`;
+  }).join('');
 }
 
 function dateKey(value) {
@@ -1497,7 +1476,7 @@ async function inicio() {
       </div>
       <div class="panel chart-panel dashboard-period-chart">
         <div class="panel-title"><div><h3>Participación por día</h3><p class="muted">Distribución de las ventas de los últimos 5 días.</p></div></div>
-        <canvas id="dailyPie"></canvas>
+        <div class="dashboard-period-content"><canvas id="dailyPie"></canvas><div id="dailyPieLegend" class="dashboard-period-legend" aria-label="Participación por día"></div></div>
       </div>
       <div class="panel chart-panel">
         <div class="panel-title"><div><h3>Comparativa semanal</h3><p class="muted">Semana actual frente a la anterior.</p></div></div>
@@ -1511,6 +1490,7 @@ async function inicio() {
 
   drawLineChart(document.getElementById('dailyBars'), dayLabels, dayValues, '#22a83d', dayTooltips);
   drawPieChart(document.getElementById('dailyPie'), dayLabels, dayValues, ['#1a7a2e', '#22a83d', '#4ade80', '#166a26', '#7a9a7a'], dayTooltips);
+  renderDailyParticipationLegend(dayLabels, dayValues);
   drawChart(document.getElementById('weekCompare'), ['Semana pasada', 'Semana actual'], [data.ventasSemanaPasada, data.ventasSemana], '#1a7a2e', [
     `<strong>Semana pasada</strong><br>Ventas: Bs ${money(data.ventasSemanaPasada)}`,
     `<strong>Semana actual</strong><br>Ventas: Bs ${money(data.ventasSemana)}`
