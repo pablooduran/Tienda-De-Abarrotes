@@ -2386,6 +2386,24 @@ body:has([data-compensation-filter-form]) { overflow: hidden; }
 .customer-form-sections section { padding-top: 4px; border-top: 1px solid var(--line); }
 .customer-form-sections section:first-child { border-top: 0; }
 .customer-form-sections h4 { margin: 6px 0 10px; }
+.customer-basic-fields { align-items: start; }
+.customer-basic-fields > label { display: grid; gap: 6px; align-content: start; }
+.international-phone-field {
+  display: grid;
+  grid-template-columns: minmax(76px, auto) minmax(0, 1fr);
+  align-items: stretch;
+  width: 100%;
+  min-height: 42px;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--panel);
+}
+.international-phone-field:focus-within { outline: 2px solid color-mix(in srgb, var(--brand) 72%, transparent); outline-offset: 2px; border-color: var(--brand); }
+.international-phone-field select,
+.international-phone-field input { min-width: 0; height: 40px; margin: 0; border: 0; border-radius: 0; background: transparent; box-shadow: none; }
+.international-phone-field select { width: 82px; padding-right: 24px; border-right: 1px solid var(--line); font-weight: 700; }
+.international-phone-field input { padding-left: 12px; }
 .plan-note,
 .readonly-note { border-left: 4px solid #d3a72b; background: #fffbeb; }
 .plan-note p, .readonly-note p { margin-bottom: 0; }

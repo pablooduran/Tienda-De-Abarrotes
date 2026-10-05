@@ -15,7 +15,7 @@
   ];
 
   window.AdministrauPhoneCountries = countries.map(([code, name]) => ({ code, name }));
-  window.administrauCountryOptions = (selected = '591') => window.AdministrauPhoneCountries.map(({ code, name }) => (
-    `<option value="${code}"${String(code) === String(selected || '591') ? ' selected' : ''}>${name} (+${code})</option>`
+  window.administrauCountryOptions = (selected = '591', compact = false) => window.AdministrauPhoneCountries.map(({ code, name }) => (
+    `<option value="${code}" title="${name}"${String(code) === String(selected || '591') ? ' selected' : ''}>${compact ? `+${code}` : `${name} (+${code})`}</option>`
   )).join('');
 }());

@@ -48,7 +48,7 @@
       messageFor: () => 'No se pudo completar la operación. Inténtalo nuevamente.'
     };
     const can = (code) => hasFeature(code);
-    const countryOptions = (selected) => window.administrauCountryOptions(selected || '591');
+    const countryOptions = (selected, compact = false) => window.administrauCountryOptions(selected || '591', compact);
     const phoneCountry = (phone) => {
       const text = String(phone || '').trim();
       const digits = text.replace(/\D/g, '');
@@ -528,10 +528,9 @@
       const creditEnabled = Boolean(customer.permiteFiado);
       const phone = phoneCountry(customer.telefono);
       return `<div class="customer-form-sections">
-        <section><h4>Datos basicos</h4><div class="form-grid">
+        <section><h4>Datos basicos</h4><div class="form-grid customer-basic-fields">
           <label>Nombre<input name="nombre" required maxlength="120" value="${e(customer.nombre || '')}"></label>
-          <label>País del WhatsApp<select name="codigoPaisWhatsApp">${countryOptions(phone.code)}</select></label>
-          <label>Telefono<input name="telefono" inputmode="numeric" maxlength="30" value="${e(phone.local || '')}" placeholder="Ej. 77049566"><span class="hint">Escribe solo el número; el país elegido se agrega automáticamente.</span></label>
+          <label>Telefono<span class="international-phone-field"><select name="codigoPaisWhatsApp" aria-label="Código de país">${countryOptions(phone.code, true)}</select><input name="telefono" inputmode="numeric" maxlength="30" value="${e(phone.local || '')}" placeholder="Número"></span></label>
           <label class="wide">Direccion <span class="hint">(opcional)</span><input name="direccion" maxlength="255" value="${e(customer.direccion || '')}"></label>
         </div></section>
         <section class="customer-credit-disclosure"><label class="check"><input name="activarCredito" type="checkbox" ${creditEnabled ? 'checked' : ''}> Activar credito para este cliente</label>
