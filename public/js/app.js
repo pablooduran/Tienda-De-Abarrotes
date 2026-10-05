@@ -811,6 +811,63 @@ function categoryOptions(value = '') {
   return state.categorias.map((cat) => `<option value="${cat}" ${value === cat ? 'selected' : ''}>${cat}</option>`).join('');
 }
 
+function enhanceListMenu(select) {
+  if (!select || select.dataset.listMenuReady === 'true') return;
+  select.dataset.listMenuReady = 'true';
+  const label = select.closest('label');
+  if (!label) return;
+  const wrapper = document.createElement('div');
+  wrapper.className = 'list-menu-select';
+  const trigger = document.createElement('button');
+  trigger.type = 'button';
+  trigger.className = 'list-menu-trigger';
+  trigger.setAttribute('aria-haspopup', 'listbox');
+  trigger.setAttribute('aria-expanded', 'false');
+  const menu = document.createElement('div');
+  menu.className = 'list-menu-popover';
+  menu.hidden = true;
+  menu.setAttribute('role', 'listbox');
+  const optionRows = () => [...select.options].map((option) => `<button type="button" role="option" data-list-menu-value="${escapeHtml(option.value)}" aria-selected="${option.selected}">${escapeHtml(option.textContent)}</button>`).join('');
+  const close = () => {
+    menu.hidden = true;
+    trigger.setAttribute('aria-expanded', 'false');
+  };
+  const refresh = () => {
+    const selected = select.options[select.selectedIndex];
+    trigger.textContent = selected?.textContent || 'Seleccionar';
+    menu.innerHTML = optionRows();
+    if (select.options.length > 10) {
+      menu.insertAdjacentHTML('afterbegin', '<label class="list-menu-search">Buscar en la lista<input type="search" autocomplete="off" placeholder="Escribe para buscar"></label>');
+      menu.querySelector('input')?.addEventListener('input', (event) => {
+        const term = normalizeSearch(event.currentTarget.value);
+        menu.querySelectorAll('[data-list-menu-value]').forEach((item) => { item.hidden = Boolean(term) && !normalizeSearch(item.textContent).includes(term); });
+      });
+    }
+    menu.querySelectorAll('[data-list-menu-value]').forEach((item) => item.addEventListener('click', () => {
+      select.value = item.dataset.listMenuValue;
+      select.dispatchEvent(new Event('change', { bubbles: true }));
+      close();
+    }));
+  };
+  const open = () => {
+    refresh();
+    menu.hidden = false;
+    trigger.setAttribute('aria-expanded', 'true');
+    menu.querySelector('.list-menu-search input, [aria-selected="true"]')?.focus();
+  };
+  trigger.addEventListener('click', () => (menu.hidden ? open() : close()));
+  trigger.addEventListener('keydown', (event) => {
+    if (event.key === 'ArrowDown' || event.key === 'Enter' || event.key === ' ') { event.preventDefault(); open(); }
+  });
+  wrapper.addEventListener('keydown', (event) => { if (event.key === 'Escape') { close(); trigger.focus(); } });
+  document.addEventListener('click', (event) => { if (!wrapper.contains(event.target)) close(); });
+  select.addEventListener('change', refresh);
+  select.classList.add('list-menu-native');
+  select.parentNode.insertBefore(wrapper, select);
+  wrapper.append(trigger, menu, select);
+  refresh();
+}
+
 function showViewLoading(section) {
   view.innerHTML = `<section class="view-loading-placeholder" role="status" aria-live="polite">
     <span class="eyebrow">Abriendo sección</span>
@@ -2791,8 +2848,8 @@ async function catalogoMaestro() {
     </section>
     <section class="panel master-catalog-filters">
       <label>Buscar<input id="catalogPickerSearch" type="search" placeholder="Producto, marca o código"></label>
-      <label>Categoría<select id="catalogPickerCategory"><option value="">Todas</option></select></label>
-      <label>Marca<select id="catalogPickerBrand"><option value="">Todas</option></select></label>
+      <label>Categoría<select id="catalogPickerCategory" data-list-menu><option value="">Todas</option></select></label>
+      <label>Marca<select id="catalogPickerBrand" data-list-menu><option value="">Todas</option></select></label>
     </section>
     <section class="master-catalog-layout">
       <section class="panel master-catalog-browser" aria-labelledby="masterCatalogResultsTitle">
@@ -2953,7 +3010,8 @@ async function catalogoMaestro() {
   };
   try {
     [picker.categories, picker.brands] = await Promise.all([api('/api/catalogo-maestro/categorias'), api('/api/catalogo-maestro/marcas')]);
-    category.innerHTML = options(picker.categories, 'idCategoriaMaestra', 'nombre', 'Todas'); brand.innerHTML = options(picker.brands, 'idMarcaMaestra', 'nombre', 'Todas'); await loadRows();
+    category.innerHTML = options(picker.categories, 'idCategoriaMaestra', 'nombre', 'Todas'); brand.innerHTML = options(picker.brands, 'idMarcaMaestra', 'nombre', 'Todas');
+    enhanceListMenu(category); enhanceListMenu(brand); await loadRows();
   } catch (error) { return showError(error.message); }
   let searchTimer;
   search.addEventListener('input', () => { window.clearTimeout(searchTimer); searchTimer = window.setTimeout(() => loadRows().catch((error) => showPickerError(error.message)), 250); });

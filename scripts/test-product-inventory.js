@@ -10,9 +10,10 @@ const checks = [];
 
 function check(name, ok) { checks.push({ name, ok: Boolean(ok) }); }
 
-check('Inventario conserva todos los destinos P1', app.includes("sections: ['productos', 'movimientosStock', 'compras', 'proveedores', 'inventarioInteligente', 'inventarioOperativo', 'lotesVencimientos']"));
-check('Subnavegacion reutiliza destinos y guards existentes', app.includes('inventoryWorkspaceSections') && app.includes('sectionAllowed(id)') && app.includes('data-inventory-workspace'));
-check('Productos conserva filtros y prioriza agregar', ['Agregar producto', 'productSearch', 'productCategory', 'productProvider', 'productLowStock', 'productSort', 'Limpiar filtros'].every((value) => app.includes(value)));
+check('Inventario conserva todos los destinos en su orden operativo', app.includes("sections: ['productos', 'compras', 'proveedores', 'movimientosStock', 'inventarioInteligente', 'inventarioOperativo', 'lotesVencimientos']"));
+check('Subnavegacion reutiliza destinos y guards existentes', app.includes('inventoryWorkspaceSections') && app.includes('sectionAvailable(id)') && app.includes('data-inventory-workspace'));
+check('Productos conserva filtros en ventana y prioriza agregar', ['Agregar producto', 'productSearch', 'productCategory', 'productProvider', 'productLowStock', 'productSort', 'id="productFilterDialog"', 'Limpiar'].every((value) => app.includes(value)));
+check('Catalogo maestro muestra Categoria y Marca con lista propia', app.includes('function enhanceListMenu(select)') && app.includes('data-list-menu') && css.includes('.list-menu-popover') && css.includes('.list-menu-trigger'));
 check('Acciones secundarias de producto quedan agrupadas', app.includes('class="row-actions"') && app.includes('Más opciones') && ['Ajustar stock', 'Ver movimientos', 'Ocultar'].every((value) => app.includes(value)));
 check('Movimientos conserva búsqueda visible y filtros en ventana', app.includes('Stock y movimientos') && app.includes('id="movementSearch"') && app.includes('id="movementFilterDialog"') && app.includes('/api/movimientos-stock?${query}'));
 check('Compras conserva flujo y evita doble envio', app.includes('inventory-purchase-flow') && app.includes('1. Proveedor y productos') && app.includes('2. Cantidades y costos') && app.includes("UiPatterns.mutation(form.querySelector('button[type=\"submit\"]')"));
