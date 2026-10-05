@@ -15,7 +15,11 @@
   const registerServiceWorker = async () => {
     if (!('serviceWorker' in navigator)) return;
     try {
-      await navigator.serviceWorker.register('/sw.js', { scope: '/' });
+      const registration = await navigator.serviceWorker.register('/sw.js?v=20261005-1', {
+        scope: '/',
+        updateViaCache: 'none'
+      });
+      await registration.update();
     } catch (error) {
       // La app sigue funcionando como sitio web si el navegador no admite PWA.
       console.warn('No se pudo preparar la instalación de la aplicación.', error);

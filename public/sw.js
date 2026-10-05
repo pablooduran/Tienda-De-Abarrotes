@@ -1,4 +1,4 @@
-const STATIC_CACHE = 'administrau-static-v1';
+const STATIC_CACHE = 'administrau-static-v2';
 const STATIC_ASSETS = [
   '/manifest.webmanifest',
   '/assets/administrau-icon.png',

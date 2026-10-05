@@ -117,6 +117,7 @@ async function main() {
     await page.locator('[data-help-welcome]').click();
     await page.locator('.guided-tour-card').waitFor();
     assert.match(await page.locator('#guidedTourTitle').textContent(), /Agrega un producto/i, 'HELP inicia un recorrido dentro del modulo correcto.');
+    assert.strictEqual(await page.getByText(/El marco verde marca exactamente/i).count(), 0, 'La guía no repite instrucciones sobre el marco.');
     assert.strictEqual(await page.locator('.guided-tour-highlight').count(), 1, 'El recorrido resalta un control real.');
     assert.strictEqual(await page.locator('.guided-tour-shade-piece').count(), 4, 'El recorrido oscurece alrededor del control sin cubrirlo.');
     const targetBox = await page.locator('.product-add-actions > summary').boundingBox();
