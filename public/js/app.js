@@ -223,6 +223,12 @@ function positionFloatingDisclosure(disclosure) {
   });
 }
 
+function internationalWhatsAppPhone(countryCode, phone) {
+  const local = String(phone || '').replace(/\D/g, '');
+  const code = String(countryCode || '591').replace(/\D/g, '');
+  return local ? `+${code} ${local}` : null;
+}
+
 document.addEventListener('toggle', (event) => {
   const disclosure = event.target;
   if (!(disclosure instanceof HTMLDetailsElement) || !disclosure.matches(floatingDisclosureSelector)) return;
@@ -3210,7 +3216,7 @@ function showSaleReceipt(receipt) {
         button.disabled = true;
         try {
           const data = new FormData(form);
-          await api(`/api/clientes/${sale.idCliente}`, { method: 'PATCH', body: JSON.stringify({ telefono: data.get('telefono'), codigoPaisWhatsApp: data.get('codigoPaisWhatsApp') }) });
+          await api(`/api/clientes/${sale.idCliente}`, { method: 'PATCH', body: JSON.stringify({ telefono: internationalWhatsAppPhone(data.get('codigoPaisWhatsApp'), data.get('telefono')) }) });
           const updatedReceipt = await api(`/api/ventas/${sale.idVenta}/comprobante`);
           showSaleReceipt(updatedReceipt);
         } catch (requestError) {

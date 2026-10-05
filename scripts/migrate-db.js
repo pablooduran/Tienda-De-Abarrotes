@@ -1279,10 +1279,6 @@ const migrationRequirements = {
   }
 };
 
-migrationRequirements['027_codigo_pais_cliente_whatsapp.sql'] = {
-  columns: { cliente: ['codigoPaisWhatsApp'] },
-  checks: [['cliente', 'chk_cliente_codigo_pais_whatsapp']]
-};
 
 const LOTS_FEATURES = Object.freeze([
   'vencimientos_lote',

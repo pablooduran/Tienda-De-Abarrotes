@@ -49,6 +49,19 @@
     };
     const can = (code) => hasFeature(code);
     const countryOptions = (selected) => window.administrauCountryOptions(selected || '591');
+    const phoneCountry = (phone) => {
+      const text = String(phone || '').trim();
+      const digits = text.replace(/\D/g, '');
+      const match = text.startsWith('+')
+        ? [...(window.AdministrauPhoneCountries || [])].sort((a, b) => b.code.length - a.code.length)
+          .find((country) => digits.startsWith(country.code))
+        : null;
+      return { code: match?.code || '591', local: match ? digits.slice(match.code.length) : text };
+    };
+    const internationalPhone = (countryCode, phone) => {
+      const local = String(phone || '').replace(/\D/g, '');
+      return local ? `+${String(countryCode || '591').replace(/\D/g, '')} ${local}` : null;
+    };
     const readOnly = () => Boolean(state().context?.soloLectura);
     const nullable = (value) => {
       const text = String(value ?? '').trim();
@@ -513,11 +526,12 @@
     function customerFormBody(customer = {}) {
       const advanced = can('limites_credito');
       const creditEnabled = Boolean(customer.permiteFiado);
+      const phone = phoneCountry(customer.telefono);
       return `<div class="customer-form-sections">
         <section><h4>Datos basicos</h4><div class="form-grid">
           <label>Nombre<input name="nombre" required maxlength="120" value="${e(customer.nombre || '')}"></label>
-          <label>País del WhatsApp<select name="codigoPaisWhatsApp">${countryOptions(customer.codigoPaisWhatsApp)}</select></label>
-          <label>Telefono<input name="telefono" inputmode="numeric" maxlength="30" value="${e(customer.telefono || '')}" placeholder="Ej. 77049566"><span class="hint">Escribe solo el número, sin +${e(customer.codigoPaisWhatsApp || '591')}.</span></label>
+          <label>País del WhatsApp<select name="codigoPaisWhatsApp">${countryOptions(phone.code)}</select></label>
+          <label>Telefono<input name="telefono" inputmode="numeric" maxlength="30" value="${e(phone.local || '')}" placeholder="Ej. 77049566"><span class="hint">Escribe solo el número; el país elegido se agrega automáticamente.</span></label>
           <label class="wide">Direccion <span class="hint">(opcional)</span><input name="direccion" maxlength="255" value="${e(customer.direccion || '')}"></label>
         </div></section>
         <section class="customer-credit-disclosure"><label class="check"><input name="activarCredito" type="checkbox" ${creditEnabled ? 'checked' : ''}> Activar credito para este cliente</label>
@@ -550,8 +564,7 @@
           const fd = new FormData(form);
           const payload = {
             nombre: nullable(fd.get('nombre')),
-            telefono: nullable(fd.get('telefono')),
-            codigoPaisWhatsApp: nullable(fd.get('codigoPaisWhatsApp')),
+            telefono: internationalPhone(fd.get('codigoPaisWhatsApp'), fd.get('telefono')),
             direccion: nullable(fd.get('direccion'))
           };
           if (!payload.nombre) throw new Error('El nombre es obligatorio.');

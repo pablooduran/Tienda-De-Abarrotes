@@ -108,10 +108,10 @@ check('Formulario de cliente prioriza datos esenciales y crédito opcional', inc
   && !creditJs.includes('name="canalPreferido"')
   && !creditJs.includes('name="horarioPreferido"')
   && !creditJs.includes('name="notas"'));
-check('WhatsApp registra país por cliente y Bolivia es la opción predeterminada', includesAll(countryCodesJs, [
+check('WhatsApp registra el teléfono internacional y Bolivia es la opción predeterminada', includesAll(countryCodesJs, [
   "['591', 'Bolivia']", 'administrauCountryOptions', 'AdministrauPhoneCountries'
-]) && creditJs.includes('Cada cliente también puede tener su propio país.')
-  && appJs.includes('codigoPaisWhatsApp: data.get(\'codigoPaisWhatsApp\')'));
+]) && creditJs.includes('internationalPhone')
+  && appJs.includes('internationalWhatsAppPhone'));
 check('Filtro explicito de estado de clientes', includesAll(creditJs + creditRoutes + creditService, [
   "customerFilters: { estado: 'activos' }", "option('activos', 'Activos'", "option('ocultos', 'Ocultos'",
   "option('todos', 'Todos'", "new Set(['activos', 'ocultos', 'todos'])", "INVALID_CUSTOMER_STATE"
