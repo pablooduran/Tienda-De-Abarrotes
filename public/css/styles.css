@@ -384,13 +384,14 @@ body {
 .account-menu-panel .account-logout { margin-top: 5px; color: #fff; background: var(--brand); border-color: var(--brand); text-align: center; }
 .sidebar-account-menu {
   z-index: 60;
-  align-self: flex-end;
+  align-self: flex-start;
   margin-top: auto;
 }
 .sidebar-account-menu .account-menu-panel {
   top: auto;
-  right: 0;
+  right: auto;
   bottom: calc(100% + 10px);
+  left: 0;
   max-height: min(70vh, 560px);
   overflow-y: auto;
 }
