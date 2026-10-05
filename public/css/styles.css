@@ -387,6 +387,7 @@ body {
   align-self: flex-start;
   margin-top: auto;
 }
+.sidebar:has(.sidebar-account-menu[open]) { z-index: 60; }
 .sidebar-account-menu .account-menu-panel {
   top: auto;
   right: auto;
@@ -2577,7 +2578,7 @@ body:has([data-compensation-filter-form]) { overflow: hidden; }
   align-items: stretch;
   width: 100%;
   min-height: 42px;
-  overflow: hidden;
+  overflow: visible;
   border: 1px solid var(--line);
   border-radius: 6px;
   background: var(--panel);

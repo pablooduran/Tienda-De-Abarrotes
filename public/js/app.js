@@ -708,6 +708,7 @@ function mobileNavigation() {
 
 function closeMobileNavigation() {
   if (!mobileNavigation()) return;
+  accountMenu?.removeAttribute('open');
   appLayout?.classList.remove('sidebar-open');
   if (sidebarScrim) sidebarScrim.hidden = true;
   setNavigationToggleState(false);
@@ -1014,6 +1015,7 @@ helpBackTopbar?.addEventListener('click', () => loadView(helpReturnView || 'inic
 settingsBackTopbar?.addEventListener('click', () => loadView('inicio'));
 
 function setDesktopSidebarCollapsed(collapsed, persist = true) {
+  if (collapsed) accountMenu?.removeAttribute('open');
   appLayout?.classList.toggle('sidebar-collapsed', collapsed);
   setNavigationToggleState(!collapsed);
   if (!persist) return;
@@ -1032,6 +1034,7 @@ function initializeShell() {
   let collapsed = false;
   try { collapsed = window.localStorage.getItem('tienda-sidebar-collapsed') === 'true'; } catch (_) { /* Mantener el valor seguro. */ }
   if (mobileNavigation()) {
+    accountMenu?.removeAttribute('open');
     appLayout?.classList.remove('sidebar-collapsed', 'sidebar-open');
     setNavigationToggleState(false);
     if (sidebarScrim) sidebarScrim.hidden = true;
@@ -1043,6 +1046,7 @@ function initializeShell() {
 navigationToggle?.addEventListener('click', () => {
   if (mobileNavigation()) {
     const open = !appLayout?.classList.contains('sidebar-open');
+    if (!open) accountMenu?.removeAttribute('open');
     appLayout?.classList.toggle('sidebar-open', open);
     setNavigationToggleState(open);
     if (sidebarScrim) sidebarScrim.hidden = !open;
