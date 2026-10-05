@@ -3036,12 +3036,19 @@ td.actions { position: relative; }
 .guided-tour-highlight {
   position: fixed;
   z-index: 4;
-  border: 5px solid #62fa87;
+  border: 5px solid #7dff9e;
   border-radius: 10px;
-  background: transparent;
-  box-shadow: 0 0 0 9999px rgba(3, 10, 6, .48), 0 0 0 10px rgba(74, 222, 128, .42), 0 0 26px 8px rgba(74, 222, 128, .38);
+  outline: 2px solid rgba(231, 255, 237, .95);
+  outline-offset: 3px;
+  background: rgba(74, 222, 128, .05);
+  box-shadow: 0 0 0 9999px rgba(1, 8, 3, .68), 0 0 0 9px rgba(74, 222, 128, .55), 0 0 30px 10px rgba(74, 222, 128, .6), inset 0 0 16px rgba(125, 255, 158, .18);
   pointer-events: none;
   transition: inset .18s ease, width .18s ease, height .18s ease;
+  animation: guidedHighlightPulse 1.25s ease-in-out infinite;
+}
+@keyframes guidedHighlightPulse {
+  0%, 100% { box-shadow: 0 0 0 9999px rgba(1, 8, 3, .68), 0 0 0 9px rgba(74, 222, 128, .55), 0 0 30px 10px rgba(74, 222, 128, .6), inset 0 0 16px rgba(125, 255, 158, .18); }
+  50% { box-shadow: 0 0 0 9999px rgba(1, 8, 3, .68), 0 0 0 13px rgba(74, 222, 128, .25), 0 0 36px 14px rgba(74, 222, 128, .76), inset 0 0 20px rgba(125, 255, 158, .28); }
 }
 .guided-tour-highlight::after {
   content: 'AQUÍ';
@@ -3066,16 +3073,17 @@ td.actions { position: relative; }
   bottom: 28px;
   width: min(520px, calc(100vw - 32px));
   padding: 18px;
-  border: 1px solid var(--line);
+  border: 1px solid #3c8a50;
   border-radius: 12px;
-  color: var(--ink);
-  background: var(--panel);
-  box-shadow: 0 24px 70px rgba(0, 0, 0, .35);
+  color: #f7fff8;
+  background: #08130c;
+  box-shadow: 0 24px 70px rgba(0, 0, 0, .62), 0 0 0 1px rgba(125, 255, 158, .08) inset;
   pointer-events: auto;
   transform: translateX(-50%);
 }
-.guided-tour-card h3 { margin: 5px 0 8px; }
-.guided-tour-card p { margin: 0; color: var(--muted); line-height: 1.5; }
+.guided-tour-card .eyebrow { color: #62fa87; }
+.guided-tour-card h3 { margin: 5px 0 8px; color: #ffffff; }
+.guided-tour-card p { margin: 0; color: #d7eadb; line-height: 1.5; }
 .guided-tour-card.is-anchored {
   left: var(--tour-left);
   top: var(--tour-top);
@@ -3099,8 +3107,8 @@ td.actions { position: relative; }
   padding: 8px 10px;
   border-left: 3px solid #4ade80;
   border-radius: 0 7px 7px 0;
-  color: var(--ink) !important;
-  background: color-mix(in srgb, var(--brand) 11%, var(--panel));
+  color: #effff2 !important;
+  background: rgba(21, 88, 40, .3);
   font-size: 13px;
 }
 .guided-tour-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 16px; }
