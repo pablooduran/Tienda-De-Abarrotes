@@ -275,6 +275,29 @@ body {
   overflow-x: hidden;
   overflow-y: auto;
   padding: clamp(12px, 2.5vw, 24px);
+  position: relative;
+  isolation: isolate;
+  background-color: var(--bg);
+  background-image:
+    radial-gradient(circle at 92% 7%, rgba(121, 151, 123, .13), transparent 24rem),
+    radial-gradient(circle at 7% 96%, rgba(123, 148, 104, .10), transparent 28rem);
+}
+.content::before,
+.content::after {
+  content: '';
+  position: fixed;
+  z-index: 0;
+  width: min(38vw, 500px);
+  aspect-ratio: 1;
+  pointer-events: none;
+  background: url('/assets/administrau-icon.png') center / contain no-repeat;
+  filter: saturate(.55) sepia(.12);
+  opacity: .055;
+}
+.content::before { top: 2vh; right: -10vw; transform: rotate(8deg); }
+.content::after { bottom: -17vh; left: max(0px, 1vw); transform: rotate(-14deg) scale(.9); }
+.content > * { position: relative; z-index: 1; }
+.content > .topbar { z-index: 3; }
 }
 .topbar {
   display: flex;
@@ -4311,7 +4334,14 @@ html[data-theme="dark"] {
   --yellow: #f2cf6f;
 }
 @media screen {
-  html[data-theme="dark"] .content { color: var(--ink); }
+  html[data-theme="dark"] .content {
+    color: var(--ink);
+    background-image:
+      radial-gradient(circle at 92% 7%, rgba(90, 160, 105, .10), transparent 24rem),
+      radial-gradient(circle at 7% 96%, rgba(75, 122, 82, .08), transparent 28rem);
+  }
+  html[data-theme="dark"] .content::before,
+  html[data-theme="dark"] .content::after { opacity: .035; filter: grayscale(.35) saturate(.7) brightness(.72); }
   html[data-theme="dark"] .modal,
   html[data-theme="dark"] .owner-filter-dialog,
   html[data-theme="dark"] .welcome-step,

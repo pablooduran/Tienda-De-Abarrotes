@@ -20,7 +20,8 @@
     const retryAfter = response.headers.get('Retry-After');
     let message = body.error || fallback;
     if (response.status === 429 && retryAfter) {
-      message = `${message} Reintenta en aproximadamente ${retryAfter} segundos.`;
+      const minutes = Math.max(1, Math.ceil(Number(retryAfter) / 60));
+      message = `${message} Reintenta en aproximadamente ${minutes} ${minutes === 1 ? 'minuto' : 'minutos'}.`;
     } else if (body.code === 'SESSION_REVOKED') {
       message = 'La sesion fue revocada. Inicia sesion nuevamente.';
     } else if (body.code === 'CSRF_VALIDATION_FAILED' || body.code === 'ORIGIN_NOT_ALLOWED') {

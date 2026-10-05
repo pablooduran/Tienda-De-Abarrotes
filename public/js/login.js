@@ -150,8 +150,10 @@
     button.dataset.readyLabel = original;
     button.disabled = true;
     const render = () => {
-      status.textContent = remaining > 0 ? `Podrás solicitar otro código en ${remaining} segundos.` : 'Ya puedes solicitar otro código.';
-      button.textContent = remaining > 0 ? `Reenviar en ${remaining} s` : original;
+      const minutes = Math.max(1, Math.ceil(remaining / 60));
+      const waitLabel = `${minutes} ${minutes === 1 ? 'minuto' : 'minutos'}`;
+      status.textContent = remaining > 0 ? `Podrás solicitar otro código en aproximadamente ${waitLabel}.` : 'Ya puedes solicitar otro código.';
+      button.textContent = remaining > 0 ? `Reenviar en ${waitLabel}` : original;
       button.disabled = remaining > 0;
       if (remaining <= 0) {
         window.clearInterval(resendTimers.get(form));

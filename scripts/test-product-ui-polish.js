@@ -33,6 +33,7 @@ const checks = [
   ['El gráfico circular mantiene etiquetas nítidas y contrastadas en oscuro', app.includes("const muted = darkTheme ? '#c7d9ca' : '#4d624f';") && app.includes('const readableColors = darkTheme') && app.includes("'700 12px system-ui")],
   ['Cierre de caja organiza el arqueo en pasos y presenta un resumen antes de guardar', app.includes('class="cash-closure-workspace panel"') && app.includes('data-closure-preset="today"') && app.includes('Primero calcula, luego guarda.') && css.includes('.cash-closure-step,' ) && css.includes('.cash-closure-actions,' )],
   ['Reportes guía la selección, filtros y consulta en una misma estructura', app.includes('class="report-workspace panel"') && app.includes('REPORT_TYPE_INFO') && app.includes('id="reportDescription"') && css.includes('.report-dynamic-filters') && css.includes('.report-actions')],
+  ['El fondo usa el árbol de marca como textura tenue sin cubrir el contenido', css.includes("background: url('/assets/administrau-icon.png')") && css.includes('.content::before,') && css.includes('.content > * { position: relative; z-index: 1; }') && css.includes('html[data-theme="dark"] .content::before')],
   ['UX-005 se registra como resuelto en P7E', pending.includes('| UX-005 |') && pending.includes('Resuelto en P7E')],
   ['TECH-026 queda resuelto tras P8', pending.includes('| TECH-026 |') && pending.includes('Resuelto: local 3/3 PASS')],
   ['El frontend no controla tenant', !app.includes('idTienda')]
