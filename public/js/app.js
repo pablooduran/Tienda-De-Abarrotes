@@ -655,18 +655,25 @@ async function startGuidedHelp(topic) {
   let current = 0;
   const returnFocus = document.activeElement;
 
-  const placeGuideCard = (card, rect) => {
+  const placeGuideCard = (card, target) => {
     if (!card) return;
     if (window.innerWidth <= 640) return;
     const padding = 16;
-    const cardWidth = Math.min(420, window.innerWidth - (padding * 2));
-    const cardHeight = Math.max(180, card.offsetHeight || 220);
+    // El cuadro se mide ya con su ancho anclado y el rectángulo se vuelve a
+    // obtener aquí: ambas referencias quedan sincronizadas después del scroll.
+    card.classList.add('is-anchored');
+    const rect = target.getBoundingClientRect();
+    const cardBox = card.getBoundingClientRect();
+    const cardWidth = cardBox.width;
+    const cardHeight = Math.max(180, cardBox.height || 220);
     const left = Math.min(window.innerWidth - cardWidth - padding, Math.max(padding, rect.left + (rect.width / 2) - (cardWidth / 2)));
     const belowTop = rect.bottom + 32;
     const aboveTop = rect.top - cardHeight - 32;
     const placement = belowTop + cardHeight <= window.innerHeight - padding ? 'below' : (aboveTop >= padding ? 'above' : 'dock');
-    if (placement === 'dock') return;
-    card.classList.add('is-anchored');
+    if (placement === 'dock') {
+      card.classList.remove('is-anchored');
+      return;
+    }
     card.dataset.placement = placement;
     card.style.setProperty('--tour-left', `${Math.round(left)}px`);
     card.style.setProperty('--tour-top', `${Math.round(placement === 'below' ? belowTop : aboveTop)}px`);
@@ -709,7 +716,7 @@ async function startGuidedHelp(topic) {
     modalRoot.querySelector('[data-tour-back]')?.addEventListener('click', () => { current -= 1; void render(); });
     modalRoot.querySelector('[data-tour-next]')?.addEventListener('click', () => { current += 1; void render(); });
     modalRoot.querySelector('[data-tour-next], [data-tour-close]')?.focus();
-    window.requestAnimationFrame(() => placeGuideCard(modalRoot.querySelector('.guided-tour-card'), rect));
+    window.requestAnimationFrame(() => placeGuideCard(modalRoot.querySelector('.guided-tour-card'), target));
   };
 
   await render();

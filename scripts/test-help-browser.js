@@ -122,6 +122,13 @@ async function main() {
     const highlightBox = await page.locator('.guided-tour-highlight').boundingBox();
     assert(highlightBox && targetBox && Math.abs((highlightBox.x + (highlightBox.width / 2)) - (targetBox.x + (targetBox.width / 2))) < 14,
       `El marco debe cubrir el control: marco=${JSON.stringify(highlightBox)}, control=${JSON.stringify(targetBox)}.`);
+    const guideArrowCenter = await page.locator('.guided-tour-card').evaluate((card) => {
+      const cardBox = card.getBoundingClientRect();
+      const arrowStyle = getComputedStyle(card, '::before');
+      return cardBox.left + Number.parseFloat(arrowStyle.left) + 14;
+    });
+    assert(targetBox && Math.abs(guideArrowCenter - (targetBox.x + (targetBox.width / 2))) < 14,
+      `La punta de la guía debe señalar el centro del control: punta=${guideArrowCenter}, control=${JSON.stringify(targetBox)}.`);
     await page.locator('[data-tour-next]').click();
     await page.locator('#guidedTourTitle').filter({ hasText: 'Prepara la entrada de stock' }).waitFor();
     const providerBox = await page.locator('#comprasProvider').boundingBox();

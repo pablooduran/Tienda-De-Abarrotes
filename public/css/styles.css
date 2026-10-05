@@ -3035,7 +3035,7 @@ td.actions { position: relative; }
 .guided-tour-shade { position: absolute; z-index: 1; inset: 0; pointer-events: none; }
 .guided-tour-highlight {
   position: fixed;
-  z-index: 4;
+  z-index: 5;
   border: 5px solid #7dff9e;
   border-radius: 10px;
   outline: 2px solid rgba(231, 255, 237, .95);
@@ -3067,17 +3067,18 @@ td.actions { position: relative; }
 }
 .guided-tour-card {
   position: fixed;
-  z-index: 3;
+  z-index: 6;
   left: 50%;
   top: auto;
   bottom: 28px;
   width: min(520px, calc(100vw - 32px));
   padding: 18px;
-  border: 1px solid #3c8a50;
+  box-sizing: border-box;
+  border: 1px solid #65c97d;
   border-radius: 12px;
   color: #f7fff8;
-  background: #08130c;
-  box-shadow: 0 24px 70px rgba(0, 0, 0, .62), 0 0 0 1px rgba(125, 255, 158, .08) inset;
+  background: #102719;
+  box-shadow: 0 24px 70px rgba(0, 0, 0, .62), 0 0 0 1px rgba(210, 255, 220, .16) inset, 0 0 34px rgba(74, 222, 128, .13);
   pointer-events: auto;
   transform: translateX(-50%);
 }
@@ -3108,7 +3109,7 @@ td.actions { position: relative; }
   border-left: 3px solid #4ade80;
   border-radius: 0 7px 7px 0;
   color: #effff2 !important;
-  background: rgba(21, 88, 40, .3);
+  background: rgba(36, 112, 56, .42);
   font-size: 13px;
 }
 .guided-tour-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 16px; }
