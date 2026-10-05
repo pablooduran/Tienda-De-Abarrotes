@@ -34,6 +34,7 @@ const checks = [
   ['Cierre de caja organiza el arqueo en pasos y presenta un resumen antes de guardar', app.includes('class="cash-closure-workspace panel"') && app.includes('data-closure-preset="today"') && app.includes('Primero calcula, luego guarda.') && css.includes('.cash-closure-step,' ) && css.includes('.cash-closure-actions,' )],
   ['Reportes guía la selección, filtros y consulta en una misma estructura', app.includes('class="report-workspace panel"') && app.includes('REPORT_TYPE_INFO') && app.includes('id="reportDescription"') && css.includes('.report-dynamic-filters') && css.includes('.report-actions')],
   ['El fondo usa el árbol de marca como textura tenue sin cubrir el contenido', css.includes("background: url('/assets/administrau-icon.png')") && css.includes('.content::before,') && css.includes('.content > * { position: relative; z-index: 1; }') && css.includes('html[data-theme="dark"] .content::before')],
+  ['La cabecera conserva su contenedor y la flecha supera el panel lateral', css.includes('.content > .topbar { z-index: 40; }') && css.includes('border: 1px solid color-mix(in srgb, var(--line) 82%, var(--brand) 18%);') && css.includes('box-shadow: 0 10px 26px rgba(29, 39, 51, .09)')],
   ['UX-005 se registra como resuelto en P7E', pending.includes('| UX-005 |') && pending.includes('Resuelto en P7E')],
   ['TECH-026 queda resuelto tras P8', pending.includes('| TECH-026 |') && pending.includes('Resuelto: local 3/3 PASS')],
   ['El frontend no controla tenant', !app.includes('idTienda')]

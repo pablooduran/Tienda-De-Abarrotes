@@ -276,7 +276,6 @@ body {
   overflow-y: auto;
   padding: clamp(12px, 2.5vw, 24px);
   position: relative;
-  isolation: isolate;
   background-color: var(--bg);
   background-image:
     radial-gradient(circle at 92% 7%, rgba(121, 151, 123, .13), transparent 24rem),
@@ -297,19 +296,18 @@ body {
 .content::before { top: 2vh; right: -10vw; transform: rotate(8deg); }
 .content::after { bottom: -17vh; left: max(0px, 1vw); transform: rotate(-14deg) scale(.9); }
 .content > * { position: relative; z-index: 1; }
-.content > .topbar { z-index: 3; }
-}
+.content > .topbar { z-index: 40; }
 .topbar {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 16px;
   background: var(--panel);
-  border: 1px solid var(--line);
+  border: 1px solid color-mix(in srgb, var(--line) 82%, var(--brand) 18%);
   border-radius: 8px;
   padding: 18px 20px;
   margin-bottom: 16px;
-  box-shadow: 0 8px 24px rgba(29, 39, 51, 0.04);
+  box-shadow: 0 10px 26px rgba(29, 39, 51, .09), inset 0 1px rgba(255, 255, 255, .62);
 }
 .topbar h2 { margin: 0 0 4px; }
 .topbar p { margin: 0; color: var(--muted); }
