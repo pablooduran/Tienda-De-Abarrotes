@@ -118,6 +118,16 @@ async function main() {
     await page.locator('.guided-tour-card').waitFor();
     assert.match(await page.locator('#guidedTourTitle').textContent(), /Agrega un producto/i, 'HELP inicia un recorrido dentro del modulo correcto.');
     assert.strictEqual(await page.locator('.guided-tour-highlight').count(), 1, 'El recorrido resalta un control real.');
+    const targetBox = await page.locator('#addProduct').boundingBox();
+    const highlightBox = await page.locator('.guided-tour-highlight').boundingBox();
+    assert(highlightBox && targetBox && Math.abs((highlightBox.x + (highlightBox.width / 2)) - (targetBox.x + (targetBox.width / 2))) < 14,
+      `El marco debe cubrir el control: marco=${JSON.stringify(highlightBox)}, control=${JSON.stringify(targetBox)}.`);
+    await page.locator('[data-tour-next]').click();
+    await page.locator('#guidedTourTitle').filter({ hasText: 'Prepara la entrada de stock' }).waitFor();
+    const providerBox = await page.locator('#comprasProvider').boundingBox();
+    const stockHighlightBox = await page.locator('.guided-tour-highlight').boundingBox();
+    assert(stockHighlightBox && providerBox && Math.abs((stockHighlightBox.x + (stockHighlightBox.width / 2)) - (providerBox.x + (providerBox.width / 2))) < 14,
+      `El marco debe seguir al proveedor: marco=${JSON.stringify(stockHighlightBox)}, control=${JSON.stringify(providerBox)}.`);
     await page.locator('[data-tour-close]').click();
     assert.deepStrictEqual(session.errors, [], 'HELP mantiene la consola limpia.');
     await session.context.close();

@@ -696,17 +696,14 @@ async function startGuidedHelp(topic) {
     target.classList.add('guided-tour-target');
     highlightedTarget = target;
     const rect = target.getBoundingClientRect();
-    const pointerDown = rect.top >= 54;
-    const pointerTop = pointerDown ? rect.top - 42 : rect.bottom + 10;
     modalRoot.innerHTML = `<div class="guided-tour" role="dialog" aria-modal="true" aria-labelledby="guidedTourTitle">
       <div class="guided-tour-shade"></div>
       <div class="guided-tour-highlight" style="top:${Math.max(6, rect.top - 6)}px;left:${Math.max(6, rect.left - 6)}px;width:${Math.max(36, rect.width + 12)}px;height:${Math.max(36, rect.height + 12)}px"></div>
-      <span class="guided-tour-pointer ${pointerDown ? 'points-down' : 'points-up'}" style="top:${Math.max(8, pointerTop)}px;left:${Math.max(10, rect.left + (rect.width / 2) - 18)}px" aria-hidden="true">${pointerDown ? '↓' : '↑'}</span>
       <section class="guided-tour-card">
         <span class="eyebrow">Paso ${current + 1} de ${steps.length}</span>
         <h3 id="guidedTourTitle">${escapeHtml(step.title)}</h3>
         <p>${escapeHtml(step.text)}</p>
-        <p class="guided-tour-hint">Busca el borde verde y la flecha: ese es el control que usarás en este paso.</p>
+        <p class="guided-tour-hint">El marco verde marca exactamente el control de este paso. La punta del cuadro señala hacia él.</p>
         <div class="guided-tour-actions">
           ${current > 0 ? '<button type="button" class="secondary" data-tour-back>Anterior</button>' : ''}
           ${current + 1 < steps.length ? '<button type="button" class="secondary" data-tour-close data-modal-cancel>Salir</button>' : ''}
