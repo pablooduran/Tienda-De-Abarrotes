@@ -8,6 +8,7 @@
     "start:local": "node scripts/start-local.js",
     "dev": "nodemon server.js",
     "db:init": "node scripts/init-db.js",
+    "db:create-staging-database": "node scripts/create-staging-database.js --remote-staging-create",
     "db:migrate": "node scripts/migrate-db.js",
     "db:diagnose-staging": "node scripts/diagnose-staging-remote.js",
     "db:preflight-staging": "node scripts/preflight-staging-remote.js",
