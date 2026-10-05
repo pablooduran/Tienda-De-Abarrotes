@@ -118,9 +118,9 @@ async function main() {
     await page.locator('.guided-tour-card').waitFor();
     assert.match(await page.locator('#guidedTourTitle').textContent(), /Agrega un producto/i, 'HELP inicia un recorrido dentro del modulo correcto.');
     assert.strictEqual(await page.locator('.guided-tour-highlight').count(), 1, 'El recorrido resalta un control real.');
-    const targetBox = await page.locator('#addProduct').boundingBox();
+    const targetBox = await page.locator('.product-add-actions > summary').boundingBox();
     const highlightBox = await page.locator('.guided-tour-highlight').boundingBox();
-    assert(highlightBox && targetBox && Math.abs((highlightBox.x + (highlightBox.width / 2)) - (targetBox.x + (targetBox.width / 2))) < 14,
+    assert(highlightBox && targetBox && Math.abs((highlightBox.x + (highlightBox.width / 2)) - (targetBox.x + (targetBox.width / 2))) < 14 && Math.abs((highlightBox.y + (highlightBox.height / 2)) - (targetBox.y + (targetBox.height / 2))) < 14,
       `El marco debe cubrir el control: marco=${JSON.stringify(highlightBox)}, control=${JSON.stringify(targetBox)}.`);
     const guideArrowCenter = await page.locator('.guided-tour-card').evaluate((card) => {
       const cardBox = card.getBoundingClientRect();

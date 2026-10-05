@@ -3036,19 +3036,27 @@ td.actions { position: relative; }
 .guided-tour-highlight {
   position: fixed;
   z-index: 5;
-  border: 5px solid #7dff9e;
+  border: 5px solid #8affaa;
   border-radius: 10px;
-  outline: 2px solid rgba(231, 255, 237, .95);
-  outline-offset: 3px;
-  background: rgba(74, 222, 128, .05);
-  box-shadow: 0 0 0 9999px rgba(1, 8, 3, .68), 0 0 0 9px rgba(74, 222, 128, .55), 0 0 30px 10px rgba(74, 222, 128, .6), inset 0 0 16px rgba(125, 255, 158, .18);
+  outline: 3px solid rgba(242, 255, 245, 1);
+  outline-offset: 4px;
+  background: linear-gradient(135deg, rgba(103, 255, 144, .33), rgba(38, 190, 83, .2));
+  backdrop-filter: brightness(1.7) saturate(1.35);
+  box-shadow: 0 0 0 9999px rgba(1, 8, 3, .68), 0 0 0 10px rgba(74, 222, 128, .72), 0 0 34px 12px rgba(74, 222, 128, .82), inset 0 0 18px rgba(224, 255, 231, .35);
   pointer-events: none;
   transition: inset .18s ease, width .18s ease, height .18s ease;
   animation: guidedHighlightPulse 1.25s ease-in-out infinite;
 }
 @keyframes guidedHighlightPulse {
-  0%, 100% { box-shadow: 0 0 0 9999px rgba(1, 8, 3, .68), 0 0 0 9px rgba(74, 222, 128, .55), 0 0 30px 10px rgba(74, 222, 128, .6), inset 0 0 16px rgba(125, 255, 158, .18); }
-  50% { box-shadow: 0 0 0 9999px rgba(1, 8, 3, .68), 0 0 0 13px rgba(74, 222, 128, .25), 0 0 36px 14px rgba(74, 222, 128, .76), inset 0 0 20px rgba(125, 255, 158, .28); }
+  0%, 100% { box-shadow: 0 0 0 9999px rgba(1, 8, 3, .68), 0 0 0 10px rgba(74, 222, 128, .72), 0 0 34px 12px rgba(74, 222, 128, .82), inset 0 0 18px rgba(224, 255, 231, .35); }
+  50% { box-shadow: 0 0 0 9999px rgba(1, 8, 3, .68), 0 0 0 15px rgba(74, 222, 128, .32), 0 0 42px 17px rgba(74, 222, 128, .96), inset 0 0 24px rgba(224, 255, 231, .5); }
+}
+.guided-tour-highlight::before {
+  content: '';
+  position: absolute;
+  inset: 4px;
+  border: 2px solid rgba(244, 255, 246, .9);
+  border-radius: 4px;
 }
 .guided-tour-highlight::after {
   content: 'AQUÍ';
