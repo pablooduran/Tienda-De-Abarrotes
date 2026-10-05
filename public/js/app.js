@@ -3974,17 +3974,24 @@ async function cierreCaja() {
   const now = new Date();
   const start = new Date(now.getFullYear(), now.getMonth(), now.getDate());
   let operationKey = newOperationKey();
-  view.innerHTML = `<div class="panel"><div class="panel-title"><div><h3>Nuevo cierre de caja</h3><p>El cierre es opcional y no modifica ventas, pagos, gastos ni stock.</p></div><button id="exportClosures" class="secondary">Exportar a Excel</button></div>
-    <form id="cashClosureForm" class="form-grid">
-      <label>Desde<input name="fechaInicio" type="datetime-local" step="1" required value="${localDateTimeValue(start)}"></label>
-      <label>Hasta<input name="fechaFin" type="datetime-local" step="1" required value="${localDateTimeValue(now)}"></label>
-      <label>Efectivo inicial<input name="efectivoInicial" type="number" min="0" step="0.01" value="0"></label>
-      <label>Efectivo contado<input name="efectivoContado" type="number" min="0" step="0.01" required value="0"></label>
-      <label class="wide">Observación<textarea name="observacion" maxlength="500"></textarea></label>
-      <div class="actions wide"><button type="button" id="calculateClosure" class="secondary">Calcular</button><button type="submit" data-finance-write>Guardar cierre</button></div>
-    </form><div id="cashClosurePreview"></div></div>
-    <div class="panel"><h3>Historial de cierres</h3><div id="cashClosureHistory"><p class="muted">Cargando cierres...</p></div></div>`;
+  view.innerHTML = `<section class="cash-closure-workspace panel">
+    <header class="cash-closure-heading"><div><span class="eyebrow">Control de efectivo</span><h3>Nuevo cierre de caja</h3><p>Compara lo registrado con el efectivo contado. El cierre no modifica ventas, pagos, gastos ni stock.</p></div><button id="exportClosures" class="secondary">Exportar historial</button></header>
+    <form id="cashClosureForm" class="cash-closure-form">
+      <section class="cash-closure-step"><header><span>1</span><div><h4>Elige el período</h4><p>Usa el día actual o ajusta las fechas y horas que quieres revisar.</p></div></header><div class="cash-closure-presets"><button type="button" class="secondary" data-closure-preset="today">Hoy</button><button type="button" class="secondary" data-closure-preset="yesterday">Ayer</button></div><div class="cash-closure-grid"><label>Desde<input name="fechaInicio" type="datetime-local" step="1" required value="${localDateTimeValue(start)}"></label><label>Hasta<input name="fechaFin" type="datetime-local" step="1" required value="${localDateTimeValue(now)}"></label></div></section>
+      <section class="cash-closure-step"><header><span>2</span><div><h4>Arquea el efectivo</h4><p>Indica con cuánto empezaste y cuánto dinero físico contaste al final.</p></div></header><div class="cash-closure-grid"><label>Efectivo inicial<input name="efectivoInicial" type="number" min="0" step="0.01" value="0"></label><label>Efectivo contado<input name="efectivoContado" type="number" min="0" step="0.01" required value="0"></label></div></section>
+      <section class="cash-closure-step cash-closure-note"><header><span>3</span><div><h4>Agrega una nota si hace falta</h4><p>Opcional: deja un detalle para identificar este cierre después.</p></div></header><label>Observación<textarea name="observacion" maxlength="500" placeholder="Ejemplo: diferencia revisada con el equipo"></textarea></label></section>
+      <footer class="cash-closure-actions"><div><strong>Primero calcula, luego guarda.</strong><small>Podrás revisar el efectivo esperado, QR y la diferencia antes de registrar.</small></div><div class="actions"><button type="button" id="calculateClosure" class="secondary">Calcular resumen</button><button type="submit" data-finance-write>Guardar cierre</button></div></footer>
+    </form><div id="cashClosurePreview" aria-live="polite"></div></section>
+    <section class="cash-closure-history panel"><div class="panel-title"><div><span class="eyebrow">Registro</span><h3>Historial de cierres</h3><p class="muted">Consulta y exporta cierres registrados anteriormente.</p></div></div><div id="cashClosureHistory"><p class="muted">Cargando cierres...</p></div></section>`;
   const form = document.getElementById('cashClosureForm');
+  const setPreset = (preset) => {
+    const end = new Date();
+    const beginning = new Date(end.getFullYear(), end.getMonth(), end.getDate());
+    if (preset === 'yesterday') { beginning.setDate(beginning.getDate() - 1); end.setTime(beginning.getTime() + 86400000 - 1000); }
+    form.elements.fechaInicio.value = localDateTimeValue(beginning);
+    form.elements.fechaFin.value = localDateTimeValue(end);
+  };
+  form.querySelectorAll('[data-closure-preset]').forEach((button) => button.addEventListener('click', () => setPreset(button.dataset.closurePreset)));
   document.getElementById('calculateClosure').addEventListener('click', () => calculateClosurePreview().catch((error) => showError(error.message)));
   form.addEventListener('submit', async (event) => {
     event.preventDefault();
@@ -5067,13 +5074,25 @@ async function openLotProductConfiguration(product) {
 }
 
 function reportFilters(type) {
-  const dateRange = '<label>Desde<input name="desde" type="date"></label><label>Hasta<input name="hasta" type="date"></label>';
+  const dateRange = `<label>Desde<input name="desde" type="date" value="${monthStartValue()}"></label><label>Hasta<input name="hasta" type="date" value="${localDateValue()}"></label>`;
   if (type === 'ventasRango') return dateRange;
   if (type === 'comprasProveedor') return `<label>Proveedor<select name="idProveedor">${options(state.proveedores, 'idProveedor', 'nombre', 'TODOS')}</select></label>${dateRange}`;
   if (type === 'fiados') return `<label>Cliente<select name="idCliente">${options(state.clientes, 'idCliente', 'nombre', 'TODOS')}</select></label><label>Estado<select name="estado"><option value="">TODOS</option><option value="pendiente">PENDIENTE</option><option value="parcial">PARCIAL</option><option value="pagado">PAGADO</option></select></label>${dateRange}`;
   if (type === 'ganancias') return `<label>Periodo<select name="periodo"><option value="dia">Día</option><option value="semana">Semana</option><option value="mes">Mes</option><option value="anio">Año</option><option value="rango">Rango</option></select></label>${dateRange}`;
   return '';
 }
+
+const REPORT_TYPE_INFO = Object.freeze({
+  ventasDia: ['Ventas del día', 'Revisa las ventas registradas para la fecha seleccionada.'],
+  ventasRango: ['Ventas por rango', 'Compara ventas dentro del período que elijas.'],
+  bajoStock: ['Productos con bajo stock', 'Identifica qué productos necesitan reposición.'],
+  masVendidos: ['Productos más vendidos', 'Observa qué productos tienen mayor movimiento.'],
+  fiados: ['Fiados', 'Consulta saldos pendientes y pagos registrados.'],
+  pagosFiado: ['Historial de pagos', 'Revisa los cobros realizados a clientes.'],
+  compras: ['Compras realizadas', 'Consulta el abastecimiento registrado.'],
+  comprasProveedor: ['Compras por proveedor', 'Filtra compras por proveedor y período.'],
+  ganancias: ['Ganancias', 'Revisa el resultado calculable en el período elegido.']
+});
 
 const REPORT_FIELD_LABELS = Object.freeze({
   fecha: 'Fecha',
@@ -5113,9 +5132,9 @@ function reportVisibleKeys(keys) {
 async function reportes() {
   reportRequest += 1;
   view.innerHTML = `
-    <div class="panel">
-      <p class="muted">Elige qué quieres revisar, ajusta las fechas si hace falta y presiona “Ver reporte”.</p><form class="grid" id="reportForm">
-        <label>Reporte<select name="tipo" id="reportType">
+    <section class="report-workspace panel">
+      <header class="report-heading"><div><span class="eyebrow">Consultas del negocio</span><h3>Arma tu reporte</h3><p>Elige qué información quieres revisar y ajusta el período solo cuando sea necesario.</p></div></header><form class="report-form" id="reportForm">
+        <section class="report-selection"><div class="report-selection-heading"><span class="report-step">1</span><div><strong id="reportTitle">Ventas del día</strong><small id="reportDescription">Revisa las ventas registradas para la fecha seleccionada.</small></div></div><label>Tipo de reporte<select name="tipo" id="reportType">
           <option value="ventasDia">Ventas del día</option>
           <option value="ventasRango">Ventas por rango</option>
           <option value="bajoStock">Productos con bajo stock</option>
@@ -5125,15 +5144,20 @@ async function reportes() {
           <option value="compras">Compras realizadas</option>
           <option value="comprasProveedor">Compras por proveedor</option>
           <option value="ganancias">Ganancias</option>
-        </select></label>
-        <span id="dynamicFilters" class="filter-inline"></span>
-        <button type="submit">Ver reporte</button>
+        </select></label></section>
+        <section id="dynamicFilters" class="report-dynamic-filters"></section>
+        <footer class="report-actions"><p><strong>2. Ajusta los filtros disponibles</strong><span>Los campos cambian según el reporte elegido.</span></p><button type="submit">Ver reporte</button></footer>
       </form>
-    </div>
+    </section>
     <div class="panel" id="reportChartPanel" hidden><h3>Tendencia y comparación</h3><canvas id="reportChart"></canvas></div>
     <div class="panel" id="reportResult"><p class="muted">Seleccione un reporte para consultar.</p></div>`;
   const type = document.getElementById('reportType');
-  const updateFilters = () => { document.getElementById('dynamicFilters').innerHTML = reportFilters(type.value); };
+  const updateFilters = () => {
+    const [heading, description] = REPORT_TYPE_INFO[type.value] || ['Reporte', 'Consulta información de tu negocio.'];
+    document.getElementById('reportTitle').textContent = heading;
+    document.getElementById('reportDescription').textContent = description;
+    document.getElementById('dynamicFilters').innerHTML = reportFilters(type.value) || '<p class="report-no-filters">Este reporte se prepara con los datos disponibles actualmente.</p>';
+  };
   type.addEventListener('change', updateFilters);
   updateFilters();
   document.getElementById('reportForm').addEventListener('submit', loadReport);

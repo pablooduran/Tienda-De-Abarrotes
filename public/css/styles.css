@@ -1742,6 +1742,50 @@ tr.low-stock { background: var(--warn); }
 }
 .closure-calculation span { color: var(--muted); }
 .closure-calculation strong { display: block; margin-top: 4px; color: var(--ink); font-size: 18px; }
+.cash-closure-workspace,
+.report-workspace { display: grid; gap: 18px; max-width: 1180px; }
+.cash-closure-heading,
+.report-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 18px; }
+.cash-closure-heading h3,
+.cash-closure-heading p,
+.report-heading h3,
+.report-heading p { margin: 4px 0 0; }
+.cash-closure-heading p,
+.report-heading p { max-width: 70ch; color: var(--muted); }
+.cash-closure-form { display: grid; gap: 12px; }
+.cash-closure-step,
+.report-selection,
+.report-dynamic-filters { padding: 16px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); }
+.cash-closure-step > header,
+.report-selection-heading { display: flex; align-items: flex-start; gap: 10px; margin-bottom: 13px; }
+.cash-closure-step > header > span,
+.report-step { display: grid; place-items: center; flex: 0 0 28px; width: 28px; height: 28px; border-radius: 50%; color: #fff; background: var(--brand); font-size: 13px; font-weight: 800; }
+.cash-closure-step h4,
+.cash-closure-step p,
+.report-selection-heading strong,
+.report-selection-heading small { display: block; margin: 0; }
+.cash-closure-step h4 { font-size: 16px; }
+.cash-closure-step p,
+.report-selection-heading small { margin-top: 3px; color: var(--muted); line-height: 1.45; }
+.cash-closure-presets { display: flex; flex-wrap: wrap; gap: 7px; margin: -3px 0 13px 38px; }
+.cash-closure-presets button { min-height: 34px; padding: 7px 11px; }
+.cash-closure-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.cash-closure-note label { max-width: 760px; }
+.cash-closure-note textarea { min-height: 88px; resize: vertical; }
+.cash-closure-actions,
+.report-actions { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 14px 16px; border: 1px solid var(--line); border-radius: 12px; background: var(--panel); }
+.cash-closure-actions > div:first-child,
+.report-actions p { display: grid; gap: 3px; margin: 0; }
+.cash-closure-actions small,
+.report-actions span { color: var(--muted); }
+.cash-closure-actions .actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.cash-closure-history { max-width: 1180px; }
+.report-form { display: grid; grid-template-columns: minmax(250px, .8fr) minmax(0, 1.4fr); gap: 12px; align-items: stretch; }
+.report-dynamic-filters { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; align-content: end; }
+.report-dynamic-filters label { align-content: end; }
+.report-no-filters { align-self: center; margin: 0; color: var(--muted); }
+.report-actions { grid-column: 1 / -1; }
+.report-actions button { min-width: 160px; }
 .badge.registrado,
 .badge.cerrado { color: var(--ok); background: #e6f4ee; border-color: #b8e0cc; }
 .badge.anulado { color: #66716c; background: #edf1ef; border-color: #cfd8d4; }
@@ -3165,6 +3209,7 @@ td.actions { position: relative; }
   .finance-explain,
   .finance-detail-grid { grid-template-columns: 1fr; }
   .closure-calculation { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .report-form { grid-template-columns: 1fr; }
   .category-editor { grid-template-columns: 1fr 1fr; }
   .inventory-filters { grid-template-columns: repeat(4, minmax(0, 1fr)); }
   .inventory-metrics { grid-template-columns: repeat(3, minmax(0, 1fr)); }
@@ -3367,7 +3412,18 @@ td.actions { position: relative; }
   .finance-filter-bar,
   .finance-range,
   .closure-calculation,
-  .category-editor { grid-template-columns: 1fr; }
+  .category-editor,
+  .cash-closure-grid,
+  .report-dynamic-filters { grid-template-columns: 1fr; }
+  .cash-closure-heading,
+  .report-heading,
+  .cash-closure-actions,
+  .report-actions { display: grid; grid-template-columns: 1fr; }
+  .cash-closure-heading > button,
+  .cash-closure-actions .actions,
+  .cash-closure-actions .actions button,
+  .report-actions button { width: 100%; }
+  .cash-closure-presets { margin-left: 0; }
   .export-menu { display: grid; grid-template-columns: 1fr 1fr; width: 100%; }
   .export-menu button { width: 100%; }
   .inventory-filters,
