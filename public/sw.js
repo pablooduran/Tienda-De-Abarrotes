@@ -36,7 +36,7 @@ self.addEventListener('fetch', (event) => {
   }
 
   event.respondWith(
-    fetch(request)
+    fetch(request, { cache: 'no-store' })
       .then((response) => {
         if (response.ok) {
           void caches.open(STATIC_CACHE).then((cache) => cache.put(request, response.clone()));

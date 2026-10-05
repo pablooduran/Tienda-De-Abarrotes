@@ -135,7 +135,7 @@ async function main() {
       `La punta de la guía debe señalar el centro del control: punta=${guideArrowCenter}, control=${JSON.stringify(targetBox)}.`);
     await page.locator('[data-tour-next]').click();
     await page.locator('#guidedTourTitle').filter({ hasText: 'Prepara la entrada de stock' }).waitFor();
-    const providerBox = await page.locator('#comprasProvider').boundingBox();
+    const providerBox = await page.locator('.list-menu-select:has(#comprasProvider) > .list-menu-trigger').boundingBox();
     const stockHighlightBox = await page.locator('.guided-tour-highlight').boundingBox();
     assert(stockHighlightBox && providerBox && Math.abs((stockHighlightBox.x + (stockHighlightBox.width / 2)) - (providerBox.x + (providerBox.width / 2))) < 14,
       `El marco debe seguir al proveedor: marco=${JSON.stringify(stockHighlightBox)}, control=${JSON.stringify(providerBox)}.`);

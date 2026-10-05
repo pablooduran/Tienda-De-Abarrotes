@@ -619,7 +619,7 @@ function ayuda() {
 const guidedHelp = Object.freeze({
   'recorrido-inicial': [
     { view: 'productos', selector: '.product-add-actions > summary', title: 'Agrega un producto', text: 'Empieza aquí. Este botón abre el formulario para registrar lo que vendes; la guía no guardará nada por ti.' },
-    { view: 'compras', selector: '#comprasProvider', title: 'Prepara la entrada de stock', text: 'Después de crear el producto, selecciona aquí quién te entrega la mercadería para registrar el ingreso.' },
+    { view: 'compras', selector: '#comprasProvider', title: 'Prepara la entrada de stock', text: 'Selecciona quién entrega la mercadería; si no corresponde, deja “Sin proveedor”. Luego buscarás el producto para registrar su ingreso.' },
     { view: 'compras', selector: '#comprasSearch', title: 'Agrega el producto recibido', text: 'Busca el producto que acabas de crear y completa sus cantidades y costos antes de registrar la compra.' },
     { view: 'ventas', selector: '#posSearch', title: 'Inicia la primera venta', text: 'Busca o escanea el producto aquí para añadirlo al carrito del punto de venta.' },
     { view: 'ventas', selector: '#posSubmit', title: 'Revisa y registra la venta', text: 'Cuando el carrito y el cobro estén correctos, este botón confirma la venta. La guía nunca lo presiona por ti.' }
@@ -685,15 +685,23 @@ async function startGuidedHelp(topic) {
     returnFocus?.focus?.();
   };
 
+  const visibleGuideTarget = (target) => {
+    if (target?.matches('select.list-menu-native')) {
+      return target.closest('.list-menu-select')?.querySelector('.list-menu-trigger') || target;
+    }
+    return target;
+  };
+
   const render = async () => {
     const step = steps[current];
     if (activeView !== step.view) await loadView(step.view);
     await new Promise((resolve) => globalThis.requestAnimationFrame(() => globalThis.requestAnimationFrame(resolve)));
-    const target = document.querySelector(step.selector);
-    if (!target) {
+    const configuredTarget = document.querySelector(step.selector);
+    if (!configuredTarget) {
       close();
       return showError('La opción de esta guía no está disponible con el acceso actual.');
     }
+    const target = visibleGuideTarget(configuredTarget);
     target.scrollIntoView({ block: 'center', inline: 'nearest' });
     await new Promise((resolve) => globalThis.requestAnimationFrame(resolve));
     const rect = target.getBoundingClientRect();
