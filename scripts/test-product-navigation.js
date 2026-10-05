@@ -25,6 +25,7 @@ check('Configuracion y auditoria viven fuera de la barra operativa',
   && html.includes('id="settingsStoreButton"')
   && html.includes('id="settingsAuditButton"')
   && app.includes("const settingsViews = new Set(['configuracion', 'auditoria'])")
+  && app.includes("const isDedicatedWorkspace = settingsViews.has(id) || id === 'ayuda';")
   && css.includes('.layout.settings-workspace .sidebar')
   && app.includes('const hideQuickActions = id === \'ayuda\' || settingsViews.has(id);')
   && css.includes('.quick-actions[hidden] { display: none !important; }'));

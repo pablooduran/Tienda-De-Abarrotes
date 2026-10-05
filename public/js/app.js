@@ -750,10 +750,10 @@ function navigateFromMenu(id) {
 }
 
 function applyWorkspaceMode(id) {
-  const isSettings = settingsViews.has(id);
-  appLayout?.classList.toggle('settings-workspace', isSettings);
-  navigationToggle.hidden = isSettings;
-  if (isSettings) closeMobileNavigation();
+  const isDedicatedWorkspace = settingsViews.has(id) || id === 'ayuda';
+  appLayout?.classList.toggle('settings-workspace', isDedicatedWorkspace);
+  navigationToggle.hidden = isDedicatedWorkspace;
+  if (isDedicatedWorkspace) closeMobileNavigation();
   settingsStoreButton.hidden = id === 'configuracion';
   settingsAuditButton.hidden = id === 'auditoria' || !sectionAvailable('auditoria');
 }
