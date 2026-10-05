@@ -23,6 +23,7 @@ let posCart = [];
 let posOperationKey = null;
 let posSearchTimer = null;
 let lastBarcodeScan = { value: '', at: 0 };
+let pendingPosDraftClient = '';
 let inventoryUi = { level: 'simple', activeTab: 'resumen', rankingMode: 'ingresos', movementClass: '', page: 1, request: 0, data: {} };
 let reportRequest = 0;
 let lotUi = { page: 1, pages: 1, activeTab: 'lotes' };
@@ -31,6 +32,7 @@ let compensationUi = null;
 let administrativeAuditUi = null;
 let inventoryAdjustmentUi = null;
 let storeConfigurationUi = null;
+let workspaceExperience = null;
 let activeView = 'inicio';
 const ACTIVE_VIEW_STORAGE_KEY = 'tienda-active-view';
 let helpReturnView = 'inicio';
@@ -293,7 +295,19 @@ window.addEventListener('resize', () => {
 });
 function showError(error) { return modal({ title: 'No se pudo completar', body: `<p>${escapeHtml(UiPatterns.messageFor(error))}</p>`, confirmText: 'Entendido', danger: true }); }
 function showSuccess(text) { return modal({ title: 'Listo', body: `<p>${escapeHtml(text)}</p>`, confirmText: 'Cerrar' }); }
-function confirmAction(text, danger = false) { return modal({ title: 'Confirmar acción', body: `<p>${escapeHtml(text)}</p>`, confirmText: 'Confirmar', cancelText: 'Cancelar', danger }); }
+function confirmAction(input, danger = false) {
+  const options = typeof input === 'string' ? { text: input } : (input || {});
+  const impact = Array.isArray(options.impact) && options.impact.length
+    ? `<div class="confirmation-impact">${options.impact.map((row) => `<div><span>${escapeHtml(row.label)}</span><strong>${escapeHtml(row.value)}</strong></div>`).join('')}</div>`
+    : '';
+  return modal({
+    title: options.title || 'Confirmar acción',
+    body: `<p>${escapeHtml(options.text || '')}</p>${impact}${options.note ? `<p class="hint">${escapeHtml(options.note)}</p>` : ''}`,
+    confirmText: options.confirmText || 'Confirmar',
+    cancelText: 'Cancelar',
+    danger: options.danger ?? danger
+  });
+}
 
 function requestAdminPassword(actionText) {
   return new Promise((resolve) => {
@@ -434,6 +448,16 @@ async function loadContext() {
   state.context = await api('/api/contexto');
   state.lotAccess = await api('/api/lotes/acceso').catch(() => ({ productosControlados: 0 }));
   renderSubscriptionContext();
+  if (!workspaceExperience && window.WorkspaceExperience) {
+    workspaceExperience = window.WorkspaceExperience.create({
+      sections,
+      navigate: (id) => loadView(id),
+      getState: () => state,
+      api,
+      escapeHtml
+    });
+    workspaceExperience.init();
+  }
 }
 
 function hasFeature(code) {
@@ -1049,6 +1073,7 @@ async function loadView(id) {
     renderContextualHelp(id);
     applyReadOnlyUi();
     enhanceListMenus(view);
+    workspaceExperience?.afterView(id);
   } finally {
     if (request === viewRequest) {
       view.removeAttribute('aria-busy');
@@ -1537,7 +1562,7 @@ async function inicio() {
       </div>
     </div>
     <div class="dashboard-metric-groups">
-      <section class="dashboard-metric-group" aria-labelledby="salesMetricsTitle">
+      <section class="dashboard-metric-group" aria-labelledby="salesMetricsTitle" data-dashboard-widget="ventas" data-dashboard-label="Rendimiento comercial">
         <div class="dashboard-group-heading"><div><span class="eyebrow">Ventas</span><h4 id="salesMetricsTitle">Rendimiento comercial</h4></div><button type="button" class="link-button" data-dashboard-view="ventas">Registrar venta</button></div>
         <div class="cards dashboard-cards">
           <div class="card metric-card"><span>Ventas de ayer</span><strong>Bs ${money(data.ventasAyer)}</strong></div>
@@ -1547,7 +1572,7 @@ async function inicio() {
           ${finance ? `<div class="card metric-card net ${Number(financeNet) < 0 ? 'negative' : ''}"><span>${finance.rentabilidadCompleta ? 'Ganancia neta hoy' : 'Ganancia neta calculable'}</span><strong>Bs ${money(financeNet)}</strong></div>` : ''}
         </div>
       </section>
-      <section class="dashboard-metric-group" aria-labelledby="collectionMetricsTitle">
+      <section class="dashboard-metric-group" aria-labelledby="collectionMetricsTitle" data-dashboard-widget="dinero" data-dashboard-label="Cobranza y gastos">
         <div class="dashboard-group-heading"><div><span class="eyebrow">Dinero</span><h4 id="collectionMetricsTitle">Cobranza y gastos</h4></div><button type="button" class="link-button" data-dashboard-view="pagos">Ir a cobranza</button></div>
         <div class="cards dashboard-cards dashboard-cards-compact">
           ${finance ? `<div class="card metric-card collected"><span>Cobrado hoy</span><strong>Bs ${money(finance.dineroCobrado)}</strong></div>
@@ -1556,7 +1581,7 @@ async function inicio() {
           <div class="card metric-card"><span>Fiados activos</span><strong>${activeDebts}</strong></div>
         </div>
       </section>
-      <section class="dashboard-metric-group dashboard-metric-group-inventory" aria-labelledby="inventoryMetricsTitle">
+      <section class="dashboard-metric-group dashboard-metric-group-inventory" aria-labelledby="inventoryMetricsTitle" data-dashboard-widget="inventario" data-dashboard-label="Stock que requiere atención">
         <div class="dashboard-group-heading"><div><span class="eyebrow">Inventario</span><h4 id="inventoryMetricsTitle">Stock que requiere atención</h4></div><button type="button" class="link-button" data-dashboard-view="productos">Ver productos</button></div>
         <div class="cards dashboard-cards dashboard-cards-compact">
           <div class="card metric-card"><span>Productos con bajo stock</span><strong>${data.bajoStock}</strong></div>
@@ -1565,19 +1590,19 @@ async function inicio() {
     </div>
     ${welcome}
     <div class="dashboard-grid modern-dashboard">
-      <div class="panel chart-panel chart-panel-wide">
+      <div class="panel chart-panel chart-panel-wide" data-dashboard-widget="ventas-cinco-dias" data-dashboard-label="Ventas de los últimos 5 días">
         <div class="panel-title"><div><h3>Ventas de los últimos 5 días</h3><p class="muted">Hoy, ayer y los 3 días anteriores.</p></div></div>
         <canvas id="dailyBars"></canvas>
       </div>
-      <div class="panel chart-panel dashboard-period-chart">
+      <div class="panel chart-panel dashboard-period-chart" data-dashboard-widget="participacion-diaria" data-dashboard-label="Participación por día">
         <div class="panel-title"><div><h3>Participación por día</h3><p class="muted">Distribución de las ventas de los últimos 5 días.</p></div></div>
         <div class="dashboard-period-content"><canvas id="dailyPie"></canvas><div id="dailyPieLegend" class="dashboard-period-legend" aria-label="Participación por día"></div></div>
       </div>
-      <div class="panel chart-panel">
+      <div class="panel chart-panel" data-dashboard-widget="comparativa-semanal" data-dashboard-label="Comparativa semanal">
         <div class="panel-title"><div><h3>Comparativa semanal</h3><p class="muted">Semana actual frente a la anterior.</p></div></div>
         <canvas id="weekCompare"></canvas>
       </div>
-      <div class="panel chart-panel">
+      <div class="panel chart-panel" data-dashboard-widget="comparativa-mensual" data-dashboard-label="Comparativa mensual">
         <div class="panel-title"><div><h3>Comparativa mensual</h3><p class="muted">Mes actual frente al mes pasado.</p></div></div>
         <canvas id="monthCompare"></canvas>
       </div>
@@ -2583,6 +2608,7 @@ function operationView(kind) {
   }
   document.getElementById(`${kind}Form`).addEventListener('submit', (event) => saveOperation(event, kind));
   renderAutocomplete(kind);
+  wireOperationDraft(kind);
 }
 
 function purchaseLotRow(product, quantity = '') {
@@ -2687,11 +2713,12 @@ function addProductItem(kind, product) {
       <div class="purchase-lot-rows" data-purchase-lot-rows>${purchaseLotRow(product, 1)}</div>
       <div class="purchase-lot-summary"><span data-purchase-lot-summary></span><small data-purchase-unit-cost></small></div>
     </section>` : ''}`;
-  row.querySelector('button').addEventListener('click', () => { row.remove(); calculateTotal(kind); });
+  row.querySelector('button').addEventListener('click', () => { row.remove(); calculateTotal(kind); captureOperationDraft(kind); });
   row.querySelectorAll('input, select').forEach((input) => input.addEventListener('input', () => fillItemInfo(row, kind)));
   document.getElementById('items').appendChild(row);
   if (isPurchase && Number(product.controlaLotes)) wirePurchaseLotEditor(row, product);
   fillItemInfo(row, kind);
+  captureOperationDraft(kind);
   focusCartItem(row);
 }
 
@@ -2754,6 +2781,60 @@ function collectItems(kind) {
   });
 }
 
+function captureOperationDraft(kind) {
+  if (!workspaceExperience || activeView !== kind) return;
+  const form = document.getElementById(`${kind}Form`);
+  if (!form) return;
+  workspaceExperience.saveDraft(kind, {
+    provider: document.getElementById(`${kind}Provider`)?.value || '',
+    category: document.getElementById(`${kind}Category`)?.value || '',
+    showAll: Boolean(document.getElementById('showAllProducts')?.checked),
+    items: collectItems(kind)
+  });
+}
+
+function restoreOperationDraft(kind) {
+  const draft = workspaceExperience?.loadDraft(kind);
+  if (!draft?.items?.length) return;
+  const provider = document.getElementById(`${kind}Provider`);
+  const category = document.getElementById(`${kind}Category`);
+  if (provider) provider.value = draft.provider || '';
+  if (category) category.value = draft.category || '';
+  if (document.getElementById('showAllProducts')) document.getElementById('showAllProducts').checked = Boolean(draft.showAll);
+  draft.items.forEach((item) => {
+    const product = state.productos.find((row) => String(row.idProducto) === String(item.idProducto));
+    if (!product) return;
+    addProductItem(kind, product);
+    const row = document.querySelector(`.cart-item[data-product="${product.idProducto}"]`);
+    if (!row) return;
+    row.querySelector('[name="presentacion"]').value = item.presentacion || 'unidad';
+    row.querySelector('[name="cantidad"]').value = item.cantidad || 1;
+    if (kind === 'compras') row.querySelector('[name="precioCompra"]').value = item.precioCompra || '';
+    const lotRows = row.querySelector('[data-purchase-lot-rows]');
+    if (lotRows && Array.isArray(item.lotes) && item.lotes.length) {
+      while (lotRows.children.length < item.lotes.length) row.querySelector('[data-add-purchase-lot]')?.click();
+      [...lotRows.querySelectorAll('[data-purchase-lot-entry]')].forEach((lotRow, index) => {
+        const lot = item.lotes[index];
+        if (!lot) return;
+        lotRow.querySelector('[name="lotCodigo"]').value = lot.codigoLote || '';
+        lotRow.querySelector('[name="lotVencimiento"]').value = lot.fechaVencimiento || '';
+        lotRow.querySelector('[name="lotCantidad"]').value = lot.cantidad || 1;
+        lotRow.dataset.edited = 'true';
+      });
+    }
+    fillItemInfo(row, kind);
+  });
+  showMessage(`${kind === 'compras' ? 'Compra' : 'Venta'} recuperada desde el borrador guardado.`);
+}
+
+function wireOperationDraft(kind) {
+  const form = document.getElementById(`${kind}Form`);
+  if (!form || !workspaceExperience) return;
+  restoreOperationDraft(kind);
+  form.addEventListener('input', () => captureOperationDraft(kind));
+  form.addEventListener('change', () => captureOperationDraft(kind));
+}
+
 function calculateTotal(kind) {
   const rows = [...document.querySelectorAll('.cart-item')];
   const total = rows.reduce((sum, row) => {
@@ -2793,11 +2874,21 @@ async function saveOperation(event, kind) {
   if ([...document.querySelectorAll('.cart-item.has-warning')].length) return showError('Hay productos con stock insuficiente. Ajuste cantidades antes de registrar.');
   if (body.tipo === 'fiada' && !body.idCliente) return showError('Una venta fiada debe tener cliente registrado.');
   const label = kind === 'ventas' ? (body.tipo === 'fiada' ? 'venta fiada' : 'venta pagada') : 'compra';
-  if (!await confirmAction(`¿Deseas registrar esta ${label}?`)) return;
+  if (!await confirmAction({
+    title: kind === 'compras' ? 'Revisar y registrar compra' : 'Revisar y registrar venta',
+    text: `Vas a registrar esta ${label}. Revisa el resumen antes de continuar.`,
+    confirmText: kind === 'compras' ? 'Registrar compra' : 'Registrar venta',
+    impact: [
+      { label: 'Productos', value: String(body.items.length) },
+      { label: 'Total', value: document.getElementById('total')?.textContent || 'Sin total' },
+      { label: kind === 'compras' ? 'Efecto' : 'Cobro', value: kind === 'compras' ? 'Aumentará el stock' : (body.tipo === 'fiada' ? 'Quedará como fiado' : 'Venta pagada') }
+    ]
+  })) return;
   const restoreMutation = UiPatterns.mutation(form.querySelector('button[type="submit"]'), kind === 'compras' ? 'Registrando compra...' : 'Registrando venta...');
   if (!restoreMutation) return;
   try {
     await api(`/api/${kind}`, { method: 'POST', body: JSON.stringify(body) });
+    workspaceExperience?.clearDraft(kind);
     await showSuccess('Operación registrada.');
     loadView(kind);
   } catch (error) { showError(error); } finally { restoreMutation(); }
@@ -3139,6 +3230,37 @@ async function catalogoMaestro() {
   });
 }
 
+function capturePosDraft() {
+  if (!workspaceExperience || activeView !== 'ventas' || !document.getElementById('posForm')) return;
+  workspaceExperience.saveDraft('ventas', {
+    items: posCart.map((line) => ({ idProducto: line.producto.idProducto, cantidad: line.cantidad, presentacion: line.presentacion })),
+    category: document.getElementById('posCategory')?.value || '',
+    client: document.getElementById('posClient')?.value || pendingPosDraftClient || '',
+    frequent: !document.getElementById('posFrequentClientPicker')?.hidden,
+    paymentMode: document.getElementById('posPaymentMode')?.value || 'efectivo',
+    discount: document.getElementById('posDiscountPercentage')?.value || '0'
+  });
+}
+
+function restorePosDraft() {
+  const draft = workspaceExperience?.loadDraft('ventas');
+  if (!draft?.items?.length) return false;
+  posCart = draft.items.map((item) => {
+    const product = state.productos.find((row) => String(row.idProducto) === String(item.idProducto));
+    return product ? { producto: product, cantidad: Number(item.cantidad || 1), presentacion: item.presentacion || 'unidad' } : null;
+  }).filter(Boolean);
+  pendingPosDraftClient = draft.client || '';
+  const category = document.getElementById('posCategory');
+  const paymentMode = document.getElementById('posPaymentMode');
+  const discount = document.getElementById('posDiscountPercentage');
+  if (category) category.value = draft.category || '';
+  if (paymentMode) paymentMode.value = draft.paymentMode || 'efectivo';
+  if (discount) discount.value = draft.discount || '0';
+  if (draft.frequent) setPosCustomerMode('frecuente');
+  showMessage('Venta recuperada desde el borrador guardado.');
+  return true;
+}
+
 function renderPosCart() {
   const container = document.getElementById('posCartItems');
   if (!container) return;
@@ -3190,6 +3312,7 @@ function renderPosCart() {
   }));
   document.getElementById('posCartCount').textContent = `${posCart.length} producto${posCart.length === 1 ? '' : 's'}`;
   renderPosPaymentSummary();
+  capturePosDraft();
 }
 
 function renderPosPaymentFields() {
@@ -3463,7 +3586,17 @@ async function submitPosSale(event) {
   } catch (error) {
     return showError(error.message);
   }
-  if (!await confirmAction(`Registrar venta por Bs ${money(totals.total)}${payment.balance > 0 ? `. El pago será parcial y Bs ${money(payment.balance)} quedarán como saldo del cliente.` : ''}`)) return;
+  if (!await confirmAction({
+    title: 'Revisar y registrar venta',
+    text: payment.balance > 0 ? 'Esta venta dejará un saldo pendiente en la cuenta del cliente.' : 'La venta quedará registrada y descontará el stock.',
+    confirmText: 'Registrar venta',
+    impact: [
+      { label: 'Productos', value: String(posCart.length) },
+      { label: 'Total', value: `Bs ${money(totals.total)}` },
+      { label: 'Pagado ahora', value: `Bs ${money(payment.paid)}` },
+      { label: 'Saldo pendiente', value: `Bs ${money(payment.balance)}` }
+    ]
+  })) return;
   const button = document.getElementById('posSubmit');
   const restoreMutation = UiPatterns.mutation(button, 'Procesando venta...');
   if (!restoreMutation) return;
@@ -3490,6 +3623,7 @@ async function submitPosSale(event) {
       fechaVencimiento: data.fechaVencimiento
     };
     posCart = [];
+    workspaceExperience?.clearDraft('ventas');
     posOperationKey = newOperationKey();
     creditUi().resetPosCredit();
     renderPosCart();
@@ -3543,6 +3677,11 @@ async function loadPosFrequentCustomers() {
     const customers = await api('/api/clientes');
     state = { ...state, clientes: customers };
     selected.innerHTML = `<option value="">Elige un cliente</option>${customers.map((customer) => `<option value="${customer.idCliente}">${escapeHtml(customer.nombre)}${customer.telefono ? ` · ${escapeHtml(customer.telefono)}` : ''}</option>`).join('')}`;
+    if (pendingPosDraftClient && customers.some((customer) => String(customer.idCliente) === String(pendingPosDraftClient))) {
+      selected.value = pendingPosDraftClient;
+      selected.dispatchEvent(new Event('change'));
+    }
+    pendingPosDraftClient = '';
     selected.disabled = false;
     status.textContent = customers.length ? `${customers.length} cliente${customers.length === 1 ? '' : 's'} disponible${customers.length === 1 ? '' : 's'}.` : 'Aún no tienes clientes registrados.';
   } catch (error) {
@@ -3598,6 +3737,7 @@ async function ventas() {
         <button type="submit" id="posSubmit" class="wide-button">Registrar venta</button>
       </aside>
     </form>`;
+  restorePosDraft();
   const search = document.getElementById('posSearch');
   search.focus();
   search.addEventListener('input', () => {
@@ -3628,8 +3768,9 @@ async function ventas() {
   document.getElementById('posPaymentMode').addEventListener('change', (event) => {
     if (event.target.value === 'fiado' && !document.getElementById('posClient').value) setPosCustomerMode('frecuente');
     else renderPosPaymentFields();
+    capturePosDraft();
   });
-  document.getElementById('posDiscountPercentage').addEventListener('input', renderPosPaymentSummary);
+  document.getElementById('posDiscountPercentage').addEventListener('input', () => { renderPosPaymentSummary(); capturePosDraft(); });
   document.getElementById('posDiscountToggle').addEventListener('click', () => {
     const control = document.getElementById('posDiscountControl');
     const expanded = control.hidden;
@@ -3641,12 +3782,13 @@ async function ventas() {
     creditUi().resetPosCredit();
     creditUi().refreshPosCredit(posPaymentDraft().balance);
     updatePosCreditNote();
+    capturePosDraft();
   });
   view.querySelectorAll('[data-pos-customer-mode]').forEach((button) => button.addEventListener('click', () => setPosCustomerMode(button.dataset.posCustomerMode)));
   document.getElementById('posForm').addEventListener('submit', submitPosSale);
   renderPosCart();
   renderPosPaymentFields();
-  updatePosPaymentOptions(false);
+  updatePosPaymentOptions(!document.getElementById('posFrequentClientPicker').hidden);
   loadPosFrequentCustomers();
   await loadPosProducts('recientes');
 }

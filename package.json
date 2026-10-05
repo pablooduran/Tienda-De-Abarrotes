@@ -121,6 +121,8 @@
     "test:product-ui-hardening-browser": "node scripts/test-product-ui-hardening-browser.js",
     "test:product-ui-polish": "node scripts/test-product-ui-polish.js",
     "test:product-ui-polish-browser": "node scripts/test-product-ui-polish-browser.js",
+    "test:workspace-experience": "node scripts/test-workspace-experience.js",
+    "test:workspace-experience-browser": "node scripts/test-workspace-experience-browser.js",
     "test:e2e-critical-business": "node scripts/test-e2e-critical-business.js",
     "test:welcome": "node scripts/test-welcome.js",
     "test:welcome-browser": "node scripts/test-welcome-browser.js",
