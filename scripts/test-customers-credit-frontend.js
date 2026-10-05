@@ -101,13 +101,14 @@ check('Segmentacion tiene carga, vacio, error y vista movil',
   && css.includes('.segmentation-mobile-list'));
 check('Formulario de cliente prioriza datos esenciales y crédito opcional', includesAll(creditJs, [
   'name="nombre"', 'name="telefono"', 'name="codigoPaisWhatsApp"', 'Direccion <span class="hint">(opcional)</span>',
-  'name="activarCredito"', 'data-credit-fields', 'limiteCredito', 'diasCreditoDefault'
+  'name="permiteFiado"', 'Permitir compras fiadas', 'data-credit-fields', 'limiteCredito', 'diasCreditoDefault'
 ]) && !creditJs.includes('name="telefonoAlternativo"')
   && !creditJs.includes('name="documentoIdentidad"')
   && !creditJs.includes('name="correo"')
   && !creditJs.includes('name="canalPreferido"')
   && !creditJs.includes('name="horarioPreferido"')
-  && !creditJs.includes('name="notas"'));
+  && !creditJs.includes('name="notas"')
+  && !creditJs.includes('name="activarCredito"'));
 check('WhatsApp registra el teléfono internacional y Bolivia es la opción predeterminada', includesAll(countryCodesJs, [
   "['591', 'Bolivia']", 'administrauCountryOptions', 'AdministrauPhoneCountries'
 ]) && creditJs.includes('internationalPhone')
