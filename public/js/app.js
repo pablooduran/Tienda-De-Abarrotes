@@ -717,7 +717,6 @@ async function startGuidedHelp(topic) {
         <span class="eyebrow">Paso ${current + 1} de ${steps.length}</span>
         <h3 id="guidedTourTitle">${escapeHtml(step.title)}</h3>
         <p>${escapeHtml(step.text)}</p>
-        <p class="guided-tour-hint">El marco verde marca exactamente el control de este paso. La punta del cuadro señala hacia él.</p>
         <div class="guided-tour-actions">
           ${current > 0 ? '<button type="button" class="secondary" data-tour-back>Anterior</button>' : ''}
           ${current + 1 < steps.length ? '<button type="button" class="secondary" data-tour-close data-modal-cancel>Salir</button>' : ''}

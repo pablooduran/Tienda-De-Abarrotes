@@ -3112,15 +3112,6 @@ td.actions { position: relative; }
 }
 .guided-tour-card[data-placement="below"]::before { top: -14px; border-bottom: 14px solid #62fa87; }
 .guided-tour-card[data-placement="above"]::before { bottom: -14px; border-top: 14px solid #62fa87; }
-.guided-tour-hint {
-  margin-top: 10px !important;
-  padding: 8px 10px;
-  border-left: 3px solid #4ade80;
-  border-radius: 0 7px 7px 0;
-  color: #effff2 !important;
-  background: rgba(36, 112, 56, .42);
-  font-size: 13px;
-}
 .guided-tour-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 16px; }
 
 .login-page {
