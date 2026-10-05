@@ -106,6 +106,9 @@ body {
   height: 38px;
 }
 .navigation-toggle[hidden] { display: none !important; }
+.whole-amount { -moz-appearance: textfield; }
+.whole-amount::-webkit-outer-spin-button,
+.whole-amount::-webkit-inner-spin-button { margin: 0; -webkit-appearance: none; }
 .store-mark img {
   display: block;
   width: 100%;

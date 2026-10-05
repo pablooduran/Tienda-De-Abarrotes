@@ -632,7 +632,7 @@
         <div class="payment-balance"><span>${debt ? 'Saldo actual' : 'Deuda total del cliente'}</span><strong>Bs ${money(debt?.saldoPendiente ?? customer?.deudaActual)}</strong></div>
         <p class="hint">${debt ? 'Este pago se aplicará solo a esta deuda.' : 'El pago se repartirá entre las deudas pendientes, empezando por las más antiguas.'}</p>
         <div class="form-grid">
-          <label>Monto pagado<input name="monto" type="number" min="0.01" step="0.01" required ${debt ? `max="${e(debt.saldoPendiente)}"` : ''}></label>
+          <label>Monto pagado<input class="whole-amount" name="monto" type="number" min="1" step="1" inputmode="numeric" required ${debt ? `max="${e(debt.saldoPendiente)}"` : ''}></label>
           <label>Forma de pago<select name="metodoPago" required>${['efectivo', 'qr'].map((item) => option(item, statusText(item), 'efectivo')).join('')}</select></label>
         </div>`;
     }
@@ -654,6 +654,7 @@
             const fd = new FormData(form);
             const amount = Number(fd.get('monto'));
             if (!(amount > 0)) throw new Error('El monto debe ser mayor a cero.');
+            if (!Number.isInteger(amount)) throw new Error('Ingresa un monto completo, sin centavos.');
             if (debt && amount > Number(debt.saldoPendiente)) throw new Error('El pago no puede superar el saldo.');
             if (!debt && amount > Number(customer.deudaActual)) throw new Error('El pago no puede superar la deuda total del cliente.');
             const method = fd.get('metodoPago');

@@ -46,11 +46,15 @@ check('Cobranza agrupa por cliente y permite elegir deudas concretas', includesA
   'data-profile-pay-all', 'data-profile-pay-debt'
 ]));
 check('Pago de deuda usa formulario mínimo', includesAll(creditJs, [
-  'Monto pagado<input name="monto"', 'Forma de pago<select name="metodoPago"',
+  'Monto pagado<input class="whole-amount" name="monto"', 'Forma de pago<select name="metodoPago"',
   "['efectivo', 'qr']", 'montoRecibido: method === \'efectivo\' ? money(amount) : null'
 ]) && !creditJs.includes('name="referencia"')
   && !creditJs.includes('name="observacion"')
   && !creditJs.includes('name="cambioVisual"'));
+check('Pago de deuda solo permite montos completos', creditJs.includes('class="whole-amount"')
+  && creditJs.includes('min="1" step="1" inputmode="numeric"')
+  && creditJs.includes('Ingresa un monto completo, sin centavos.')
+  && css.includes('.whole-amount::-webkit-inner-spin-button'));
 check('Endpoint de segmentacion exige permisos basico y avanzado',
   creditRoutes.includes("'/clientes/segmentacion'")
   && creditRoutes.indexOf("requirePlanFeature('clientes_basico')", creditRoutes.indexOf("'/clientes/segmentacion'")) > 0
