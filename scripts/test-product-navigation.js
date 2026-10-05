@@ -28,14 +28,17 @@ check('Configuracion y auditoria viven fuera de la barra operativa',
   && css.includes('.layout.settings-workspace .sidebar'));
 check('Ventas conserva POS, historial, cobranza y devoluciones',
   app.includes("sections: ['ventas', 'historialVentas', 'pagos', 'compensaciones']"));
-check('Inventario conserva sus destinos existentes',
-  app.includes("sections: ['productos', 'movimientosStock', 'compras', 'proveedores', 'inventarioInteligente', 'inventarioOperativo', 'lotesVencimientos']"));
+check('Inventario conserva sus destinos en el orden operativo solicitado',
+  app.includes("sections: ['productos', 'compras', 'proveedores', 'movimientosStock', 'inventarioInteligente', 'inventarioOperativo', 'lotesVencimientos']"));
 check('Mi plan usa una ruta existente y segura',
   html.includes('href="/suscripcion.html"') && html.includes('id="accountMenu"') && !html.includes('subscriptionSummary" class="subscription-summary" href'));
 check('Compensaciones usa solo el texto visible aprobado',
   app.includes("['compensaciones', 'Devoluciones y anulaciones'") && !app.includes("['compensaciones', 'Compensaciones'"));
-check('Los guards existentes de plan se conservan',
-  app.includes('function sectionAllowed(id)') && app.includes("features.includes('anulaciones_operativas')"));
+check('Los accesos por plan se conservan y los modulos bloqueados permanecen visibles',
+  app.includes('function sectionAvailable(id)')
+  && app.includes("features.includes('anulaciones_operativas')")
+  && app.includes("button.textContent = available ? label : `${label} 🔒`;")
+  && app.includes('function openPlanAccessNotice(id)'));
 check('La navegacion usa grupos accesibles y foco visible',
   app.includes("document.createElement('details')")
   && app.includes("document.createElement('summary')")
@@ -54,7 +57,7 @@ check('El control para ocultar navegacion permanece disponible al desplazarse',
   && app.includes('function setNavigationToggleState(open)')
   && app.includes("navigationToggle.textContent = open ? '‹' : '›'"));
 check('La apertura de la barra revela su contenido de forma gradual',
-  css.includes('.sidebar > * {\n  transition: opacity .16s ease, transform .22s cubic-bezier(.22, .75, .25, 1);')
+  /\.sidebar > \* \{\s*transition: opacity \.16s ease, transform \.22s cubic-bezier\(\.22, \.75, \.25, 1\);/.test(css)
   && css.includes('.layout.sidebar-open .sidebar > * { opacity: 1; transform: translateX(0); transition-delay: .1s; }')
   && css.includes('transition-delay: .08s;'));
 check('La pantalla activa se conserva al refrescar sin persistir formularios',

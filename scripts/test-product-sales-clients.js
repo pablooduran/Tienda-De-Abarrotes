@@ -11,7 +11,7 @@ const checks = [];
 
 function check(name, ok) { checks.push({ name, ok: Boolean(ok) }); }
 
-check('Ventas conserva la familia y guards existentes', app.includes('salesWorkspaceSections') && app.includes('sectionAllowed(id)') && app.includes('data-sales-workspace'));
+check('Ventas conserva la familia y guards existentes', app.includes('salesWorkspaceSections') && app.includes('sectionAvailable(id)') && app.includes('data-sales-workspace'));
 check('POS prioriza una venta y cliente opcional', app.includes('Registrar venta') && app.includes('Cliente ocasional') && app.includes('Cliente frecuente'));
 check('Busqueda POS usa debounce y teclado accesible', app.includes('posSearchTimer') && app.includes('setTimeout(() => loadPosProducts(), 180)') && app.includes('Buscar o escanear producto'));
 check('POS mantiene el cliente opcional y no recibe tenant del cliente', app.includes('id="posClient" disabled') && app.includes("data-pos-customer-mode=\"frecuente\"") && !/idTienda\s*:/.test(app));

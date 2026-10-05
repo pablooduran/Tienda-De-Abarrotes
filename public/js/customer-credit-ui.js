@@ -756,7 +756,7 @@
       if (!rows.length) return '<div class="panel empty-state"><strong>No hay cuentas en este estado.</strong><p>Los filtros actuales no devolvieron resultados.</p></div>';
       const customers = groupedCollectionRows(rows);
       return `<div class="panel collection-desktop-table table-wrap"><table><thead><tr><th>Cliente</th><th>Telefono</th><th>Deuda pendiente</th><th>Acciones</th></tr></thead><tbody>${customers.map((row) => `<tr>
-        <td><strong>${e(row.cliente)}</strong>${row.clienteActivo ? '' : `<small>${statusBadge('oculto')}</small>`}</td><td>${e(row.telefono || 'Sin telefono')}</td><td><strong>Bs ${money(row.saldoPendiente)}</strong>${row.cantidadDeudas > 1 ? `<small>${row.cantidadDeudas} deudas pendientes</small>` : ''}</td><td>${collectionActions(row)}</td></tr>`).join('')}</tbody></table></div>
+        <td><strong>${e(row.cliente)}</strong>${row.clienteActivo ? '' : `<small>${statusBadge('oculto')}</small>`}</td><td>${e(row.telefono || 'Sin telefono')}</td><td><strong>Bs ${money(row.saldoPendiente)}</strong>${row.cantidadDeudas > 1 ? `<small class="collection-debt-count">${row.cantidadDeudas} deudas pendientes</small>` : ''}</td><td>${collectionActions(row)}</td></tr>`).join('')}</tbody></table></div>
         <div class="collection-mobile-list">${customers.map((row) => `<article class="collection-card ${row.clienteActivo ? '' : 'customer-hidden'}"><header><div><strong>${e(row.cliente)}</strong><span>${e(row.telefono || 'Sin telefono')}</span>${row.clienteActivo ? '' : '<span>Cliente oculto</span>'}</div></header><dl><div><dt>Deuda pendiente</dt><dd>Bs ${money(row.saldoPendiente)}</dd></div><div><dt>Deudas</dt><dd>${row.cantidadDeudas}</dd></div></dl>${collectionActions(row)}</article>`).join('')}</div>`;
     }
 

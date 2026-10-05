@@ -49,10 +49,10 @@ const sections = [
   ['lotesVencimientos', 'Lotes y vencimientos', 'Trazabilidad, alertas y stock vendible'],
   ['clientes', 'Clientes', 'Perfiles, credito y estados de cuenta'],
   ['proveedores', 'Proveedores', 'Registro de proveedores'],
-  ['ventas', 'Punto de venta', 'Cobro rápido, pagos mixtos y comprobantes'],
-  ['compras', 'Compras / stock', 'Abastecimiento por paquete o unidad'],
-  ['historialVentas', 'Historial de ventas', 'Ventas realizadas y detalle'],
-  ['pagos', 'Cobranza', 'Deudas, pagos, promesas y recordatorios'],
+  ['ventas', 'Vender productos', 'Registra y cobra las ventas de tus productos'],
+  ['compras', 'Abastecimiento', 'Registra compras y repone tu stock'],
+  ['historialVentas', 'Historial', 'Ventas realizadas y detalle'],
+  ['pagos', 'Fiados', 'Deudas y pagos de clientes'],
   ['gastos', 'Gastos', 'Egresos operativos y categorias'],
   ['finanzas', 'Finanzas', 'Ventas, cobros, costos y ganancias'],
   ['compensaciones', 'Devoluciones y anulaciones', 'Anulaciones, devoluciones y ajustes trazables'],
@@ -66,14 +66,14 @@ const sections = [
 const navigationFamilies = [
   { id: 'inicio', label: 'Inicio', sections: ['inicio'] },
   { id: 'ventas', label: 'Ventas', sections: ['ventas', 'historialVentas', 'pagos', 'compensaciones'] },
-  { id: 'inventario', label: 'Inventario', sections: ['productos', 'movimientosStock', 'compras', 'proveedores', 'inventarioInteligente', 'inventarioOperativo', 'lotesVencimientos'] },
+  { id: 'inventario', label: 'Inventario', sections: ['productos', 'compras', 'proveedores', 'movimientosStock', 'inventarioInteligente', 'inventarioOperativo', 'lotesVencimientos'] },
   { id: 'clientes', label: 'Clientes', sections: ['clientes'] },
   { id: 'reportes', label: 'Reportes', sections: ['reportes', 'finanzas', 'gastos', 'cierreCaja'] }
 ];
 
 const settingsViews = new Set(['configuracion', 'auditoria']);
 
-const inventoryWorkspaceSections = ['productos', 'compras', 'movimientosStock', 'proveedores', 'lotesVencimientos', 'inventarioInteligente', 'inventarioOperativo'];
+const inventoryWorkspaceSections = ['productos', 'compras', 'proveedores', 'movimientosStock', 'inventarioInteligente', 'inventarioOperativo', 'lotesVencimientos'];
 const salesWorkspaceSections = ['ventas', 'historialVentas', 'pagos', 'compensaciones'];
 
 function money(value) { return Number(value || 0).toFixed(2); }
@@ -502,7 +502,7 @@ function hasLotOperationalAccess() {
     .some(hasFeature) || Number(state.lotAccess?.productosControlados || 0) > 0;
 }
 
-function sectionAllowed(id) {
+function sectionAvailable(id) {
   const features = state.context?.caracteristicas || [];
   if (id === 'gastos') return features.includes('gastos');
   if (id === 'finanzas') return features.includes('reportes_financieros');
@@ -518,6 +518,18 @@ function sectionAllowed(id) {
   if (id === 'clientes') return features.includes('clientes_basico');
   if (id === 'pagos') return features.includes('fiados_basico') || features.includes('pagos_fiado');
   return true;
+}
+
+function openPlanAccessNotice(id) {
+  const section = sectionById(id);
+  const planName = state.context?.plan?.nombre || 'tu plan actual';
+  void modal({
+    title: 'Función disponible en otro plan',
+    body: `<p><strong>${escapeHtml(section?.[1] || 'Esta función')}</strong> no está incluida en ${escapeHtml(planName)}.</p><p>Podés revisar los planes disponibles y elegir el que mejor se adapte a tu negocio.</p>`,
+    confirmText: 'Subir de plan', cancelText: 'Cerrar'
+  }).then((upgrade) => {
+    if (upgrade) window.location.href = '/subscription.html';
+  });
 }
 
 const contextualHelp = {
@@ -669,7 +681,7 @@ function applyWorkspaceMode(id) {
   navigationToggle.hidden = isSettings;
   if (isSettings) closeMobileNavigation();
   settingsStoreButton.hidden = id === 'configuracion';
-  settingsAuditButton.hidden = id === 'auditoria' || !sectionAllowed('auditoria');
+  settingsAuditButton.hidden = id === 'auditoria' || !sectionAvailable('auditoria');
 }
 
 function renderMenu(activeView = 'inicio') {
@@ -678,7 +690,7 @@ function renderMenu(activeView = 'inicio') {
   navigationFamilies.forEach((family) => {
     const destinations = (family.sections || [])
       .map((id) => sectionById(id))
-      .filter((section) => section && sectionAllowed(section[0]));
+      .filter(Boolean);
     if (!destinations.length && !family.links?.length) return;
 
     if (destinations.length + (family.links?.length || 0) === 1) {
@@ -719,13 +731,19 @@ function renderMenu(activeView = 'inicio') {
     const items = document.createElement('div');
     items.className = 'nav-family-items';
     destinations.forEach(([id, label]) => {
+      const available = sectionAvailable(id);
       const button = document.createElement('button');
       button.type = 'button';
-      button.textContent = label;
+      button.textContent = available ? label : `${label} 🔒`;
       button.dataset.view = id;
-      button.className = 'nav-destination';
+      button.className = `nav-destination${available ? '' : ' nav-destination-locked'}`;
       button.classList.toggle('active', id === activeView);
-      button.addEventListener('click', () => navigateFromMenu(id));
+      if (!available) {
+        button.setAttribute('aria-label', `${label}: disponible en otro plan`);
+        button.addEventListener('click', () => openPlanAccessNotice(id));
+      } else {
+        button.addEventListener('click', () => navigateFromMenu(id));
+      }
       items.appendChild(button);
     });
     (family.links || []).forEach((link) => {
@@ -806,8 +824,12 @@ async function loadView(id) {
   const request = ++viewRequest;
   showMessage('');
   const section = sectionById(id);
-  if (!section || !sectionAllowed(id)) {
+  if (!section) {
     if (id !== 'inicio') return loadView('inicio');
+    return;
+  }
+  if (!sectionAvailable(id)) {
+    openPlanAccessNotice(id);
     return;
   }
   if (id === 'ayuda' && activeView !== 'ayuda') helpReturnView = activeView;
@@ -909,7 +931,7 @@ document.addEventListener('click', (event) => {
 function renderInventoryWorkspace(activeId) {
   if (!inventoryWorkspaceSections.includes(activeId) || view.querySelector('.inventory-workspace-nav')) return;
   const destinations = inventoryWorkspaceSections
-    .filter((id) => sectionAllowed(id))
+    .filter((id) => sectionAvailable(id))
     .map((id) => {
       const section = sectionById(id);
       return `<button type="button" data-inventory-workspace="${id}" class="${id === activeId ? 'active' : ''}" aria-current="${id === activeId ? 'page' : 'false'}">${escapeHtml(section?.[1] || id)}</button>`;
@@ -922,7 +944,7 @@ function renderInventoryWorkspace(activeId) {
 function renderSalesWorkspace(activeId) {
   if (!salesWorkspaceSections.includes(activeId) || view.querySelector('.sales-workspace-nav')) return;
   const destinations = salesWorkspaceSections
-    .filter((id) => sectionAllowed(id))
+    .filter((id) => sectionAvailable(id))
     .map((id) => {
       const section = sectionById(id);
       return `<button type="button" data-sales-workspace="${id}" class="${id === activeId ? 'active' : ''}" aria-current="${id === activeId ? 'page' : 'false'}">${escapeHtml(section?.[1] || id)}</button>`;

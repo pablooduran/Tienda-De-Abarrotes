@@ -30,7 +30,7 @@ check('Modulo cargado antes de app.js',
   && appHtml.indexOf('/js/customer-credit-ui.js') >= 0
   && appHtml.indexOf('/js/customer-credit-ui.js') < appHtml.indexOf('/js/app.js'));
 check('Navegacion Clientes', appJs.includes("['clientes', 'Clientes'"));
-check('Navegacion Cobranza', appJs.includes("['pagos', 'Cobranza'"));
+check('Navegacion Fiados', appJs.includes("['pagos', 'Fiados'"));
 check('Permisos basico y avanzado', includesAll(appJs + creditJs, [
   'clientes_basico', 'fiados_basico', 'pagos_fiado', 'recordatorios_fiado',
   'seguimiento_cobranza', 'limites_credito', 'exportacion_clientes_fiados', 'segmentacion_clientes'
@@ -48,6 +48,9 @@ check('Cobranza agrupa por cliente y permite elegir deudas concretas', includesA
   'Elige una deuda para pagarla, o registra un pago para todas.',
   'data-profile-pay-all', 'data-profile-pay-debt'
 ]));
+check('Cobranza separa visualmente el total de la cantidad de deudas',
+  creditJs.includes('class="collection-debt-count"')
+  && css.includes('.collection-desktop-table .collection-debt-count'));
 check('Pago de deuda usa formulario mínimo', includesAll(creditJs, [
   'Monto pagado<input class="whole-amount" name="monto"', 'Forma de pago<select name="metodoPago"',
   "['efectivo', 'qr']", 'montoRecibido: method === \'efectivo\' ? money(amount) : null'

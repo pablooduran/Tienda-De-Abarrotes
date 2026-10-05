@@ -940,6 +940,8 @@ tr.low-stock { background: var(--warn); }
   gap: 9px;
   margin-top: 12px;
 }
+.sidebar .nav-destination-locked { color: #b8d1ca; border-color: transparent; }
+.sidebar .nav-destination-locked:hover { background: rgba(255,255,255,.05); border-color: #426653; }
 .catalog-provider-panel { position: relative; grid-column: 1 / -1; min-height: 68px; }
 .catalog-provider-summary,
 .catalog-provider-change { position: absolute; inset: 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 9px; align-items: end; }
@@ -2325,6 +2327,7 @@ body:has([data-compensation-filter-form]) { overflow: hidden; }
   gap: 14px;
 }
 .customer-desktop-table td small { display: block; margin-top: 4px; color: var(--muted); }
+.collection-desktop-table .collection-debt-count { display: block; margin-top: 5px; color: var(--muted); font-size: 12px; line-height: 1.25; }
 .customer-mobile-list,
 .collection-mobile-list { display: none; }
 .customer-card,
