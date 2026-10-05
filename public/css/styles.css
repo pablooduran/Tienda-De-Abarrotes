@@ -41,7 +41,7 @@ body {
 .layout.settings-workspace { grid-template-columns: minmax(0, 1fr); }
 .navigation-toggle {
   position: fixed;
-  z-index: 50;
+  z-index: 80;
   top: 30px;
   left: 0;
   width: 34px;
@@ -387,7 +387,10 @@ body {
   align-self: flex-start;
   margin-top: auto;
 }
-.sidebar:has(.sidebar-account-menu[open]) { z-index: 60; }
+.sidebar:has(.sidebar-account-menu[open]) {
+  z-index: 70;
+  overflow: visible;
+}
 .sidebar-account-menu .account-menu-panel {
   top: auto;
   right: auto;
