@@ -15,6 +15,7 @@ const settingsBackTopbar = document.getElementById('settingsBackTopbar');
 const quickActions = document.getElementById('quickActions');
 const settingsStoreButton = document.getElementById('settingsStoreButton');
 const settingsAuditButton = document.getElementById('settingsAuditButton');
+const serverWakeNotice = document.getElementById('serverWakeNotice');
 
 let state = { productos: [], clientes: [], proveedores: [], fiados: [], ventas: [], categorias: [], context: null, lotAccess: null };
 let debtFocus = null;
@@ -38,6 +39,8 @@ let viewRequest = 0;
 let catalogCacheAt = 0;
 let catalogRefreshPromise = null;
 let catalogClientsLoaded = false;
+let pendingApiRequests = 0;
+let serverWakeNoticeTimer = null;
 
 const sections = [
   ['inicio', 'Inicio', 'Resumen general del negocio'],
@@ -106,6 +109,46 @@ function formatDate(value) {
 function showMessage(text, isError = false) {
   message.textContent = text || '';
   message.className = `message${isError ? ' error' : ''}`;
+}
+function waitFor(ms) { return new Promise((resolve) => window.setTimeout(resolve, ms)); }
+function startServerWakeNotice() {
+  pendingApiRequests += 1;
+  if (pendingApiRequests === 1) {
+    serverWakeNoticeTimer = window.setTimeout(() => {
+      if (pendingApiRequests > 0 && serverWakeNotice) serverWakeNotice.hidden = false;
+    }, 1200);
+  }
+  return () => {
+    pendingApiRequests = Math.max(0, pendingApiRequests - 1);
+    if (pendingApiRequests !== 0) return;
+    if (serverWakeNoticeTimer) window.clearTimeout(serverWakeNoticeTimer);
+    serverWakeNoticeTimer = null;
+    if (serverWakeNotice) serverWakeNotice.hidden = true;
+  };
+}
+function isRecoverableWakeupResponse(response) {
+  return [502, 503, 504].includes(Number(response?.status));
+}
+async function fetchWithWakeupRecovery(url, options) {
+  const method = String(options.method || 'GET').toUpperCase();
+  const canRetry = ['GET', 'HEAD', 'OPTIONS'].includes(method);
+  const finishNotice = startServerWakeNotice();
+  let retries = 0;
+  try {
+    while (true) {
+      try {
+        const response = await SecurityHttp.secureFetch(url, options);
+        if (!canRetry || !isRecoverableWakeupResponse(response) || retries >= 2) return response;
+      } catch (error) {
+        if (!canRetry || retries >= 2) throw error;
+      }
+      retries += 1;
+      if (serverWakeNotice) serverWakeNotice.hidden = false;
+      await waitFor(retries * 2500);
+    }
+  } finally {
+    finishNotice();
+  }
 }
 function stockBreakdown(product) {
   const total = Number(product?.stockUnidadesTotal ?? product?.stock ?? 0);
@@ -306,7 +349,7 @@ async function api(url, options = {}) {
     throw new Error('La suscripción está en modo de solo lectura. Puedes consultar los datos, pero no realizar cambios.');
   }
   const { allowReadOnlyWrite: _allowReadOnlyWrite, ...fetchOptions } = options;
-  const response = await SecurityHttp.secureFetch(url, {
+  const response = await fetchWithWakeupRecovery(url, {
     ...fetchOptions,
     headers: { 'Content-Type': 'application/json', ...(options.headers || {}) }
   });
