@@ -48,6 +48,7 @@
       messageFor: () => 'No se pudo completar la operación. Inténtalo nuevamente.'
     };
     const can = (code) => hasFeature(code);
+    const countryOptions = (selected) => window.administrauCountryOptions(selected || '591');
     const readOnly = () => Boolean(state().context?.soloLectura);
     const nullable = (value) => {
       const text = String(value ?? '').trim();
@@ -515,7 +516,8 @@
       return `<div class="customer-form-sections">
         <section><h4>Datos basicos</h4><div class="form-grid">
           <label>Nombre<input name="nombre" required maxlength="120" value="${e(customer.nombre || '')}"></label>
-          <label>Telefono<input name="telefono" maxlength="30" value="${e(customer.telefono || '')}"></label>
+          <label>País del WhatsApp<select name="codigoPaisWhatsApp">${countryOptions(customer.codigoPaisWhatsApp)}</select></label>
+          <label>Telefono<input name="telefono" inputmode="numeric" maxlength="30" value="${e(customer.telefono || '')}" placeholder="Ej. 77049566"><span class="hint">Escribe solo el número, sin +${e(customer.codigoPaisWhatsApp || '591')}.</span></label>
           <label class="wide">Direccion <span class="hint">(opcional)</span><input name="direccion" maxlength="255" value="${e(customer.direccion || '')}"></label>
         </div></section>
         <section class="customer-credit-disclosure"><label class="check"><input name="activarCredito" type="checkbox" ${creditEnabled ? 'checked' : ''}> Activar credito para este cliente</label>
@@ -549,6 +551,7 @@
           const payload = {
             nombre: nullable(fd.get('nombre')),
             telefono: nullable(fd.get('telefono')),
+            codigoPaisWhatsApp: nullable(fd.get('codigoPaisWhatsApp')),
             direccion: nullable(fd.get('direccion'))
           };
           if (!payload.nombre) throw new Error('El nombre es obligatorio.');
@@ -1027,8 +1030,8 @@
             <label>Politica de deuda vencida<select name="politicaFiadoVencido">${['permitir', 'advertir', 'bloquear'].map((item) => option(item, item, config.politicaFiadoVencido)).join('')}</select></label>
             <label class="check"><input name="requiereTelefonoParaFiado" type="checkbox" ${config.requiereTelefonoParaFiado ? 'checked' : ''}> Exigir telefono para fiar</label>
             <label class="check"><input name="permiteFiadoSinFecha" type="checkbox" ${config.permiteFiadoSinFecha ? 'checked' : ''}> Permitir fiado sin fecha</label>
-            <label>Codigo de pais WhatsApp<input name="codigoPaisWhatsApp" inputmode="numeric" pattern="[0-9]{1,8}" maxlength="8" value="${e(config.codigoPaisWhatsApp || '')}" placeholder="Ejemplo: 591"></label>
-          </div><div class="credit-policy-help"><p><strong>Permitir:</strong> permite nuevas ventas con advertencia.</p><p><strong>Advertir:</strong> solicita confirmacion y motivo.</p><p><strong>Bloquear:</strong> no permite nuevos fiados con deuda vencida.</p><p>El codigo de pais usa solo digitos, sin signo +. No se asigna ningun pais automaticamente.</p></div>`,
+            <label>País predeterminado de WhatsApp<select name="codigoPaisWhatsApp">${countryOptions(config.codigoPaisWhatsApp || '591')}</select></label>
+          </div><div class="credit-policy-help"><p><strong>Permitir:</strong> permite nuevas ventas con advertencia.</p><p><strong>Advertir:</strong> solicita confirmacion y motivo.</p><p><strong>Bloquear:</strong> no permite nuevos fiados con deuda vencida.</p><p>Bolivia (+591) queda seleccionada inicialmente. Cada cliente también puede tener su propio país.</p></div>`,
           submitText: 'Guardar configuracion',
           onSubmit: async (form) => {
             const fd = new FormData(form);

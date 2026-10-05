@@ -6,6 +6,7 @@ const read = (file) => fs.readFileSync(path.join(root, file), 'utf8');
 const appHtml = read('public/app.html');
 const appJs = read('public/js/app.js');
 const creditJs = read('public/js/customer-credit-ui.js');
+const countryCodesJs = read('public/js/phone-country-codes.js');
 const creditRoutes = read('routes/customers-credit.js');
 const apiRoutes = read('routes/api.js');
 const creditService = read('services/customer-credit-service.js');
@@ -24,7 +25,9 @@ function check(name, condition, detail = '') {
 function includesAll(source, values) { return values.every((value) => source.includes(value)); }
 
 check('Modulo cargado antes de app.js',
-  appHtml.indexOf('/js/customer-credit-ui.js') >= 0
+  appHtml.indexOf('/js/phone-country-codes.js') >= 0
+  && appHtml.indexOf('/js/phone-country-codes.js') < appHtml.indexOf('/js/customer-credit-ui.js')
+  && appHtml.indexOf('/js/customer-credit-ui.js') >= 0
   && appHtml.indexOf('/js/customer-credit-ui.js') < appHtml.indexOf('/js/app.js'));
 check('Navegacion Clientes', appJs.includes("['clientes', 'Clientes'"));
 check('Navegacion Cobranza', appJs.includes("['pagos', 'Cobranza'"));
@@ -97,7 +100,7 @@ check('Segmentacion tiene carga, vacio, error y vista movil',
   && creditJs.includes('No se pudo calcular la segmentacion.')
   && css.includes('.segmentation-mobile-list'));
 check('Formulario de cliente prioriza datos esenciales y crédito opcional', includesAll(creditJs, [
-  'name="nombre"', 'name="telefono"', 'Direccion <span class="hint">(opcional)</span>',
+  'name="nombre"', 'name="telefono"', 'name="codigoPaisWhatsApp"', 'Direccion <span class="hint">(opcional)</span>',
   'name="activarCredito"', 'data-credit-fields', 'limiteCredito', 'diasCreditoDefault'
 ]) && !creditJs.includes('name="telefonoAlternativo"')
   && !creditJs.includes('name="documentoIdentidad"')
@@ -105,6 +108,10 @@ check('Formulario de cliente prioriza datos esenciales y crédito opcional', inc
   && !creditJs.includes('name="canalPreferido"')
   && !creditJs.includes('name="horarioPreferido"')
   && !creditJs.includes('name="notas"'));
+check('WhatsApp registra país por cliente y Bolivia es la opción predeterminada', includesAll(countryCodesJs, [
+  "['591', 'Bolivia']", 'administrauCountryOptions', 'AdministrauPhoneCountries'
+]) && creditJs.includes('Cada cliente también puede tener su propio país.')
+  && appJs.includes('codigoPaisWhatsApp: data.get(\'codigoPaisWhatsApp\')'));
 check('Filtro explicito de estado de clientes', includesAll(creditJs + creditRoutes + creditService, [
   "customerFilters: { estado: 'activos' }", "option('activos', 'Activos'", "option('ocultos', 'Ocultos'",
   "option('todos', 'Todos'", "new Set(['activos', 'ocultos', 'todos'])", "INVALID_CUSTOMER_STATE"

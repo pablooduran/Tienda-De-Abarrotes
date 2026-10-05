@@ -409,7 +409,7 @@ async function getCreditConfiguration(connection, idTienda, { forUpdate = false 
 
 async function lockCustomer(connection, idTienda, idCliente, { requireActive = false } = {}) {
   const [rows] = await connection.query(
-    `SELECT idCliente, nombre, telefono, telefonoNormalizado, telefonoAlternativo,
+    `SELECT idCliente, nombre, telefono, telefonoNormalizado, codigoPaisWhatsApp, telefonoAlternativo,
             documentoIdentidad, documentoNormalizado, correo, direccion, notas,
             limiteCredito, permiteFiado, diasCreditoDefault, canalPreferido,
             aceptaRecordatorios, horarioPreferido, activo, eliminadoEn,
@@ -586,10 +586,16 @@ function normalizeCustomerPayload(body, current = {}) {
   const channel = String(source.canalPreferido === undefined
     ? (current.canalPreferido || 'ninguno') : source.canalPreferido).trim().toLowerCase();
   if (!COMMUNICATION_CHANNELS.has(channel)) throw creditError(400, 'El canal preferido no es valido.');
+  const countryCode = cleanText(source.codigoPaisWhatsApp === undefined
+    ? current.codigoPaisWhatsApp : source.codigoPaisWhatsApp, 8) || null;
+  if (countryCode && !/^\d{1,8}$/.test(countryCode)) {
+    throw creditError(400, 'El código de país de WhatsApp debe contener solo dígitos.');
+  }
   return {
     nombre: name,
     telefono: phone.original,
     telefonoNormalizado: phone.normalized,
+    codigoPaisWhatsApp: phone.normalized ? (countryCode || '591') : null,
     telefonoAlternativo: alternatePhone.original,
     documentoIdentidad: document.original,
     documentoNormalizado: document.normalized,

@@ -454,7 +454,7 @@ async function getSaleReceipt(idTienda, idVenta) {
     pool.query(
       `SELECT v.idVenta, v.fecha, v.subtotal, v.descuento, v.total, v.montoPagado,
               v.saldoPendiente, v.estadoPago, v.tipo, v.codigoComprobante,
-              c.idCliente, COALESCE(c.nombre, 'Cliente ocasional') cliente, c.telefono, c.telefonoNormalizado,
+              c.idCliente, COALESCE(c.nombre, 'Cliente ocasional') cliente, c.telefono, c.telefonoNormalizado, c.codigoPaisWhatsApp,
               t.nombre tienda, f.idFiado, f.saldoPendiente saldoActualFiado, f.estado estadoFiado
        FROM venta v
        JOIN tienda t ON t.idTienda=v.idTienda
@@ -481,7 +481,7 @@ async function getSaleReceipt(idTienda, idVenta) {
   if (!sales.length) throw stockError(404, 'Venta no encontrada.');
   const sale = { ...sales[0], codigoComprobante: compactSaleReceiptCode(sales[0].codigoComprobante) };
   const receipt = { venta: sale, detalle: details, pagos: payments };
-  const countryCode = String(creditConfigurations[0]?.codigoPaisWhatsApp || '').replace(/\D/g, '');
+  const countryCode = String(sales[0].codigoPaisWhatsApp || creditConfigurations[0]?.codigoPaisWhatsApp || '').replace(/\D/g, '');
   const normalizedPhone = String(sales[0].telefonoNormalizado || '').replace(/\D/g, '');
   if (!countryCode || !normalizedPhone) return { ...receipt, whatsappUrl: null };
   const phone = normalizedPhone.startsWith(countryCode) ? normalizedPhone : `${countryCode}${normalizedPhone}`;

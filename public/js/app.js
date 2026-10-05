@@ -3197,7 +3197,7 @@ function showSaleReceipt(receipt) {
       modalRoot.innerHTML = `
         <div class="modal-backdrop"><form class="modal receipt-modal" data-add-whatsapp-phone role="dialog" aria-modal="true" aria-label="Agregar número de WhatsApp">
           <h3>Falta el número de WhatsApp</h3>
-          <div class="modal-body"><p>El cliente <strong>${escapeHtml(sale.cliente)}</strong> está registrado, pero todavía no tiene un número asociado.</p><label class="receipt-whatsapp-recipient">Número de WhatsApp<input name="telefono" type="tel" inputmode="numeric" autocomplete="tel" maxlength="30" required placeholder="Ej. 70000000"><small>Se guardará en la ficha del cliente para futuros comprobantes.</small></label><p class="form-error" data-whatsapp-phone-error role="alert" hidden></p></div>
+          <div class="modal-body"><p>El cliente <strong>${escapeHtml(sale.cliente)}</strong> está registrado, pero todavía no tiene un número asociado.</p><div class="form-grid"><label>País<select name="codigoPaisWhatsApp">${window.administrauCountryOptions('591')}</select></label><label class="receipt-whatsapp-recipient">Número de WhatsApp<input name="telefono" type="tel" inputmode="numeric" autocomplete="tel" maxlength="30" required placeholder="Ej. 70000000"><small>Escribe solo el número; se guardará con el país elegido.</small></label></div><p class="form-error" data-whatsapp-phone-error role="alert" hidden></p></div>
           <div class="modal-actions"><button type="button" class="secondary" data-preview-back>Volver al comprobante</button><button type="submit">Agregar número</button></div>
         </form></div>`;
       const form = modalRoot.querySelector('[data-add-whatsapp-phone]');
@@ -3209,7 +3209,8 @@ function showSaleReceipt(receipt) {
         error.hidden = true;
         button.disabled = true;
         try {
-          await api(`/api/clientes/${sale.idCliente}`, { method: 'PATCH', body: JSON.stringify({ telefono: new FormData(form).get('telefono') }) });
+          const data = new FormData(form);
+          await api(`/api/clientes/${sale.idCliente}`, { method: 'PATCH', body: JSON.stringify({ telefono: data.get('telefono'), codigoPaisWhatsApp: data.get('codigoPaisWhatsApp') }) });
           const updatedReceipt = await api(`/api/ventas/${sale.idVenta}/comprobante`);
           showSaleReceipt(updatedReceipt);
         } catch (requestError) {

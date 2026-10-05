@@ -200,6 +200,7 @@ function publicCustomer(row, configuration, debts = []) {
     idCliente: row.idCliente,
     nombre: row.nombre,
     telefono: row.telefono,
+    codigoPaisWhatsApp: row.codigoPaisWhatsApp,
     telefonoAlternativo: row.telefonoAlternativo,
     documentoIdentidad: row.documentoIdentidad,
     correo: row.correo,
@@ -241,7 +242,7 @@ async function customerSnapshot(connection, idTienda, idCliente, { lock = false 
   const customer = lock
     ? await lockCustomer(connection, idTienda, idCliente)
     : (await connection.query(
-      `SELECT idCliente, nombre, telefono, telefonoAlternativo, telefonoNormalizado,
+      `SELECT idCliente, nombre, telefono, telefonoAlternativo, telefonoNormalizado, codigoPaisWhatsApp,
               documentoIdentidad, documentoNormalizado, correo, direccion, notas,
               limiteCredito, permiteFiado, diasCreditoDefault, canalPreferido,
               aceptaRecordatorios, horarioPreferido, activo, eliminadoEn,
@@ -272,7 +273,7 @@ async function listCustomers(req, res, options = {}) {
   const [[count], [rows], configuration, [summaryRows]] = await Promise.all([
     pool.query(`SELECT COUNT(*) total FROM cliente c WHERE ${where}`, params),
     pool.query(
-      `SELECT c.idCliente, c.nombre, c.telefono, c.telefonoAlternativo, c.documentoIdentidad,
+      `SELECT c.idCliente, c.nombre, c.telefono, c.telefonoAlternativo, c.codigoPaisWhatsApp, c.documentoIdentidad,
               c.correo, c.limiteCredito, c.permiteFiado, c.diasCreditoDefault,
               c.canalPreferido, c.aceptaRecordatorios, c.activo, c.eliminadoEn,
               (SELECT COALESCE(SUM(f.saldoPendiente),0) FROM fiado f
@@ -372,13 +373,13 @@ router.post('/clientes', requirePlanFeature('clientes_basico'), asyncRoute(async
     try {
       const [insert] = await connection.query(
         `INSERT INTO cliente
-         (idTienda, nombre, telefono, direccion, telefonoAlternativo, telefonoNormalizado,
+         (idTienda, nombre, telefono, direccion, telefonoAlternativo, telefonoNormalizado, codigoPaisWhatsApp,
           documentoIdentidad, documentoNormalizado, correo, notas, limiteCredito,
           permiteFiado, diasCreditoDefault, canalPreferido, aceptaRecordatorios,
           horarioPreferido, creadoEn, actualizadoEn, idAdministradorCrea, idAdministradorActualiza)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [idTienda, data.nombre, data.telefono, data.direccion, data.telefonoAlternativo,
-          data.telefonoNormalizado, data.documentoIdentidad, data.documentoNormalizado, data.correo,
+          data.telefonoNormalizado, data.codigoPaisWhatsApp, data.documentoIdentidad, data.documentoNormalizado, data.correo,
           data.notas, data.limiteCreditoCents === null ? null : centsToDecimal(data.limiteCreditoCents),
           data.permiteFiado, data.diasCreditoDefault, data.canalPreferido, data.aceptaRecordatorios,
           data.horarioPreferido, now, now, req.session.admin.id, req.session.admin.id]
@@ -412,11 +413,11 @@ async function updateCustomer(req, res) {
     try {
       await connection.query(
         `UPDATE cliente SET nombre=?, telefono=?, direccion=?, telefonoAlternativo=?,
-            telefonoNormalizado=?, documentoIdentidad=?, documentoNormalizado=?, correo=?, notas=?,
+            telefonoNormalizado=?, codigoPaisWhatsApp=?, documentoIdentidad=?, documentoNormalizado=?, correo=?, notas=?,
             limiteCredito=?, permiteFiado=?, diasCreditoDefault=?, canalPreferido=?,
             aceptaRecordatorios=?, horarioPreferido=?, actualizadoEn=?, idAdministradorActualiza=?
          WHERE idTienda=? AND idCliente=?`,
-        [data.nombre, data.telefono, data.direccion, data.telefonoAlternativo, data.telefonoNormalizado,
+        [data.nombre, data.telefono, data.direccion, data.telefonoAlternativo, data.telefonoNormalizado, data.codigoPaisWhatsApp,
           data.documentoIdentidad, data.documentoNormalizado, data.correo, data.notas,
           data.limiteCreditoCents === null ? null : centsToDecimal(data.limiteCreditoCents),
           data.permiteFiado, data.diasCreditoDefault, data.canalPreferido, data.aceptaRecordatorios,
@@ -1011,7 +1012,7 @@ router.post('/cobranza/mensaje-whatsapp/preparar', requirePlanFeature('recordato
   const idFiado = req.body?.idFiado ? positiveId(req.body.idFiado, 'El fiado') : null;
   const configuration = await getCreditConfiguration(pool, idTienda);
   const [[customers], [stores]] = await Promise.all([
-    pool.query('SELECT idCliente,nombre,telefono,telefonoNormalizado,aceptaRecordatorios FROM cliente WHERE idTienda=? AND idCliente=?', [idTienda, idCliente]),
+    pool.query('SELECT idCliente,nombre,telefono,telefonoNormalizado,codigoPaisWhatsApp,aceptaRecordatorios FROM cliente WHERE idTienda=? AND idCliente=?', [idTienda, idCliente]),
     pool.query('SELECT nombre FROM tienda WHERE idTienda=?', [idTienda])
   ]);
   if (!customers.length) throw creditError(404, 'Cliente no encontrado.');
@@ -1057,7 +1058,7 @@ router.post('/cobranza/mensaje-whatsapp/preparar', requirePlanFeature('recordato
     saldo_inicial: '', debitos: '', creditos: '', saldo_final: `Bs ${balance}`, periodo: ''
   };
   const text = renderTemplate(template, values);
-  const countryCode = configuration.codigoPaisWhatsApp;
+  const countryCode = customer.codigoPaisWhatsApp || configuration.codigoPaisWhatsApp;
   const normalizedPhone = customer.telefonoNormalizado;
   const phone = countryCode && normalizedPhone
     ? (normalizedPhone.startsWith(countryCode) ? normalizedPhone : `${countryCode}${normalizedPhone}`)
