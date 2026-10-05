@@ -654,7 +654,6 @@ async function startGuidedHelp(topic) {
   if (!steps?.length) return;
   let current = 0;
   const returnFocus = document.activeElement;
-  let highlightedTarget = null;
 
   const placeGuideCard = (card, rect) => {
     if (!card) return;
@@ -675,14 +674,11 @@ async function startGuidedHelp(topic) {
   };
 
   const close = () => {
-    highlightedTarget?.classList.remove('guided-tour-target');
     modalRoot.innerHTML = '';
     returnFocus?.focus?.();
   };
 
   const render = async () => {
-    highlightedTarget?.classList.remove('guided-tour-target');
-    highlightedTarget = null;
     const step = steps[current];
     if (activeView !== step.view) await loadView(step.view);
     await new Promise((resolve) => globalThis.requestAnimationFrame(() => globalThis.requestAnimationFrame(resolve)));
@@ -693,8 +689,6 @@ async function startGuidedHelp(topic) {
     }
     target.scrollIntoView({ block: 'center', inline: 'nearest' });
     await new Promise((resolve) => globalThis.requestAnimationFrame(resolve));
-    target.classList.add('guided-tour-target');
-    highlightedTarget = target;
     const rect = target.getBoundingClientRect();
     modalRoot.innerHTML = `<div class="guided-tour" role="dialog" aria-modal="true" aria-labelledby="guidedTourTitle">
       <div class="guided-tour-shade"></div>

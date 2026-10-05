@@ -3058,22 +3058,6 @@ td.actions { position: relative; }
   letter-spacing: .04em;
   transform: translateX(-50%);
 }
-.guided-tour-target {
-  position: relative !important;
-  z-index: 81 !important;
-  outline: 4px solid #4ade80 !important;
-  outline-offset: 6px;
-  border-radius: 10px;
-  box-shadow: 0 0 0 8px rgba(74, 222, 128, .26) !important;
-  animation: guidedTargetPulse 1.2s ease-in-out infinite;
-  pointer-events: none !important;
-}
-
-@keyframes guidedTargetPulse {
-  0%, 100% { box-shadow: 0 0 0 8px rgba(74, 222, 128, .26) !important; }
-  50% { box-shadow: 0 0 0 15px rgba(74, 222, 128, .08) !important; }
-}
-
 .guided-tour-card {
   position: fixed;
   z-index: 3;
