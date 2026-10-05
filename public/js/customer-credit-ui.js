@@ -242,17 +242,15 @@
     function customerRowsMarkup(customers) {
       if (!customers.length) return uiPatterns.empty('No hay clientes con estos filtros', 'Prueba limpiando los filtros o registra un cliente nuevo.');
       const desktop = `<div class="panel table-wrap customer-desktop-table"><table><thead><tr>
-        <th>Cliente</th><th>Telefono</th><th>Documento</th><th>Deuda</th><th>Vencido</th><th>Limite</th><th>Credito disponible</th><th>Ultima compra</th><th>Estado</th><th>Acciones</th>
+        <th>Cliente</th><th>Telefono</th><th>Deuda</th><th>Ultima compra</th><th>Estado</th><th>Acciones</th>
       </tr></thead><tbody>${customers.map((customer) => `<tr class="${customer.activo ? '' : 'customer-hidden'}">
         <td><strong>${e(customer.nombre)}</strong>${customer.correo ? `<small>${e(customer.correo)}</small>` : ''}${!customer.activo && customer.eliminadoEn ? `<small>Oculto: ${e(formatDate(customer.eliminadoEn))}</small>` : ''}</td>
-        <td>${e(customer.telefono || 'Sin telefono')}</td><td>${e(customer.documentoIdentidad || 'Sin documento')}</td>
-        <td>Bs ${money(customer.deudaActual)}</td><td>${Number(customer.deudaVencida || 0) > 0 ? `<strong class="text-danger">Bs ${money(customer.deudaVencida)}</strong>` : 'Bs 0.00'}</td>
-        <td>${valueOrUnknown(customer.limiteEfectivo, 'Bs ')}</td><td>${valueOrUnknown(customer.creditoDisponible, 'Bs ')}</td>
+        <td>${e(customer.telefono || 'Sin telefono')}</td><td>${Number(customer.deudaActual || 0) > 0 ? `<strong class="customer-debt-active">Deuda activa · Bs ${money(customer.deudaActual)}</strong>` : '<span class="customer-debt-clear">Sin deuda</span>'}</td>
         <td>${customer.ultimaCompra ? e(formatDate(customer.ultimaCompra)) : 'Sin compras'}</td><td>${statusBadge(customer.activo ? (customer.permiteFiado ? 'activo' : 'fiado_bloqueado') : 'oculto')}</td>
         <td>${customerActions(customer)}</td></tr>`).join('')}</tbody></table></div>`;
       const mobile = `<div class="customer-mobile-list">${customers.map((customer) => `<article class="customer-card ${customer.activo ? '' : 'customer-hidden'}">
         <header><div><strong>${e(customer.nombre)}</strong><span>${e(customer.telefono || 'Sin telefono')}</span>${!customer.activo && customer.eliminadoEn ? `<span>Oculto: ${e(formatDate(customer.eliminadoEn))}</span>` : ''}</div>${statusBadge(customer.activo ? 'activo' : 'oculto')}</header>
-        <dl><div><dt>Deuda</dt><dd>Bs ${money(customer.deudaActual)}</dd></div><div><dt>Vencida</dt><dd>Bs ${money(customer.deudaVencida)}</dd></div><div><dt>Credito disponible</dt><dd>${valueOrUnknown(customer.creditoDisponible, 'Bs ')}</dd></div></dl>
+        <dl><div><dt>Deuda</dt><dd>${Number(customer.deudaActual || 0) > 0 ? `Activa · Bs ${money(customer.deudaActual)}` : 'Sin deuda'}</dd></div></dl>
         ${customerActions(customer)}</article>`).join('')}</div>`;
       return desktop + mobile;
     }

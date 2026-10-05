@@ -2495,6 +2495,8 @@ body:has([data-compensation-filter-form]) { overflow: hidden; }
 .timeline-actions { display: flex; align-items: center; justify-content: flex-end; gap: 8px; flex-wrap: wrap; }
 .collection-receipt,
 .account-statement {
+  margin: 0 0 22px;
+  padding: 24px;
   --ink: #172027;
   --muted: #59656f;
   --line: #d9dfe3;
@@ -2530,6 +2532,8 @@ body:has([data-compensation-filter-form]) { overflow: hidden; }
 .statement-summary span { padding: 10px; border: 1px solid #d9dfe3; }
 .statement-summary strong { display: block; margin-top: 5px; }
 .statement-note { margin-top: 18px; color: #59656f; font-size: 12px; }
+.customer-debt-active { color: var(--danger); }
+.customer-debt-clear { color: var(--muted); }
 .pos-credit-summary { margin-top: 10px; }
 .pos-credit-card { padding: 12px; border: 1px solid #cbded6; border-radius: 7px; background: #f4faf7; }
 .pos-credit-card > p { margin: 8px 0 0; color: var(--muted); }
@@ -3743,7 +3747,7 @@ td.actions { position: relative; }
   body > .layout, #message, .no-print { display: none !important; }
   #modalRoot, .modal-backdrop { position: static; display: block; padding: 0; background: #fff; }
   .statement-modal, .receipt-modal { width: 100%; max-height: none; overflow: visible; padding: 0; border: 0; box-shadow: none; }
-  .account-statement { width: 190mm; max-width: 100%; margin: 0 auto; font-size: 11pt; border: 0; border-radius: 0; box-shadow: none; }
+  .account-statement { width: 190mm; max-width: 100%; margin: 0 auto; padding: 12mm; font-size: 11pt; color: #172027 !important; background: #fff !important; border: 0; border-radius: 0; box-shadow: none; }
   .collection-receipt { width: 110mm; max-width: 100%; margin: 0 auto; font-size: 10pt; border: 0; border-radius: 0; box-shadow: none; }
   .collection-receipt .receipt-distribution { break-inside: avoid; }
   .statement-row { break-inside: avoid; }
@@ -4319,7 +4323,12 @@ html[data-theme="dark"] {
   html[data-theme="dark"] .content :is(.credit-status.status-activo, .credit-status.status-pagado, .credit-status.status-al_dia, .lot-vigente, .lot-disponible) { color: #95e3a5; background: #143422; border-color: #316c42; }
   html[data-theme="dark"] .content :is(.credit-status.status-vence_hoy, .credit-status.status-proximo_a_vencer, .credit-status.status-fiado_bloqueado, .lot-vence_hoy, .lot-proximo_a_vencer) { color: #f3d891; background: #342a13; border-color: #8c701f; }
   html[data-theme="dark"] .content :is(.credit-status.status-vencido, .credit-status.status-inactivo, .credit-status.status-oculto, .lot-vencido) { color: #ffc4bc; background: #371d1b; border-color: #a75b55; }
-  html[data-theme="dark"] .modal :is(.collection-receipt, .account-statement) { background: #fff; color: #172027; border-color: #aab8c1; }
+  html[data-theme="dark"] .modal .collection-receipt { background: #fff; color: #172027; border-color: #aab8c1; }
+  html[data-theme="dark"] .modal .account-statement { --ink: #edf8ef; --muted: #b4c7b8; --line: #315840; color: var(--ink); background: #0c1810; border-color: #315840; box-shadow: 0 12px 28px rgba(0, 0, 0, .35); }
+  html[data-theme="dark"] .account-statement > header { border-color: #638b6d; }
+  html[data-theme="dark"] .account-statement > header p,
+  html[data-theme="dark"] .statement-note { color: var(--muted); }
+  html[data-theme="dark"] .statement-summary span { border-color: var(--line); background: #102217; }
 }
 
 @page sale-ticket { size: 80mm auto; margin: 0; }
