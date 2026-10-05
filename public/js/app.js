@@ -1278,7 +1278,7 @@ function drawPieChart(canvas, labels, values, colors, tooltips = []) {
   const ink = darkTheme ? '#f2fbf3' : '#172017';
   const grid = darkTheme ? '#58735d' : '#dce8dc';
   const readableColors = darkTheme
-    ? ['#6ee786', '#9af0ac', '#b5f6c2', '#56d9ca', '#d8ec98']
+    ? ['#6ee786', '#9af0ac', '#b5f6c2', '#55cf76', '#d8ec98']
     : colors;
   const hitAreas = [];
   if (!total) {

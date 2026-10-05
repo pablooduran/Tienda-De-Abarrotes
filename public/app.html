@@ -19,6 +19,20 @@
         <h1 id="storeName">Mi tienda</h1>
       </div>
       <nav id="menu" aria-label="Secciones de la tienda"></nav>
+      <details class="account-menu sidebar-account-menu" id="accountMenu">
+        <summary class="icon-button" aria-label="Abrir configuración"><span aria-hidden="true">⚙</span></summary>
+        <div class="account-menu-panel">
+          <p class="account-menu-title">Cuenta y configuración</p>
+          <p id="subscriptionSummary" class="subscription-summary" hidden></p>
+          <button id="settingsStoreButton" type="button" data-settings-view="configuracion">Configuración de la tienda</button>
+          <button id="settingsAuditButton" type="button" data-settings-view="auditoria">Auditoría</button>
+          <a href="/suscripcion.html">Mi plan y facturación</a>
+          <button id="helpBtn" type="button">Centro de ayuda</button>
+          <button type="button" data-pwa-install hidden>Instalar aplicación</button>
+          <button type="button" data-toggle-theme aria-pressed="false">Modo oscuro</button>
+          <button id="logoutBtn" type="button" class="account-logout">Cerrar sesión</button>
+        </div>
+      </details>
     </aside>
     <button id="sidebarScrim" class="sidebar-scrim" type="button" aria-label="Cerrar navegación" hidden></button>
     <main class="content">
@@ -36,22 +50,8 @@
           <nav class="quick-actions" id="quickActions" aria-label="Accesos rápidos">
             <button type="button" data-quick-view="ventas">Vender</button>
             <button type="button" class="secondary" data-quick-view="compras">Registrar compra</button>
-            <button type="button" class="secondary" data-quick-view="pagos">Cobranza</button>
+            <button type="button" class="secondary" data-quick-view="pagos">Fiados</button>
           </nav>
-          <details class="account-menu" id="accountMenu">
-            <summary class="icon-button" aria-label="Abrir configuración"><span aria-hidden="true">⚙</span></summary>
-            <div class="account-menu-panel">
-              <p class="account-menu-title">Cuenta y configuración</p>
-              <p id="subscriptionSummary" class="subscription-summary" hidden></p>
-              <button id="settingsStoreButton" type="button" data-settings-view="configuracion">Configuración de la tienda</button>
-              <button id="settingsAuditButton" type="button" data-settings-view="auditoria">Auditoría</button>
-              <a href="/suscripcion.html">Mi plan y facturación</a>
-              <button id="helpBtn" type="button">Centro de ayuda</button>
-              <button type="button" data-pwa-install hidden>Instalar aplicación</button>
-              <button type="button" data-toggle-theme aria-pressed="false">Modo oscuro</button>
-              <button id="logoutBtn" type="button" class="account-logout">Cerrar sesión</button>
-            </div>
-          </details>
         </div>
       </header>
       <div id="viewProgress" class="view-progress" role="progressbar" aria-label="Cargando contenido" hidden><span></span></div>

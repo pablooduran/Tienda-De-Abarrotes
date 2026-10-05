@@ -382,6 +382,18 @@ body {
 .account-menu-panel a:focus-visible { color: var(--ink); background: var(--surface-2); border-color: var(--line); transform: none; }
 .account-menu-panel .subscription-summary { margin: 0 0 4px; color: var(--muted); border-color: var(--line); }
 .account-menu-panel .account-logout { margin-top: 5px; color: #fff; background: var(--brand); border-color: var(--brand); text-align: center; }
+.sidebar-account-menu {
+  z-index: 60;
+  align-self: flex-end;
+  margin-top: auto;
+}
+.sidebar-account-menu .account-menu-panel {
+  top: auto;
+  right: 0;
+  bottom: calc(100% + 10px);
+  max-height: min(70vh, 560px);
+  overflow-y: auto;
+}
 .view-progress {
   position: sticky;
   z-index: 25;

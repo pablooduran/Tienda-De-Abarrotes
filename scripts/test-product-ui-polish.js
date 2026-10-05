@@ -5,6 +5,7 @@ const path = require('path');
 const root = path.resolve(__dirname, '..');
 const read = (file) => fs.readFileSync(path.join(root, file), 'utf8');
 const app = read('public/js/app.js');
+const shell = read('public/app.html');
 const css = read('public/css/styles.css');
 const pending = read('docs/PENDIENTES_Y_MEJORAS_FUTURAS.md');
 const packageJson = JSON.parse(read('package.json'));
@@ -31,6 +32,8 @@ const checks = [
   ['Las ventanas flotantes superan la barra lateral y respetan el tema oscuro', css.includes('z-index: 90;') && css.includes('.modal :is(.credit-policy-help') && css.includes('.payment-subscription-section { border-bottom: 1px solid var(--line); }')],
   ['El detalle circular usa una leyenda HTML nítida sin invadir la torta', app.includes('function renderDailyParticipationLegend(labels, values)') && app.includes('id="dailyPieLegend"') && app.includes('class="dashboard-period-legend-row') && css.includes('.dashboard-period-content') && css.includes('.dashboard-period-legend-row')],
   ['El gráfico circular mantiene contraste alto en oscuro', app.includes("const muted = darkTheme ? '#c7d9ca' : '#4d624f';") && app.includes("const ink = darkTheme ? '#f2fbf3' : '#172017';") && css.includes('.dashboard-period-legend-row strong {')],
+  ['La torta de participación usa únicamente tonos verdes', app.includes("'#55cf76'") && !app.includes("'#56d9ca'")],
+  ['La cuenta queda al pie del lateral y abre su menú hacia arriba', shell.includes('class="account-menu sidebar-account-menu" id="accountMenu"') && shell.includes('data-quick-view="pagos">Fiados</button>') && css.includes('.sidebar-account-menu .account-menu-panel {') && css.includes('bottom: calc(100% + 10px);')],
   ['Cierre de caja organiza el arqueo en pasos y presenta un resumen antes de guardar', app.includes('class="cash-closure-workspace panel"') && app.includes('data-closure-preset="today"') && app.includes('Primero calcula, luego guarda.') && css.includes('.cash-closure-step,' ) && css.includes('.cash-closure-actions,' )],
   ['Reportes guía la selección, filtros y consulta en una misma estructura', app.includes('class="report-workspace panel"') && app.includes('REPORT_TYPE_INFO') && app.includes('id="reportDescription"') && css.includes('.report-dynamic-filters') && css.includes('.report-actions')],
   ['El fondo usa el árbol de marca como textura tenue sin cubrir el contenido', css.includes("background: url('/assets/administrau-icon.png')") && css.includes('.content::before,') && css.includes('.content > * { position: relative; z-index: 1; }') && css.includes('html[data-theme="dark"] .content::before')],
