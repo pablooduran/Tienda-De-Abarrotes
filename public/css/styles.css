@@ -3033,6 +3033,7 @@ td.actions { position: relative; }
 
 .guided-tour { position: fixed; z-index: 80; inset: 0; pointer-events: auto; }
 .guided-tour-shade { position: absolute; z-index: 1; inset: 0; pointer-events: none; }
+.guided-tour-shade-piece { position: fixed; display: block; background: rgba(1, 8, 3, .68); }
 .guided-tour-highlight {
   position: fixed;
   z-index: 5;
@@ -3042,14 +3043,14 @@ td.actions { position: relative; }
   outline-offset: 4px;
   background: linear-gradient(135deg, rgba(103, 255, 144, .33), rgba(38, 190, 83, .2));
   backdrop-filter: brightness(1.7) saturate(1.35);
-  box-shadow: 0 0 0 9999px rgba(1, 8, 3, .68), 0 0 0 10px rgba(74, 222, 128, .72), 0 0 34px 12px rgba(74, 222, 128, .82), inset 0 0 18px rgba(224, 255, 231, .35);
+  box-shadow: 0 0 0 10px rgba(74, 222, 128, .72), 0 0 34px 12px rgba(74, 222, 128, .82), inset 0 0 18px rgba(224, 255, 231, .35);
   pointer-events: none;
   transition: inset .18s ease, width .18s ease, height .18s ease;
   animation: guidedHighlightPulse 1.25s ease-in-out infinite;
 }
 @keyframes guidedHighlightPulse {
-  0%, 100% { box-shadow: 0 0 0 9999px rgba(1, 8, 3, .68), 0 0 0 10px rgba(74, 222, 128, .72), 0 0 34px 12px rgba(74, 222, 128, .82), inset 0 0 18px rgba(224, 255, 231, .35); }
-  50% { box-shadow: 0 0 0 9999px rgba(1, 8, 3, .68), 0 0 0 15px rgba(74, 222, 128, .32), 0 0 42px 17px rgba(74, 222, 128, .96), inset 0 0 24px rgba(224, 255, 231, .5); }
+  0%, 100% { box-shadow: 0 0 0 10px rgba(74, 222, 128, .72), 0 0 34px 12px rgba(74, 222, 128, .82), inset 0 0 18px rgba(224, 255, 231, .35); }
+  50% { box-shadow: 0 0 0 15px rgba(74, 222, 128, .32), 0 0 42px 17px rgba(74, 222, 128, .96), inset 0 0 24px rgba(224, 255, 231, .5); }
 }
 .guided-tour-highlight::before {
   content: '';

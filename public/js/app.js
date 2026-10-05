@@ -697,9 +697,22 @@ async function startGuidedHelp(topic) {
     target.scrollIntoView({ block: 'center', inline: 'nearest' });
     await new Promise((resolve) => globalThis.requestAnimationFrame(resolve));
     const rect = target.getBoundingClientRect();
+    const spotlight = {
+      top: Math.max(0, rect.top - 8),
+      left: Math.max(0, rect.left - 8),
+      right: Math.min(window.innerWidth, rect.right + 8),
+      bottom: Math.min(window.innerHeight, rect.bottom + 8)
+    };
+    const spotlightWidth = Math.max(36, spotlight.right - spotlight.left);
+    const spotlightHeight = Math.max(36, spotlight.bottom - spotlight.top);
     modalRoot.innerHTML = `<div class="guided-tour" role="dialog" aria-modal="true" aria-labelledby="guidedTourTitle">
-      <div class="guided-tour-shade"></div>
-      <div class="guided-tour-highlight" style="top:${Math.max(6, rect.top - 6)}px;left:${Math.max(6, rect.left - 6)}px;width:${Math.max(36, rect.width + 12)}px;height:${Math.max(36, rect.height + 12)}px"></div>
+      <div class="guided-tour-shade" aria-hidden="true">
+        <span class="guided-tour-shade-piece" style="inset:0 0 auto 0;height:${spotlight.top}px"></span>
+        <span class="guided-tour-shade-piece" style="top:${spotlight.bottom}px;right:0;bottom:0;left:0"></span>
+        <span class="guided-tour-shade-piece" style="top:${spotlight.top}px;left:0;width:${spotlight.left}px;height:${spotlightHeight}px"></span>
+        <span class="guided-tour-shade-piece" style="top:${spotlight.top}px;right:0;width:${Math.max(0, window.innerWidth - spotlight.right)}px;height:${spotlightHeight}px"></span>
+      </div>
+      <div class="guided-tour-highlight" style="top:${spotlight.top}px;left:${spotlight.left}px;width:${spotlightWidth}px;height:${spotlightHeight}px"></div>
       <section class="guided-tour-card">
         <span class="eyebrow">Paso ${current + 1} de ${steps.length}</span>
         <h3 id="guidedTourTitle">${escapeHtml(step.title)}</h3>
