@@ -25,7 +25,9 @@ check('Configuracion y auditoria viven fuera de la barra operativa',
   && html.includes('id="settingsStoreButton"')
   && html.includes('id="settingsAuditButton"')
   && app.includes("const settingsViews = new Set(['configuracion', 'auditoria'])")
-  && css.includes('.layout.settings-workspace .sidebar'));
+  && css.includes('.layout.settings-workspace .sidebar')
+  && app.includes('const hideQuickActions = id === \'ayuda\' || settingsViews.has(id);')
+  && css.includes('.quick-actions[hidden] { display: none !important; }'));
 check('Ventas conserva POS, historial, cobranza y devoluciones',
   app.includes("sections: ['ventas', 'historialVentas', 'pagos', 'compensaciones']"));
 check('Inventario conserva sus destinos en el orden operativo solicitado',

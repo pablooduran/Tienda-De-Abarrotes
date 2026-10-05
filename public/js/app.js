@@ -900,7 +900,9 @@ async function loadView(id) {
   if (helpBackTopbar) helpBackTopbar.hidden = id !== 'ayuda';
   if (settingsBackTopbar) settingsBackTopbar.hidden = !settingsViews.has(id);
   if (quickActions) {
-    quickActions.hidden = id === 'ayuda' || settingsViews.has(id);
+    const hideQuickActions = id === 'ayuda' || settingsViews.has(id);
+    quickActions.hidden = hideQuickActions;
+    quickActions.setAttribute('aria-hidden', String(hideQuickActions));
     quickActions.querySelectorAll('[data-quick-view]').forEach((button) => {
       const selected = button.dataset.quickView === id;
       button.classList.toggle('secondary', !selected);

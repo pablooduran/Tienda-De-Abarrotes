@@ -294,6 +294,7 @@ body {
 .topbar-heading,
 .topbar-actions,
 .quick-actions { display: flex; align-items: center; gap: 10px; }
+.quick-actions[hidden] { display: none !important; }
 .topbar-heading { min-width: 0; }
 .topbar-heading > div { min-width: 0; }
 .topbar-actions { justify-content: flex-end; flex-wrap: wrap; }
