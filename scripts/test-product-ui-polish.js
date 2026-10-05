@@ -30,6 +30,7 @@ const checks = [
   ['La guía conserva el avance a la derecha y reemplaza Siguiente por Cerrar al final', app.includes("data-tour-close data-modal-cancel>Salir") && app.includes("data-tour-next>Siguiente") && app.includes("data-tour-close data-modal-cancel>Cerrar")],
   ['Las ventanas flotantes superan la barra lateral y respetan el tema oscuro', css.includes('z-index: 90;') && css.includes('.modal :is(.credit-policy-help') && css.includes('.payment-subscription-section { border-bottom: 1px solid var(--line); }')],
   ['El detalle circular reserva su propia leyenda sin invadir la torta', app.includes('const legendX = Math.max(146') && app.includes('ctx.arc(cx, cy, radius, start + gap, end - gap)') && css.includes('.dashboard-period-chart canvas { display: block; width: 100%; max-width: 100%; }')],
+  ['El gráfico circular mantiene etiquetas nítidas y contrastadas en oscuro', app.includes("const muted = darkTheme ? '#c7d9ca' : '#4d624f';") && app.includes('const readableColors = darkTheme') && app.includes("'700 12px system-ui")],
   ['UX-005 se registra como resuelto en P7E', pending.includes('| UX-005 |') && pending.includes('Resuelto en P7E')],
   ['TECH-026 queda resuelto tras P8', pending.includes('| TECH-026 |') && pending.includes('Resuelto: local 3/3 PASS')],
   ['El frontend no controla tenant', !app.includes('idTienda')]

@@ -813,6 +813,7 @@ function categoryOptions(value = '') {
 
 function enhanceListMenu(select) {
   if (!select || select.dataset.listMenuReady === 'true') return;
+  if (select.multiple || select.size > 1 || select.closest('.international-phone-field') || select.dataset.nativeSelect === 'true') return;
   select.dataset.listMenuReady = 'true';
   const label = select.closest('label');
   if (!label) return;
@@ -835,6 +836,8 @@ function enhanceListMenu(select) {
   const refresh = () => {
     const selected = select.options[select.selectedIndex];
     trigger.textContent = selected?.textContent || 'Seleccionar';
+    trigger.disabled = select.disabled;
+    trigger.setAttribute('aria-label', select.closest('label')?.childNodes?.[0]?.textContent?.trim() || 'Seleccionar opción');
     menu.innerHTML = optionRows();
     if (select.options.length > 10) {
       menu.insertAdjacentHTML('afterbegin', '<label class="list-menu-search">Buscar en la lista<input type="search" autocomplete="off" placeholder="Escribe para buscar"></label>');
@@ -862,11 +865,38 @@ function enhanceListMenu(select) {
   wrapper.addEventListener('keydown', (event) => { if (event.key === 'Escape') { close(); trigger.focus(); } });
   document.addEventListener('click', (event) => { if (!wrapper.contains(event.target)) close(); });
   select.addEventListener('change', refresh);
+  select.listMenuRefresh = refresh;
   select.classList.add('list-menu-native');
   select.parentNode.insertBefore(wrapper, select);
   wrapper.append(trigger, menu, select);
   refresh();
 }
+
+function enhanceListMenus(root = document) {
+  root.querySelectorAll?.('select').forEach((select) => enhanceListMenu(select));
+}
+
+function observeListMenus(root) {
+  if (!root || root.dataset.listMenuObserved === 'true') return;
+  root.dataset.listMenuObserved = 'true';
+  const observer = new MutationObserver((mutations) => {
+    const refreshes = new Set();
+    mutations.forEach((mutation) => {
+      if (mutation.target instanceof HTMLSelectElement) refreshes.add(mutation.target);
+      mutation.addedNodes.forEach((node) => {
+        if (!(node instanceof Element)) return;
+        if (node.matches('select')) enhanceListMenu(node);
+        enhanceListMenus(node);
+      });
+    });
+    refreshes.forEach((select) => select.listMenuRefresh?.());
+  });
+  observer.observe(root, { childList: true, subtree: true, attributes: true, attributeFilter: ['disabled'] });
+  enhanceListMenus(root);
+}
+
+observeListMenus(view);
+observeListMenus(modalRoot);
 
 function showViewLoading(section) {
   view.innerHTML = `<section class="view-loading-placeholder" role="status" aria-live="polite">
@@ -926,6 +956,7 @@ async function loadView(id) {
     renderSalesWorkspace(id);
     renderContextualHelp(id);
     applyReadOnlyUi();
+    enhanceListMenus(view);
   } finally {
     if (request === viewRequest) {
       view.removeAttribute('aria-busy');
@@ -1243,9 +1274,13 @@ function drawPieChart(canvas, labels, values, colors, tooltips = []) {
   const cy = 104;
   const radius = 48;
   const legendX = Math.max(146, cx + radius + 22);
-  const muted = getComputedStyle(document.documentElement).getPropertyValue('--muted').trim();
-  const ink = getComputedStyle(document.documentElement).getPropertyValue('--ink').trim();
-  const grid = getComputedStyle(document.documentElement).getPropertyValue('--chart-grid').trim();
+  const darkTheme = document.documentElement.dataset.theme === 'dark';
+  const muted = darkTheme ? '#c7d9ca' : '#4d624f';
+  const ink = darkTheme ? '#f2fbf3' : '#172017';
+  const grid = darkTheme ? '#58735d' : '#dce8dc';
+  const readableColors = darkTheme
+    ? ['#6ee786', '#9af0ac', '#b5f6c2', '#56d9ca', '#d8ec98']
+    : colors;
   const hitAreas = [];
   if (!total) {
     ctx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--surface-2').trim();
@@ -1263,12 +1298,12 @@ function drawPieChart(canvas, labels, values, colors, tooltips = []) {
       const slice = (Number(value || 0) / total) * Math.PI * 2;
       const gap = Math.min(0.055, slice / 5);
       const end = start + slice;
-      ctx.fillStyle = colors[index % colors.length];
+      ctx.fillStyle = readableColors[index % readableColors.length];
       ctx.beginPath();
       ctx.lineWidth = 18;
       ctx.lineCap = 'butt';
       ctx.arc(cx, cy, radius, start + gap, end - gap);
-      ctx.strokeStyle = colors[index % colors.length];
+      ctx.strokeStyle = readableColors[index % readableColors.length];
       ctx.stroke();
       const mid = start + slice / 2;
       hitAreas.push({
@@ -1292,7 +1327,7 @@ function drawPieChart(canvas, labels, values, colors, tooltips = []) {
   ctx.font = '12px "Segoe UI", Arial';
   labels.forEach((label, index) => {
     const y = 32 + index * 32;
-    ctx.fillStyle = colors[index % colors.length];
+    ctx.fillStyle = readableColors[index % readableColors.length];
     ctx.beginPath();
     ctx.arc(legendX, y, 4, 0, Math.PI * 2);
     ctx.fill();
@@ -1308,13 +1343,13 @@ function drawPieChart(canvas, labels, values, colors, tooltips = []) {
     ctx.moveTo(lineStart, y + 13);
     ctx.lineTo(lineEnd, y + 13);
     ctx.stroke();
-    ctx.strokeStyle = colors[index % colors.length];
+    ctx.strokeStyle = readableColors[index % readableColors.length];
     ctx.beginPath();
     ctx.moveTo(lineStart, y + 13);
     ctx.lineTo(lineStart + (lineEnd - lineStart) * (percent / 100), y + 13);
     ctx.stroke();
-    ctx.fillStyle = colors[index % colors.length];
-    ctx.font = '700 11px "Segoe UI", Arial';
+    ctx.fillStyle = readableColors[index % readableColors.length];
+    ctx.font = '700 12px system-ui, -apple-system, "Segoe UI", Arial';
     ctx.textAlign = 'right';
     ctx.fillText(`${percent}%`, displayWidth - 4, y + 4);
     ctx.textAlign = 'left';

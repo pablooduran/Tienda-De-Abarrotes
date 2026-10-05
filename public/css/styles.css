@@ -1282,12 +1282,14 @@ tr.low-stock { background: var(--warn); }
   max-height: min(360px, 52vh);
   padding: 7px;
   overflow-y: auto;
+  scrollbar-width: none;
   border: 1px solid var(--line);
   border-radius: 8px;
   color: var(--ink);
   background: var(--panel);
   box-shadow: 0 16px 32px rgba(12, 25, 16, .2);
 }
+.list-menu-popover::-webkit-scrollbar { display: none; }
 .list-menu-popover[hidden] { display: none; }
 .list-menu-popover button {
   min-height: 36px;
