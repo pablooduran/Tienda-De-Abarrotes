@@ -262,8 +262,23 @@ async function findOrCreateTaxonomy(connection, kind, name, idAdministrador) {
     [normalized]
   );
   if (rows.length) return rows[0].id;
-  const created = await createTaxonomy(connection, kind, display, idAdministrador);
-  return created.id;
+  try {
+    const created = await createTaxonomy(connection, kind, display, idAdministrador);
+    return created.id;
+  } catch (error) {
+    // Dos solicitudes pueden intentar crear la misma categoría o marca al mismo
+    // tiempo. Si la otra solicitud la creó entre nuestra consulta y el INSERT,
+    // reutilizamos ese registro en lugar de abortar toda la importación.
+    if (error.status !== 409 || error.message !== 'Ya existe un registro con ese nombre normalizado.') {
+      throw error;
+    }
+    const [existing] = await connection.query(
+      `SELECT ${definition.id} id FROM ${definition.table} WHERE nombreNormalizado=?`,
+      [normalized]
+    );
+    if (!existing.length) throw error;
+    return existing[0].id;
+  }
 }
 
 async function updateTaxonomy(connection, kind, idValue, input, idAdministrador) {
