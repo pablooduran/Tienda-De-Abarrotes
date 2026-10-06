@@ -577,11 +577,9 @@ function sectionAvailable(id) {
   if (id === 'compensaciones') return features.includes('anulaciones_operativas');
   if (id === 'cierreCaja') return features.includes('cierre_caja');
   if (id === 'inventarioInteligente') return features.includes('inventario_resumen');
-  if (id === 'inventarioOperativo') {
-    return features.includes('inventario_resumen')
-      || features.includes('historial_stock')
-      || features.includes('ajuste_stock');
-  }
+  // La conciliacion permite ajustar el stock. El historial por si solo no
+  // habilita esa operacion, por lo que Basic debe verla bloqueada.
+  if (id === 'inventarioOperativo') return features.includes('ajuste_stock');
   if (id === 'lotesVencimientos') return hasLotOperationalAccess();
   if (id === 'clientes') return features.includes('clientes_basico');
   if (id === 'pagos') return features.includes('fiados_basico') || features.includes('pagos_fiado');
