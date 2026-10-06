@@ -147,7 +147,7 @@ async function validateAdministratorScope(connection, event) {
     if (actorStoreId !== null) throw auditError('El superadministrador de auditoria tiene una asociacion invalida.');
     return;
   }
-  if (rows[0].rol !== 'dueno_tienda'
+  if (!['dueno_tienda', 'encargado', 'cajero', 'inventario'].includes(rows[0].rol)
     || actorStoreId === null
     || event.storeId !== actorStoreId) {
     throw auditError('El actor de auditoria no pertenece a la tienda del evento.');

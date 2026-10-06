@@ -4933,6 +4933,11 @@ html[data-theme="dark"] {
 .workspace-sticky-action > button[type="submit"] { margin-bottom: 0; }
 .confirmation-impact { display: grid; gap: 8px; margin: 14px 0 0; padding: 12px; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; }
 .confirmation-impact div { display: flex; justify-content: space-between; gap: 12px; }
+.team-member-list { display: grid; gap: 10px; }
+.team-member { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 14px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); }
+.team-member p { margin: 4px 0 0; color: var(--muted); }
+.team-member-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
+.team-member-actions select { width: auto; min-width: 150px; }
 
 @media (max-width: 1100px) {
   .workspace-tool-label, .workspace-tool-button kbd { display: none; }
@@ -4951,6 +4956,8 @@ html[data-theme="dark"] {
   .workspace-sticky-action { margin-inline: -10px; padding: 12px 10px calc(12px + env(safe-area-inset-bottom)); border-top: 1px solid var(--line); }
   .workspace-sticky-action > button[type="submit"] { min-height: 48px; }
   .dashboard-customize-button { justify-self: stretch; width: 100%; }
+  .team-member { align-items: flex-start; flex-direction: column; }
+  .team-member-actions, .team-member-actions select { width: 100%; }
 }
 
 @media (prefers-reduced-motion: reduce) {

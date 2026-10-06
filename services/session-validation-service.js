@@ -1,7 +1,8 @@
 const pool = require('../config/db');
+const { isTenantRole } = require('../config/team-roles');
 
 const SESSION_COOKIE_NAME = 'tienda.sid';
-const VALID_ROLES = new Set(['dueno_tienda', 'superadmin']);
+const VALID_ROLES = new Set(['dueno_tienda', 'encargado', 'cajero', 'inventario', 'superadmin']);
 
 function invalidResult(reason, status = 401, code = 'SESSION_REVOKED') {
   return Object.freeze({ valid: false, reason, status, code });
@@ -17,7 +18,7 @@ function sessionIdentity(sessionAdmin) {
   }
   const idTienda = sessionAdmin.idTienda === null ? null : Number(sessionAdmin.idTienda);
   if (sessionAdmin.rol === 'superadmin' && idTienda !== null) return null;
-  if (sessionAdmin.rol === 'dueno_tienda' && (!Number.isInteger(idTienda) || idTienda <= 0)) return null;
+  if (isTenantRole(sessionAdmin.rol) && (!Number.isInteger(idTienda) || idTienda <= 0)) return null;
   return { idAdministrador, idTienda, rol: sessionAdmin.rol, versionSesion };
 }
 

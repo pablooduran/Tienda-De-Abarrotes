@@ -22,6 +22,7 @@ const { validPasswordLength } = require('../config/password-policy');
 const { normalizedVerificationIdentity } = require('../config/email-verification-contract');
 const { normalizeGoogleRegistration } = require('../config/public-registration-contract');
 const { googleIdentityService } = require('../services/google-identity-service');
+const { isTenantRole } = require('../config/team-roles');
 
 const router = express.Router();
 const dummyPasswordHash = bcrypt.hash(crypto.randomBytes(32).toString('hex'), 12);
@@ -153,7 +154,7 @@ router.post('/login', async (req, res, next) => {
     }
 
     const admin = rows[0];
-    if (!['dueno_tienda', 'superadmin'].includes(admin.rol)) {
+    if (!isTenantRole(admin.rol) && admin.rol !== 'superadmin') {
       await auditLoginRejected(req);
       return invalidCredentials(res);
     }
@@ -161,7 +162,7 @@ router.post('/login', async (req, res, next) => {
       await auditLoginRejected(req);
       return invalidCredentials(res);
     }
-    if (admin.rol === 'dueno_tienda'
+    if (isTenantRole(admin.rol)
       && (!Number.isInteger(Number(admin.idTienda))
         || Number(admin.idTienda) <= 0
         || !admin.tiendaActiva
@@ -170,7 +171,7 @@ router.post('/login', async (req, res, next) => {
       return invalidCredentials(res);
     }
 
-    const subscriptionContext = admin.rol === 'dueno_tienda'
+    const subscriptionContext = isTenantRole(admin.rol)
       ? await resolveSubscriptionAccess(pool, Number(admin.idTienda))
       : null;
 
@@ -200,7 +201,9 @@ router.post('/login', async (req, res, next) => {
     }
     const destination = admin.rol === 'superadmin'
       ? '/admin.html'
-      : ownerDestination(subscriptionContext, admin.estadoOnboarding);
+      : admin.rol === 'dueno_tienda'
+        ? ownerDestination(subscriptionContext, admin.estadoOnboarding)
+        : '/app.html';
     res.json({ message: 'Sesion iniciada.', admin: publicAdmin(req.session.admin), destination });
   } catch (error) {
     next(error);

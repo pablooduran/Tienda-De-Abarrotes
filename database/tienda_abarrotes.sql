@@ -77,7 +77,7 @@ CREATE TABLE IF NOT EXISTS administrador (
   correoNormalizado VARCHAR(160) NULL,
   correoVerificadoEn DATETIME NULL,
   password VARCHAR(255) NOT NULL,
-  rol ENUM('superadmin','dueno_tienda') NOT NULL DEFAULT 'dueno_tienda',
+  rol ENUM('superadmin','dueno_tienda','encargado','cajero','inventario') NOT NULL DEFAULT 'dueno_tienda',
   activo TINYINT(1) NOT NULL DEFAULT 1,
   estadoAcceso ENUM('activo','pendiente_verificacion') NOT NULL DEFAULT 'activo',
   versionSesion INT UNSIGNED NOT NULL DEFAULT 1,
@@ -88,7 +88,7 @@ CREATE TABLE IF NOT EXISTS administrador (
   CONSTRAINT fk_administrador_tienda FOREIGN KEY (idTienda) REFERENCES tienda(idTienda),
   CONSTRAINT chk_administrador_rol_tienda CHECK (
     (rol = 'superadmin' AND idTienda IS NULL)
-    OR (rol = 'dueno_tienda' AND idTienda IS NOT NULL)
+    OR (rol IN ('dueno_tienda','encargado','cajero','inventario') AND idTienda IS NOT NULL)
   ),
   CONSTRAINT chk_administrador_version_sesion CHECK (versionSesion >= 1)
 );
@@ -391,6 +391,9 @@ WHERE NOT EXISTS (SELECT 1 FROM plan WHERE codigo='avanzado');
 INSERT INTO funcionalidad (codigo, nombre, descripcion)
 SELECT 'reportes_avanzados', 'Reportes avanzados', 'Analisis y reportes ampliados.'
 WHERE NOT EXISTS (SELECT 1 FROM funcionalidad WHERE codigo='reportes_avanzados');
+INSERT INTO funcionalidad (codigo, nombre, descripcion)
+SELECT 'equipo_colaborativo', 'Equipo y permisos', 'Usuarios operativos con permisos por rol.'
+WHERE NOT EXISTS (SELECT 1 FROM funcionalidad WHERE codigo='equipo_colaborativo');
 INSERT INTO funcionalidad (codigo, nombre, descripcion)
 SELECT 'compras_sugeridas', 'Compras sugeridas', 'Sugerencias de abastecimiento segun rotacion.'
 WHERE NOT EXISTS (SELECT 1 FROM funcionalidad WHERE codigo='compras_sugeridas');
@@ -2678,7 +2681,7 @@ INSERT INTO plan
   (codigo,nombre,descripcion,activo,visiblePublicamente,esLegado,ordenComercial,
    precioMensual,duracionDias,limitePropietarios,limiteProductos,limiteClientes,
    limiteProveedores)
-SELECT 'pro','Pro','Gestion avanzada, exportaciones y lotes sin limites.',
+SELECT 'pro','Pro','Gestion avanzada, equipo de trabajo, exportaciones y lotes sin limites.',
        1,1,0,30,10.00,30,NULL,NULL,NULL,NULL
 WHERE NOT EXISTS (SELECT 1 FROM plan WHERE codigo='pro');
 
@@ -2724,7 +2727,7 @@ SELECT p.idPlan,f.idFuncionalidad,
          'dias_cobertura','exportacion_clientes_fiados','exportacion_inventario',
          'exportacion_lotes','exportacion_reportes','inventario_sin_movimiento',
          'rentabilidad_producto','rotacion_inventario','trazabilidad_lotes',
-         'vencimientos_lote'
+         'vencimientos_lote','equipo_colaborativo'
        ) THEN 1 ELSE 0 END
 FROM plan p
 JOIN funcionalidad f ON f.activo=1

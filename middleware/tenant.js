@@ -1,7 +1,9 @@
+const { isTenantRole } = require('../config/team-roles');
+
 function requireTenant(req, res, next) {
   const admin = req.auth;
   if (!admin) return res.status(401).json({ error: 'Debe iniciar sesion.' });
-  if (admin.rol !== 'dueno_tienda') {
+  if (!isTenantRole(admin.rol)) {
     return res.status(403).json({ error: 'Debe seleccionar una tienda antes de usar las funciones operativas.' });
   }
 

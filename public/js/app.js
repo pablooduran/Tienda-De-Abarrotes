@@ -16,6 +16,7 @@ const settingsBackTopbar = document.getElementById('settingsBackTopbar');
 const quickActions = document.getElementById('quickActions');
 const settingsStoreButton = document.getElementById('settingsStoreButton');
 const settingsAuditButton = document.getElementById('settingsAuditButton');
+const settingsTeamButton = document.getElementById('settingsTeamButton');
 const serverWakeNotice = document.getElementById('serverWakeNotice');
 
 let state = { productos: [], clientes: [], proveedores: [], fiados: [], ventas: [], categorias: [], context: null, lotAccess: null };
@@ -63,6 +64,7 @@ const sections = [
   ['finanzas', 'Finanzas', 'Ventas, cobros, costos y ganancias'],
   ['compensaciones', 'Devoluciones y anulaciones', 'Anulaciones, devoluciones y ajustes trazables'],
   ['configuracion', 'Configuracion', 'Datos operativos de la tienda'],
+  ['equipo', 'Equipo y permisos', 'Accesos de las personas que trabajan contigo'],
   ['auditoria', 'Auditoria', 'Acciones administrativas y resultados'],
   ['cierreCaja', 'Cierre de caja', 'Control de efectivo por periodo'],
   ['reportes', 'Reportes', 'Consultas, filtros y ganancias'],
@@ -77,7 +79,7 @@ const navigationFamilies = [
   { id: 'reportes', label: 'Reportes', sections: ['reportes', 'finanzas', 'gastos', 'cierreCaja'] }
 ];
 
-const settingsViews = new Set(['configuracion', 'auditoria']);
+const settingsViews = new Set(['configuracion', 'equipo', 'auditoria']);
 
 const inventoryWorkspaceSections = ['productos', 'compras', 'proveedores', 'movimientosStock', 'inventarioInteligente', 'inventarioOperativo', 'lotesVencimientos'];
 const salesWorkspaceSections = ['ventas', 'historialVentas', 'pagos', 'compensaciones'];
@@ -392,6 +394,14 @@ function renderSubscriptionContext() {
   const expiration = context.suscripcion?.fechaFin ? formatDate(context.suscripcion.fechaFin) : 'Sin fecha';
   summary.textContent = `${planName} · vence ${expiration}`;
   summary.hidden = false;
+  const owner = context.rol === 'dueno_tienda';
+  settingsStoreButton.hidden = !owner;
+  settingsAuditButton.hidden = !owner;
+  if (settingsTeamButton) {
+    const teamEnabled = owner && context.caracteristicas?.includes('equipo_colaborativo');
+    settingsTeamButton.hidden = !owner;
+    settingsTeamButton.textContent = teamEnabled ? 'Equipo y permisos' : 'Equipo y permisos 🔒';
+  }
 
   if (context.soloLectura) {
     const status = context.suscripcion?.estadoEfectivo || 'sin suscripción';
@@ -543,6 +553,33 @@ async function auditoria() {
   await auditUi().render();
 }
 
+async function equipo() {
+  const data = await api('/api/equipo');
+  const roles = Object.entries(data.roles || {}).filter(([code]) => code !== 'dueno_tienda');
+  view.innerHTML = `<section class="settings-shell"><div class="settings-hero"><span class="eyebrow">PLAN PRO</span><h3>Equipo y permisos</h3><p>Crea accesos para tu personal. Al cambiar un rol o desactivar una cuenta, su sesión se cierra de inmediato.</p></div>
+    <div class="panel"><h3>Agregar persona</h3><form id="teamMemberForm" class="form-grid"><label>Usuario<input name="usuario" required maxlength="50" autocomplete="off"></label><label>Contraseña temporal<input name="password" type="password" required autocomplete="new-password"></label><label>Rol<select name="rol">${roles.map(([code, role]) => `<option value="${escapeHtml(code)}">${escapeHtml(role.nombre)} — ${escapeHtml(role.descripcion)}</option>`).join('')}</select></label><div class="form-actions"><button type="submit">Agregar al equipo</button></div></form></div>
+    <div class="panel"><h3>Personas con acceso</h3><div class="team-member-list">${(data.miembros || []).length ? data.miembros.map((member) => `<article class="team-member"><div><strong>${escapeHtml(member.usuario)}</strong><p>${escapeHtml(data.roles?.[member.rol]?.nombre || member.rol)} · ${member.activo ? 'Activo' : 'Desactivado'}</p></div><div class="team-member-actions"><select data-member-role="${member.idAdministrador}" aria-label="Rol de ${escapeHtml(member.usuario)}">${roles.map(([code, role]) => `<option value="${escapeHtml(code)}" ${member.rol === code ? 'selected' : ''}>${escapeHtml(role.nombre)}</option>`).join('')}</select><button type="button" class="secondary" data-member-save="${member.idAdministrador}">Guardar</button><button type="button" class="${member.activo ? 'danger' : 'secondary'}" data-member-toggle="${member.idAdministrador}" data-member-active="${member.activo ? '0' : '1'}">${member.activo ? 'Desactivar' : 'Activar'}</button></div></article>`).join('') : '<p class="empty-state">Aún no agregaste personas al equipo.</p>'}</div></div></section>`;
+  document.getElementById('teamMemberForm')?.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    const form = new FormData(event.currentTarget);
+    await api('/api/equipo', { method: 'POST', body: JSON.stringify(Object.fromEntries(form)) });
+    await showSuccess('Miembro agregado al equipo.');
+    await equipo();
+  });
+  view.querySelectorAll('[data-member-save]').forEach((button) => button.addEventListener('click', async () => {
+    const id = button.dataset.memberSave;
+    const rol = view.querySelector(`[data-member-role="${id}"]`).value;
+    await api(`/api/equipo/${id}`, { method: 'PATCH', body: JSON.stringify({ rol }) });
+    await showSuccess('Permisos actualizados.');
+    await equipo();
+  }));
+  view.querySelectorAll('[data-member-toggle]').forEach((button) => button.addEventListener('click', async () => {
+    await api(`/api/equipo/${button.dataset.memberToggle}`, { method: 'PATCH', body: JSON.stringify({ activo: button.dataset.memberActive === '1' }) });
+    await showSuccess('Estado del miembro actualizado.');
+    await equipo();
+  }));
+}
+
 function inventoryOperationsUi() {
   if (!inventoryAdjustmentUi) {
     inventoryAdjustmentUi = window.InventoryAdjustmentUI.create({
@@ -571,6 +608,12 @@ function hasLotOperationalAccess() {
 }
 
 function sectionAvailable(id) {
+  const role = state.context?.rol;
+  const cashierSections = new Set(['inicio', 'ventas', 'historialVentas', 'pagos', 'clientes', 'ayuda']);
+  const inventorySections = new Set(['inicio', 'productos', 'catalogoMaestro', 'movimientosStock', 'inventarioInteligente', 'inventarioOperativo', 'lotesVencimientos', 'proveedores', 'compras', 'ayuda']);
+  if (role === 'cajero' && !cashierSections.has(id)) return false;
+  if (role === 'inventario' && !inventorySections.has(id)) return false;
+  if (role === 'encargado' && ['configuracion', 'auditoria', 'equipo'].includes(id)) return false;
   const features = state.context?.caracteristicas || [];
   if (id === 'gastos') return features.includes('gastos');
   if (id === 'finanzas') return features.includes('reportes_financieros');
@@ -583,11 +626,21 @@ function sectionAvailable(id) {
   if (id === 'lotesVencimientos') return hasLotOperationalAccess();
   if (id === 'clientes') return features.includes('clientes_basico');
   if (id === 'pagos') return features.includes('fiados_basico') || features.includes('pagos_fiado');
+  if (id === 'equipo') return state.context?.rol === 'dueno_tienda' && features.includes('equipo_colaborativo');
   return true;
 }
 
 function openPlanAccessNotice(id) {
   const section = sectionById(id);
+  const role = state.context?.rol;
+  if (role && role !== 'dueno_tienda' && id !== 'ayuda') {
+    void modal({
+      title: 'Acceso restringido',
+      body: `<p><strong>${escapeHtml(section?.[1] || 'Esta sección')}</strong> no está asignada a tu rol.</p><p>Pide al propietario de la tienda que revise tus permisos si necesitás usarla.</p>`,
+      confirmText: 'Entendido', cancelText: null
+    });
+    return;
+  }
   const planName = state.context?.plan?.nombre || 'tu plan actual';
   void modal({
     title: 'Función disponible en otro plan',
@@ -818,6 +871,7 @@ function applyWorkspaceMode(id) {
   if (isDedicatedWorkspace) closeMobileNavigation();
   settingsStoreButton.hidden = id === 'configuracion';
   settingsAuditButton.hidden = id === 'auditoria' || !sectionAvailable('auditoria');
+  settingsTeamButton.hidden = id === 'equipo';
 }
 
 function renderMenu(activeView = 'inicio') {
@@ -1084,7 +1138,7 @@ async function loadView(id) {
   try {
     await refreshCatalogsForView(id, request);
     if (request !== viewRequest) return;
-    const handlers = { inicio, productos, catalogoMaestro, movimientosStock, inventarioInteligente, inventarioOperativo, lotesVencimientos, clientes, proveedores, ventas, compras, historialVentas, pagos, gastos, finanzas, compensaciones, configuracion, auditoria, cierreCaja, reportes, ayuda };
+    const handlers = { inicio, productos, catalogoMaestro, movimientosStock, inventarioInteligente, inventarioOperativo, lotesVencimientos, clientes, proveedores, ventas, compras, historialVentas, pagos, gastos, finanzas, compensaciones, configuracion, equipo, auditoria, cierreCaja, reportes, ayuda };
     if (!handlers[id]) return loadView('inicio');
     await handlers[id]();
     if (request !== viewRequest) return;

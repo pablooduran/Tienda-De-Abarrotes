@@ -34,9 +34,11 @@ const { permissionsPolicy, securityHeaders } = require('./middleware/security-he
 const {
   requireActiveSubscription,
   requireFullSubscriptionAccess,
+  requirePlanFeature,
   resolveSubscription
 } = require('./middleware/subscription');
 const { requireTenant } = require('./middleware/tenant');
+const { requireCommercialPermission } = require('./middleware/team-permissions');
 const { createSecurityLogger } = require('./utils/security-logger');
 const { administrativeAuditService } = require('./services/administrative-audit-service');
 const { createAdminHealthRouter } = require('./routes/admin-health');
@@ -257,6 +259,7 @@ app.use(
   rateLimiters.admin,
   requireAuth,
   requireTenant,
+  requireRole('dueno_tienda'),
   resolveSubscription,
   requireActiveSubscription,
   tenantAuditRoutes
@@ -265,6 +268,7 @@ app.use(
   '/api/suscripcion',
   requireAuth,
   requireTenant,
+  requireRole('dueno_tienda'),
   resolveSubscription,
   requireActiveSubscription,
   subscriptionRoutes
@@ -273,6 +277,7 @@ app.use(
   '/api/pagos-suscripcion',
   requireAuth,
   requireTenant,
+  requireRole('dueno_tienda'),
   resolveSubscription,
   createPaymentSubscriptionsRouter({ receiptsEnabled: appDeploymentConfig.privateStorage.enabled })
 );
@@ -281,15 +286,18 @@ app.use(
   rateLimiters.api,
   requireAuth,
   requireTenant,
+  requireRole('dueno_tienda'),
   resolveSubscription,
   requireFullSubscriptionAccess,
   onboardingRoutes
 );
-app.use('/api/catalogo-maestro', requireAuth, requireTenant, resolveSubscription, requireActiveSubscription, masterCatalogRoutes);
+app.use('/api/catalogo-maestro', requireAuth, requireTenant, requireRole('dueno_tienda', 'encargado', 'inventario'), resolveSubscription, requireActiveSubscription, masterCatalogRoutes);
+app.use('/api/equipo', requireAuth, requireTenant, resolveSubscription, requireActiveSubscription, requireRole('dueno_tienda'), requirePlanFeature('equipo_colaborativo'), require('./routes/team'));
 app.use(
   '/api/configuracion-tienda',
   requireAuth,
   requireTenant,
+  requireRole('dueno_tienda'),
   resolveSubscription,
   requireActiveSubscription,
   storeConfigurationRoutes
@@ -300,6 +308,7 @@ app.use(
   requireTenant,
   resolveSubscription,
   requireActiveSubscription,
+  requireCommercialPermission,
   financeRoutes,
   inventoryAdjustmentRoutes,
   inventoryIntelligenceRoutes,
@@ -313,17 +322,19 @@ app.use(
 );
 
 function requireOwnerPage(req, res, next) {
-  if (req.auth.rol === 'dueno_tienda') return next();
+  if (req.auth.rol !== 'superadmin') return next();
   return res.redirect('/admin.html');
 }
 
 app.get('/app.html', requireAuth, requireOwnerPage, requireTenant, resolveSubscription, (req, res) => {
-  const destination = ownerDestination(req.subscriptionContext, req.auth.estadoOnboarding);
+  const destination = req.auth.rol === 'dueno_tienda'
+    ? ownerDestination(req.subscriptionContext, req.auth.estadoOnboarding)
+    : '/app.html';
   if (destination !== '/app.html') return res.redirect(destination);
   return res.sendFile(path.join(__dirname, 'public', 'app.html'));
 });
 
-app.get('/onboarding.html', requireAuth, requireOwnerPage, requireTenant, resolveSubscription, (req, res) => {
+app.get('/onboarding.html', requireAuth, requireRole('dueno_tienda'), requireTenant, resolveSubscription, (req, res) => {
   const destination = ownerDestination(req.subscriptionContext, req.auth.estadoOnboarding);
   if (destination !== '/onboarding.html') return res.redirect(destination);
   return res.sendFile(path.join(__dirname, 'public', 'onboarding.html'));
@@ -333,8 +344,8 @@ function sendSubscriptionPage(req, res) {
   return res.sendFile(path.join(__dirname, 'public', 'subscription.html'));
 }
 
-app.get('/suscripcion.html', requireAuth, requireOwnerPage, requireTenant, resolveSubscription, sendSubscriptionPage);
-app.get('/subscription.html', requireAuth, requireOwnerPage, requireTenant, resolveSubscription, sendSubscriptionPage);
+app.get('/suscripcion.html', requireAuth, requireRole('dueno_tienda'), requireTenant, resolveSubscription, sendSubscriptionPage);
+app.get('/subscription.html', requireAuth, requireRole('dueno_tienda'), requireTenant, resolveSubscription, sendSubscriptionPage);
 
 app.get('/admin.html', requireAuth, (req, res) => {
   if (req.auth.rol !== 'superadmin') return res.redirect('/app.html');
@@ -349,7 +360,9 @@ app.get(
   (req, res, next) => (req.auth.rol === 'superadmin' ? res.redirect('/admin.html') : next()),
   requireTenant,
   resolveSubscription,
-  (req, res) => res.redirect(ownerDestination(req.subscriptionContext, req.auth.estadoOnboarding))
+  (req, res) => res.redirect(req.auth.rol === 'dueno_tienda'
+    ? ownerDestination(req.subscriptionContext, req.auth.estadoOnboarding)
+    : '/app.html')
 );
 
 app.use(notFoundHandler);
