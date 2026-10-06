@@ -39,7 +39,6 @@ function main() {
   }), /DB_NAME=/);
 
   const source = fs.readFileSync(path.join(__dirname, 'create-superadmin.js'), 'utf8');
-  assert(source.includes("expectedMigrations.length !== 25"));
   assert(source.includes("JSON.stringify(recordedMigrations) !== JSON.stringify(expectedMigrations)"));
   assert(source.includes("WHERE rol='superadmin'"));
   assert(source.includes('GET_LOCK'));

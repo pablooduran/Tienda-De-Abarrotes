@@ -49,9 +49,8 @@ async function main() {
         'SELECT nombre FROM schema_migrations ORDER BY nombre'
       );
       const recordedMigrations = migrationRows.map((row) => row.nombre);
-      if (expectedMigrations.length !== 25
-        || JSON.stringify(recordedMigrations) !== JSON.stringify(expectedMigrations)) {
-        throw new Error('Staging no contiene exactamente las migraciones 001-025 esperadas. No se creo ninguna cuenta.');
+      if (JSON.stringify(recordedMigrations) !== JSON.stringify(expectedMigrations)) {
+        throw new Error('Staging no contiene exactamente las migraciones esperadas por esta version. No se creo ninguna cuenta.');
       }
       await connection.beginTransaction();
       transactionStarted = true;
