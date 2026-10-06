@@ -1302,6 +1302,17 @@ const migrationRequirements = {
     columns: {
       suscripcionFuncionalidadSnapshot: ['idTienda', 'idSuscripcion', 'codigoFuncionalidad', 'nombreFuncionalidad']
     }
+  },
+  '030_equipo_colaborativo_pro.sql': {
+    columns: {
+      administrador: ['rol'],
+      funcionalidad: ['codigo', 'nombre', 'descripcion', 'activo'],
+      planFuncionalidad: ['idPlan', 'idFuncionalidad', 'habilitada'],
+      suscripcionFuncionalidadSnapshot: ['idTienda', 'idSuscripcion', 'codigoFuncionalidad', 'nombreFuncionalidad']
+    },
+    checks: [
+      ['administrador', 'chk_administrador_rol_tienda']
+    ]
   }
 };
 
@@ -1624,7 +1635,7 @@ async function commercialPlanCatalogSatisfied(connection) {
   return true;
 }
 
-async function activeSubscriptionSnapshotsSatisfied(connection) {
+async function activeSubscriptionSnapshotsSatisfied(connection, { allowAdditionalFeatures = false } = {}) {
   const expectedFeatures = new Map([
     ['basico', new Set(BASIC_FEATURES)],
     ['standard', new Set(STANDARD_FEATURES)],
@@ -1647,8 +1658,35 @@ async function activeSubscriptionSnapshotsSatisfied(connection) {
   }
   return [...snapshots.values()].every(({ plan, features }) => {
     const expected = expectedFeatures.get(plan);
-    return expected && features.size === expected.size && [...expected].every((feature) => features.has(feature));
+    return expected
+      && [...expected].every((feature) => features.has(feature))
+      && (allowAdditionalFeatures || features.size === expected.size);
   });
+}
+
+async function collaborativeTeamSatisfied(connection) {
+  const roleColumn = (await getColumnMap(connection, 'administrador', ['rol'])).rol;
+  const expectedRole = {
+    type: "enum('superadmin','dueno_tienda','encargado','cajero','inventario')",
+    nullable: false,
+    defaultValue: 'dueno_tienda',
+    extra: ''
+  };
+  if (!columnDefinitionMatches(roleColumn, expectedRole)
+    || !await normalizedHasConstraint(connection, 'administrador', 'chk_administrador_rol_tienda', 'CHECK')) return false;
+
+  const [features] = await connection.query(
+    `SELECT p.codigo AS planCodigo,pf.habilitada
+     FROM plan p
+     LEFT JOIN planFuncionalidad pf ON pf.idPlan=p.idPlan
+     LEFT JOIN funcionalidad f ON f.idFuncionalidad=pf.idFuncionalidad
+     WHERE p.codigo IN ('basico','standard','pro') AND f.codigo='equipo_colaborativo'`
+  );
+  if (features.length !== 3) return false;
+  const enabledByPlan = Object.fromEntries(features.map((row) => [row.planCodigo, Number(row.habilitada)]));
+  if (enabledByPlan.basico !== 0 || enabledByPlan.standard !== 0 || enabledByPlan.pro !== 1) return false;
+
+  return activeSubscriptionSnapshotsSatisfied(connection);
 }
 
 async function requirementsSatisfied(connection, file) {
@@ -1659,7 +1697,10 @@ async function requirementsSatisfied(connection, file) {
     return commercialPlanCatalogSatisfied(connection);
   }
   if (file === '029_sincronizar_snapshot_funciones_plan.sql') {
-    return activeSubscriptionSnapshotsSatisfied(connection);
+    return activeSubscriptionSnapshotsSatisfied(connection, { allowAdditionalFeatures: true });
+  }
+  if (file === '030_equipo_colaborativo_pro.sql') {
+    return collaborativeTeamSatisfied(connection);
   }
   if (file === '011_lotes_vencimientos.sql') {
     const estado011 = await inspect011State(connection, false, { log: false });
@@ -4079,7 +4120,8 @@ async function main() {
               '026_proveedor_sugerido_catalogo_maestro.sql',
               '027_reestructurar_planes_comerciales.sql',
               '028_reordenar_funciones_por_plan.sql',
-              '029_sincronizar_snapshot_funciones_plan.sql'
+              '029_sincronizar_snapshot_funciones_plan.sql',
+              '030_equipo_colaborativo_pro.sql'
             ].includes(file)
             && !await requirementsSatisfied(connection, file);
         if (registeredMigrationIsIncomplete) {
@@ -4119,7 +4161,8 @@ async function main() {
           '026_proveedor_sugerido_catalogo_maestro.sql',
           '027_reestructurar_planes_comerciales.sql',
           '028_reordenar_funciones_por_plan.sql',
-          '029_sincronizar_snapshot_funciones_plan.sql'
+          '029_sincronizar_snapshot_funciones_plan.sql',
+          '030_equipo_colaborativo_pro.sql'
         ].includes(file)) {
           await connection.query('INSERT IGNORE INTO schema_migrations (nombre) VALUES (?)', [file]);
           const [finalRecord] = await connection.query(
@@ -4205,7 +4248,19 @@ async function main() {
           '015_compensaciones_venta_inventario.sql',
           '016_compensaciones_financieras.sql',
           '017_integracion_compensaciones.sql',
-          '018_auditoria_administrativa_critica.sql'
+          '018_auditoria_administrativa_critica.sql',
+          '019_stock_vendible_ajustes.sql',
+          '020_registro_publico_onboarding.sql',
+          '021_configuracion_base_tienda.sql',
+          '022_ciclo_vida_suscripciones.sql',
+          '023_estructura_pagos_suscripcion.sql',
+          '024_corregir_idempotencia_y_snapshot_pagos.sql',
+          '025_google_oauth_identities.sql',
+          '026_proveedor_sugerido_catalogo_maestro.sql',
+          '027_reestructurar_planes_comerciales.sql',
+          '028_reordenar_funciones_por_plan.sql',
+          '029_sincronizar_snapshot_funciones_plan.sql',
+          '030_equipo_colaborativo_pro.sql'
         ].includes(file)
           ? structureElementFromStatement(statement)
           : null;
@@ -4286,7 +4341,8 @@ async function main() {
         '015_compensaciones_venta_inventario.sql',
         '016_compensaciones_financieras.sql',
         '017_integracion_compensaciones.sql',
-        '018_auditoria_administrativa_critica.sql'
+        '018_auditoria_administrativa_critica.sql',
+        '030_equipo_colaborativo_pro.sql'
       ].includes(file)) {
         await connection.query('INSERT IGNORE INTO schema_migrations (nombre) VALUES (?)', [file]);
         const [finalRecord] = await connection.query(

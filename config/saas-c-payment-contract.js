@@ -100,6 +100,7 @@ const PRO_FEATURES = Object.freeze([
   'compras_sugeridas',
   'control_lotes',
   'dias_cobertura',
+  'equipo_colaborativo',
   'exportacion_clientes_fiados',
   'exportacion_inventario',
   'exportacion_lotes',
