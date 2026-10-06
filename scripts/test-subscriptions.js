@@ -2,6 +2,7 @@ const crypto = require('crypto');
 const bcrypt = require('bcryptjs');
 const { createDatabaseConnection } = require('../config/database-connection');
 const { requireLocalhostDatabase } = require('../config/env');
+const { BASIC_FEATURES, PLAN_CATALOG, PRO_FEATURES } = require('../config/saas-c-payment-contract');
 const { addLocalDays, formatLocalDateTime, getLocalNow, parseLocalDateTime } = require('../utils/local-datetime');
 const { applyTestRequestSecurity } = require('./http-test-security');
 
@@ -110,38 +111,10 @@ function assertUniformLoginRejection(body, referenceBody, forbiddenValues = []) 
   }
 }
 
-const BASIC_REQUIRED_FEATURES = Object.freeze([
-  'gastos',
-  'reportes_financieros',
-  'dashboard_financiero',
-  'inventario_resumen',
-  'alertas_stock',
-  'ranking_productos',
-  'valor_inventario_basico',
-  'clientes_basico',
-  'fiados_basico',
-  'pagos_fiado',
-  'estado_cuenta_basico'
-]);
-
-const ADVANCED_ONLY_FEATURES = Object.freeze([
-  'reportes_avanzados',
-  'exportacion_reportes',
-  'compras_sugeridas',
-  'recordatorios_fiado',
-  'cierre_caja',
-  'rentabilidad_producto',
-  'rotacion_inventario',
-  'dias_cobertura',
-  'inventario_sin_movimiento',
-  'exportacion_inventario',
-  'limites_credito',
-  'seguimiento_cobranza',
-  'segmentacion_clientes',
-  'exportacion_clientes_fiados',
-  'vencimientos_lote',
-  'portal_clientes'
-]);
+const BASIC_REQUIRED_FEATURES = BASIC_FEATURES;
+const ADVANCED_ONLY_FEATURES = Object.freeze(
+  PRO_FEATURES.filter((feature) => !BASIC_FEATURES.includes(feature))
+);
 
 async function resolveSubscriptionTestPlans(connection, apiPlans) {
   const [rows] = await connection.query(
@@ -189,10 +162,10 @@ function basicContextComparison(context, expectedSlug, expectedPlanCode) {
     plan: context?.plan?.codigo === expectedPlanCode,
     estadoEfectivo: context?.suscripcion?.estadoEfectivo === 'activa',
     soloLectura: context?.soloLectura === false,
-    limitePropietarios: limits.propietarios === 1,
-    limiteProductos: limits.productos === 500,
-    limiteClientes: limits.clientes === 25,
-    limiteProveedores: limits.proveedores === 15,
+    limitePropietarios: limits.propietarios === PLAN_CATALOG.basico.limits.owners,
+    limiteProductos: limits.productos === PLAN_CATALOG.basico.limits.products,
+    limiteClientes: limits.clientes === PLAN_CATALOG.basico.limits.customers,
+    limiteProveedores: limits.proveedores === PLAN_CATALOG.basico.limits.suppliers,
     funcionesBasicasPresentes: BASIC_REQUIRED_FEATURES.every((code) => features.includes(code)),
     sinFuncionesExclusivasAvanzado: !features.some((code) => ADVANCED_ONLY_FEATURES.includes(code)),
     fechasValidas: validDates
@@ -205,7 +178,12 @@ function basicContextComparison(context, expectedSlug, expectedPlanCode) {
       planCodigo: expectedPlanCode,
       estadoEfectivo: 'activa',
       soloLectura: false,
-      limites: { propietarios: 1, productos: 500, clientes: 25, proveedores: 15 },
+      limites: {
+        propietarios: PLAN_CATALOG.basico.limits.owners,
+        productos: PLAN_CATALOG.basico.limits.products,
+        clientes: PLAN_CATALOG.basico.limits.customers,
+        proveedores: PLAN_CATALOG.basico.limits.suppliers
+      },
       funcionesRequeridasBasico: BASIC_REQUIRED_FEATURES,
       funcionesExclusivasAvanzado: [],
       fechasValidas: true

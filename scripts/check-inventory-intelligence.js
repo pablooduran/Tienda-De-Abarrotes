@@ -11,9 +11,7 @@ const {
 const MIGRATION = '010_inteligencia_inventario.sql';
 const BASIC_FEATURES = Object.freeze([
   'inventario_resumen',
-  'alertas_stock',
-  'ranking_productos',
-  'valor_inventario_basico'
+  'alertas_stock'
 ]);
 const ADVANCED_FEATURES = Object.freeze([
   ...BASIC_FEATURES,
@@ -24,6 +22,8 @@ const ADVANCED_FEATURES = Object.freeze([
   'exportacion_inventario'
 ]);
 const BASIC_FORBIDDEN_FEATURES = Object.freeze([
+  'ranking_productos',
+  'valor_inventario_basico',
   'compras_sugeridas',
   'rotacion_inventario',
   'dias_cobertura',

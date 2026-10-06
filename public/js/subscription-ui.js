@@ -29,11 +29,24 @@
   });
 
   const FEATURE_LABELS = Object.freeze({
-    ventas: 'Ventas', inventario: 'Inventario', productos: 'Productos', clientes: 'Clientes',
-    proveedores: 'Proveedores', compras: 'Compras', punto_venta: 'Punto de venta',
-    reportes_financieros: 'Reportes financieros', exportaciones: 'Exportaciones',
-    rentabilidad_producto: 'Rentabilidad por producto', rotacion_inventario: 'Rotacion de inventario',
-    recordatorios_fiado: 'Mensajes preparados de cobranza'
+    ajuste_stock: 'Ajustes protegidos de stock', alertas_stock: 'Alertas de stock',
+    alertas_vencimiento: 'Alertas de vencimiento', anulaciones_operativas: 'Anulaciones y devoluciones protegidas',
+    catalogo_maestro: 'Catálogo guiado de productos', cierre_caja: 'Cierre de caja',
+    clientes_basico: 'Clientes', compras_sugeridas: 'Compras sugeridas', control_lotes: 'Control de lotes',
+    dashboard_financiero: 'Resumen financiero', dias_cobertura: 'Días de cobertura',
+    estado_cuenta_basico: 'Estado de cuenta de clientes', exportacion_clientes_fiados: 'Exportación de clientes y fiados',
+    exportacion_inventario: 'Exportación de inventario', exportacion_lotes: 'Exportación de lotes',
+    exportacion_reportes: 'Exportación de reportes', fiados_basico: 'Ventas a crédito y fiados',
+    gastos: 'Registro de gastos', historial_stock: 'Historial de stock',
+    inventario_resumen: 'Resumen de inventario', inventario_sin_movimiento: 'Productos sin movimiento',
+    limites_credito: 'Límites y plazos de crédito', pagos_fiado: 'Cobranza de fiados',
+    pagos_multiples: 'Pagos en efectivo, QR o combinados', punto_venta: 'Punto de venta',
+    ranking_productos: 'Ranking de productos', recibos_whatsapp: 'Comprobantes para compartir por WhatsApp',
+    recordatorios_fiado: 'Mensajes preparados de cobranza', rentabilidad_producto: 'Rentabilidad por producto',
+    reportes_financieros: 'Reportes financieros', rotacion_inventario: 'Rotación de inventario',
+    segmentacion_clientes: 'Segmentación de clientes', seguimiento_cobranza: 'Seguimiento de cobranza',
+    trazabilidad_lotes: 'Trazabilidad de lotes', valor_inventario_basico: 'Valoración de inventario',
+    vencimientos_lote: 'Vencimientos por lote'
   });
 
   function statusLabel(value) { return STATUS_LABELS[value] || label(value); }
@@ -109,7 +122,7 @@
           ? `Incluye lo de ${previousPlan.nombre} y agrega:`
           : 'Incluye lo esencial para comenzar:';
         const featureItems = additionalFeatures.length
-          ? additionalFeatures.slice(0, 6).map((feature) => `<li>${escapeHtml(featureLabel(feature))}</li>`).join('')
+          ? additionalFeatures.map((feature) => `<li>${escapeHtml(featureLabel(feature))}</li>`).join('')
           : '<li>Consulta el detalle de funciones disponibles.</li>';
         const limits = Object.entries(plan.limites || {}).slice(0, 4).map(([key, value]) => `<span><strong>${escapeHtml(value === null ? 'Ilimitado' : value)}</strong> ${escapeHtml(label(key))}</span>`).join('');
         const message = plan.tipoCambio === 'upgrade'

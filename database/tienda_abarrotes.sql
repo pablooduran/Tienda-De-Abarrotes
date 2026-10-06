@@ -380,7 +380,7 @@ CREATE TABLE IF NOT EXISTS solicitudRegistroPublico (
 
 INSERT INTO plan
   (codigo, nombre, descripcion, activo, precioMensual, duracionDias, limitePropietarios, limiteProductos, limiteClientes, limiteProveedores)
-SELECT 'basico', 'Basico', 'Funciones comerciales para una tienda pequena.', 1, 0, 30, 1, 500, 500, 100
+SELECT 'basico', 'Basic', 'Operacion esencial para una tienda pequena.', 1, 3.00, 30, 1, 300, 15, 15
 WHERE NOT EXISTS (SELECT 1 FROM plan WHERE codigo='basico');
 
 INSERT INTO plan
@@ -2649,11 +2649,11 @@ ALTER TABLE operacionSuscripcionTienda
 
 UPDATE plan
 SET nombre='Basic',
-    descripcion='Nucleo comercial para una tienda familiar.',
+    descripcion='Operacion esencial para una tienda pequena.',
     precioMensual=3.00,
     limitePropietarios=1,
-    limiteProductos=500,
-    limiteClientes=25,
+    limiteProductos=300,
+    limiteClientes=15,
     limiteProveedores=15,
     visiblePublicamente=1,
     esLegado=0,
@@ -2670,15 +2670,15 @@ INSERT INTO plan
   (codigo,nombre,descripcion,activo,visiblePublicamente,esLegado,ordenComercial,
    precioMensual,duracionDias,limitePropietarios,limiteProductos,limiteClientes,
    limiteProveedores)
-SELECT 'standard','Standard','Mayor capacidad y herramientas operativas reales.',
-       1,1,0,20,6.00,30,3,1200,70,50
+SELECT 'standard','Standard','Control y analisis para una tienda en crecimiento.',
+       1,1,0,20,6.00,30,3,1000,30,30
 WHERE NOT EXISTS (SELECT 1 FROM plan WHERE codigo='standard');
 
 INSERT INTO plan
   (codigo,nombre,descripcion,activo,visiblePublicamente,esLegado,ordenComercial,
    precioMensual,duracionDias,limitePropietarios,limiteProductos,limiteClientes,
    limiteProveedores)
-SELECT 'pro','Pro','Capacidad ilimitada y todas las funciones operativas disponibles.',
+SELECT 'pro','Pro','Gestion avanzada, exportaciones y lotes sin limites.',
        1,1,0,30,10.00,30,NULL,NULL,NULL,NULL
 WHERE NOT EXISTS (SELECT 1 FROM plan WHERE codigo='pro');
 
@@ -2688,8 +2688,7 @@ SELECT p.idPlan,f.idFuncionalidad,
          'ajuste_stock','alertas_stock','anulaciones_operativas','catalogo_maestro',
          'clientes_basico','dashboard_financiero','estado_cuenta_basico',
          'fiados_basico','gastos','historial_stock','inventario_resumen',
-         'pagos_fiado','pagos_multiples','punto_venta','ranking_productos',
-         'recibos_whatsapp','reportes_financieros','valor_inventario_basico'
+         'pagos_fiado','pagos_multiples','punto_venta','recibos_whatsapp'
        ) THEN 1 ELSE 0 END
 FROM plan p
 JOIN funcionalidad f ON f.activo=1
@@ -2702,13 +2701,11 @@ SELECT p.idPlan,f.idFuncionalidad,
          'ajuste_stock','alertas_stock','anulaciones_operativas','catalogo_maestro',
          'clientes_basico','dashboard_financiero','estado_cuenta_basico',
          'fiados_basico','gastos','historial_stock','inventario_resumen',
-         'pagos_fiado','pagos_multiples','punto_venta','ranking_productos',
-         'recibos_whatsapp','reportes_financieros','valor_inventario_basico',
+         'pagos_fiado','pagos_multiples','punto_venta','recibos_whatsapp',
          'cierre_caja','compras_sugeridas','dias_cobertura',
-         'exportacion_clientes_fiados','exportacion_inventario',
-         'exportacion_reportes','inventario_sin_movimiento','limites_credito',
-         'recordatorios_fiado','rentabilidad_producto','rotacion_inventario',
-         'segmentacion_clientes','seguimiento_cobranza'
+         'inventario_sin_movimiento','limites_credito','ranking_productos',
+         'recordatorios_fiado','reportes_financieros','rotacion_inventario',
+         'segmentacion_clientes','seguimiento_cobranza','valor_inventario_basico'
        ) THEN 1 ELSE 0 END
 FROM plan p
 JOIN funcionalidad f ON f.activo=1
@@ -2717,8 +2714,19 @@ ON DUPLICATE KEY UPDATE habilitada=VALUES(habilitada);
 
 INSERT INTO planFuncionalidad (idPlan,idFuncionalidad,habilitada)
 SELECT p.idPlan,f.idFuncionalidad,
-       CASE WHEN f.codigo NOT IN ('portal_clientes','reportes_avanzados')
-         THEN 1 ELSE 0 END
+       CASE WHEN f.codigo IN (
+         'ajuste_stock','alertas_stock','anulaciones_operativas','catalogo_maestro',
+         'clientes_basico','dashboard_financiero','estado_cuenta_basico',
+         'fiados_basico','gastos','historial_stock','inventario_resumen',
+         'pagos_fiado','pagos_multiples','punto_venta','recibos_whatsapp',
+         'cierre_caja','compras_sugeridas','dias_cobertura',
+         'inventario_sin_movimiento','limites_credito','ranking_productos',
+         'recordatorios_fiado','reportes_financieros','rotacion_inventario',
+         'segmentacion_clientes','seguimiento_cobranza','valor_inventario_basico',
+         'alertas_vencimiento','control_lotes','exportacion_clientes_fiados',
+         'exportacion_inventario','exportacion_lotes','exportacion_reportes',
+         'rentabilidad_producto','trazabilidad_lotes','vencimientos_lote'
+       ) THEN 1 ELSE 0 END
 FROM plan p
 JOIN funcionalidad f ON f.activo=1
 WHERE p.codigo='pro'

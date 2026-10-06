@@ -71,7 +71,7 @@ function createServer() {
       });
       return;
     }
-    if (url.pathname === '/' || url.pathname === '/suscripcion.html') {
+    if (url.pathname === '/' || url.pathname === '/suscripcion.html' || url.pathname === '/subscription.html') {
       response.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
       return response.end(fs.readFileSync(path.join(PUBLIC, 'subscription.html')));
     }
@@ -82,11 +82,21 @@ function createServer() {
       { referencia: 'standard', nombre: 'Standard', operacionesDisponibles: ['upgrade'], periodos: [{ periodo: 'mensual', monto: '6.00' }, { periodo: 'trimestral', monto: '16.50' }] },
       { referencia: 'pro', nombre: 'Pro', operacionesDisponibles: ['upgrade'], periodos: [{ periodo: 'mensual', monto: '10.00' }] }
     ] });
-    if (url.pathname === '/api/pagos-suscripcion/metodos') return json(response, 200, { disponibles: true, metodos: [{ referencia: 'qr_manual', nombre: 'QR manual' }] });
+    if (url.pathname === '/api/pagos-suscripcion/metodos') return json(response, 200, { disponibles: true, metodos: [{ codigo: 'qr_manual', referencia: 'qr_manual', nombre: 'QR manual' }] });
     if (url.pathname === '/api/pagos-suscripcion/solicitudes') return json(response, 200, { resultados: [], paginacion: { paginas: 1 } });
     if (url.pathname.startsWith('/js/') || url.pathname.startsWith('/css/')) {
       const file = path.join(PUBLIC, url.pathname.slice(1));
       response.writeHead(200, { 'Content-Type': url.pathname.endsWith('.css') ? 'text/css' : 'text/javascript' });
+      return fs.createReadStream(file).pipe(response);
+    }
+    if (url.pathname === '/sw.js') {
+      response.writeHead(200, { 'Content-Type': 'text/javascript' });
+      return response.end("self.addEventListener('install', () => self.skipWaiting());");
+    }
+    if (url.pathname.startsWith('/assets/') || url.pathname === '/manifest.webmanifest') {
+      const file = path.join(PUBLIC, url.pathname.slice(1));
+      const contentType = url.pathname.endsWith('.webmanifest') ? 'application/manifest+json' : 'application/octet-stream';
+      response.writeHead(200, { 'Content-Type': contentType });
       return fs.createReadStream(file).pipe(response);
     }
     if (url.pathname === '/favicon.ico') { response.writeHead(204); return response.end(); }
@@ -136,7 +146,16 @@ async function main() {
     }
     const page = await browser.newPage({ viewport: { width: 1366, height: 768 } });
     await page.goto(`${baseUrl}/suscripcion.html`);
-    await page.locator('[data-plan-code="standard"] [data-plan-action="payment"]').click();
+    await Promise.all([
+      page.waitForURL(/checkout=standard/),
+      page.locator('[data-plan-code="standard"] [data-plan-action="payment"]').click()
+    ]);
+    try {
+      await page.locator('[data-select-payment-period="mensual"]').click({ timeout: 5000 });
+    } catch (error) {
+      throw new Error(`${error.message}\nURL: ${page.url()}\nVista: ${await page.locator('body').innerText().catch(() => 'contenido ausente')}`);
+    }
+    await page.locator('[data-select-payment-method="qr_manual"]').click();
     await page.locator('[data-payment-form]:visible').waitFor();
     assert.strictEqual(await page.locator('[data-payment-form]').isVisible(), true);
     assert.strictEqual(await page.locator('[data-payment-form] [name="plan"]').inputValue(), 'standard');

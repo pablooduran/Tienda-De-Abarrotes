@@ -45,6 +45,12 @@ const {
   SALE_COMPENSATION_TYPES,
   SALE_OPERATION_STATES
 } = require('../config/compensation-contract');
+const {
+  BASIC_FEATURES,
+  PLAN_CATALOG,
+  PRO_FEATURES,
+  STANDARD_FEATURES
+} = require('../config/saas-c-payment-contract');
 
 const MIGRATION_LOCAL_DATETIME_TOKEN = '__MIGRATION_LOCAL_DATETIME__';
 
@@ -1276,6 +1282,16 @@ const migrationRequirements = {
     columns: {
       productoMaestro: ['proveedorSugerido']
     }
+  },
+  '027_reestructurar_planes_comerciales.sql': {
+    columns: {
+      plan: [
+        'codigo', 'precioMensual', 'limitePropietarios', 'limiteProductos',
+        'limiteClientes', 'limiteProveedores', 'visiblePublicamente', 'esLegado',
+        'ordenComercial'
+      ],
+      planFuncionalidad: ['idPlan', 'idFuncionalidad', 'habilitada']
+    }
   }
 };
 
@@ -1551,7 +1567,57 @@ async function normalizedHasForeignKeyConstraint(connection, relation) {
     && normalizedIdentifier(rules[0].DELETE_RULE) === normalizedIdentifier(deleteRule);
 }
 
+async function commercialPlanCatalogSatisfied(connection) {
+  const expectedFeatures = new Map([
+    ['basico', new Set(BASIC_FEATURES)],
+    ['standard', new Set(STANDARD_FEATURES)],
+    ['pro', new Set(PRO_FEATURES)]
+  ]);
+  const [plans] = await connection.query(
+    `SELECT codigo,nombre,precioMensual,limitePropietarios,limiteProductos,
+            limiteClientes,limiteProveedores,visiblePublicamente,esLegado,ordenComercial
+     FROM plan WHERE codigo IN ('basico','standard','pro')`
+  );
+  if (plans.length !== 3) return false;
+  for (const row of plans) {
+    const expected = PLAN_CATALOG[row.codigo];
+    if (!expected
+      || row.nombre !== expected.name
+      || Number(row.precioMensual) !== Number(expected.pricesUsd.mensual)
+      || Number(row.visiblePublicamente) !== 1
+      || Number(row.esLegado) !== 0
+      || Number(row.ordenComercial) !== Number(expected.order)) return false;
+    const limits = [
+      ['limitePropietarios', expected.limits.owners],
+      ['limiteProductos', expected.limits.products],
+      ['limiteClientes', expected.limits.customers],
+      ['limiteProveedores', expected.limits.suppliers]
+    ];
+    if (limits.some(([column, value]) => (
+      value === null ? row[column] !== null : Number(row[column]) !== Number(value)
+    ))) return false;
+  }
+  const [features] = await connection.query(
+    `SELECT p.codigo planCodigo,f.codigo funcionalidadCodigo
+     FROM plan p
+     JOIN planFuncionalidad pf ON pf.idPlan=p.idPlan AND pf.habilitada=1
+     JOIN funcionalidad f ON f.idFuncionalidad=pf.idFuncionalidad AND f.activo=1
+     WHERE p.codigo IN ('basico','standard','pro')`
+  );
+  for (const code of expectedFeatures.keys()) {
+    const actual = new Set(features
+      .filter((row) => row.planCodigo === code)
+      .map((row) => row.funcionalidadCodigo));
+    const expected = expectedFeatures.get(code);
+    if (actual.size !== expected.size || [...expected].some((feature) => !actual.has(feature))) return false;
+  }
+  return true;
+}
+
 async function requirementsSatisfied(connection, file) {
+  if (file === '027_reestructurar_planes_comerciales.sql') {
+    return commercialPlanCatalogSatisfied(connection);
+  }
   if (file === '011_lotes_vencimientos.sql') {
     const estado011 = await inspect011State(connection, false, { log: false });
     return estado011.estructuraCompleta && estado011.datosValidos;
@@ -3967,7 +4033,8 @@ async function main() {
               '023_estructura_pagos_suscripcion.sql',
               '024_corregir_idempotencia_y_snapshot_pagos.sql',
               '025_google_oauth_identities.sql',
-              '026_proveedor_sugerido_catalogo_maestro.sql'
+              '026_proveedor_sugerido_catalogo_maestro.sql',
+              '027_reestructurar_planes_comerciales.sql'
             ].includes(file)
             && !await requirementsSatisfied(connection, file);
         if (registeredMigrationIsIncomplete) {
@@ -4004,7 +4071,8 @@ async function main() {
           '023_estructura_pagos_suscripcion.sql',
           '024_corregir_idempotencia_y_snapshot_pagos.sql',
           '025_google_oauth_identities.sql',
-          '026_proveedor_sugerido_catalogo_maestro.sql'
+          '026_proveedor_sugerido_catalogo_maestro.sql',
+          '027_reestructurar_planes_comerciales.sql'
         ].includes(file)) {
           await connection.query('INSERT IGNORE INTO schema_migrations (nombre) VALUES (?)', [file]);
           const [finalRecord] = await connection.query(

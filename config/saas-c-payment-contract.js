@@ -49,13 +49,13 @@ const PLAN_CATALOG = Object.freeze({
   basico: Object.freeze({
     name: 'Basic',
     order: 10,
-    limits: Object.freeze({ owners: 1, products: 500, customers: 25, suppliers: 15 }),
+    limits: Object.freeze({ owners: 1, products: 300, customers: 15, suppliers: 15 }),
     pricesUsd: Object.freeze({ mensual: 3, trimestral: 8.25, anual: 30 })
   }),
   standard: Object.freeze({
     name: 'Standard',
     order: 20,
-    limits: Object.freeze({ owners: 3, products: 1200, customers: 70, suppliers: 50 }),
+    limits: Object.freeze({ owners: 3, products: 1000, customers: 30, suppliers: 30 }),
     pricesUsd: Object.freeze({ mensual: 6, trimestral: 16.5, anual: 60 })
   }),
   pro: Object.freeze({
@@ -81,32 +81,32 @@ const BASIC_FEATURES = Object.freeze([
   'pagos_fiado',
   'pagos_multiples',
   'punto_venta',
-  'ranking_productos',
   'recibos_whatsapp',
-  'reportes_financieros',
-  'valor_inventario_basico'
 ]);
 const STANDARD_FEATURES = Object.freeze([
   ...BASIC_FEATURES,
   'cierre_caja',
   'compras_sugeridas',
   'dias_cobertura',
-  'exportacion_clientes_fiados',
-  'exportacion_inventario',
-  'exportacion_reportes',
   'inventario_sin_movimiento',
   'limites_credito',
+  'ranking_productos',
   'recordatorios_fiado',
-  'rentabilidad_producto',
+  'reportes_financieros',
   'rotacion_inventario',
   'segmentacion_clientes',
-  'seguimiento_cobranza'
+  'seguimiento_cobranza',
+  'valor_inventario_basico'
 ]);
 const PRO_FEATURES = Object.freeze([
   ...STANDARD_FEATURES,
   'alertas_vencimiento',
   'control_lotes',
+  'exportacion_clientes_fiados',
+  'exportacion_inventario',
   'exportacion_lotes',
+  'exportacion_reportes',
+  'rentabilidad_producto',
   'trazabilidad_lotes',
   'vencimientos_lote'
 ]);
