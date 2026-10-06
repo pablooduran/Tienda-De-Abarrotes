@@ -4325,6 +4325,9 @@ async function main() {
     }
   } catch (error) {
     if (remoteRequested) {
+      // Conserva el motivo tecnico en el log privado de Render para poder
+      // diagnosticar una migracion fallida, sin exponer la configuracion.
+      console.error(`Detalle de migracion: ${error.code || 'ERROR'} ${error.message}`);
       console.log(remoteOperationStatus('MIGRATE', {
         passed: false,
         ...classifyRemoteFailure(error, phase)
