@@ -2685,10 +2685,9 @@ WHERE NOT EXISTS (SELECT 1 FROM plan WHERE codigo='pro');
 INSERT INTO planFuncionalidad (idPlan,idFuncionalidad,habilitada)
 SELECT p.idPlan,f.idFuncionalidad,
        CASE WHEN f.codigo IN (
-         'ajuste_stock','alertas_stock','anulaciones_operativas','catalogo_maestro',
-         'clientes_basico','dashboard_financiero','estado_cuenta_basico',
-         'fiados_basico','gastos','historial_stock','inventario_resumen',
-         'pagos_fiado','pagos_multiples','punto_venta','recibos_whatsapp'
+         'catalogo_maestro','clientes_basico','dashboard_financiero',
+         'estado_cuenta_basico','fiados_basico','historial_stock',
+         'pagos_fiado','pagos_multiples','punto_venta'
        ) THEN 1 ELSE 0 END
 FROM plan p
 JOIN funcionalidad f ON f.activo=1
@@ -2698,13 +2697,12 @@ ON DUPLICATE KEY UPDATE habilitada=VALUES(habilitada);
 INSERT INTO planFuncionalidad (idPlan,idFuncionalidad,habilitada)
 SELECT p.idPlan,f.idFuncionalidad,
        CASE WHEN f.codigo IN (
-         'ajuste_stock','alertas_stock','anulaciones_operativas','catalogo_maestro',
-         'clientes_basico','dashboard_financiero','estado_cuenta_basico',
-         'fiados_basico','gastos','historial_stock','inventario_resumen',
-         'pagos_fiado','pagos_multiples','punto_venta','recibos_whatsapp',
-         'cierre_caja','compras_sugeridas','dias_cobertura',
-         'inventario_sin_movimiento','limites_credito','ranking_productos',
-         'recordatorios_fiado','reportes_financieros','rotacion_inventario',
+         'catalogo_maestro','clientes_basico','dashboard_financiero',
+         'estado_cuenta_basico','fiados_basico','historial_stock',
+         'pagos_fiado','pagos_multiples','punto_venta',
+         'ajuste_stock','alertas_stock','anulaciones_operativas','gastos',
+         'inventario_resumen','limites_credito','ranking_productos',
+         'recibos_whatsapp','recordatorios_fiado','reportes_financieros',
          'segmentacion_clientes','seguimiento_cobranza','valor_inventario_basico'
        ) THEN 1 ELSE 0 END
 FROM plan p
@@ -2715,17 +2713,18 @@ ON DUPLICATE KEY UPDATE habilitada=VALUES(habilitada);
 INSERT INTO planFuncionalidad (idPlan,idFuncionalidad,habilitada)
 SELECT p.idPlan,f.idFuncionalidad,
        CASE WHEN f.codigo IN (
-         'ajuste_stock','alertas_stock','anulaciones_operativas','catalogo_maestro',
-         'clientes_basico','dashboard_financiero','estado_cuenta_basico',
-         'fiados_basico','gastos','historial_stock','inventario_resumen',
-         'pagos_fiado','pagos_multiples','punto_venta','recibos_whatsapp',
-         'cierre_caja','compras_sugeridas','dias_cobertura',
-         'inventario_sin_movimiento','limites_credito','ranking_productos',
-         'recordatorios_fiado','reportes_financieros','rotacion_inventario',
+         'catalogo_maestro','clientes_basico','dashboard_financiero',
+         'estado_cuenta_basico','fiados_basico','historial_stock',
+         'pagos_fiado','pagos_multiples','punto_venta',
+         'ajuste_stock','alertas_stock','anulaciones_operativas','gastos',
+         'inventario_resumen','limites_credito','ranking_productos',
+         'recibos_whatsapp','recordatorios_fiado','reportes_financieros',
          'segmentacion_clientes','seguimiento_cobranza','valor_inventario_basico',
-         'alertas_vencimiento','control_lotes','exportacion_clientes_fiados',
-         'exportacion_inventario','exportacion_lotes','exportacion_reportes',
-         'rentabilidad_producto','trazabilidad_lotes','vencimientos_lote'
+         'alertas_vencimiento','cierre_caja','compras_sugeridas','control_lotes',
+         'dias_cobertura','exportacion_clientes_fiados','exportacion_inventario',
+         'exportacion_lotes','exportacion_reportes','inventario_sin_movimiento',
+         'rentabilidad_producto','rotacion_inventario','trazabilidad_lotes',
+         'vencimientos_lote'
        ) THEN 1 ELSE 0 END
 FROM plan p
 JOIN funcionalidad f ON f.activo=1

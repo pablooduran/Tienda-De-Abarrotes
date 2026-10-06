@@ -1292,6 +1292,11 @@ const migrationRequirements = {
       ],
       planFuncionalidad: ['idPlan', 'idFuncionalidad', 'habilitada']
     }
+  },
+  '028_reordenar_funciones_por_plan.sql': {
+    columns: {
+      planFuncionalidad: ['idPlan', 'idFuncionalidad', 'habilitada']
+    }
   }
 };
 
@@ -1616,6 +1621,9 @@ async function commercialPlanCatalogSatisfied(connection) {
 
 async function requirementsSatisfied(connection, file) {
   if (file === '027_reestructurar_planes_comerciales.sql') {
+    return true;
+  }
+  if (file === '028_reordenar_funciones_por_plan.sql') {
     return commercialPlanCatalogSatisfied(connection);
   }
   if (file === '011_lotes_vencimientos.sql') {
@@ -4034,7 +4042,8 @@ async function main() {
               '024_corregir_idempotencia_y_snapshot_pagos.sql',
               '025_google_oauth_identities.sql',
               '026_proveedor_sugerido_catalogo_maestro.sql',
-              '027_reestructurar_planes_comerciales.sql'
+              '027_reestructurar_planes_comerciales.sql',
+              '028_reordenar_funciones_por_plan.sql'
             ].includes(file)
             && !await requirementsSatisfied(connection, file);
         if (registeredMigrationIsIncomplete) {
@@ -4072,7 +4081,8 @@ async function main() {
           '024_corregir_idempotencia_y_snapshot_pagos.sql',
           '025_google_oauth_identities.sql',
           '026_proveedor_sugerido_catalogo_maestro.sql',
-          '027_reestructurar_planes_comerciales.sql'
+          '027_reestructurar_planes_comerciales.sql',
+          '028_reordenar_funciones_por_plan.sql'
         ].includes(file)) {
           await connection.query('INSERT IGNORE INTO schema_migrations (nombre) VALUES (?)', [file]);
           const [finalRecord] = await connection.query(

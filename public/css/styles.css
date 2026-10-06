@@ -2594,6 +2594,8 @@ body:has([data-compensation-filter-form]) { overflow: hidden; }
   gap: 12px;
   align-items: end;
 }
+.inventory-tabs button.locked { color: var(--muted); border-style: dashed; opacity: .86; }
+.inventory-tabs button.locked:hover { color: var(--ink); background: var(--surface-2); border-color: var(--brand); }
 .collection-filters { grid-template-columns: minmax(0, 1fr) auto; }
 .credit-filter-actions { display: flex; gap: 8px; }
 .credit-filter-actions button { min-width: 78px; white-space: nowrap; }
@@ -2866,6 +2868,8 @@ button.is-busy { cursor: wait; opacity: .72; }
   border: 1px solid var(--line);
 }
 .inventory-workspace-nav button.active { color: #fff; background: var(--brand); border-color: var(--brand); }
+.inventory-workspace-nav button.locked, .sales-workspace-nav button.locked { color: var(--muted); border-style: dashed; }
+.inventory-workspace-nav button.locked:hover, .sales-workspace-nav button.locked:hover { color: var(--ink); border-color: var(--brand); }
 .sales-workspace-nav {
   display: flex;
   gap: 8px;

@@ -21,29 +21,27 @@ plan gratuito: su precio comercial es USD 3 al mes.
 ### Basic — operar
 
 - Punto de venta, efectivo, QR y pagos combinados.
-- Catalogo guiado, compras, stock, historial y ajustes protegidos.
-- Resumen y alertas de inventario.
+- Catalogo guiado, compras, stock e historial de movimientos.
 - Clientes, fiados, cobros y estados de cuenta.
-- Gastos y resumen financiero del inicio.
-- Comprobantes para compartir por WhatsApp.
-- Anulaciones y devoluciones protegidas.
+- Resumen operativo del inicio.
 
 ### Standard — controlar y decidir
 
 Incluye Basic y agrega:
 
-- Reportes financieros y cierre de caja.
-- Ranking, valoracion, rotacion y cobertura del inventario.
-- Productos sin movimiento y compras sugeridas.
+- Gastos, comprobantes de venta y mensajes de cobranza por WhatsApp.
+- Devoluciones, anulaciones y conciliacion protegida de inventario.
+- Reportes de ganancias, historial de pagos, productos mas vendidos y bajo stock.
+- Resumen, alertas, ranking y valoracion del inventario.
 - Limites de credito, segmentacion y seguimiento de cobranza.
-- Plantillas y mensajes preparados para cobrar fiados.
 
 ### Pro — escalar y auditar
 
 Incluye Standard y agrega:
 
 - Capacidad ilimitada.
-- Rentabilidad detallada por producto.
+- Cierre de caja y rentabilidad detallada por producto.
+- Compras sugeridas, rotacion, cobertura y productos sin movimiento.
 - Exportaciones de reportes, inventario, clientes y fiados.
 - Control, trazabilidad, alertas y exportacion de lotes y vencimientos.
 
@@ -55,7 +53,7 @@ bloqueada por defecto hasta asignarla explicitamente a uno o mas planes.
 
 ## Aplicacion de cambios
 
-La migracion 027 actualiza el catalogo para nuevas altas y nuevos periodos. No
+Las migraciones 027 y 028 actualizan el catalogo para nuevas altas y nuevos periodos. No
 reescribe snapshots de suscripciones vigentes ni elimina datos cuando una
 tienda supera un limite; conserva lectura y bloquea nuevas altas segun el
 contrato de suscripcion.

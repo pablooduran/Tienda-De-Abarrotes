@@ -67,33 +67,28 @@ const PLAN_CATALOG = Object.freeze({
 });
 
 const BASIC_FEATURES = Object.freeze([
-  'ajuste_stock',
-  'alertas_stock',
-  'anulaciones_operativas',
   'catalogo_maestro',
   'clientes_basico',
   'dashboard_financiero',
   'estado_cuenta_basico',
   'fiados_basico',
-  'gastos',
   'historial_stock',
-  'inventario_resumen',
   'pagos_fiado',
   'pagos_multiples',
-  'punto_venta',
-  'recibos_whatsapp',
+  'punto_venta'
 ]);
 const STANDARD_FEATURES = Object.freeze([
   ...BASIC_FEATURES,
-  'cierre_caja',
-  'compras_sugeridas',
-  'dias_cobertura',
-  'inventario_sin_movimiento',
+  'ajuste_stock',
+  'alertas_stock',
+  'anulaciones_operativas',
+  'gastos',
+  'inventario_resumen',
   'limites_credito',
   'ranking_productos',
+  'recibos_whatsapp',
   'recordatorios_fiado',
   'reportes_financieros',
-  'rotacion_inventario',
   'segmentacion_clientes',
   'seguimiento_cobranza',
   'valor_inventario_basico'
@@ -101,12 +96,17 @@ const STANDARD_FEATURES = Object.freeze([
 const PRO_FEATURES = Object.freeze([
   ...STANDARD_FEATURES,
   'alertas_vencimiento',
+  'cierre_caja',
+  'compras_sugeridas',
   'control_lotes',
+  'dias_cobertura',
   'exportacion_clientes_fiados',
   'exportacion_inventario',
   'exportacion_lotes',
   'exportacion_reportes',
+  'inventario_sin_movimiento',
   'rentabilidad_producto',
+  'rotacion_inventario',
   'trazabilidad_lotes',
   'vencimientos_lote'
 ]);

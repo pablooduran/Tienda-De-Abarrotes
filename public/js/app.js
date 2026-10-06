@@ -600,6 +600,27 @@ function openPlanAccessNotice(id) {
   });
 }
 
+function requiredPlanForFeature(feature) {
+  return [
+    'alertas_vencimiento', 'cierre_caja', 'compras_sugeridas', 'control_lotes',
+    'dias_cobertura', 'exportacion_clientes_fiados', 'exportacion_inventario',
+    'exportacion_lotes', 'exportacion_reportes', 'inventario_sin_movimiento',
+    'rentabilidad_producto', 'rotacion_inventario', 'trazabilidad_lotes', 'vencimientos_lote'
+  ].includes(feature) ? 'Pro' : 'Standard';
+}
+
+function openFeatureAccessNotice(label, feature) {
+  const planName = state.context?.plan?.nombre || 'tu plan actual';
+  const requiredPlan = requiredPlanForFeature(feature);
+  void modal({
+    title: `Disponible en ${requiredPlan}`,
+    body: `<p><strong>${escapeHtml(label)}</strong> no está incluida en ${escapeHtml(planName)}.</p><p>Está disponible desde el plan ${escapeHtml(requiredPlan)}. Puedes revisar sus beneficios y mejorar tu plan cuando lo necesites.</p>`,
+    confirmText: 'Ver planes', cancelText: 'Cerrar'
+  }).then((upgrade) => {
+    if (upgrade) window.location.href = '/subscription.html';
+  });
+}
+
 const contextualHelp = {
   ventas: { topic: 'realizar-venta', label: 'Ayuda sobre ventas' },
   productos: { topic: 'productos', label: 'Ayuda sobre inventario' },
@@ -1147,27 +1168,35 @@ document.addEventListener('click', (event) => {
 function renderInventoryWorkspace(activeId) {
   if (!inventoryWorkspaceSections.includes(activeId) || view.querySelector('.inventory-workspace-nav')) return;
   const destinations = inventoryWorkspaceSections
-    .filter((id) => sectionAvailable(id))
     .map((id) => {
       const section = sectionById(id);
-      return `<button type="button" data-inventory-workspace="${id}" class="${id === activeId ? 'active' : ''}" aria-current="${id === activeId ? 'page' : 'false'}">${escapeHtml(section?.[1] || id)}</button>`;
+      const available = sectionAvailable(id);
+      const label = escapeHtml(section?.[1] || id);
+      return `<button type="button" data-inventory-workspace="${id}" class="${available && id === activeId ? 'active' : ''}${available ? '' : ' locked'}" aria-current="${available && id === activeId ? 'page' : 'false'}" aria-label="${available ? label : `${label}: disponible en otro plan`}">${label}${available ? '' : ' <span aria-hidden="true">🔒</span>'}</button>`;
     }).join('');
   if (!destinations) return;
   view.insertAdjacentHTML('afterbegin', `<nav class="inventory-workspace-nav" aria-label="Herramientas de inventario">${destinations}</nav>`);
-  view.querySelectorAll('[data-inventory-workspace]').forEach((button) => button.addEventListener('click', () => loadView(button.dataset.inventoryWorkspace)));
+  view.querySelectorAll('[data-inventory-workspace]').forEach((button) => button.addEventListener('click', () => {
+    if (!sectionAvailable(button.dataset.inventoryWorkspace)) return openPlanAccessNotice(button.dataset.inventoryWorkspace);
+    return loadView(button.dataset.inventoryWorkspace);
+  }));
 }
 
 function renderSalesWorkspace(activeId) {
   if (!salesWorkspaceSections.includes(activeId) || view.querySelector('.sales-workspace-nav')) return;
   const destinations = salesWorkspaceSections
-    .filter((id) => sectionAvailable(id))
     .map((id) => {
       const section = sectionById(id);
-      return `<button type="button" data-sales-workspace="${id}" class="${id === activeId ? 'active' : ''}" aria-current="${id === activeId ? 'page' : 'false'}">${escapeHtml(section?.[1] || id)}</button>`;
+      const available = sectionAvailable(id);
+      const label = escapeHtml(section?.[1] || id);
+      return `<button type="button" data-sales-workspace="${id}" class="${available && id === activeId ? 'active' : ''}${available ? '' : ' locked'}" aria-current="${available && id === activeId ? 'page' : 'false'}" aria-label="${available ? label : `${label}: disponible en otro plan`}">${label}${available ? '' : ' <span aria-hidden="true">🔒</span>'}</button>`;
     }).join('');
   if (!destinations) return;
   view.insertAdjacentHTML('afterbegin', `<nav class="sales-workspace-nav" aria-label="Ciclo de ventas">${destinations}</nav>`);
-  view.querySelectorAll('[data-sales-workspace]').forEach((button) => button.addEventListener('click', () => loadView(button.dataset.salesWorkspace)));
+  view.querySelectorAll('[data-sales-workspace]').forEach((button) => button.addEventListener('click', () => {
+    if (!sectionAvailable(button.dataset.salesWorkspace)) return openPlanAccessNotice(button.dataset.salesWorkspace);
+    return loadView(button.dataset.salesWorkspace);
+  }));
 }
 
 async function compensaciones() {
@@ -4264,15 +4293,23 @@ function inventoryTabs() {
     ['sinMovimiento', 'Sin movimiento', 'inventario_sin_movimiento']
   ];
   if (inventoryAdvancedAvailable()) tabs.push(['configuracion', 'Configuración', 'inventario_resumen']);
-  return tabs.filter(([, , feature]) => inventoryFeature(feature));
+  return tabs;
 }
 
 function renderInventoryTabs() {
   const tablist = document.querySelector('.inventory-tabs');
   if (!tablist) return;
   const tabs = inventoryTabs();
-  tablist.innerHTML = tabs.map(([id, label]) => `<button type="button" role="tab" data-inventory-tab="${id}" aria-selected="${inventoryUi.activeTab === id}" class="${inventoryUi.activeTab === id ? 'active' : ''}">${escapeHtml(label)}</button>`).join('');
+  tablist.innerHTML = tabs.map(([id, label, feature]) => {
+    const available = inventoryFeature(feature);
+    return `<button type="button" role="tab" data-inventory-tab="${id}" data-inventory-feature="${feature}" aria-selected="${available && inventoryUi.activeTab === id}" class="${available && inventoryUi.activeTab === id ? 'active' : ''}${available ? '' : ' locked'}" aria-label="${available ? escapeHtml(label) : `${escapeHtml(label)}: disponible en ${requiredPlanForFeature(feature)}`}">${escapeHtml(label)}${available ? '' : ' <span aria-hidden="true">🔒</span>'}</button>`;
+  }).join('');
   tablist.querySelectorAll('[data-inventory-tab]').forEach((button) => button.addEventListener('click', async () => {
+    const feature = button.dataset.inventoryFeature;
+    if (!inventoryFeature(feature)) {
+      openFeatureAccessNotice(button.textContent.replace('🔒', '').trim(), feature);
+      return;
+    }
     inventoryUi.activeTab = button.dataset.inventoryTab;
     inventoryUi.page = 1;
     renderInventoryTabs();
