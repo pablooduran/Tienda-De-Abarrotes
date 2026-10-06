@@ -180,7 +180,7 @@ async function createMasterProduct(connection, input, idAdministrador) {
       (nombre, nombreNormalizado, descripcion, proveedorSugerido, idCategoriaMaestra, idMarcaMaestra, codigoBarras,
        presentacion, contenidoCantidad, contenidoUnidad, unidadesPorPaquete,
        permiteVentaPorUnidad, permiteVentaPorPaquete, huellaDuplicado, activo, creadoEn, actualizadoEn)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [data.nombre, data.nombreNormalizado, data.descripcion, data.proveedorSugerido, data.idCategoriaMaestra, data.idMarcaMaestra,
       data.codigoBarras, data.presentacion, data.contenidoCantidad, data.contenidoUnidad,
       data.unidadesPorPaquete, data.permiteVentaPorUnidad, data.permiteVentaPorPaquete,
