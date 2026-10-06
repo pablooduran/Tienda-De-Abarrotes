@@ -2,8 +2,8 @@ const INITIAL_STAGING_DATABASE = 'tienda_abarrotes_staging';
 const REMOTE_STAGING_ARGUMENT = '--remote-staging';
 const REMOTE_STAGING_DIAGNOSTIC_ARGUMENT = '--remote-staging-diagnose';
 const REMOTE_STAGING_CONFIRMATION = 'CONFIRM_EMPTY_STAGING_001_025';
-const REMOTE_STAGING_EXACT_MIGRATION_CONFIRMATION = 'CONFIRM_STAGING_MIGRATION_026';
-const REMOTE_STAGING_EXACT_MIGRATION = '026_proveedor_sugerido_catalogo_maestro.sql';
+const REMOTE_STAGING_EXACT_MIGRATION_CONFIRMATION = 'CONFIRM_STAGING_MIGRATION_027';
+const REMOTE_STAGING_EXACT_MIGRATION = '027_reestructurar_planes_comerciales.sql';
 const REMOTE_STAGING_SUPERADMIN_ARGUMENT = '--remote-staging-superadmin';
 const REMOTE_STAGING_SUPERADMIN_CONFIRMATION = 'CREATE_FIRST_STAGING_SUPERADMIN';
 const STAGING_DATABASE_DIAGNOSTICS = Object.freeze({
@@ -82,7 +82,7 @@ function resolveDatabaseMutationMode({ args = [], environment = process.env } = 
       }
       if (String(environment.STAGING_DB_MIGRATION_CONFIRMATION || '').trim()
         !== REMOTE_STAGING_EXACT_MIGRATION_CONFIRMATION) {
-        throw new Error('Falta la confirmacion explicita STAGING_DB_MIGRATION_CONFIRMATION para la migracion 026.');
+        throw new Error(`Falta la confirmacion explicita STAGING_DB_MIGRATION_CONFIRMATION para ${REMOTE_STAGING_EXACT_MIGRATION}.`);
       }
       return Object.freeze({ type: 'remote-staging-exact', migration: args[2] });
     }
