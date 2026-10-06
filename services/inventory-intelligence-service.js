@@ -771,6 +771,68 @@ async function suggestedPurchases(connection, idTienda, query = {}, options = {}
   };
 }
 
+function restockListBySupplier(rows = []) {
+  const groups = new Map();
+  for (const row of rows) {
+    const providerId = row.idProveedor ? Number(row.idProveedor) : null;
+    const providerName = String(row.proveedor || 'Sin proveedor asignado');
+    const key = providerId ? `proveedor:${providerId}` : `sin-proveedor:${providerName}`;
+    if (!groups.has(key)) {
+      groups.set(key, {
+        idProveedor: providerId,
+        proveedor: providerName,
+        productos: [],
+        totalEstimado: 0,
+        productosSinCosto: 0
+      });
+    }
+    const group = groups.get(key);
+    const units = Number(row.cantidadSugeridaUnidades || 0);
+    const unitCost = Number(row.ultimoPrecioCompra || 0);
+    const estimatedCost = units > 0 && unitCost > 0 ? money(safeCentsProduct(units, cents(unitCost), `El estimado de ${row.nombre}`)) : null;
+    if (estimatedCost === null) group.productosSinCosto += 1;
+    else group.totalEstimado = money(safeCentsSum(cents(group.totalEstimado), cents(estimatedCost), `El total de ${providerName}`));
+    group.productos.push({
+      idProducto: row.idProducto,
+      nombre: row.nombre,
+      categoria: row.categoria,
+      estadoSugerencia: row.estadoSugerencia,
+      cantidadCompraSugerida: row.cantidadCompraSugerida,
+      presentacionCompraSugerida: row.presentacionCompraSugerida,
+      cantidadSugeridaUnidades: row.cantidadSugeridaUnidades,
+      ultimoPrecioCompra: row.ultimoPrecioCompra,
+      costoEstimado: estimatedCost
+    });
+  }
+  return [...groups.values()]
+    .map((group) => ({
+      ...group,
+      productos: group.productos.sort((a, b) => a.nombre.localeCompare(b.nombre, 'es-BO') || a.idProducto - b.idProducto)
+    }))
+    .sort((a, b) => a.proveedor.localeCompare(b.proveedor, 'es-BO'));
+}
+
+async function restockList(connection, idTienda, query = {}) {
+  const suggestions = await suggestedPurchases(connection, idTienda, {
+    ...query,
+    estadoSugerencia: 'accionables',
+    pagina: 1,
+    limite: MAX_ANALYSIS_ROWS
+  }, { maximumLimit: MAX_ANALYSIS_ROWS });
+  const proveedores = restockListBySupplier(suggestions.rows);
+  const totalEstimado = proveedores.reduce(
+    (total, group) => money(safeCentsSum(cents(total), cents(group.totalEstimado), 'El total estimado de reposicion')),
+    0
+  );
+  return {
+    periodo: suggestions.periodo,
+    totalProductos: suggestions.total,
+    totalEstimado,
+    productosSinCosto: proveedores.reduce((total, group) => total + group.productosSinCosto, 0),
+    proveedores
+  };
+}
+
 async function inventoryRotation(connection, idTienda, query = {}, options = {}) {
   const context = await analysisContext(connection, idTienda, query);
   const rows = context.products.map((product) => ({
@@ -926,6 +988,8 @@ module.exports = {
   loadInventoryConfiguration,
   mysqlDate,
   positiveId,
+  restockList,
+  restockListBySupplier,
   suggestedPurchases,
   updateInventoryConfiguration,
   updateProductInventoryConfiguration,

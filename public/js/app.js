@@ -2147,11 +2147,12 @@ function renderProductTable(rows) {
       <td>${escapeHtml(p.nombre)}</td><td>${escapeHtml(p.proveedor || 'SIN PROVEEDOR')}</td><td>${escapeHtml(p.categoria)}</td>
       <td>Bs ${money(p.precioVenta)}</td><td>${stockLabel(p)}</td><td>${packageText(p)}</td>
       <td>${p.bajoStock ? '<span class="badge pendiente">Bajo stock</span>' : '<span class="badge normal">Normal</span>'}${Number(p.controlaLotes) ? `<span class="lot-control-label">Lotes${Number(p.controlaVencimiento) ? ' y vencimiento' : ''}</span>` : ''}</td>
-      <td class="actions"><button class="small secondary" data-edit="${p.idProducto}">Editar</button><details class="row-actions"><summary>Más opciones</summary><div class="row-actions-menu">${hasFeature('ajuste_stock') && !state.context?.soloLectura ? `<button class="small" data-adjust-stock="${p.idProducto}">Ajustar stock</button>` : ''}<button class="small secondary" data-product-movements="${p.idProducto}">Ver movimientos</button>${Number(p.controlaLotes) || hasFeature('control_lotes') ? `<button class="small secondary" data-lot-config="${p.idProducto}">${Number(p.controlaLotes) ? 'Configurar lotes' : 'Activar lotes'}</button>` : ''}<button class="small danger" data-delete="${p.idProducto}">Ocultar</button><button type="button" class="small secondary secondary-actions-close" data-secondary-actions-close>Cerrar</button></div></details></td>
+      <td class="actions"><button class="small secondary" data-edit="${p.idProducto}">Editar</button><details class="row-actions"><summary>Más opciones</summary><div class="row-actions-menu">${hasFeature('ajuste_stock') && !state.context?.soloLectura ? `<button class="small" data-adjust-stock="${p.idProducto}">Ajustar stock</button>` : ''}<button class="small secondary" data-product-movements="${p.idProducto}">Ver movimientos</button><button class="small secondary" data-product-purchase-history="${p.idProducto}">Historial de costos</button>${Number(p.controlaLotes) || hasFeature('control_lotes') ? `<button class="small secondary" data-lot-config="${p.idProducto}">${Number(p.controlaLotes) ? 'Configurar lotes' : 'Activar lotes'}</button>` : ''}<button class="small danger" data-delete="${p.idProducto}">Ocultar</button><button type="button" class="small secondary secondary-actions-close" data-secondary-actions-close>Cerrar</button></div></details></td>
     </tr>`).join('')}</tbody></table></div>`;
   target.querySelectorAll('[data-edit]').forEach((btn) => btn.addEventListener('click', () => openProductModal(state.productos.find((p) => String(p.idProducto) === btn.dataset.edit))));
   target.querySelectorAll('[data-adjust-stock]').forEach((btn) => btn.addEventListener('click', () => openStockAdjustment(state.productos.find((p) => String(p.idProducto) === btn.dataset.adjustStock))));
   target.querySelectorAll('[data-product-movements]').forEach((btn) => btn.addEventListener('click', () => openProductMovements(btn.dataset.productMovements)));
+  target.querySelectorAll('[data-product-purchase-history]').forEach((btn) => btn.addEventListener('click', () => openProductPurchaseHistory(btn.dataset.productPurchaseHistory)));
   target.querySelectorAll('[data-lot-config]').forEach((btn) => btn.addEventListener('click', () => openLotProductConfiguration(state.productos.find((p) => String(p.idProducto) === btn.dataset.lotConfig))));
   target.querySelectorAll('[data-delete]').forEach((btn) => btn.addEventListener('click', async () => {
     if (!await confirmAction('¿Deseas ocultar este producto? Su stock y movimientos se conservarán.', true)) return;
@@ -2441,6 +2442,25 @@ async function openProductMovements(idProducto) {
       confirmText: 'Cerrar',
       wide: true,
       body: `<p>Stock actual: <strong>${intValue(data.producto.stockUnidadesTotal)} unidades base</strong></p>${movementTable(data.rows, { includeProduct: false })}`
+    });
+  } catch (error) { showError(error.message); }
+}
+
+async function openProductPurchaseHistory(idProducto) {
+  try {
+    const data = await api(`/api/productos/${idProducto}/historial-compras`);
+    const summary = data.resumen || {};
+    await modal({
+      title: `Historial de costos · ${data.producto.nombre}`,
+      confirmText: 'Cerrar',
+      wide: true,
+      body: `<p class="hint">Estos costos se calculan por unidad base a partir de las compras registradas. No cambian precios ni stock.</p>
+        <div class="purchase-history-summary">
+          <div><span>Costo actual</span><strong>Bs ${money(data.producto.ultimoPrecioCompra)}</strong></div>
+          <div><span>Promedio reciente</span><strong>${summary.costoPromedioReciente === null ? 'Sin compras' : `Bs ${money(summary.costoPromedioReciente)}`}</strong></div>
+          <div><span>Rango reciente</span><strong>${summary.costoMinimoReciente === null ? 'Sin datos' : `Bs ${money(summary.costoMinimoReciente)} – ${money(summary.costoMaximoReciente)}`}</strong></div>
+        </div>
+        ${data.compras.length ? `<div class="table-wrap"><table><thead><tr><th>Fecha</th><th>Proveedor</th><th>Cantidad</th><th>Costo por unidad</th><th>Total</th></tr></thead><tbody>${data.compras.map((purchase) => `<tr><td>${escapeHtml(formatDate(purchase.fecha))}</td><td>${escapeHtml(purchase.proveedor || 'Sin proveedor')}</td><td>${escapeHtml(purchase.cantidad)} ${escapeHtml(purchase.presentacionCompra)}</td><td>${purchase.costoUnitarioBase === null ? '<span class="muted">No disponible</span>' : `Bs ${money(purchase.costoUnitarioBase)}`}</td><td>Bs ${money(purchase.subtotal)}</td></tr>`).join('')}</tbody></table></div>` : '<p class="muted">Todavía no hay compras registradas para este producto.</p>'}`
     });
   } catch (error) { showError(error.message); }
 }
@@ -3733,6 +3753,80 @@ async function loadPosFrequentCustomers() {
   }
 }
 
+async function processPosBarcode(rawCode) {
+  const search = document.getElementById('posSearch');
+  const code = String(rawCode || '').trim();
+  if (!search || !code) return false;
+  const now = Date.now();
+  if (lastBarcodeScan.value === code && now - lastBarcodeScan.at < 500) return false;
+  lastBarcodeScan = { value: code, at: now };
+  try {
+    const data = await api(`/api/pos/productos?q=${encodeURIComponent(code)}&limit=20`);
+    const exact = data.productos.find((product) => String(product.codigoBarrasDisponible || product.codigoBarras || '') === code);
+    if (exact) {
+      addPosProduct(exact);
+      search.value = '';
+      await loadPosProducts();
+      return true;
+    }
+    if (data.productos.length === 1) {
+      addPosProduct(data.productos[0]);
+      return true;
+    }
+    showError('No se encontró un producto con ese código.');
+  } catch (error) { showError(error.message); }
+  return false;
+}
+
+async function openPosCameraScanner() {
+  const trigger = document.getElementById('posCameraScan');
+  if (!navigator.mediaDevices?.getUserMedia || !('BarcodeDetector' in window)) {
+    await modal({
+      title: 'Escaneo con cámara no disponible',
+      confirmText: 'Entendido',
+      body: '<p>Este navegador no permite detectar códigos con la cámara. Puedes usar un lector físico o escribir el código de barras en el buscador.</p>'
+    });
+    trigger?.focus();
+    return;
+  }
+  let stream = null;
+  let stopped = false;
+  let scanTimer = null;
+  const close = () => {
+    stopped = true;
+    if (scanTimer) window.clearTimeout(scanTimer);
+    stream?.getTracks().forEach((track) => track.stop());
+    modalRoot.innerHTML = '';
+    trigger?.focus();
+  };
+  modalRoot.innerHTML = `<div class="modal-backdrop"><section class="modal camera-scanner-modal" role="dialog" aria-modal="true" aria-labelledby="cameraScannerTitle"><h3 id="cameraScannerTitle">Escanear código de barras</h3><p class="hint">Apunta la cámara al código. El producto se agregará automáticamente cuando sea reconocido.</p><div class="camera-scanner-frame"><video data-camera-preview autoplay playsinline muted></video><p data-camera-status aria-live="polite">Solicitando acceso a la cámara…</p></div><div class="modal-actions"><button type="button" class="secondary" data-camera-cancel>Cancelar</button></div></section></div>`;
+  modalRoot.querySelector('[data-camera-cancel]').addEventListener('click', close);
+  const status = modalRoot.querySelector('[data-camera-status]');
+  const video = modalRoot.querySelector('[data-camera-preview]');
+  try {
+    stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: 'environment' } }, audio: false });
+    if (stopped) return close();
+    video.srcObject = stream;
+    await video.play();
+    const detector = new window.BarcodeDetector({ formats: ['ean_13', 'ean_8', 'upc_a', 'upc_e', 'code_128', 'code_39', 'qr_code'] });
+    status.textContent = 'Cámara lista. Busca un código de barras dentro del recuadro.';
+    const scan = async () => {
+      if (stopped || !video.videoWidth) return;
+      try {
+        const codes = await detector.detect(video);
+        const value = codes[0]?.rawValue;
+        if (value && await processPosBarcode(value)) return close();
+      } catch {
+        status.textContent = 'No se pudo leer aún. Mantén el código enfocado y con buena luz.';
+      }
+      if (!stopped) scanTimer = window.setTimeout(scan, 220);
+    };
+    scanTimer = window.setTimeout(scan, 120);
+  } catch {
+    status.textContent = 'No se pudo acceder a la cámara. Revisa los permisos del navegador e inténtalo de nuevo.';
+  }
+}
+
 async function ventas() {
   posOperationKey = posOperationKey || newOperationKey();
   view.innerHTML = `
@@ -3741,6 +3835,7 @@ async function ventas() {
       <section class="panel pos-picker">
         <div class="pos-search-row">
           <label class="pos-search-label">Buscar o escanear producto<input id="posSearch" autocomplete="off" placeholder="Nombre o código de barras"></label>
+          <button type="button" class="secondary pos-camera-button" id="posCameraScan">Escanear con cámara</button>
           <label>Categoría<select id="posCategory"><option value="">Todas</option>${categoryOptions()}</select></label>
         </div>
         <div class="pos-quick-tabs" role="group" aria-label="Vistas rapidas">
@@ -3790,22 +3885,9 @@ async function ventas() {
   search.addEventListener('keydown', async (event) => {
     if (event.key !== 'Enter') return;
     event.preventDefault();
-    const code = search.value.trim();
-    if (!code) return;
-    const now = Date.now();
-    if (lastBarcodeScan.value === code && now - lastBarcodeScan.at < 500) return;
-    lastBarcodeScan = { value: code, at: now };
-    try {
-      const data = await api(`/api/pos/productos?q=${encodeURIComponent(code)}&limit=20`);
-      const exact = data.productos.find((product) => String(product.codigoBarrasDisponible || product.codigoBarras || '') === code);
-      if (exact) {
-        addPosProduct(exact);
-        search.value = '';
-        loadPosProducts();
-      } else if (data.productos.length === 1) addPosProduct(data.productos[0]);
-      else showError('No se encontró un producto con ese código.');
-    } catch (error) { showError(error.message); }
+    await processPosBarcode(search.value);
   });
+  document.getElementById('posCameraScan').addEventListener('click', openPosCameraScanner);
   document.getElementById('posCategory').addEventListener('change', () => loadPosProducts());
   view.querySelectorAll('[data-pos-view]').forEach((button) => button.addEventListener('click', () => loadPosProducts(button.dataset.posView)));
   document.getElementById('posPaymentMode').addEventListener('change', (event) => {
@@ -4505,10 +4587,49 @@ function inventoryRenderSuggestions() {
   if (!data?.rows?.length) return inventoryEmpty('No hay sugerencias para los filtros actuales.');
   const canWrite = !state.context?.soloLectura;
   const summary = data.resumen || {};
-  return `<div class="inventory-section-heading"><div><h3>Sugerencias de compra</h3><p>${escapeHtml(inventoryPeriod(data.periodo))} · ${escapeHtml(data.total)} resultados</p></div></div>
+  return `<div class="inventory-section-heading"><div><h3>Sugerencias de compra</h3><p>${escapeHtml(inventoryPeriod(data.periodo))} · ${escapeHtml(data.total)} resultados</p></div><button type="button" class="secondary" data-open-restock-list>Preparar lista por proveedor</button></div>
     <div class="inventory-note"><strong>Cómo leer la sugerencia</strong><p>Stock objetivo: unidades calculadas con el mínimo configurado, las ventas observadas y el tiempo de reposición. Cobertura: días que alcanzaría el stock al ritmo de venta actual. Urgente: sin stock o cobertura menor a la reposición. Recomendada: falta para el objetivo. Exceso: más de 150% del objetivo. Esta vista no registra compras ni modifica stock.</p></div>
     <p class="inventory-summary-line">Urgentes: ${escapeHtml(summary.urgente || 0)} · Recomendadas: ${escapeHtml(summary.recomendada || 0)} · Suficientes: ${escapeHtml(summary.suficiente || 0)} · Exceso: ${escapeHtml(summary.exceso || 0)} · Sin datos: ${escapeHtml(summary.sin_datos || 0)}</p>
     <div class="inventory-suggestion-list">${data.rows.map((row) => `<article class="inventory-suggestion"><header><div><h4>${escapeHtml(row.nombre)}</h4><p>${escapeHtml(row.categoria)} · ${escapeHtml(row.proveedor || 'Sin proveedor')}</p></div><span class="inventory-status inventory-status-${escapeHtml(row.estadoSugerencia)}">${escapeHtml(row.estadoSugerencia)}</span></header><dl><div><dt>Físico / vendible</dt><dd>${escapeHtml(row.stockFisico)} / ${escapeHtml(row.stockVendible)}</dd></div><div><dt>No vendible</dt><dd>${escapeHtml(row.stockNoVendible)}</dd></div><div><dt>Promedio diario</dt><dd>${inventoryMetric(row.promedioDiario, 2, 'Sin datos suficientes')}</dd></div><div><dt>Cobertura</dt><dd>${row.diasRestantes === null ? 'No calculable' : `${inventoryMetric(row.diasRestantes, 1)} días`}</dd></div><div><dt>Stock objetivo</dt><dd>${escapeHtml(row.stockObjetivo)}</dd></div><div><dt>Cantidad sugerida</dt><dd><strong>${escapeHtml(row.cantidadCompraSugerida)} ${escapeHtml(row.presentacionCompraSugerida === 'paquete' ? 'paquetes' : 'unidades')}</strong></dd></div></dl><p class="inventory-reason">${escapeHtml(row.motivo)}</p>${canWrite ? `<button type="button" class="small secondary" data-inventory-product-config="${escapeHtml(row.idProducto)}">Configurar</button>` : ''}</article>`).join('')}</div>${inventoryPagination(data)}`;
+}
+
+function restockListText(data) {
+  return (data.proveedores || []).map((group) => [
+    group.proveedor,
+    ...group.productos.map((product) => `- ${product.nombre}: ${product.cantidadCompraSugerida} ${product.presentacionCompraSugerida === 'paquete' ? 'paquetes' : 'unidades'}${product.costoEstimado === null ? '' : ` · estimado Bs ${money(product.costoEstimado)}`}`)
+  ].join('\n')).join('\n\n');
+}
+
+async function openRestockList() {
+  try {
+    const query = inventoryFilterQuery(inventoryUi.appliedFilters, 1).toString();
+    const data = await api(`/api/inventario-inteligente/lista-reposicion?${query}`);
+    const groups = data.proveedores || [];
+    await modal({
+      title: 'Lista de reposición por proveedor',
+      confirmText: 'Cerrar',
+      wide: true,
+      body: groups.length ? `<div class="restock-list-intro"><p>Organiza los productos que requieren acción. Es una lista de consulta: no registra una compra ni altera el stock.</p><div><strong>${escapeHtml(data.totalProductos)}</strong><span>productos por reponer</span></div><div><strong>Bs ${money(data.totalEstimado)}</strong><span>estimado con costos conocidos</span></div></div>
+        ${data.productosSinCosto ? `<p class="inventory-note-inline">${escapeHtml(data.productosSinCosto)} producto${data.productosSinCosto === 1 ? '' : 's'} sin costo registrado no se incluyen en el estimado.</p>` : ''}
+        <div class="restock-provider-list">${groups.map((group) => `<section class="restock-provider"><header><div><span class="eyebrow">Proveedor</span><h4>${escapeHtml(group.proveedor)}</h4></div><strong>${group.productos.length} producto${group.productos.length === 1 ? '' : 's'} · Bs ${money(group.totalEstimado)}</strong></header><ul>${group.productos.map((product) => `<li><div><strong>${escapeHtml(product.nombre)}</strong><small>${escapeHtml(product.categoria)} · ${escapeHtml(product.estadoSugerencia)}</small></div><span>${escapeHtml(product.cantidadCompraSugerida)} ${escapeHtml(product.presentacionCompraSugerida === 'paquete' ? 'paquetes' : 'unidades')}${product.costoEstimado === null ? '<small>Costo pendiente</small>' : `<small>Bs ${money(product.costoEstimado)}</small>`}</span></li>`).join('')}</ul></section>`).join('')}</div>
+        <div class="restock-list-actions"><button type="button" class="secondary" data-copy-restock-list>Copiar lista</button><button type="button" data-open-purchases>Registrar compra</button><span class="hint" data-restock-copy-status aria-live="polite"></span></div>` : '<p class="muted">No hay productos accionables para reponer con los filtros actuales.</p>',
+      onOpen: (root) => {
+        root.querySelector('[data-copy-restock-list]')?.addEventListener('click', async () => {
+          const status = root.querySelector('[data-restock-copy-status]');
+          try {
+            await navigator.clipboard.writeText(restockListText(data));
+            status.textContent = 'Lista copiada.';
+          } catch {
+            status.textContent = 'No se pudo copiar automáticamente. Puedes seleccionar la lista.';
+          }
+        });
+        root.querySelector('[data-open-purchases]')?.addEventListener('click', async () => {
+          root.querySelector('[data-modal-confirm]')?.click();
+          await loadView('compras');
+        });
+      }
+    });
+  } catch (error) { showError(error.message); }
 }
 
 function inventoryRenderRotationLegacy() {
@@ -4571,6 +4692,7 @@ function renderInventoryActiveTab() {
   target.innerHTML = renderers[inventoryUi.activeTab]?.() || inventoryEmpty('Seleccione una sección de inventario.');
   target.querySelector('[data-inventory-retry]')?.addEventListener('click', () => loadInventoryActiveTab(true));
   target.querySelectorAll('[data-inventory-product-config]').forEach((button) => button.addEventListener('click', () => openInventoryProductConfiguration(button.dataset.inventoryProductConfig)));
+  target.querySelector('[data-open-restock-list]')?.addEventListener('click', openRestockList);
   target.querySelectorAll('[data-inventory-product-lots]').forEach((button) => button.addEventListener('click', () => openProductLotAvailability(button.dataset.inventoryProductLots)));
   target.querySelector('[data-open-lot-dashboard]')?.addEventListener('click', () => loadView('lotesVencimientos'));
   target.querySelectorAll('[data-inventory-simple-destination]').forEach((button) => button.addEventListener('click', async () => {

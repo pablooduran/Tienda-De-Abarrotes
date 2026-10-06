@@ -11,6 +11,7 @@ const {
   inventorySummary,
   inventoryValuation,
   inventoryWithoutMovement,
+  restockList,
   suggestedPurchases,
   updateInventoryConfiguration,
   updateProductInventoryConfiguration
@@ -61,6 +62,11 @@ router.get('/inventario-inteligente/compras-sugeridas', requirePlanFeature('comp
     reference: `inventario:${idTienda(req)}`,
     requestId: req.requestId
   });
+}));
+
+router.get('/inventario-inteligente/lista-reposicion', requirePlanFeature('compras_sugeridas'), asyncRoute(async (req, res) => {
+  res.set('Cache-Control', 'no-store');
+  res.json(await restockList(pool, idTienda(req), req.query));
 }));
 
 router.get('/inventario-inteligente/rotacion', requirePlanFeature('rotacion_inventario'), asyncRoute(async (req, res) => {

@@ -430,6 +430,54 @@ router.post('/productos', async (req, res, next) => {
   }
 });
 
+router.get('/productos/:id/historial-compras', requirePlanFeature('historial_stock'), async (req, res, next) => {
+  try {
+    const idProducto = Number(req.params.id);
+    if (!Number.isInteger(idProducto) || idProducto <= 0) {
+      return res.status(400).json({ error: 'El producto no es valido.' });
+    }
+    const idTienda = tenantId(req);
+    const [[productRows], [history]] = await Promise.all([
+      pool.query(
+        `SELECT idProducto, nombre, ultimoPrecioCompra
+         FROM producto WHERE idTienda=? AND idProducto=? LIMIT 1`,
+        [idTienda, idProducto]
+      ),
+      pool.query(
+        `SELECT dc.idDetalleCompra, c.fecha, dc.cantidad, dc.precioCompra, dc.subtotal,
+                dc.presentacionCompra, dc.cantidadEquivalenteUnidades,
+                CASE WHEN dc.cantidadEquivalenteUnidades > 0
+                  THEN ROUND(dc.subtotal / dc.cantidadEquivalenteUnidades, 6) ELSE NULL END costoUnitarioBase,
+                pr.nombre proveedor
+         FROM detalleCompra dc
+         JOIN compra c ON c.idTienda=dc.idTienda AND c.idCompra=dc.idCompra
+         LEFT JOIN proveedor pr ON pr.idTienda=c.idTienda AND pr.idProveedor=c.idProveedor
+         WHERE dc.idTienda=? AND dc.idProducto=?
+         ORDER BY c.fecha DESC, dc.idDetalleCompra DESC LIMIT 24`,
+        [idTienda, idProducto]
+      )
+    ]);
+    if (!productRows.length) throw notFound('Producto no encontrado.');
+    const knownCosts = history.filter((row) => Number(row.costoUnitarioBase) > 0);
+    const averageCost = knownCosts.length
+      ? knownCosts.reduce((sum, row) => sum + Number(row.costoUnitarioBase), 0) / knownCosts.length
+      : null;
+    res.set('Cache-Control', 'no-store');
+    res.json({
+      producto: productRows[0],
+      resumen: {
+        comprasMostradas: history.length,
+        costoPromedioReciente: averageCost === null ? null : Number(averageCost.toFixed(6)),
+        costoMinimoReciente: knownCosts.length ? Math.min(...knownCosts.map((row) => Number(row.costoUnitarioBase))) : null,
+        costoMaximoReciente: knownCosts.length ? Math.max(...knownCosts.map((row) => Number(row.costoUnitarioBase))) : null
+      },
+      compras: history
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
 router.put('/productos/:id', async (req, res, next) => {
   try {
     const data = validateProductPayload(req.body, true);
