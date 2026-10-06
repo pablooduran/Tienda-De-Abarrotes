@@ -1297,6 +1297,11 @@ const migrationRequirements = {
     columns: {
       planFuncionalidad: ['idPlan', 'idFuncionalidad', 'habilitada']
     }
+  },
+  '029_sincronizar_snapshot_funciones_plan.sql': {
+    columns: {
+      suscripcionFuncionalidadSnapshot: ['idTienda', 'idSuscripcion', 'codigoFuncionalidad', 'nombreFuncionalidad']
+    }
   }
 };
 
@@ -1619,12 +1624,42 @@ async function commercialPlanCatalogSatisfied(connection) {
   return true;
 }
 
+async function activeSubscriptionSnapshotsSatisfied(connection) {
+  const expectedFeatures = new Map([
+    ['basico', new Set(BASIC_FEATURES)],
+    ['standard', new Set(STANDARD_FEATURES)],
+    ['pro', new Set(PRO_FEATURES)]
+  ]);
+  const [rows] = await connection.query(
+    `SELECT s.idTienda,s.idSuscripcion,p.codigo planCodigo,sf.codigoFuncionalidad
+     FROM suscripcionTienda s
+     JOIN plan p ON p.idPlan=s.idPlan
+     LEFT JOIN suscripcionFuncionalidadSnapshot sf
+       ON sf.idTienda=s.idTienda AND sf.idSuscripcion=s.idSuscripcion
+     WHERE p.codigo IN ('basico','standard','pro')
+       AND s.estado IN ('activa','gracia')`
+  );
+  const snapshots = new Map();
+  for (const row of rows) {
+    const key = `${row.idTienda}:${row.idSuscripcion}`;
+    if (!snapshots.has(key)) snapshots.set(key, { plan: row.planCodigo, features: new Set() });
+    if (row.codigoFuncionalidad) snapshots.get(key).features.add(row.codigoFuncionalidad);
+  }
+  return [...snapshots.values()].every(({ plan, features }) => {
+    const expected = expectedFeatures.get(plan);
+    return expected && features.size === expected.size && [...expected].every((feature) => features.has(feature));
+  });
+}
+
 async function requirementsSatisfied(connection, file) {
   if (file === '027_reestructurar_planes_comerciales.sql') {
     return true;
   }
   if (file === '028_reordenar_funciones_por_plan.sql') {
     return commercialPlanCatalogSatisfied(connection);
+  }
+  if (file === '029_sincronizar_snapshot_funciones_plan.sql') {
+    return activeSubscriptionSnapshotsSatisfied(connection);
   }
   if (file === '011_lotes_vencimientos.sql') {
     const estado011 = await inspect011State(connection, false, { log: false });
@@ -4043,7 +4078,8 @@ async function main() {
               '025_google_oauth_identities.sql',
               '026_proveedor_sugerido_catalogo_maestro.sql',
               '027_reestructurar_planes_comerciales.sql',
-              '028_reordenar_funciones_por_plan.sql'
+              '028_reordenar_funciones_por_plan.sql',
+              '029_sincronizar_snapshot_funciones_plan.sql'
             ].includes(file)
             && !await requirementsSatisfied(connection, file);
         if (registeredMigrationIsIncomplete) {
@@ -4082,7 +4118,8 @@ async function main() {
           '025_google_oauth_identities.sql',
           '026_proveedor_sugerido_catalogo_maestro.sql',
           '027_reestructurar_planes_comerciales.sql',
-          '028_reordenar_funciones_por_plan.sql'
+          '028_reordenar_funciones_por_plan.sql',
+          '029_sincronizar_snapshot_funciones_plan.sql'
         ].includes(file)) {
           await connection.query('INSERT IGNORE INTO schema_migrations (nombre) VALUES (?)', [file]);
           const [finalRecord] = await connection.query(
