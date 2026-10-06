@@ -8,6 +8,7 @@ const app = read('public/js/app.js');
 const admin = read('public/js/admin.js');
 const paymentUi = read('public/js/payment-subscription-ui.js');
 const customerCreditUi = read('public/js/customer-credit-ui.js');
+const onboardingUi = read('public/js/onboarding-ui.js');
 const styles = read('public/css/styles.css');
 const adminStyles = read('public/css/admin.css');
 
@@ -15,6 +16,8 @@ const checks = [
   ['Inicio tiene una jerarquia orientada a la tarea', app.includes('<h3>Resumen de hoy</h3>') && app.includes('Ventas, cobros, inventario y alertas para decidir que revisar.')],
   ['Los dialogos pasivos usan Cerrar', app.includes("confirmText = 'Cerrar'") && app.includes("confirmText: 'Cerrar'")],
   ['Productos usa acciones concretas de guardado', app.includes("confirmText: isEdit ? 'Guardar cambios' : 'Agregar producto'")],
+  ['Añadir producto organiza identidad, venta e inventario', ['productIdentityTitle', 'productSaleTitle', 'productStockTitle', "className: 'product-editor-modal'"].every((fragment) => app.includes(fragment)) && styles.includes('.product-form-card')],
+  ['Configuración inicial incorpora marca y acciones ordenadas', onboardingUi.includes('onboarding-brand-art') && onboardingUi.includes('Guardar y entrar a mi tienda') && onboardingUi.includes('class="onboarding-logout"') && styles.includes('.onboarding-shell')],
   ['Mi plan mantiene revisar precio como accion primaria', paymentUi.includes('button-link payment-primary') && paymentUi.includes('Ver precio') && paymentUi.includes('Solicitar este plan')],
   ['La accion primaria de pagos tiene estilo compartido', styles.includes('.payment-form-actions .payment-primary')],
   ['El punto de venta calcula descuentos por porcentaje solo al solicitarlos', app.includes('id="posDiscountPercentage"') && app.includes('subtotal * (discountPercentage / 100)') && app.includes('id="posDiscountToggle"') && app.includes('id="posDiscountControl" hidden')],

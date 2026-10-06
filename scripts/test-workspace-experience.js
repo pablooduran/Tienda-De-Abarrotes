@@ -13,6 +13,7 @@ function assert(condition, message) {
 }
 
 assert(appHtml.includes('id="workspaceTools"'), 'Falta el acceso a herramientas del espacio de trabajo.');
+assert(appHtml.includes('id="customizeDashboardButton"'), 'Personalizar inicio debe vivir dentro del menú de configuración.');
 assert(appHtml.includes('/js/workspace-experience.js'), 'El módulo de experiencia no está cargado.');
 assert(appHtml.indexOf('/js/workspace-experience.js') < appHtml.indexOf('/js/app.js'), 'El módulo debe cargarse antes de app.js.');
 
@@ -31,6 +32,9 @@ assert(appJs.includes('workspaceExperience?.afterView(id)'), 'Las mejoras no se 
 assert(appJs.includes("workspaceExperience?.clearDraft('ventas')"), 'La venta no limpia su borrador al completarse.');
 assert(appJs.includes('workspaceExperience?.clearDraft(kind)'), 'La operación no limpia su borrador al completarse.');
 assert(appJs.includes('confirmation-impact'), 'Las confirmaciones no muestran el impacto de la operación.');
+assert(appJs.includes('workspaceExperience?.openDashboardCustomizer()'), 'La tuerca no abre la personalización del inicio.');
+assert(!experience.includes('<kbd>Ctrl K</kbd>'), 'El acceso Buscar no debe mostrar el atajo Ctrl K.');
+assert(!experience.includes('¿Qué puedo hacer aquí?'), 'Los estados vacíos no deben repetir ayuda genérica.');
 
 [
   '.workspace-command',

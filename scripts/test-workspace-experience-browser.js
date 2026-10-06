@@ -57,7 +57,7 @@ async function main() {
       assert.strictEqual(await page.locator('.workspace-notification').count(), 2);
       assert.strictEqual(await page.locator('.workspace-activity-item').count(), 1);
       await page.keyboard.press('Escape');
-      await page.locator('[data-customize-dashboard]').click();
+      await page.evaluate(() => window.experience.openDashboardCustomizer());
       await page.locator('.workspace-widget-list input').uncheck();
       await page.locator('[data-save-dashboard]').click();
       assert.strictEqual(await page.locator('[data-dashboard-widget="ventas"]').isHidden(), true);

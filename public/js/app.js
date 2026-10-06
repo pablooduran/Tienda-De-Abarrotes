@@ -9,6 +9,7 @@ const appLayout = document.getElementById('appLayout');
 const navigationToggle = document.getElementById('navigationToggle');
 const sidebarScrim = document.getElementById('sidebarScrim');
 const accountMenu = document.getElementById('accountMenu');
+const customizeDashboardButton = document.getElementById('customizeDashboardButton');
 const viewProgress = document.getElementById('viewProgress');
 const helpBackTopbar = document.getElementById('helpBackTopbar');
 const settingsBackTopbar = document.getElementById('settingsBackTopbar');
@@ -180,12 +181,12 @@ function validatePhoneValue(value) {
   return !value || /^\d+$/.test(String(value).trim());
 }
 
-function modal({ title: modalTitle, body, confirmText = 'Cerrar', cancelText = '', danger = false, wide = false, preserveOnConfirm = false, onOpen = null }) {
+function modal({ title: modalTitle, body, confirmText = 'Cerrar', cancelText = '', danger = false, wide = false, className = '', preserveOnConfirm = false, onOpen = null }) {
   return new Promise((resolve) => {
     const returnFocus = document.activeElement;
     modalRoot.innerHTML = `
       <div class="modal-backdrop">
-        <div class="modal ${wide ? 'modal-wide' : ''}" role="dialog" aria-modal="true" aria-label="${escapeHtml(modalTitle)}">
+        <div class="modal ${wide ? 'modal-wide' : ''} ${escapeHtml(className)}" role="dialog" aria-modal="true" aria-label="${escapeHtml(modalTitle)}">
           <h3>${escapeHtml(modalTitle)}</h3>
           <div class="modal-body">${body}</div>
           <div class="modal-actions">
@@ -1133,6 +1134,11 @@ window.matchMedia('(max-width: 900px)').addEventListener?.('change', initializeS
 
 document.querySelectorAll('[data-quick-view]').forEach((button) => button.addEventListener('click', () => loadView(button.dataset.quickView)));
 document.querySelectorAll('[data-settings-view]').forEach((button) => button.addEventListener('click', () => loadView(button.dataset.settingsView)));
+customizeDashboardButton?.addEventListener('click', async () => {
+  accountMenu?.removeAttribute('open');
+  if (activeView !== 'inicio') await loadView('inicio');
+  workspaceExperience?.openDashboardCustomizer();
+});
 document.addEventListener('click', (event) => {
   if (!accountMenu?.open || accountMenu.contains(event.target)) return;
   accountMenu.removeAttribute('open');
@@ -1782,38 +1788,48 @@ function productForm(row = {}) {
     <form class="grid product-form" id="productoForm" data-id="${row.idProducto || ''}">
       <input type="hidden" name="unidadMedida" value="${escapeHtml(row.unidadMedida || 'unidad')}">
       <input type="hidden" name="paquetesPorCaja" value="${row.paquetesPorCaja || 1}">
-
-      <div class="form-section wide">
-        <h4>Datos principales</h4>
-        <p class="hint">Registra lo que se ve en mostrador. El precio de compra se coloca después al registrar una compra.</p>
+      <div class="product-form-intro wide">
+        <span class="product-form-mark" aria-hidden="true"><img src="/assets/administrau-icon.png" alt=""></span>
+        <div><span class="eyebrow">Catálogo de tu tienda</span><strong>${isEdit ? 'Actualiza la información sin perder su historial' : 'Crea un producto listo para vender'}</strong><p>Completa primero lo esencial. Las opciones de paquete aparecen únicamente cuando las necesitas.</p></div>
       </div>
-      <label>Nombre del producto<input name="nombre" required value="${escapeHtml(row.nombre || '')}"></label>
-      <label>Código de barras (opcional)<input name="codigoBarras" maxlength="64" value="${escapeHtml(row.codigoBarras || '')}"></label>
-      <label>Proveedor<select name="idProveedor">${options(state.proveedores, 'idProveedor', 'nombre', 'Sin proveedor', row.idProveedor)}</select></label>
-      <label>Categoría<select name="categoria" required>${categoryOptions(row.categoria || 'OTROS')}</select></label>
-      <label>Tipo de compra<select id="tipoCompraProducto">
-        <option value="unidad" ${!isPackagePurchase ? 'selected' : ''}>Unidad</option>
-        <option value="paquete" ${isPackagePurchase ? 'selected' : ''}>Paquete</option>
-      </select></label>
 
-      <div class="form-section wide">
-        <h4>Precios y stock</h4>
-      </div>
-      <label id="unitsPerPackageField">Unidades por paquete<input name="unidadesPorPaquete" type="number" step="1" min="1" required value="${row.unidadesPorPaquete || 1}"></label>
-      <label>Precio venta por unidad<input name="precioVenta" type="number" step="0.01" min="0.01" required value="${row.precioVenta || ''}"></label>
-      <label id="packagePriceField">Precio venta por paquete<input name="precioVentaPaquete" id="precioVentaPaquete" data-price-mode="${row.precioVentaPaquete == null ? 'auto' : 'manual'}" type="number" step="0.01" min="0.01" value="${packagePrice ? money(packagePrice) : ''}"></label>
-      <label>Stock mínimo<input name="stockMinimo" type="number" step="1" min="1" required value="${row.stockMinimo || 5}"></label>
-      ${isEdit
-        ? `<label>Stock actual<input type="number" readonly value="${Number(row.stockUnidadesTotal ?? row.stock ?? 0)}"></label>`
-        : '<label>Stock inicial<input name="stockUnidadesTotal" type="number" step="1" min="0" required value="0"></label>'}
+      <section class="product-form-card wide" aria-labelledby="productIdentityTitle">
+        <header><span>1</span><div><h4 id="productIdentityTitle">Identifica el producto</h4><p>Así lo reconocerás al buscarlo o escanearlo.</p></div></header>
+        <div class="product-form-grid product-form-grid-primary">
+          <label class="product-name-field">Nombre del producto<input name="nombre" required autofocus placeholder="Ej.: Coca-Cola 2 L" value="${escapeHtml(row.nombre || '')}"></label>
+          <label>Código de barras <small>Opcional</small><input name="codigoBarras" maxlength="64" inputmode="numeric" placeholder="Escanea o escribe el código" value="${escapeHtml(row.codigoBarras || '')}"></label>
+          <label>Proveedor<select name="idProveedor">${options(state.proveedores, 'idProveedor', 'nombre', 'Sin proveedor', row.idProveedor)}</select></label>
+          <label>Categoría<select name="categoria" required>${categoryOptions(row.categoria || 'OTROS')}</select></label>
+        </div>
+      </section>
 
-      <div class="form-section wide">
-        <h4>Venta permitida</h4>
-        <p class="hint">La venta por unidad queda como opción principal. La venta por paquete aparece solo si el producto tiene varias unidades por paquete.</p>
-      </div>
-      <label class="check"><input name="permiteVentaPorUnidad" type="checkbox" ${checked(row.permiteVentaPorUnidad ?? true)}> Vender por unidad</label>
-      <label class="check" id="salePackageField"><input name="permiteVentaPorPaquete" type="checkbox" ${checked(row.permiteVentaPorPaquete)}> Vender por paquete</label>
-      <p class="hint wide">Después de crear el producto, el stock solo cambia mediante compras, ventas o un ajuste manual.</p>
+      <section class="product-form-card wide" aria-labelledby="productSaleTitle">
+        <header><span>2</span><div><h4 id="productSaleTitle">Define cómo lo vendes</h4><p>Elige la presentación y establece el precio para el mostrador.</p></div></header>
+        <div class="product-form-grid">
+          <label>Lo compras por<select id="tipoCompraProducto">
+            <option value="unidad" ${!isPackagePurchase ? 'selected' : ''}>Unidad individual</option>
+            <option value="paquete" ${isPackagePurchase ? 'selected' : ''}>Paquete con varias unidades</option>
+          </select></label>
+          <label id="unitsPerPackageField">Unidades por paquete<input name="unidadesPorPaquete" type="number" step="1" min="1" required value="${row.unidadesPorPaquete || 1}"></label>
+          <label>Precio de venta por unidad<div class="input-prefix"><span>Bs</span><input name="precioVenta" type="number" step="0.01" min="0.01" required placeholder="0.00" value="${row.precioVenta || ''}"></div></label>
+          <label id="packagePriceField">Precio de venta por paquete<div class="input-prefix"><span>Bs</span><input name="precioVentaPaquete" id="precioVentaPaquete" data-price-mode="${row.precioVentaPaquete == null ? 'auto' : 'manual'}" type="number" step="0.01" min="0.01" value="${packagePrice ? money(packagePrice) : ''}"></div></label>
+        </div>
+        <div class="product-sale-options">
+          <label class="check"><input name="permiteVentaPorUnidad" type="checkbox" ${checked(row.permiteVentaPorUnidad ?? true)}> <span><strong>Vender por unidad</strong><small>Opción principal para la venta diaria.</small></span></label>
+          <label class="check" id="salePackageField"><input name="permiteVentaPorPaquete" type="checkbox" ${checked(row.permiteVentaPorPaquete)}> <span><strong>Vender el paquete completo</strong><small>Disponible cuando el paquete contiene varias unidades.</small></span></label>
+        </div>
+      </section>
+
+      <section class="product-form-card wide" aria-labelledby="productStockTitle">
+        <header><span>3</span><div><h4 id="productStockTitle">Configura el inventario</h4><p>Usaremos estos valores para avisarte antes de quedarte sin existencias.</p></div></header>
+        <div class="product-form-grid product-form-grid-stock">
+          <label>Stock mínimo<input name="stockMinimo" type="number" step="1" min="1" required value="${row.stockMinimo || 5}"><small>Avisar cuando llegue a esta cantidad.</small></label>
+          ${isEdit
+            ? `<label>Stock actual<input type="number" readonly value="${Number(row.stockUnidadesTotal ?? row.stock ?? 0)}"><small>Se modifica mediante movimientos de inventario.</small></label>`
+            : '<label>Stock inicial<input name="stockUnidadesTotal" type="number" step="1" min="0" required value="0"><small>Lo que tienes disponible hoy.</small></label>'}
+        </div>
+        <p class="product-form-note"><strong>Importante:</strong> el precio de compra se registra cuando ingresas mercadería en Abastecimiento.</p>
+      </section>
     </form>`;
 }
 
@@ -1856,7 +1872,7 @@ function wireProductForm() {
 
 async function openProductModal(row = {}) {
   const isEdit = Boolean(row.idProducto);
-  const ok = await modal({ title: isEdit ? 'Editar producto' : 'Añadir producto', body: productForm(row), confirmText: isEdit ? 'Guardar cambios' : 'Agregar producto', cancelText: 'Cancelar', wide: true, preserveOnConfirm: true, onOpen: wireProductForm });
+  const ok = await modal({ title: isEdit ? 'Editar producto' : 'Añadir producto', body: productForm(row), confirmText: isEdit ? 'Guardar cambios' : 'Agregar producto', cancelText: 'Cancelar', wide: true, className: 'product-editor-modal', preserveOnConfirm: true, onOpen: wireProductForm });
   if (!ok) return;
   const form = document.getElementById('productoForm');
   const data = formData(form);

@@ -59,6 +59,10 @@ function createServer() {
       response.writeHead(200, { 'Content-Type': 'text/css; charset=utf-8' });
       return fs.createReadStream(path.join(PUBLIC, 'css', 'styles.css')).pipe(response);
     }
+    if (url.pathname === '/assets/administrau-icon.png' || url.pathname === '/assets/administrau-growth.png') {
+      response.writeHead(200, { 'Content-Type': 'image/png', 'Cache-Control': 'no-store' });
+      return fs.createReadStream(path.join(PUBLIC, url.pathname.slice(1))).pipe(response);
+    }
     if (url.pathname === '/favicon.ico') {
       response.writeHead(204);
       return response.end();
@@ -95,6 +99,8 @@ async function assertViewport(browser, baseUrl, viewport) {
   await page.locator('[data-onboarding-form]').waitFor();
   assert.strictEqual(await page.locator('html').getAttribute('data-theme'), 'dark');
   assert.strictEqual(await page.locator('.onboarding-card').evaluate((node) => getComputedStyle(node).backgroundColor), 'rgb(11, 17, 11)');
+  assert.strictEqual(await page.locator('.onboarding-brand').isVisible(), true);
+  assert.strictEqual(await page.locator('.onboarding-logout').evaluate((node) => getComputedStyle(node).borderStyle), 'solid');
   const overflow = await page.evaluate(() => document.documentElement.scrollWidth > document.documentElement.clientWidth + 1);
   assert.strictEqual(overflow, false, `La vista ${viewport.width}x${viewport.height} no debe desbordar.`);
   assert.strictEqual(await page.locator('label').count(), 4);
@@ -115,6 +121,8 @@ async function main() {
     page.on('pageerror', (error) => errors.push(error.message));
     await page.goto(baseUrl);
     await page.evaluate(() => window.__ready);
+    assert.strictEqual(await page.locator('.onboarding-brand').isVisible(), true);
+    assert.strictEqual(await page.locator('.onboarding-shell').count(), 1);
     const form = page.locator('[data-onboarding-form]');
     await form.locator('input[name="nombreMostrado"]').fill('Tienda de prueba');
     await form.locator('input[name="nombreMostrado"]').focus();

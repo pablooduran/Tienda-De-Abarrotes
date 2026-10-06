@@ -52,7 +52,7 @@
     function renderTools() {
       const count = notificationItems().length;
       tools.innerHTML = `
-        <button type="button" class="workspace-tool-button" data-workspace-search aria-label="Buscar en la aplicación"><span aria-hidden="true">⌕</span><span class="workspace-tool-label">Buscar</span><kbd>Ctrl K</kbd></button>
+        <button type="button" class="workspace-tool-button" data-workspace-search aria-label="Buscar en la aplicación"><span aria-hidden="true">⌕</span><span class="workspace-tool-label">Buscar</span></button>
         <button type="button" class="workspace-tool-button workspace-notification-button" data-workspace-notifications aria-label="Abrir novedades"><span aria-hidden="true">◉</span><span class="workspace-tool-label">Novedades</span>${count ? `<span class="workspace-tool-count">${count}</span>` : ''}</button>`;
       tools.querySelector('[data-workspace-search]').addEventListener('click', openSearch);
       tools.querySelector('[data-workspace-notifications]').addEventListener('click', openNotifications);
@@ -154,19 +154,6 @@
       });
     }
 
-    function enhanceEmptyStates() {
-      document.querySelectorAll('#view .empty-state, #view .audit-empty').forEach((empty) => {
-        if (empty.querySelector('[data-empty-help]')) return;
-        const button = document.createElement('button');
-        button.type = 'button';
-        button.className = 'secondary small';
-        button.dataset.emptyHelp = 'true';
-        button.textContent = '¿Qué puedo hacer aquí?';
-        button.addEventListener('click', () => navigate('ayuda'));
-        empty.appendChild(button);
-      });
-    }
-
     function dashboardPreferences() {
       return read('preferences', 'dashboard', { hidden: [] });
     }
@@ -176,16 +163,6 @@
       if (!widgets.length) return;
       const preferences = dashboardPreferences();
       widgets.forEach((widget) => { widget.hidden = preferences.hidden.includes(widget.dataset.dashboardWidget); });
-      let button = document.querySelector('[data-customize-dashboard]');
-      if (!button) {
-        button = document.createElement('button');
-        button.type = 'button';
-        button.className = 'secondary dashboard-customize-button';
-        button.dataset.customizeDashboard = 'true';
-        button.textContent = 'Personalizar inicio';
-        document.querySelector('.dashboard-hero')?.appendChild(button);
-        button.addEventListener('click', openDashboardCustomizer);
-      }
     }
 
     function openDashboardCustomizer() {
@@ -209,7 +186,6 @@
     function afterView(viewId) {
       state.activeView = viewId;
       enhanceStickyAction();
-      enhanceEmptyStates();
       if (viewId === 'inicio') applyDashboardPreferences();
       renderTools();
     }
@@ -247,7 +223,7 @@
       });
     }
 
-    return { init, afterView, saveDraft, loadDraft, clearDraft, refresh: renderTools };
+    return { init, afterView, saveDraft, loadDraft, clearDraft, refresh: renderTools, openDashboardCustomizer };
   }
 
   global.WorkspaceExperience = { create };

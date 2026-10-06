@@ -48,44 +48,59 @@
 
     function renderCompleted(data) {
       root.innerHTML = `
-        <section class="onboarding-card onboarding-completed" data-onboarding-completed>
-          <p class="onboarding-eyebrow">Configuracion inicial</p>
-          <h1>Todo esta listo</h1>
-          <p>La configuracion inicial de tu tienda fue completada.</p>
-          <button type="button" data-onboarding-panel>Ir al panel principal</button>
-          <button type="button" class="secondary" data-onboarding-logout>Cerrar sesion</button>
+        <section class="onboarding-shell onboarding-shell-completed">
+          ${brandPanel()}
+          <div class="onboarding-card onboarding-completed" data-onboarding-completed>
+            <span class="onboarding-success-icon" aria-hidden="true">✓</span>
+            <p class="onboarding-eyebrow">Configuración completada</p>
+            <h1>Tu tienda está lista</h1>
+            <p>Ya puedes registrar productos, ventas y movimientos desde el panel principal.</p>
+            <div class="onboarding-completed-actions"><button type="button" data-onboarding-panel>Ir al panel principal</button><button type="button" class="onboarding-logout" data-onboarding-logout><span aria-hidden="true">↪</span> Cerrar sesión</button></div>
+          </div>
         </section>`;
       root.querySelector('[data-onboarding-panel]').addEventListener('click', () => navigate('/app.html'));
       wireLogout();
+    }
+
+    function brandPanel() {
+      return `<aside class="onboarding-brand" aria-label="Administrau">
+        <div class="onboarding-brand-name"><img src="/assets/administrau-icon.png" alt=""><div><span>ADMINISTRAU</span><strong>Tu negocio, más claro cada día</strong></div></div>
+        <img class="onboarding-brand-art" src="/assets/administrau-growth.png" alt="" aria-hidden="true">
+        <div class="onboarding-brand-copy"><p class="onboarding-eyebrow">Empecemos con lo esencial</p><h2>Configura tu tienda en un momento</h2><p>Estos datos organizan tu espacio y ayudan a que los reportes, ventas y comprobantes se muestren correctamente.</p></div>
+        <ul class="onboarding-benefits"><li><span>1</span> Identifica tu negocio</li><li><span>2</span> Define cómo contactarte</li><li><span>3</span> Empieza a vender</li></ul>
+      </aside>`;
     }
 
     function renderForm(data, announcement = '') {
       const config = data.configuracion || {};
       const progress = Number(data.progreso || 0);
       root.innerHTML = `
-        <section class="onboarding-card" data-onboarding-screen>
-          <header class="onboarding-heading">
-            <p class="onboarding-eyebrow">Configuracion inicial</p>
-            <h1>Prepara tu tienda</h1>
-            <p>Completa los datos esenciales para empezar a usar tu tienda.</p>
-          </header>
-          <div class="onboarding-progress" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${progress}">
-            <span>Progreso</span><strong>${progress}%</strong><progress value="${progress}" max="100">${progress}%</progress>
+        <section class="onboarding-shell">
+          ${brandPanel()}
+          <div class="onboarding-card" data-onboarding-screen>
+            <header class="onboarding-heading">
+              <p class="onboarding-eyebrow">Configuración inicial</p>
+              <h1>Prepara tu tienda</h1>
+              <p>Completa los datos básicos. Podrás modificarlos después desde Configuración.</p>
+            </header>
+            <div class="onboarding-progress" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${progress}">
+              <span>Tu avance</span><strong>${progress}%</strong><progress value="${progress}" max="100">${progress}%</progress>
+            </div>
+            <form data-onboarding-form novalidate>
+              <div class="onboarding-grid">
+                <label class="onboarding-field-wide">Nombre de la tienda<small>El nombre que verás en el panel.</small><input name="nombreMostrado" maxlength="120" required placeholder="Ej.: Abarrotes La Esquina" value="${escapeHtml(config.nombreMostrado)}"></label>
+                <label>Teléfono<small>Solo números, sin espacios.</small><input name="telefono" maxlength="30" required autocomplete="tel" inputmode="tel" placeholder="Ej.: 70000000" value="${escapeHtml(config.telefono)}"></label>
+                <label>Moneda<small>Se usará en precios y reportes.</small><select name="moneda" required><option value="BOB" ${config.moneda === 'BOB' ? 'selected' : ''}>Bolivianos (BOB)</option></select></label>
+                <label class="onboarding-field-wide">Dirección <small>Opcional · ayuda a identificar tu sucursal.</small><textarea name="direccion" maxlength="255" rows="3" placeholder="Zona, calle o referencia">${escapeHtml(config.direccion)}</textarea></label>
+              </div>
+              <p class="onboarding-message" data-onboarding-message role="status" aria-live="polite">${escapeHtml(announcement)}</p>
+              <p class="onboarding-message error" data-onboarding-error role="alert" aria-live="assertive"></p>
+              <div class="onboarding-actions">
+                <button type="button" class="onboarding-logout" data-onboarding-logout><span aria-hidden="true">↪</span> Cerrar sesión</button>
+                <button type="submit" data-onboarding-complete>Guardar y entrar a mi tienda <span aria-hidden="true">→</span></button>
+              </div>
+            </form>
           </div>
-          <form data-onboarding-form novalidate>
-            <div class="onboarding-grid">
-              <label>Nombre de la tienda<input name="nombreMostrado" maxlength="120" required value="${escapeHtml(config.nombreMostrado)}"></label>
-              <label>Moneda<select name="moneda" required><option value="BOB" ${config.moneda === 'BOB' ? 'selected' : ''}>BOB</option></select></label>
-              <label>Teléfono<input name="telefono" maxlength="30" required autocomplete="tel" value="${escapeHtml(config.telefono)}"></label>
-              <label>Dirección (opcional)<textarea name="direccion" maxlength="255" rows="3">${escapeHtml(config.direccion)}</textarea></label>
-            </div>
-            <p class="onboarding-message" data-onboarding-message role="status" aria-live="polite">${escapeHtml(announcement)}</p>
-            <p class="onboarding-message error" data-onboarding-error role="alert" aria-live="assertive"></p>
-            <div class="onboarding-actions">
-              <button type="submit" data-onboarding-complete>Completar configuración</button>
-            </div>
-          </form>
-          <button type="button" class="onboarding-logout" data-onboarding-logout>Cerrar sesion</button>
         </section>`;
       const form = root.querySelector('[data-onboarding-form]');
       const error = root.querySelector('[data-onboarding-error]');
