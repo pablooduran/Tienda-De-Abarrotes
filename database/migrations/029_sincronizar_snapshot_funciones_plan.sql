@@ -1,6 +1,6 @@
 -- Aplica la nueva escalera comercial a las suscripciones vigentes.
 -- Las funciones se leen desde un snapshot por suscripcion para conservar
--- el historial; 028 actualizo el catalogo, pero las suscripciones activas
+-- el historial. 028 actualizo el catalogo, pero las suscripciones activas
 -- existentes necesitan recibir esa nueva foto de funcionalidades.
 
 DELETE sf
