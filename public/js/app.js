@@ -1797,7 +1797,7 @@ function productForm(row = {}) {
         <header><span>1</span><div><h4 id="productIdentityTitle">Identifica el producto</h4><p>Así lo reconocerás al buscarlo o escanearlo.</p></div></header>
         <div class="product-form-grid product-form-grid-primary">
           <label class="product-name-field">Nombre del producto<input name="nombre" required autofocus placeholder="Ej.: Coca-Cola 2 L" value="${escapeHtml(row.nombre || '')}"></label>
-          <label>Código de barras <small>Opcional</small><input name="codigoBarras" maxlength="64" inputmode="numeric" placeholder="Escanea o escribe el código" value="${escapeHtml(row.codigoBarras || '')}"></label>
+          <label><span class="field-label-with-note"><span>Código de barras</span><small>Opcional</small></span><input name="codigoBarras" maxlength="64" inputmode="numeric" placeholder="Escanea o escribe el código" value="${escapeHtml(row.codigoBarras || '')}"></label>
           <label>Proveedor<select name="idProveedor">${options(state.proveedores, 'idProveedor', 'nombre', 'Sin proveedor', row.idProveedor)}</select></label>
           <label>Categoría<select name="categoria" required>${categoryOptions(row.categoria || 'OTROS')}</select></label>
         </div>
