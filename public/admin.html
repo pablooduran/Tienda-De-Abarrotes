@@ -14,7 +14,7 @@
   <div class="admin-shell">
     <aside class="admin-sidebar">
       <div class="brand-block">
-        <span class="brand-mark" aria-hidden="true">T</span>
+        <img class="brand-logo" src="/assets/administrau-icon.png" alt="">
         <div>
           <strong>Plataforma de tiendas</strong>
           <span>Administración general</span>
@@ -71,13 +71,17 @@
 
       <section id="pagos-suscripcion" data-admin-view="pagos-suscripcion" class="content-section payment-admin-section" aria-labelledby="paymentAdminHeading">
         <div class="section-heading">
-          <div><p class="eyebrow">Pagos manuales</p><h2 id="paymentAdminHeading">Solicitudes de suscripción</h2><p>Revisa solicitudes y configura las condiciones manuales sin registrar cobros automáticos.</p></div>
+          <div><p class="eyebrow">Cobros de la plataforma</p><h2 id="paymentAdminHeading">Pagos de suscripción</h2><p>Configura cómo pagan las tiendas y revisa sus comprobantes antes de activar o renovar un plan.</p></div>
           <div class="button-row"><button id="openPaymentReviewFilters" class="button button-secondary" type="button">Filtros</button><button id="refreshPaymentAdmin" class="button button-secondary" type="button">Actualizar</button></div>
         </div>
+        <section class="payment-guide" aria-label="Cómo funciona esta sección">
+          <div class="payment-guide-brand"><img src="/assets/administrau-icon.png" alt=""><div><strong>¿Qué administras aquí?</strong><span>Los cobros de planes de las tiendas, no sus ventas ni su inventario.</span></div></div>
+          <ol class="payment-guide-steps"><li><b>1</b><span><strong>Configura</strong> QR, transferencia o efectivo administrativo.</span></li><li><b>2</b><span><strong>La tienda solicita</strong> un plan y adjunta su comprobante.</span></li><li><b>3</b><span><strong>Revisa y aprueba</strong> solo cuando los datos sean correctos.</span></li></ol>
+        </section>
         <p id="paymentAdminFeedback" class="payment-admin-feedback" role="status" aria-live="polite"></p>
         <div class="payment-admin-grid">
           <details class="payment-admin-card payment-admin-advanced">
-            <summary><span><strong>Conversión para cobros manuales</strong><small>Solo se usa mientras los pagos se confirmen por QR o transferencia.</small></span></summary>
+            <summary><span><strong>Conversión USD → BOB</strong><small>Solo modifica el valor de referencia para cobros manuales en bolivianos.</small></span><em>Ajuste opcional</em></summary>
             <section aria-labelledby="paymentRateHeading">
               <h3 id="paymentRateHeading">Valor de referencia USD a BOB</h3>
               <p class="payment-muted">Cuando se conecte un proveedor de pagos, la conversión será automática y este ajuste dejará de ser necesario.</p>
@@ -91,7 +95,7 @@
             </section>
           </details>
           <section class="payment-admin-card" aria-labelledby="paymentMethodsHeading">
-            <h3 id="paymentMethodsHeading">Métodos manuales</h3>
+            <div class="payment-card-heading"><div><p class="eyebrow">Paso 1</p><h3 id="paymentMethodsHeading">Cómo puede pagar una tienda</h3><p>Activa únicamente los métodos que realmente podrás revisar.</p></div><span class="payment-card-icon" aria-hidden="true">▣</span></div>
             <div id="paymentAdminMethods" class="payment-method-admin-list"></div>
           </section>
         </div>
@@ -373,9 +377,11 @@
   <dialog id="formDialog" class="modal">
     <form id="dynamicForm" method="dialog">
       <header>
-        <div>
-          <p class="eyebrow">Administración</p>
+        <div class="modal-heading">
+          <img id="formDialogLogo" class="form-dialog-logo" src="/assets/administrau-icon.png" alt="" hidden>
+          <div><p id="formDialogEyebrow" class="eyebrow">Administración</p>
           <h2 id="formDialogTitle"></h2>
+          <p id="formDialogIntro" class="form-dialog-intro" hidden></p></div>
         </div>
         <button class="icon-button" type="button" data-close-dialog aria-label="Cerrar">×</button>
       </header>

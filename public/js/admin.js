@@ -48,6 +48,9 @@ const elements = {
   subscriptionsTableBody: document.getElementById('subscriptionsTableBody'),
   emptySubscriptions: document.getElementById('emptySubscriptions'),
   formDialog: document.getElementById('formDialog'),
+  formDialogEyebrow: document.getElementById('formDialogEyebrow'),
+  formDialogIntro: document.getElementById('formDialogIntro'),
+  formDialogLogo: document.getElementById('formDialogLogo'),
   dynamicForm: document.getElementById('dynamicForm'),
   formDialogTitle: document.getElementById('formDialogTitle'),
   formFields: document.getElementById('formFields'),
@@ -413,17 +416,46 @@ function createField(definition) {
   const labelText = document.createElement('span');
   labelText.textContent = definition.label;
   if (definition.type === 'checkbox') label.append(input, labelText);
-  else label.append(labelText, input);
+  else {
+    label.append(labelText, input);
+    if (definition.hint) {
+      const hint = document.createElement('small');
+      hint.className = 'field-help';
+      hint.textContent = definition.hint;
+      label.append(hint);
+    }
+  }
   return label;
 }
 
-function openForm({ title, submitLabel = 'Guardar', fields, action }) {
+function formNodes(fields) {
+  let section = null;
+  return fields.flatMap((field) => {
+    const nodes = [];
+    if (field.section && field.section !== section) {
+      section = field.section;
+      const heading = document.createElement('div');
+      heading.className = 'form-section-heading';
+      heading.innerHTML = `<span>${escapeHtml(field.section)}</span>${field.sectionHint ? `<small>${escapeHtml(field.sectionHint)}</small>` : ''}`;
+      nodes.push(heading);
+    }
+    nodes.push(createField(field));
+    return nodes;
+  });
+}
+
+function openForm({ title, submitLabel = 'Guardar', fields, action, eyebrow = 'Administración', intro = '', formClass = '' }) {
   state.formFields = fields;
   state.formAction = action;
   elements.formDialogTitle.textContent = title;
+  elements.formDialogEyebrow.textContent = eyebrow;
+  elements.formDialogIntro.textContent = intro;
+  elements.formDialogIntro.hidden = !intro;
+  elements.formDialogLogo.hidden = !formClass;
+  elements.formDialog.className = `modal ${formClass}`.trim();
   elements.formSubmitButton.textContent = submitLabel;
   elements.formError.hidden = true;
-  elements.formFields.replaceChildren(...fields.map(createField));
+  elements.formFields.replaceChildren(...formNodes(fields));
   elements.formDialog.showModal();
 }
 
@@ -833,20 +865,20 @@ async function toggleTaxonomy(kind, row) {
 
 function masterProductFields(product = {}) {
   return [
-    { name: 'nombre', label: 'Nombre', value: product.nombre || '', required: true, full: true },
-    { name: 'proveedorSugerido', label: 'Proveedor sugerido', value: product.proveedorSugerido || '', placeholder: 'Se crea en la tienda al agregar el producto' },
-    { name: 'idCategoriaMaestra', label: 'Categoría maestra', type: 'select', value: String(product.idCategoriaMaestra || ''), options: optionList(state.masterCategories, 'idCategoriaMaestra') },
-    { name: 'idMarcaMaestra', label: 'Marca maestra', type: 'select', value: String(product.idMarcaMaestra || ''), options: optionList(state.masterBrands, 'idMarcaMaestra') },
-    { name: 'codigoBarras', label: 'Código de barras opcional', value: product.codigoBarras || '' },
-    { name: 'presentacion', label: 'Presentación', value: product.presentacion || '', placeholder: 'Botella, bolsa, paquete' },
-    { name: 'contenidoCantidad', label: 'Contenido', type: 'number', step: '0.001', min: 0.001, value: product.contenidoCantidad || '' },
-    { name: 'contenidoUnidad', label: 'Unidad de contenido', value: product.contenidoUnidad || '', placeholder: 'g, kg, ml, l' },
-    { name: 'unidadesPorPaquete', label: 'Unidades por paquete', type: 'number', min: 1, step: 1, value: product.unidadesPorPaquete || 1, required: true },
-    { name: 'permiteVentaPorUnidad', label: 'Permite venta por unidad', type: 'checkbox', value: product.permiteVentaPorUnidad ?? true },
-    { name: 'permiteVentaPorPaquete', label: 'Permite venta por paquete', type: 'checkbox', value: product.permiteVentaPorPaquete ?? false },
-    { name: 'activo', label: 'Producto maestro activo', type: 'checkbox', value: product.activo ?? true },
-    { name: 'confirmarDuplicado', label: 'Confirmar posible duplicado advertido', type: 'checkbox', value: false },
-    { name: 'descripcion', label: 'Descripción', type: 'textarea', value: product.descripcion || '', full: true }
+    { name: 'nombre', label: 'Nombre del producto', value: product.nombre || '', required: true, full: true, section: '1. Identifica el producto', sectionHint: 'Usa un nombre claro para que todas las tiendas lo encuentren al buscar.', hint: 'Ejemplo: Galletas María paquete 120 g.' },
+    { name: 'codigoBarras', label: 'Código de barras', value: product.codigoBarras || '', hint: 'Opcional. Ayuda a encontrarlo con un escáner.' },
+    { name: 'idCategoriaMaestra', label: 'Categoría', type: 'select', value: String(product.idCategoriaMaestra || ''), options: optionList(state.masterCategories, 'idCategoriaMaestra'), hint: 'Ordena el catálogo global.' },
+    { name: 'idMarcaMaestra', label: 'Marca', type: 'select', value: String(product.idMarcaMaestra || ''), options: optionList(state.masterBrands, 'idMarcaMaestra') },
+    { name: 'proveedorSugerido', label: 'Proveedor sugerido', value: product.proveedorSugerido || '', placeholder: 'Opcional', hint: 'Cada tienda podrá elegir o cambiar su proveedor.' },
+    { name: 'presentacion', label: 'Presentación', value: product.presentacion || '', placeholder: 'Botella, bolsa, paquete', section: '2. Define cómo se presenta', sectionHint: 'Estos datos guían el alta del producto en cada tienda.' },
+    { name: 'contenidoCantidad', label: 'Cantidad', type: 'number', step: '0.001', min: 0.001, value: product.contenidoCantidad || '', placeholder: 'Ej. 500' },
+    { name: 'contenidoUnidad', label: 'Unidad', value: product.contenidoUnidad || '', placeholder: 'g, kg, ml, l' },
+    { name: 'unidadesPorPaquete', label: 'Unidades por paquete', type: 'number', min: 1, step: 1, value: product.unidadesPorPaquete || 1, required: true, hint: 'Usa 1 si se vende individualmente.' },
+    { name: 'permiteVentaPorUnidad', label: 'Se puede vender por unidad', type: 'checkbox', value: product.permiteVentaPorUnidad ?? true, section: '3. Habilita las ventas', sectionHint: 'Marca solo las modalidades que estarán disponibles para las tiendas.' },
+    { name: 'permiteVentaPorPaquete', label: 'Se puede vender por paquete', type: 'checkbox', value: product.permiteVentaPorPaquete ?? false },
+    { name: 'activo', label: 'Disponible para las tiendas', type: 'checkbox', value: product.activo ?? true, section: '4. Información adicional' },
+    { name: 'confirmarDuplicado', label: 'Crear aunque parezca duplicado', type: 'checkbox', value: false },
+    { name: 'descripcion', label: 'Descripción o aclaración', type: 'textarea', value: product.descripcion || '', full: true, placeholder: 'Opcional: sabor, condición o información útil para quien lo agregue.' }
   ];
 }
 
@@ -854,6 +886,9 @@ function openMasterProduct(product = null) {
   openForm({
     title: product ? 'Editar producto maestro' : 'Nuevo producto maestro',
     submitLabel: product ? 'Guardar cambios' : 'Crear producto',
+    eyebrow: 'Catálogo de Administrau',
+    intro: product ? 'Actualiza la información compartida. No modifica los precios ni el stock de las tiendas.' : 'Crea una ficha reutilizable. Los precios, el stock y los proveedores reales se completan dentro de cada tienda.',
+    formClass: 'modal-product',
     fields: masterProductFields(product || {}),
     action: async (values) => {
       try {
