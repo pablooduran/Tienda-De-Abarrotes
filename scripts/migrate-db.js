@@ -1665,7 +1665,7 @@ async function activeSubscriptionSnapshotsSatisfied(connection, { allowAdditiona
 }
 
 async function collaborativeTeamSatisfied(connection) {
-  const roleColumn = (await getColumnMap(connection, 'administrador', ['rol'])).rol;
+  const roleColumn = (await normalizedColumnDetails(connection, 'administrador', ['rol'])).rol;
   const expectedRole = {
     type: "enum('superadmin','dueno_tienda','encargado','cajero','inventario')",
     nullable: false,
