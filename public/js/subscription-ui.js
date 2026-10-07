@@ -34,6 +34,7 @@
     catalogo_maestro: 'Catálogo guiado de productos', cierre_caja: 'Cierre de caja',
     clientes_basico: 'Clientes', compras_sugeridas: 'Compras sugeridas', control_lotes: 'Control de lotes',
     dashboard_financiero: 'Resumen financiero', dias_cobertura: 'Días de cobertura',
+    equipo_colaborativo: 'Equipo y permisos para tu personal',
     estado_cuenta_basico: 'Estado de cuenta de clientes', exportacion_clientes_fiados: 'Exportación de clientes y fiados',
     exportacion_inventario: 'Exportación de inventario', exportacion_lotes: 'Exportación de lotes',
     exportacion_reportes: 'Exportación de reportes', fiados_basico: 'Ventas a crédito y fiados',

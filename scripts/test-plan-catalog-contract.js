@@ -14,6 +14,10 @@ const migration = fs.readFileSync(
   path.join(root, 'database', 'migrations', '028_reordenar_funciones_por_plan.sql'),
   'utf8'
 );
+const teamMigration = fs.readFileSync(
+  path.join(root, 'database', 'migrations', '030_equipo_colaborativo_pro.sql'),
+  'utf8'
+);
 const schema = fs.readFileSync(path.join(root, 'database', 'tienda_abarrotes.sql'), 'utf8');
 const subscriptionUi = fs.readFileSync(path.join(root, 'public', 'js', 'subscription-ui.js'), 'utf8');
 
@@ -38,7 +42,7 @@ assert.deepStrictEqual(
 
 assert.strictEqual(BASIC_FEATURES.length, 9);
 assert.strictEqual(STANDARD_FEATURES.length, 22);
-assert.strictEqual(PRO_FEATURES.length, 36);
+assert.strictEqual(PRO_FEATURES.length, 37);
 assert(sameMembers(STANDARD_FEATURES, BASIC_FEATURES));
 assert(sameMembers(PRO_FEATURES, STANDARD_FEATURES));
 assert(EXCLUDED_PUBLIC_FEATURES.every((feature) => !PRO_FEATURES.includes(feature)));
@@ -53,13 +57,17 @@ assert(!STANDARD_FEATURES.includes('cierre_caja'));
 assert(!STANDARD_FEATURES.includes('rentabilidad_producto'));
 assert(PRO_FEATURES.includes('rentabilidad_producto'));
 assert(PRO_FEATURES.includes('cierre_caja'));
+assert(!BASIC_FEATURES.includes('equipo_colaborativo'));
+assert(!STANDARD_FEATURES.includes('equipo_colaborativo'));
+assert(PRO_FEATURES.includes('equipo_colaborativo'));
 
 for (const code of Object.keys(PLAN_CATALOG)) {
   assert(migration.includes(`WHERE p.codigo='${code}'`));
   assert(schema.includes(`WHERE p.codigo='${code}'`));
 }
 for (const feature of PRO_FEATURES) {
-  assert(migration.includes(`'${feature}'`), `La migracion no declara ${feature}`);
+  const isTeamFeature = feature === 'equipo_colaborativo';
+  assert((isTeamFeature ? teamMigration : migration).includes(`'${feature}'`), `La migracion no declara ${feature}`);
   assert(subscriptionUi.includes(`${feature}:`), `Falta etiqueta visible para ${feature}`);
 }
 for (const feature of EXCLUDED_PUBLIC_FEATURES) {
