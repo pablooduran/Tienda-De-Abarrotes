@@ -137,6 +137,14 @@ async function main() {
       assert.notStrictEqual(viewState.sectionDisplay, 'none', JSON.stringify({ viewState, errors }));
       assert.strictEqual(await page.locator('.admin-sidebar nav').isVisible(), true,
         'La navegacion administrativa debe estar disponible en movil y escritorio.');
+      if (viewport.width <= 760) {
+        assert.strictEqual(await page.locator('.admin-shell').getAttribute('class'), 'admin-shell');
+        await page.locator('#adminSidebarToggle').click();
+        assert.strictEqual(await page.locator('.admin-shell').getAttribute('class'), 'admin-shell sidebar-expanded');
+        assert.strictEqual(await page.locator('#adminSidebarToggle').getAttribute('aria-expanded'), 'true');
+        await page.locator('#adminSidebarScrim').click();
+        assert.strictEqual(await page.locator('#adminSidebarToggle').getAttribute('aria-expanded'), 'false');
+      }
       await page.locator('.admin-sidebar a[href="#catalogo"]').click();
       assert.strictEqual(await page.locator('#catalogo').isVisible(), true);
       assert.strictEqual(await page.locator('#suscripciones-saas').isVisible(), false,

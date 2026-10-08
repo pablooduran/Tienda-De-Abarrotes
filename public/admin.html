@@ -12,7 +12,11 @@
 </head>
 <body>
   <div class="admin-shell">
-    <aside class="admin-sidebar">
+    <button id="adminSidebarScrim" class="admin-sidebar-scrim" type="button" aria-label="Cerrar navegación" hidden></button>
+    <aside id="adminSidebar" class="admin-sidebar">
+      <button id="adminSidebarToggle" class="admin-sidebar-toggle" type="button" aria-controls="adminSidebar" aria-expanded="false" aria-label="Abrir navegación administrativa" title="Abrir navegación">
+        <span aria-hidden="true">☰</span>
+      </button>
       <div class="brand-block">
         <img class="brand-logo" src="/assets/administrau-icon.png" alt="">
         <div>
@@ -33,10 +37,10 @@
       </nav>
 
       <div class="session-block">
-        <button class="button button-quiet admin-theme-toggle" type="button" data-toggle-theme aria-pressed="false">Modo oscuro</button>
+        <button class="button button-quiet admin-theme-toggle" type="button" data-toggle-theme aria-pressed="false" title="Cambiar tema">Modo oscuro</button>
         <span>Sesión iniciada como</span>
         <strong id="currentAdmin">Superadmin</strong>
-        <button id="logoutButton" class="button button-quiet" type="button">Cerrar sesión</button>
+        <button id="logoutButton" class="button button-quiet" type="button" title="Cerrar sesión">Cerrar sesión</button>
       </div>
     </aside>
 

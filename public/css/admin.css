@@ -65,6 +65,11 @@ button {
   background: #0e2117;
 }
 
+.admin-sidebar-toggle,
+.admin-sidebar-scrim {
+  display: none;
+}
+
 .brand-block {
   display: flex;
   gap: 12px;
@@ -1213,62 +1218,182 @@ html[data-theme="dark"] {
 @media (max-width: 760px) {
   html,
   body {
-    height: auto;
+    height: 100%;
     min-height: 100%;
     overflow-x: hidden;
-    overflow-y: auto;
+    overflow-y: hidden;
   }
 
   .admin-shell {
-    display: block;
-    height: auto;
-    overflow: visible;
+    display: grid;
+    grid-template-columns: 72px minmax(0, 1fr);
+    height: 100dvh;
+    overflow: hidden;
   }
 
   .admin-sidebar {
-    position: sticky;
-    z-index: 5;
-    top: 0;
+    position: relative;
+    z-index: 30;
+    width: 72px;
+    height: 100dvh;
+    padding: 12px 10px;
+    gap: 14px;
+    overflow: hidden;
+    border-right: 1px solid rgba(188, 235, 216, .18);
+    box-shadow: 8px 0 24px rgba(4, 17, 9, .14);
+    transition: width .22s ease, box-shadow .22s ease;
+  }
+
+  .admin-sidebar-toggle {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) auto;
-    gap: 12px;
-    align-items: center;
-    padding: 12px 16px;
+    width: 48px;
+    height: 44px;
+    place-items: center;
+    padding: 0;
+    border: 1px solid rgba(188, 235, 216, .28);
+    border-radius: 12px;
+    color: #f7fbf9;
+    background: #173b29;
+    font-size: 1.2rem;
+    cursor: pointer;
+  }
+
+  .admin-sidebar-toggle:focus-visible,
+  .admin-sidebar-toggle:hover {
+    outline: none;
+    border-color: #75df96;
+    background: #1a7a2e;
+    box-shadow: 0 0 0 3px rgba(117, 223, 150, .18);
+  }
+
+  .admin-sidebar-scrim:not([hidden]) {
+    position: fixed;
+    z-index: 20;
+    inset: 0;
+    display: block;
+    border: 0;
+    background: rgba(4, 12, 7, .54);
+  }
+
+  .admin-shell.sidebar-expanded .admin-sidebar {
+    position: fixed;
+    inset: 0 auto 0 0;
+    width: min(288px, calc(100vw - 42px));
+    padding: 18px;
+    box-shadow: 18px 0 48px rgba(4, 17, 9, .35);
   }
 
   .brand-block {
     margin: 0;
   }
 
-  .admin-sidebar nav {
-    display: flex;
-    grid-column: 1 / -1;
-    gap: 6px;
-    overflow-x: auto;
-    white-space: nowrap;
-  }
-  .admin-sidebar .admin-nav-group { display: none; }
-  .admin-sidebar .nav-link { flex: 0 0 auto; }
-
-  .session-block {
-    width: auto;
-    margin: 0;
-    padding: 0;
-    border: 0;
-  }
-
+  .brand-block div,
+  .admin-sidebar .admin-nav-group,
   .session-block span,
   .session-block strong {
     display: none;
   }
 
-  .session-block .button {
-    width: auto;
+  .admin-sidebar .brand-logo {
+    width: 48px;
+    height: 48px;
+    flex-basis: 48px;
+    border-radius: 14px;
   }
 
+  .admin-sidebar nav {
+    display: grid;
+    flex: 1 1 auto;
+    gap: 9px;
+    padding: 2px 0;
+    overflow: hidden auto;
+    scrollbar-width: none;
+  }
+  .admin-sidebar nav::-webkit-scrollbar { display: none; }
+  .admin-sidebar .nav-link {
+    display: grid;
+    width: 48px;
+    min-height: 48px;
+    place-items: center;
+    padding: 0;
+    border: 1px solid transparent;
+    border-radius: 12px;
+    font-size: 0;
+  }
+  .admin-sidebar .nav-link::before { font-size: 1.18rem; line-height: 1; }
+  .admin-sidebar .nav-link[href="#tiendas"]::before { content: '⌂'; }
+  .admin-sidebar .nav-link[href="#suscripciones-saas"]::before { content: '◈'; }
+  .admin-sidebar .nav-link[href="#pagos-suscripcion"]::before { content: '₿'; }
+  .admin-sidebar .nav-link[href="#catalogo"]::before { content: '▦'; }
+  .admin-sidebar .nav-link[href="#auditoria"]::before { content: '◷'; }
+
+  .session-block {
+    display: grid;
+    width: 48px;
+    margin: auto 0 0;
+    padding: 0;
+    border: 0;
+    gap: 8px;
+  }
+  .session-block .button {
+    display: grid;
+    width: 48px;
+    min-height: 44px;
+    place-items: center;
+    padding: 0;
+    font-size: 0;
+    border-radius: 12px;
+  }
+  .session-block .button::before { font-size: 1.1rem; }
+  .session-block .admin-theme-toggle::before { content: '◐'; }
+  .session-block #logoutButton::before { content: '↪'; }
+
+  .admin-shell.sidebar-expanded .admin-sidebar .brand-block {
+    gap: 12px;
+  }
+  .admin-shell.sidebar-expanded .admin-sidebar .brand-block div,
+  .admin-shell.sidebar-expanded .admin-sidebar .admin-nav-group,
+  .admin-shell.sidebar-expanded .session-block span,
+  .admin-shell.sidebar-expanded .session-block strong {
+    display: block;
+  }
+  .admin-shell.sidebar-expanded .admin-sidebar nav {
+    gap: 6px;
+    scrollbar-width: thin;
+  }
+  .admin-shell.sidebar-expanded .admin-sidebar .nav-link {
+    display: block;
+    width: 100%;
+    min-height: 0;
+    padding: 11px 12px;
+    border-radius: 8px;
+    font-size: inherit;
+  }
+  .admin-shell.sidebar-expanded .admin-sidebar .nav-link::before { display: none; }
+  .admin-shell.sidebar-expanded .session-block {
+    display: block;
+    width: 100%;
+  }
+  .admin-shell.sidebar-expanded .session-block .button {
+    display: block;
+    width: 100%;
+    min-height: 42px;
+    padding: 10px 12px;
+    font-size: inherit;
+    text-align: center;
+  }
+  .admin-shell.sidebar-expanded .session-block .button::before { display: none; }
+  .admin-shell.sidebar-expanded .session-block strong { margin-bottom: 14px; }
+
   .admin-main {
+    grid-column: 2;
+    height: 100dvh;
     padding: 24px 16px 48px;
-    overflow: visible;
+    overflow: auto;
+  }
+
+  .admin-shell.sidebar-expanded .admin-main {
+    pointer-events: none;
   }
   #storeDetail[open], #saasSubscriptionDetail[open], #paymentReviewDetail[open], .admin-filter-dialog[open] { padding: 16px; }
 

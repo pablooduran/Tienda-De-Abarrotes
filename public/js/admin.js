@@ -61,7 +61,10 @@ const elements = {
   confirmMessage: document.getElementById('confirmMessage'),
   confirmAccept: document.getElementById('confirmAccept'),
   confirmCancel: document.getElementById('confirmCancel'),
-  toast: document.getElementById('toast')
+  toast: document.getElementById('toast'),
+  adminShell: document.querySelector('.admin-shell'),
+  adminSidebarToggle: document.getElementById('adminSidebarToggle'),
+  adminSidebarScrim: document.getElementById('adminSidebarScrim')
 };
 
 Object.assign(elements, {
@@ -104,6 +107,19 @@ function isActive(value) {
 function isCommercialPlan(plan) {
   return isActive(plan?.activo)
     && ['basico', 'standard', 'pro'].includes(String(plan.codigo || '').toLowerCase());
+}
+
+function setAdminSidebarExpanded(expanded, { restoreFocus = false } = {}) {
+  const mobile = window.matchMedia('(max-width: 760px)').matches;
+  const visible = mobile && Boolean(expanded);
+  elements.adminShell.classList.toggle('sidebar-expanded', visible);
+  elements.adminSidebarToggle.setAttribute('aria-expanded', String(visible));
+  elements.adminSidebarToggle.setAttribute('aria-label', visible
+    ? 'Cerrar navegación administrativa' : 'Abrir navegación administrativa');
+  elements.adminSidebarToggle.title = visible ? 'Cerrar navegación' : 'Abrir navegación';
+  elements.adminSidebarToggle.firstElementChild.textContent = visible ? '×' : '☰';
+  elements.adminSidebarScrim.hidden = !visible;
+  if (restoreFocus) elements.adminSidebarToggle.focus();
 }
 
 function formatDate(value) {
@@ -1146,6 +1162,21 @@ document.getElementById('manageSubscriptionButton').addEventListener('click', ma
 document.getElementById('addOwnerButton').addEventListener('click', addOwner);
 document.getElementById('toggleStoreButton').addEventListener('click', toggleStore);
 document.getElementById('logoutButton').addEventListener('click', logout);
+elements.adminSidebarToggle.addEventListener('click', () => {
+  setAdminSidebarExpanded(!elements.adminShell.classList.contains('sidebar-expanded'));
+});
+elements.adminSidebarScrim.addEventListener('click', () => setAdminSidebarExpanded(false, { restoreFocus: true }));
+document.querySelectorAll('.admin-sidebar .nav-link').forEach((link) => {
+  link.addEventListener('click', () => setAdminSidebarExpanded(false));
+});
+window.addEventListener('keydown', (event) => {
+  if (event.key === 'Escape' && elements.adminShell.classList.contains('sidebar-expanded')) {
+    setAdminSidebarExpanded(false, { restoreFocus: true });
+  }
+});
+window.addEventListener('resize', () => {
+  if (!window.matchMedia('(max-width: 760px)').matches) setAdminSidebarExpanded(false);
+});
 document.getElementById('addMasterProductButton').addEventListener('click', () => openMasterProduct());
 document.getElementById('addMasterCategoryButton').addEventListener('click', () => openTaxonomy('categoria'));
 document.getElementById('addMasterBrandButton').addEventListener('click', () => openTaxonomy('marca'));
