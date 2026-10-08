@@ -276,7 +276,10 @@ router.get('/planes', asyncRoute(async (req, res) => {
   const [rows] = await pool.query(
     `SELECT idPlan, codigo, nombre, descripcion, activo, precioMensual, duracionDias,
        limitePropietarios, limiteProductos, limiteClientes, limiteProveedores
-     FROM plan ORDER BY idPlan`
+     FROM plan
+     WHERE activo=1 AND visiblePublicamente=1 AND esLegado=0
+       AND codigo IN ('basico','standard','pro')
+     ORDER BY ordenComercial,codigo`
   );
   res.json(rows);
 }));

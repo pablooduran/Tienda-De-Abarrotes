@@ -37,6 +37,11 @@
     return String(value || 'sin_suscripcion').replaceAll('_', ' ').replace(/^./, (character) => character.toUpperCase());
   }
 
+  function isCommercialPlan(plan) {
+    return Number(plan?.activo) === 1
+      && ['basico', 'standard', 'pro'].includes(String(plan.codigo || '').toLowerCase());
+  }
+
   function date(value) {
     if (!value) return 'Sin fecha registrada';
     const text = String(value).trim();
@@ -126,7 +131,7 @@
     const planSelect = elements.filters.elements.plan;
     if (planSelect.options.length === 1) {
       const catalog = await request('/api/admin/planes');
-      for (const plan of catalog.filter((item) => Number(item.activo) === 1)) {
+      for (const plan of catalog.filter(isCommercialPlan)) {
         const option = document.createElement('option');
         option.value = plan.codigo;
         option.textContent = plan.nombre;

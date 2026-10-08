@@ -16,6 +16,7 @@ const {
   withTransaction
 } = require('./subscription-lifecycle-service');
 const { formatLocalDateTime, getLocalNow, parseLocalDateTime } = require('../utils/local-datetime');
+const { PUBLIC_PLAN_CODES } = require('../config/saas-c-payment-contract');
 
 function dateText(value) {
   return formatLocalDateTime(value instanceof Date ? value : parseLocalDateTime(value));
@@ -163,6 +164,9 @@ async function changePlan(database, input, expectedType) {
   const nowText = formatLocalDateTime(now);
   return withTransaction(database, async (connection) => {
     const subscription = await lockStoreAndSubscription(connection, idTienda, idSuscripcion);
+    if (!PUBLIC_PLAN_CODES.includes(body.codigoPlan)) {
+      throw lifecycleError(400, 'El plan seleccionado no esta disponible para cambios.', 'PLAN_NOT_AVAILABLE');
+    }
     const target = await planFromCatalog(connection, body.codigoPlan, true, false);
     const operation = await claimOperation(connection, {
       idTienda,

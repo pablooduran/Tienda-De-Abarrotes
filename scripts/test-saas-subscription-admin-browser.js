@@ -40,7 +40,7 @@ function detail() {
     },
     planes: [
       { codigo: 'basico', nombre: 'Basico', tipoCambio: 'mismo_plan' },
-      { codigo: 'avanzado', nombre: 'Avanzado', tipoCambio: 'upgrade' }
+      { codigo: 'standard', nombre: 'Standard', tipoCambio: 'upgrade' }
     ],
     historial: { resultados: [{
       operacion: 'entrada_gracia', estadoAnterior: 'activa', estadoNuevo: 'gracia',
@@ -69,7 +69,9 @@ function fixtureServer() {
     }
     if (url.pathname === '/api/admin/planes') return json(response, 200, [
       { codigo: 'basico', nombre: 'Basico', activo: 1 },
-      { codigo: 'avanzado', nombre: 'Avanzado', activo: 1 }
+      { codigo: 'avanzado', nombre: 'Avanzado', activo: 1 },
+      { codigo: 'standard', nombre: 'Standard', activo: 1 },
+      { codigo: 'pro', nombre: 'Pro', activo: 1 }
     ]);
     if (url.pathname === '/api/admin/suscripciones/resumen') return json(response, 200, {
       total: 1, activas: 0, gracia: 1, suspendidas: 0, canceladas: 0, limitesExcedidos: 1
@@ -114,6 +116,9 @@ async function main() {
       page.on('console', (message) => { if (message.type() === 'error') errors.push(message.text()); });
       page.on('pageerror', (error) => errors.push(error.message));
       await page.goto(`${baseUrl}/admin.html#suscripciones-saas`);
+      await page.locator('#saasSubscriptionFilters select[name="plan"] option').nth(3).waitFor();
+      assert.strictEqual(await page.locator('#saasSubscriptionFilters select[name="plan"] option').allTextContents().then((items) => items.includes('Avanzado')), false,
+        'El plan legado no debe aparecer como filtro comercial.');
       await page.locator('[data-toggle-theme]').click();
       assert.strictEqual(await page.locator('html').getAttribute('data-theme'), 'dark');
       assert.strictEqual(await page.locator('.content-section').first().evaluate((node) => getComputedStyle(node).backgroundColor), 'rgb(11, 17, 11)');

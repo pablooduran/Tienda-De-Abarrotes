@@ -101,6 +101,11 @@ function isActive(value) {
   return Number(value) === 1;
 }
 
+function isCommercialPlan(plan) {
+  return isActive(plan?.activo)
+    && ['basico', 'standard', 'pro'].includes(String(plan.codigo || '').toLowerCase());
+}
+
 function formatDate(value) {
   if (!value) return 'Sin actividad registrada';
   const date = new Date(value);
@@ -490,7 +495,7 @@ function openConfirmation(title, message, acceptLabel = 'Confirmar') {
 }
 
 function createStore() {
-  const planOptions = state.plans.filter((plan) => isActive(plan.activo)).map((plan) => ({
+  const planOptions = state.plans.filter((plan) => isCommercialPlan(plan)).map((plan) => ({
     value: plan.codigo, label: plan.nombre
   }));
   openForm({
@@ -553,7 +558,7 @@ function createStore() {
 function manageSubscription() {
   const store = state.selectedStore;
   if (!store) return;
-  const planOptions = state.plans.filter((plan) => isActive(plan.activo)).map((plan) => ({
+  const planOptions = state.plans.filter((plan) => isCommercialPlan(plan)).map((plan) => ({
     value: plan.codigo, label: plan.nombre
   }));
   openForm({

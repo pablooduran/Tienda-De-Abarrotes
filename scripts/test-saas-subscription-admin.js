@@ -200,10 +200,10 @@ async function main() {
     assert.strictEqual(renewed.body.resultado.estado, 'activa');
 
     const plans = await expect(sessions[0], '/api/admin/planes', {}, 200, 'Planes');
-    const advanced = plans.body.find((plan) => plan.codigo === 'avanzado');
-    assert(advanced, 'No existe un plan avanzado para probar upgrade.');
+    const standard = plans.body.find((plan) => plan.codigo === 'standard');
+    assert(standard, 'No existe un plan Standard para probar upgrade.');
     await expect(sessions[0], `/api/admin/suscripciones/${fixture.slugs[0]}/upgrade`, {
-      method: 'POST', headers: { 'Idempotency-Key': `saas-admin:${marker}:upgrade` }, body: { codigoPlan: 'avanzado' }
+      method: 'POST', headers: { 'Idempotency-Key': `saas-admin:${marker}:upgrade` }, body: { codigoPlan: 'standard' }
     }, 200, 'Upgrade');
     await expect(sessions[0], `/api/admin/suscripciones/${fixture.slugs[0]}/downgrade`, {
       method: 'POST', headers: { 'Idempotency-Key': `saas-admin:${marker}:downgrade` }, body: { codigoPlan: 'basico' }

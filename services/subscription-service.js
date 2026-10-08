@@ -12,6 +12,7 @@ const {
 } = require('../config/subscription-lifecycle-contract');
 const { computeEffectiveStatus } = require('./subscription-lifecycle-service');
 const { limitAvailability } = require('../config/subscription-plan-change-contract');
+const { PUBLIC_PLAN_CODES } = require('../config/saas-c-payment-contract');
 
 const LIMITS = Object.freeze({
   propietarios: {
@@ -247,10 +248,14 @@ async function enforcePlanLimit(connection, idTienda, entity, increment = 1) {
 async function createSubscription(connection, input) {
   const idTienda = Number(input.idTienda);
   if (!Number.isInteger(idTienda) || idTienda <= 0) throw httpError(400, 'La tienda no es valida.');
+  const requestedPlan = cleanText(input.planCodigo).toLowerCase();
+  if (!PUBLIC_PLAN_CODES.includes(requestedPlan)) {
+    throw httpError(400, 'El plan seleccionado no esta disponible para nuevas suscripciones.', 'PLAN_NOT_AVAILABLE');
+  }
   const [stores] = await connection.query('SELECT idTienda FROM tienda WHERE idTienda=? FOR UPDATE', [idTienda]);
   if (!stores.length) throw httpError(404, 'La tienda no existe.');
 
-  const plan = await findPlanByCode(connection, input.planCodigo, {
+  const plan = await findPlanByCode(connection, requestedPlan, {
     requireActive: true,
     forUpdate: true
   });
