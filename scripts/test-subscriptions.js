@@ -391,7 +391,7 @@ async function main() {
     await expect(superSession, '/api/admin/tiendas', { method: 'POST', body: invalidPayload.body }, 400, 'Plan inexistente');
     const inactivePayload = storePayload(marker, 'inactive', fixture.inactivePlanCode, 'pagada');
     inactivePayload.body.slug = fixture.inactivePlanSlug;
-    await expect(superSession, '/api/admin/tiendas', { method: 'POST', body: inactivePayload.body }, 409, 'Plan inactivo');
+    await expect(superSession, '/api/admin/tiendas', { method: 'POST', body: inactivePayload.body }, 400, 'Plan inactivo');
 
     const basic = storePayload(marker, 'basic', resolvedPlans.basic.codigo, 'pagada');
     const advanced = storePayload(marker, 'advanced', resolvedPlans.advanced.codigo, 'cortesia');
