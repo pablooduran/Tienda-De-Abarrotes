@@ -315,7 +315,7 @@ async function runBrowserFlow({ baseUrl, username, password, productName, custom
       page.getByRole('link', { name: 'Mi plan y facturación' }).click()
     ]);
     await page.locator('[data-subscription-view]').waitFor();
-    await page.locator('[data-payment-form]').waitFor();
+    await page.locator('[data-payment-form]').waitFor({ state: 'attached' });
     ok((await page.locator('body').innerText()).includes('Pro'),
       'Mi plan muestra la suscripcion sintetica vigente.');
     await page.locator('article[data-plan-code="pro"] [data-plan-action="payment"]').click();
