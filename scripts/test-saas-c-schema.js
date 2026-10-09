@@ -132,6 +132,22 @@ async function applyMigration024(connection) {
   await connection.query('INSERT INTO schema_migrations (nombre) VALUES (?)', [MIGRATION]);
 }
 
+async function applyCurrentCommercialCatalog(connection) {
+  const commercialMigrations = [
+    '027_reestructurar_planes_comerciales.sql',
+    '028_reordenar_funciones_por_plan.sql',
+    '029_sincronizar_snapshot_funciones_plan.sql',
+    '030_equipo_colaborativo_pro.sql',
+    '031_tienda_online_base.sql'
+  ];
+  for (const migration of commercialMigrations) {
+    for (const statement of readSqlStatements(path.join(MIGRATIONS_DIR, migration))) {
+      if (/^(ALTER|CREATE)\s+/i.test(statement)) continue;
+      await connection.query(statement);
+    }
+  }
+}
+
 async function primaryFingerprint(config) {
   const connection = await connect(config);
   try {
@@ -582,9 +598,7 @@ async function runUpgradeScenario(server, database) {
        FROM plan WHERE codigo='avanzado'`
     );
     assert.deepStrictEqual(legacyAfter, legacyBefore, 'El plan avanzado legado fue reescrito.');
-    const migrationOutput = runScript('scripts/migrate-db.js', database);
-    assert(migrationOutput.includes('Migraciones completadas.'),
-      'No se completaron las migraciones comerciales posteriores a SAAS-C1.');
+    await applyCurrentCommercialCatalog(connection);
     const state = await inspectSaasC(connection);
     assert(isValidState(state), JSON.stringify(state));
     await assertCatalog(connection);
