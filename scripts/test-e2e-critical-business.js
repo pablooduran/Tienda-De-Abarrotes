@@ -272,7 +272,7 @@ async function runBrowserFlow({ baseUrl, username, password, productName, custom
 
     await page.locator('[data-navigation-family="inventario"] > summary').click();
     await page.locator('[data-navigation-family="inventario"] [data-view="productos"]').click();
-    await page.locator('#addProduct').waitFor();
+    await page.locator('.product-add-actions > summary').waitFor();
     ok((await page.locator('#view').innerText()).includes(productName),
       'El producto sintetico aparece en Productos.');
 
