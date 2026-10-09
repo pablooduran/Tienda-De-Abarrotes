@@ -173,6 +173,8 @@ async function cleanup(fixture) {
     await pool.query('DELETE FROM historialSuscripcionTienda WHERE idTienda=?', [idTienda]);
     await pool.query('DELETE FROM suscripcionFuncionalidadSnapshot WHERE idTienda=?', [idTienda]);
     await pool.query('DELETE FROM suscripcionTienda WHERE idTienda=?', [idTienda]);
+    await pool.query('DELETE FROM productoCatalogoOnline WHERE idTienda=?', [idTienda]);
+    await pool.query('DELETE FROM configuracionTiendaOnline WHERE idTienda=?', [idTienda]);
     await pool.query('DELETE FROM administrador WHERE idTienda=?', [idTienda]);
     await pool.query('DELETE FROM tienda WHERE idTienda=?', [idTienda]);
   }

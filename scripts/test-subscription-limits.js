@@ -118,6 +118,8 @@ async function main() {
         await connection.query('DELETE FROM historialSuscripcionTienda WHERE idTienda=?', [idTienda]);
         await connection.query('DELETE FROM suscripcionFuncionalidadSnapshot WHERE idTienda=?', [idTienda]);
         await connection.query('DELETE FROM suscripcionTienda WHERE idTienda=?', [idTienda]);
+        await connection.query('DELETE FROM productoCatalogoOnline WHERE idTienda=?', [idTienda]);
+        await connection.query('DELETE FROM configuracionTiendaOnline WHERE idTienda=?', [idTienda]);
         await connection.query('DELETE FROM configuracionTienda WHERE idTienda=?', [idTienda]);
         await connection.query('DELETE FROM administrador WHERE idTienda=?', [idTienda]);
         await connection.query('DELETE FROM tienda WHERE idTienda=?', [idTienda]);

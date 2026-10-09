@@ -124,6 +124,8 @@ async function cleanup(connection, fixtures) {
     await connection.query('DELETE FROM historialSuscripcionTienda WHERE idTienda IN (?)', [stores]);
     await connection.query('DELETE FROM suscripcionFuncionalidadSnapshot WHERE idTienda IN (?)', [stores]);
     await connection.query('DELETE FROM suscripcionTienda WHERE idTienda IN (?)', [stores]);
+    await connection.query('DELETE FROM productoCatalogoOnline WHERE idTienda IN (?)', [stores]);
+    await connection.query('DELETE FROM configuracionTiendaOnline WHERE idTienda IN (?)', [stores]);
     await connection.query('DELETE FROM configuracionTienda WHERE idTienda IN (?)', [stores]);
     await connection.query('DELETE FROM administrador WHERE idTienda IN (?)', [stores]);
     await connection.query('DELETE FROM tienda WHERE idTienda IN (?)', [stores]);

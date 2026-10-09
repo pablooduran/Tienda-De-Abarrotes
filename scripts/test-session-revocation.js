@@ -125,9 +125,9 @@ async function cleanupStore(connection, idTienda) {
   for (const table of [
     'seguimientoCobranza', 'pagoVenta', 'pagoFiado', 'cobroFiado', 'detalleFiado',
     'detalleVenta', 'detalleCompra', 'fiado', 'venta', 'compra', 'movimientoLote',
-    'loteProducto', 'movimientoStock', 'producto', 'cliente', 'proveedor',
+    'loteProducto', 'movimientoStock', 'productoCatalogoOnline', 'producto', 'cliente', 'proveedor',
     'plantillaCobranzaTienda', 'configuracionCreditoTienda',
-    'configuracionInventarioTienda', 'configuracionTienda', 'categoriaGasto',
+    'configuracionInventarioTienda', 'configuracionTiendaOnline', 'configuracionTienda', 'categoriaGasto',
     'suscripcionTienda'
   ]) {
     await connection.query(`DELETE FROM ${table} WHERE idTienda=?`, [idTienda]);

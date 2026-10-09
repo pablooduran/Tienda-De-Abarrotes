@@ -39,6 +39,8 @@ async function cleanup(connection, fixture) {
     await connection.query('DELETE FROM historialSuscripcionTienda WHERE idTienda=?', [fixture.idTienda]);
     await connection.query('DELETE FROM suscripcionFuncionalidadSnapshot WHERE idTienda=?', [fixture.idTienda]);
     await connection.query('DELETE FROM suscripcionTienda WHERE idTienda=?', [fixture.idTienda]);
+    await connection.query('DELETE FROM productoCatalogoOnline WHERE idTienda=?', [fixture.idTienda]);
+    await connection.query('DELETE FROM configuracionTiendaOnline WHERE idTienda=?', [fixture.idTienda]);
     await connection.query('DELETE FROM administrador WHERE idTienda=? OR usuario=?', [fixture.idTienda, fixture.adminUser]);
     await connection.query('DELETE FROM tienda WHERE idTienda=?', [fixture.idTienda]);
     await connection.commit();
