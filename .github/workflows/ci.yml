@@ -44,6 +44,7 @@ jobs:
         run: |
           sudo systemctl start mysql.service
           mysqladmin ping --host=localhost --user=root --password=root --wait=30
+          mysql --host=localhost --user=root --password=root --execute="CREATE DATABASE tienda_abarrotes_pruebas CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;"
       - name: Install locked dependencies
         run: npm ci
       - name: Check CI isolation contract

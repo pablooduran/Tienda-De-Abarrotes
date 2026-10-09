@@ -14,6 +14,7 @@ function checkWorkflow(source) {
     'node-version: 20.x',
     'sudo systemctl start mysql.service',
     'mysqladmin ping --host=localhost --user=root --password=root --wait=30',
+    'CREATE DATABASE tienda_abarrotes_pruebas CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci',
     'APP_ENV: local',
     'DB_HOST: localhost',
     'npm ci',
