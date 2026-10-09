@@ -582,6 +582,9 @@ async function runUpgradeScenario(server, database) {
        FROM plan WHERE codigo='avanzado'`
     );
     assert.deepStrictEqual(legacyAfter, legacyBefore, 'El plan avanzado legado fue reescrito.');
+    const migrationOutput = runScript('scripts/migrate-db.js', database);
+    assert(migrationOutput.includes('Migraciones completadas.'),
+      'No se completaron las migraciones comerciales posteriores a SAAS-C1.');
     const state = await inspectSaasC(connection);
     assert(isValidState(state), JSON.stringify(state));
     await assertCatalog(connection);

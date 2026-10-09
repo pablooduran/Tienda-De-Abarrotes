@@ -157,7 +157,7 @@ async function inspectSaasC(connection) {
        JOIN planFuncionalidad pf ON pf.idPlan=p.idPlan AND pf.habilitada=1
        JOIN funcionalidad f ON f.idFuncionalidad=pf.idFuncionalidad
        WHERE p.codigo IN ('basico','standard','pro')
-         AND f.codigo IN ('portal_clientes','reportes_avanzados')) excludedFeatures,
+         AND f.codigo IN (${EXCLUDED_PUBLIC_FEATURES.map(() => '?').join(',')})) excludedFeatures,
       (SELECT COUNT(*) FROM information_schema.COLUMNS
        WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='comprobantePagoSuscripcion'
          AND DATA_TYPE IN ('binary','varbinary','blob','tinyblob','mediumblob','longblob')) binaryColumns,
@@ -165,7 +165,7 @@ async function inspectSaasC(connection) {
        WHERE CONSTRAINT_SCHEMA=DATABASE()
          AND TABLE_NAME IN (${TABLES.map(() => '?').join(',')})
          AND DELETE_RULE<>'RESTRICT') destructiveForeignKeys`,
-    TABLES
+    [...TABLES, ...EXCLUDED_PUBLIC_FEATURES]
   );
   const [methods] = await connection.query(
     `SELECT codigo,configurado,visiblePropietario,activo,
