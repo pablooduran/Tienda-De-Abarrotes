@@ -28,8 +28,15 @@ const elements = {
   ownerCount: document.getElementById('ownerCount'),
   expiringStoreCount: document.getElementById('expiringStoreCount'),
   attentionStoreCount: document.getElementById('attentionStoreCount'),
+  trialStoreCount: document.getElementById('trialStoreCount'),
+  expiredStoreCount: document.getElementById('expiredStoreCount'),
+  pendingPaymentCount: document.getElementById('pendingPaymentCount'),
+  globalSalesCount: document.getElementById('globalSalesCount'),
+  globalSalesTotal: document.getElementById('globalSalesTotal'),
   platformOverviewSummary: document.getElementById('platformOverviewSummary'),
   platformAlertList: document.getElementById('platformAlertList'),
+  globalAdminSearch: document.getElementById('globalAdminSearch'),
+  globalSearchResults: document.getElementById('globalSearchResults'),
   storeSearch: document.getElementById('storeSearch'),
   storeFilterButton: document.getElementById('openStoreFilters'),
   storeFilterDialog: document.getElementById('storeFilterDialog'),
@@ -225,6 +232,21 @@ function updateSummary() {
   elements.expiringStoreCount.textContent = String(alerts.filter((alert) => alert.kind === 'expiry').length);
   elements.attentionStoreCount.textContent = String(alerts.filter((alert) => alert.priority === 'high').length);
   renderPlatformAlerts(alerts);
+}
+
+function formatCurrency(value) {
+  return new Intl.NumberFormat('es-BO', {
+    style: 'currency', currency: 'BOB', minimumFractionDigits: 2
+  }).format(Number(value || 0)).replace('BOB', 'Bs');
+}
+
+async function loadPlatformOverview() {
+  const overview = await api('/api/admin/resumen-plataforma');
+  elements.trialStoreCount.textContent = String(overview.suscripciones.pruebas || 0);
+  elements.expiredStoreCount.textContent = String(overview.suscripciones.vencidas || 0);
+  elements.pendingPaymentCount.textContent = String(overview.pagosPendientes || 0);
+  elements.globalSalesCount.textContent = String(overview.ventas.cantidad || 0);
+  elements.globalSalesTotal.textContent = formatCurrency(overview.ventas.total);
 }
 
 function localDate(value) {
@@ -471,6 +493,7 @@ async function loadStores(selectedId = state.selectedStore?.idTienda) {
   state.stores = await api('/api/admin/tiendas');
   updateSummary();
   renderStores();
+  loadPlatformOverview().catch((error) => showToast(`No se pudo actualizar el resumen global: ${error.message}`, 'error'));
   if (selectedId && state.stores.some((store) => Number(store.idTienda) === Number(selectedId))) {
     await selectStore(selectedId, false);
   } else {
@@ -575,6 +598,48 @@ function createField(definition) {
     }
   }
   return label;
+}
+
+function clearGlobalSearch() {
+  elements.globalSearchResults.replaceChildren();
+  elements.globalSearchResults.hidden = true;
+}
+
+function openSearchResult(result) {
+  clearGlobalSearch();
+  elements.globalAdminSearch.value = '';
+  if (result.tipo === 'producto') {
+    window.location.hash = '#catalogo';
+    elements.masterProductSearch.value = result.titulo;
+    loadMasterCatalog(1).catch((error) => showToast(error.message, 'error'));
+    return;
+  }
+  window.location.hash = '#tiendas';
+  selectStore(result.idTienda || result.id).catch((error) => showToast(error.message, 'error'));
+}
+
+async function searchPlatform(query) {
+  const text = query.trim();
+  if (text.length < 2) return clearGlobalSearch();
+  const results = await api(`/api/admin/busqueda-global?q=${encodeURIComponent(text)}`);
+  if (elements.globalAdminSearch.value.trim() !== text) return;
+  elements.globalSearchResults.replaceChildren();
+  if (!results.length) {
+    const empty = document.createElement('p');
+    empty.className = 'global-search-empty';
+    empty.textContent = 'No encontramos coincidencias. Prueba con otro nombre, usuario o código.';
+    elements.globalSearchResults.appendChild(empty);
+  } else {
+    results.forEach((result) => {
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.className = 'global-search-result';
+      button.innerHTML = `<span class="global-search-type">${escapeHtml({ tienda: 'Tienda', propietario: 'Propietario', producto: 'Producto' }[result.tipo] || result.tipo)}</span><strong>${escapeHtml(result.titulo)}</strong><small>${escapeHtml(result.detalle)}</small>`;
+      button.addEventListener('click', () => openSearchResult(result));
+      elements.globalSearchResults.appendChild(button);
+    });
+  }
+  elements.globalSearchResults.hidden = false;
 }
 
 function formNodes(fields) {
@@ -1261,6 +1326,22 @@ document.querySelectorAll('[data-close-dialog]').forEach((button) => {
   button.addEventListener('click', () => elements.formDialog.close());
 });
 elements.storeSearch.addEventListener('input', renderStores);
+let globalSearchTimer;
+elements.globalAdminSearch.addEventListener('input', () => {
+  window.clearTimeout(globalSearchTimer);
+  globalSearchTimer = window.setTimeout(() => {
+    searchPlatform(elements.globalAdminSearch.value).catch((error) => showToast(error.message, 'error'));
+  }, 220);
+});
+elements.globalAdminSearch.addEventListener('keydown', (event) => {
+  if (event.key === 'Escape') {
+    clearGlobalSearch();
+    elements.globalAdminSearch.blur();
+  }
+});
+document.addEventListener('click', (event) => {
+  if (!event.target.closest('.global-search-field')) clearGlobalSearch();
+});
 elements.storeFilterButton.addEventListener('click', () => {
   elements.storeFilterDialog.showModal();
   elements.storeFilterForm.elements.estado.focus();
@@ -1284,10 +1365,20 @@ elements.storeFilterForm.addEventListener('submit', (event) => {
   renderStores();
   elements.storeFilterDialog.close();
 });
+document.getElementById('clearStoreFilters').addEventListener('click', () => {
+  elements.storeSearch.value = '';
+  state.storeFilters = { estado: '', suscripcion: '' };
+  elements.storeFilterForm.reset();
+  elements.storeFilterButton.textContent = 'Filtros';
+  renderStores();
+  elements.storeSearch.focus();
+});
 document.getElementById('createStoreButton').addEventListener('click', createStore);
 document.getElementById('editStoreButton').addEventListener('click', editStore);
 document.getElementById('manageSubscriptionButton').addEventListener('click', manageSubscription);
 document.getElementById('addOwnerButton').addEventListener('click', addOwner);
+document.getElementById('addFirstOwnerButton').addEventListener('click', addOwner);
+document.getElementById('emptyManageSubscriptionButton').addEventListener('click', manageSubscription);
 document.getElementById('toggleStoreButton').addEventListener('click', toggleStore);
 document.getElementById('logoutButton').addEventListener('click', logout);
 elements.adminSidebarToggle.addEventListener('click', () => {

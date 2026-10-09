@@ -51,7 +51,15 @@
           <h1>Tiendas registradas</h1>
           <p>Administra el acceso de cada tienda sin intervenir en sus datos comerciales.</p>
         </div>
-        <button id="createStoreButton" class="button button-primary" type="button">Nueva tienda</button>
+        <div class="button-row admin-header-actions">
+          <label class="global-search-field">
+            <span class="sr-only">Búsqueda global</span>
+            <input id="globalAdminSearch" type="search" autocomplete="off" placeholder="Buscar tienda, dueño o producto" aria-describedby="globalSearchHelp">
+            <small id="globalSearchHelp">Escribe al menos 2 caracteres</small>
+            <div id="globalSearchResults" class="global-search-results" hidden></div>
+          </label>
+          <button id="createStoreButton" class="button button-primary" type="button">Nueva tienda</button>
+        </div>
       </header>
 
       <section class="summary-grid" data-admin-view="tiendas" aria-label="Resumen de tiendas">
@@ -79,6 +87,27 @@
           <span>Requieren acción</span>
           <strong id="attentionStoreCount">0</strong>
         </article>
+        <article class="summary-item summary-warning">
+          <span>Pruebas activas</span>
+          <strong id="trialStoreCount">0</strong>
+        </article>
+        <article class="summary-item summary-danger">
+          <span>Suscripciones vencidas</span>
+          <strong id="expiredStoreCount">0</strong>
+        </article>
+        <article class="summary-item">
+          <span>Pagos por revisar</span>
+          <strong id="pendingPaymentCount">0</strong>
+        </article>
+        <article class="summary-item summary-success">
+          <span>Ventas registradas</span>
+          <strong id="globalSalesCount">0</strong>
+        </article>
+      </section>
+
+      <section class="platform-metrics" data-admin-view="tiendas" aria-labelledby="platformMetricsHeading">
+        <div><p class="eyebrow">Actividad comercial agregada</p><h2 id="platformMetricsHeading">Cómo avanza la plataforma</h2><p>Datos globales para entender el uso. No muestra información sensible de una tienda en particular.</p></div>
+        <div class="platform-metric-value"><span>Ventas acumuladas</span><strong id="globalSalesTotal">Bs 0.00</strong></div>
       </section>
 
       <section class="platform-overview" data-admin-view="tiendas" aria-labelledby="platformOverviewHeading">
@@ -255,7 +284,7 @@
             </thead>
             <tbody id="storesTableBody"></tbody>
           </table>
-          <p id="emptyStores" class="empty-state" hidden>No hay tiendas que coincidan con la búsqueda o los filtros.</p>
+          <div id="emptyStores" class="empty-state empty-state-action" hidden><strong>No hay tiendas que coincidan</strong><p>Prueba con otro nombre o quita los filtros activos.</p><button id="clearStoreFilters" class="button button-secondary" type="button">Limpiar búsqueda y filtros</button></div>
         </div>
       </section>
 
@@ -312,7 +341,7 @@
             </thead>
             <tbody id="ownersTableBody"></tbody>
           </table>
-          <p id="emptyOwners" class="empty-state" hidden>Esta tienda todavía no tiene propietarios.</p>
+          <div id="emptyOwners" class="empty-state empty-state-action" hidden><strong>Aún no hay propietarios adicionales</strong><p>Agrega a la persona que administrará esta tienda contigo.</p><button id="addFirstOwnerButton" class="button button-secondary" type="button">Agregar propietario</button></div>
         </div>
 
         <div class="owners-heading subscription-heading">
@@ -337,7 +366,7 @@
             </thead>
             <tbody id="subscriptionsTableBody"></tbody>
           </table>
-          <p id="emptySubscriptions" class="empty-state" hidden>No hay suscripciones registradas.</p>
+          <div id="emptySubscriptions" class="empty-state empty-state-action" hidden><strong>Esta tienda no tiene historial de suscripciones</strong><p>Asigna un plan para habilitar su acceso y registrar los cambios aquí.</p><button id="emptyManageSubscriptionButton" class="button button-secondary" type="button">Asignar plan</button></div>
         </div>
       </dialog>
 

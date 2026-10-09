@@ -262,6 +262,59 @@ router.get('/tiendas', asyncRoute(async (req, res) => {
   res.json(rows);
 }));
 
+// Datos agregados y búsqueda acotada para el panel; no expone información comercial por tienda.
+router.get('/resumen-plataforma', asyncRoute(async (req, res) => {
+  const now = formatLocalDateTime();
+  const [[stores], [subscriptions], [sales], [pendingPayments]] = await Promise.all([
+    pool.query(`SELECT
+      COUNT(*) AS total,
+      SUM(CASE WHEN activo=1 AND estado='activa' THEN 1 ELSE 0 END) AS activas,
+      SUM(CASE WHEN activo=0 OR estado<>'activa' THEN 1 ELSE 0 END) AS inactivas
+      FROM tienda`),
+    pool.query(`SELECT
+      SUM(CASE WHEN s.tipo='prueba' AND s.estado IN ('activa','pendiente') AND ? >= s.fechaInicio AND ? < s.fechaFin THEN 1 ELSE 0 END) AS pruebas,
+      SUM(CASE WHEN s.estado IN ('activa','pendiente') AND ? >= s.fechaFin THEN 1 ELSE 0 END) AS vencidas,
+      SUM(CASE WHEN s.estado='pendiente' THEN 1 ELSE 0 END) AS pendientes
+      FROM suscripcionTienda s`, [now, now, now]),
+    pool.query(`SELECT COUNT(*) AS cantidad, COALESCE(SUM(total), 0) AS total
+      FROM venta WHERE estadoOperacion<>'anulada'`),
+    pool.query(`SELECT COUNT(*) AS total FROM solicitudPagoSuscripcion
+      WHERE estado IN ('pendiente_revision','observada')`).catch(() => [[{ total: 0 }]])
+  ]);
+  res.json({
+    tiendas: {
+      total: Number(stores[0].total || 0), activas: Number(stores[0].activas || 0),
+      inactivas: Number(stores[0].inactivas || 0)
+    },
+    suscripciones: {
+      pruebas: Number(subscriptions[0].pruebas || 0), vencidas: Number(subscriptions[0].vencidas || 0),
+      pendientes: Number(subscriptions[0].pendientes || 0)
+    },
+    ventas: { cantidad: Number(sales[0].cantidad || 0), total: Number(sales[0].total || 0) },
+    pagosPendientes: Number(pendingPayments[0]?.total || 0)
+  });
+}));
+
+router.get('/busqueda-global', asyncRoute(async (req, res) => {
+  const query = cleanText(req.query.q).slice(0, 80);
+  if (query.length < 2) return res.json([]);
+  const term = `%${query}%`;
+  const [rows] = await pool.query(`
+    SELECT 'tienda' AS tipo, t.idTienda AS id, t.nombre AS titulo, t.slug AS detalle, t.idTienda AS idTienda
+      FROM tienda t WHERE t.nombre LIKE ? OR t.slug LIKE ?
+    UNION ALL
+    SELECT 'propietario' AS tipo, a.idAdministrador AS id, a.usuario AS titulo, t.nombre AS detalle,
+      t.idTienda AS idTienda
+      FROM administrador a INNER JOIN tienda t ON t.idTienda=a.idTienda
+      WHERE a.rol='dueno_tienda' AND a.usuario LIKE ?
+    UNION ALL
+    SELECT 'producto' AS tipo, pm.idProductoMaestro AS id, pm.nombre AS titulo,
+      COALESCE(pm.codigoBarras, 'Sin código') AS detalle, NULL AS idTienda
+      FROM productoMaestro pm WHERE pm.nombre LIKE ? OR pm.codigoBarras LIKE ?
+    LIMIT 12`, [term, term, term, term, term]);
+  res.json(rows);
+}));
+
 router.get('/tiendas/:idTienda', asyncRoute(async (req, res) => {
   const idTienda = parseId(req.params.idTienda, 'La tienda');
   const [rows] = await pool.query(

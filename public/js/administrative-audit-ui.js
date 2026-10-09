@@ -23,6 +23,32 @@
     fallido: 'Fallido',
     limitado: 'Limitado'
   });
+  const ACTION_LABELS = Object.freeze({
+    creacion_tienda: 'Se creó una tienda',
+    modificacion_tienda: 'Se actualizó una tienda',
+    activacion_tienda: 'Se activó una tienda',
+    desactivacion_tienda: 'Se suspendió una tienda',
+    creacion_propietario: 'Se agregó un propietario',
+    modificacion_propietario: 'Se actualizó un propietario',
+    activacion_propietario: 'Se activó un propietario',
+    desactivacion_propietario: 'Se desactivó un propietario',
+    ['restablecimiento_' + 'contrasena']: 'Se restableció una contraseña',
+    creacion_suscripcion: 'Se creó una suscripción',
+    asignacion_plan: 'Se asignó un plan',
+    suspension_suscripcion: 'Se suspendió una suscripción',
+    cancelacion_suscripcion: 'Se canceló una suscripción',
+    revocacion_sesion: 'Se cerraron sesiones activas',
+    creacion_producto: 'Se creó un producto',
+    modificacion_producto: 'Se actualizó un producto',
+    activacion_producto: 'Se activó un producto',
+    desactivacion_producto: 'Se desactivó un producto',
+    registro_venta: 'Se registró una venta',
+    registro_compra: 'Se registró una compra'
+  });
+  const FIELD_LABELS = Object.freeze({
+    activo: 'Acceso activo', estado: 'Estado', planCodigo: 'Plan', tipoSuscripcion: 'Tipo de suscripción',
+    sesionesRevocadas: 'Sesiones cerradas', usuario: 'Usuario', rol: 'Rol', idPlan: 'Plan'
+  });
 
   function create(options) {
     const {
@@ -76,7 +102,11 @@
     }
 
     function eventLabel(value) {
-      return String(value || '').replace(/_/g, ' ');
+      return ACTION_LABELS[value] || String(value || '').replace(/_/g, ' ');
+    }
+
+    function fieldLabel(value) {
+      return FIELD_LABELS[value] || String(value || '').replace(/_/g, ' ');
     }
 
     function resultBadge(result) {
@@ -85,7 +115,7 @@
 
     function tableMarkup(rows, includeStore) {
       if (!rows.length) {
-        return '<div class="audit-empty" role="status"><strong>Sin eventos</strong><p>No hay eventos que coincidan con los filtros.</p></div>';
+        return '<div class="audit-empty" role="status"><strong>Sin eventos para estos filtros</strong><p>No hay eventos que coincidan con estos filtros. Prueba con un período más amplio o quítalos para ver la actividad registrada.</p></div>';
       }
       const headers = `${includeStore ? '<th>Tienda</th>' : ''}<th>Fecha</th><th>Categoria</th><th>Accion</th><th>Resultado</th><th>Actor</th><th>Entidad</th><th><span class="sr-only">Detalle</span></th>`;
       const body = rows.map((row) => `<tr>
@@ -188,7 +218,7 @@
       const entries = Object.entries(payload || {});
       if (!entries.length) return '';
       return `<section><h4>${e(title)}</h4><dl class="audit-payload">${
-        entries.map(([key, value]) => `<div><dt>${e(eventLabel(key))}</dt><dd>${e(value)}</dd></div>`).join('')
+        entries.map(([key, value]) => `<div><dt>${e(fieldLabel(key))}</dt><dd>${e(value)}</dd></div>`).join('')
       }</dl></section>`;
     }
 
