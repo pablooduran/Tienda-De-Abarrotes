@@ -318,10 +318,9 @@ async function runBrowserFlow({ baseUrl, username, password, productName, custom
     await page.locator('[data-payment-form]').waitFor({ state: 'attached' });
     ok((await page.locator('body').innerText()).includes('Pro'),
       'Mi plan muestra la suscripcion sintetica vigente.');
-    await page.locator('article[data-plan-code="pro"] [data-plan-action="payment"]').click();
-    await page.locator('[data-payment-form]:visible').waitFor();
-    ok(await page.getByRole('button', { name: 'Ver precio' }).isEnabled(),
-      'Mi plan conserva la accion de revisar el precio.');
+    const currentPlanButton = page.locator('article[data-plan-code="pro"] [data-plan-action]').first();
+    ok(!(await currentPlanButton.isEnabled()) && (await currentPlanButton.innerText()).includes('Plan actual'),
+      'Mi plan distingue Pro como plan actual y no ofrece un upgrade redundante.');
     ok(errors.length === 0, `El recorrido browser termina con consola limpia${errors.length ? `: ${errors.join(' | ')}` : ''}.`);
     return sale;
   } finally {
