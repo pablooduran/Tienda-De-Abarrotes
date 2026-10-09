@@ -659,7 +659,7 @@ async function main() {
           confirmacionPassword: ownerPassword,
           activo: true
         },
-        suscripcion: { planCodigo: 'avanzado', tipo: 'prueba', duracionDias: 30 }
+        suscripcion: { planCodigo: 'pro', tipo: 'prueba', duracionDias: 30 }
       }
     }, 201, 'Creacion de tienda auditada');
     const storeB = await expect(superSession, '/api/admin/tiendas', {
