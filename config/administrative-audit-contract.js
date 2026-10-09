@@ -122,6 +122,8 @@ const COMMERCIAL_AUDIT_ACTIONS = {
   ocultamiento_cliente: definition('cliente', 'cliente', ['activo'], ['activo']),
   restauracion_cliente: definition('cliente', 'cliente', ['activo'], ['activo']),
   configuracion_credito: definition('credito', 'configuracion_credito'),
+  configuracion_tienda_online: definition('tienda_online', 'tienda_online'),
+  publicacion_producto_online: definition('tienda_online', 'producto'),
   creacion_producto: definition('producto', 'producto', [], ['activo']),
   modificacion_producto: definition('producto', 'producto'),
   ocultamiento_producto: definition('producto', 'producto', ['activo'], ['activo']),

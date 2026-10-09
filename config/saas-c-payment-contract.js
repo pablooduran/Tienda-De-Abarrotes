@@ -86,6 +86,7 @@ const STANDARD_FEATURES = Object.freeze([
   'inventario_resumen',
   'limites_credito',
   'ranking_productos',
+  'portal_clientes',
   'recibos_whatsapp',
   'recordatorios_fiado',
   'reportes_financieros',
@@ -111,7 +112,7 @@ const PRO_FEATURES = Object.freeze([
   'trazabilidad_lotes',
   'vencimientos_lote'
 ]);
-const EXCLUDED_PUBLIC_FEATURES = Object.freeze(['portal_clientes', 'reportes_avanzados']);
+const EXCLUDED_PUBLIC_FEATURES = Object.freeze(['reportes_avanzados']);
 
 module.exports = {
   BASIC_FEATURES,

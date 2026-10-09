@@ -15,6 +15,7 @@ const helpBackTopbar = document.getElementById('helpBackTopbar');
 const settingsBackTopbar = document.getElementById('settingsBackTopbar');
 const quickActions = document.getElementById('quickActions');
 const settingsStoreButton = document.getElementById('settingsStoreButton');
+const settingsOnlineStoreButton = document.getElementById('settingsOnlineStoreButton');
 const settingsAuditButton = document.getElementById('settingsAuditButton');
 const settingsTeamButton = document.getElementById('settingsTeamButton');
 const serverWakeNotice = document.getElementById('serverWakeNotice');
@@ -34,6 +35,7 @@ let compensationUi = null;
 let administrativeAuditUi = null;
 let inventoryAdjustmentUi = null;
 let storeConfigurationUi = null;
+let onlineStoreAdminUi = null;
 let workspaceExperience = null;
 let activeView = 'inicio';
 const ACTIVE_VIEW_STORAGE_KEY = 'tienda-active-view';
@@ -64,6 +66,7 @@ const sections = [
   ['finanzas', 'Finanzas', 'Ventas, cobros, costos y ganancias'],
   ['compensaciones', 'Devoluciones y anulaciones', 'Anulaciones, devoluciones y ajustes trazables'],
   ['configuracion', 'Configuracion', 'Datos operativos de la tienda'],
+  ['tiendaOnline', 'Tienda online', 'Publica tu catálogo y comparte el enlace de tu tienda'],
   ['equipo', 'Equipo y permisos', 'Accesos de las personas que trabajan contigo'],
   ['auditoria', 'Auditoria', 'Acciones administrativas y resultados'],
   ['cierreCaja', 'Cierre de caja', 'Control de efectivo por periodo'],
@@ -79,7 +82,7 @@ const navigationFamilies = [
   { id: 'reportes', label: 'Reportes', sections: ['reportes', 'finanzas', 'gastos', 'cierreCaja'] }
 ];
 
-const settingsViews = new Set(['configuracion', 'equipo', 'auditoria']);
+const settingsViews = new Set(['configuracion', 'tiendaOnline', 'equipo', 'auditoria']);
 
 const inventoryWorkspaceSections = ['productos', 'compras', 'proveedores', 'movimientosStock', 'inventarioInteligente', 'inventarioOperativo', 'lotesVencimientos'];
 const salesWorkspaceSections = ['ventas', 'historialVentas', 'pagos', 'compensaciones'];
@@ -396,6 +399,11 @@ function renderSubscriptionContext() {
   summary.hidden = false;
   const owner = context.rol === 'dueno_tienda';
   settingsStoreButton.hidden = !owner;
+  if (settingsOnlineStoreButton) {
+    const onlineStoreEnabled = owner && context.caracteristicas?.includes('portal_clientes');
+    settingsOnlineStoreButton.hidden = !owner;
+    settingsOnlineStoreButton.textContent = onlineStoreEnabled ? 'Tienda online' : 'Tienda online 🔒';
+  }
   settingsAuditButton.hidden = !owner;
   if (settingsTeamButton) {
     const teamEnabled = owner && context.caracteristicas?.includes('equipo_colaborativo');
@@ -549,6 +557,19 @@ async function configuracion() {
   await configurationUi().render();
 }
 
+function onlineStoreUi() {
+  if (!onlineStoreAdminUi) {
+    onlineStoreAdminUi = window.OnlineStoreAdminUI.create({
+      api, root: view, isReadOnly: () => Boolean(state.context?.soloLectura), patterns: UiPatterns
+    });
+  }
+  return onlineStoreAdminUi;
+}
+
+async function tiendaOnline() {
+  await onlineStoreUi().render();
+}
+
 async function auditoria() {
   await auditUi().render();
 }
@@ -613,7 +634,7 @@ function sectionAvailable(id) {
   const inventorySections = new Set(['inicio', 'productos', 'catalogoMaestro', 'movimientosStock', 'inventarioInteligente', 'inventarioOperativo', 'lotesVencimientos', 'proveedores', 'compras', 'ayuda']);
   if (role === 'cajero' && !cashierSections.has(id)) return false;
   if (role === 'inventario' && !inventorySections.has(id)) return false;
-  if (role === 'encargado' && ['configuracion', 'auditoria', 'equipo'].includes(id)) return false;
+  if (role === 'encargado' && ['configuracion', 'tiendaOnline', 'auditoria', 'equipo'].includes(id)) return false;
   const features = state.context?.caracteristicas || [];
   if (id === 'gastos') return features.includes('gastos');
   if (id === 'finanzas') return features.includes('reportes_financieros');
@@ -627,6 +648,7 @@ function sectionAvailable(id) {
   if (id === 'clientes') return features.includes('clientes_basico');
   if (id === 'pagos') return features.includes('fiados_basico') || features.includes('pagos_fiado');
   if (id === 'equipo') return state.context?.rol === 'dueno_tienda' && features.includes('equipo_colaborativo');
+  if (id === 'tiendaOnline') return state.context?.rol === 'dueno_tienda' && features.includes('portal_clientes');
   return true;
 }
 
@@ -870,6 +892,7 @@ function applyWorkspaceMode(id) {
   navigationToggle.hidden = isDedicatedWorkspace;
   if (isDedicatedWorkspace) closeMobileNavigation();
   settingsStoreButton.hidden = id === 'configuracion';
+  if (settingsOnlineStoreButton) settingsOnlineStoreButton.hidden = id === 'tiendaOnline';
   settingsAuditButton.hidden = id === 'auditoria' || !sectionAvailable('auditoria');
   settingsTeamButton.hidden = id === 'equipo';
 }
@@ -1138,7 +1161,7 @@ async function loadView(id) {
   try {
     await refreshCatalogsForView(id, request);
     if (request !== viewRequest) return;
-    const handlers = { inicio, productos, catalogoMaestro, movimientosStock, inventarioInteligente, inventarioOperativo, lotesVencimientos, clientes, proveedores, ventas, compras, historialVentas, pagos, gastos, finanzas, compensaciones, configuracion, equipo, auditoria, cierreCaja, reportes, ayuda };
+    const handlers = { inicio, productos, catalogoMaestro, movimientosStock, inventarioInteligente, inventarioOperativo, lotesVencimientos, clientes, proveedores, ventas, compras, historialVentas, pagos, gastos, finanzas, compensaciones, configuracion, tiendaOnline, equipo, auditoria, cierreCaja, reportes, ayuda };
     if (!handlers[id]) return loadView('inicio');
     await handlers[id]();
     if (request !== viewRequest) return;

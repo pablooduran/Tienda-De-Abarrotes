@@ -42,7 +42,7 @@
     inventario_resumen: 'Resumen de inventario', inventario_sin_movimiento: 'Productos sin movimiento',
     limites_credito: 'Límites y plazos de crédito', pagos_fiado: 'Cobranza de fiados',
     pagos_multiples: 'Pagos en efectivo, QR o combinados', punto_venta: 'Punto de venta',
-    ranking_productos: 'Ranking de productos', recibos_whatsapp: 'Comprobantes para compartir por WhatsApp',
+    ranking_productos: 'Ranking de productos', portal_clientes: 'Tienda online con catálogo público', recibos_whatsapp: 'Comprobantes para compartir por WhatsApp',
     recordatorios_fiado: 'Mensajes preparados de cobranza', rentabilidad_producto: 'Rentabilidad por producto',
     reportes_financieros: 'Reportes financieros', rotacion_inventario: 'Rotación de inventario',
     segmentacion_clientes: 'Segmentación de clientes', seguimiento_cobranza: 'Seguimiento de cobranza',

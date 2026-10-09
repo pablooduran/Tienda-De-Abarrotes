@@ -18,6 +18,10 @@ const teamMigration = fs.readFileSync(
   path.join(root, 'database', 'migrations', '030_equipo_colaborativo_pro.sql'),
   'utf8'
 );
+const onlineStoreMigration = fs.readFileSync(
+  path.join(root, 'database', 'migrations', '031_tienda_online_base.sql'),
+  'utf8'
+);
 const schema = fs.readFileSync(path.join(root, 'database', 'tienda_abarrotes.sql'), 'utf8');
 const subscriptionUi = fs.readFileSync(path.join(root, 'public', 'js', 'subscription-ui.js'), 'utf8');
 
@@ -41,8 +45,8 @@ assert.deepStrictEqual(
 );
 
 assert.strictEqual(BASIC_FEATURES.length, 9);
-assert.strictEqual(STANDARD_FEATURES.length, 22);
-assert.strictEqual(PRO_FEATURES.length, 37);
+assert.strictEqual(STANDARD_FEATURES.length, 23);
+assert.strictEqual(PRO_FEATURES.length, 38);
 assert(sameMembers(STANDARD_FEATURES, BASIC_FEATURES));
 assert(sameMembers(PRO_FEATURES, STANDARD_FEATURES));
 assert(EXCLUDED_PUBLIC_FEATURES.every((feature) => !PRO_FEATURES.includes(feature)));
@@ -53,6 +57,7 @@ assert(!BASIC_FEATURES.includes('recibos_whatsapp'));
 assert(STANDARD_FEATURES.includes('reportes_financieros'));
 assert(STANDARD_FEATURES.includes('gastos'));
 assert(STANDARD_FEATURES.includes('recibos_whatsapp'));
+assert(STANDARD_FEATURES.includes('portal_clientes'));
 assert(!STANDARD_FEATURES.includes('cierre_caja'));
 assert(!STANDARD_FEATURES.includes('rentabilidad_producto'));
 assert(PRO_FEATURES.includes('rentabilidad_producto'));
@@ -66,8 +71,10 @@ for (const code of Object.keys(PLAN_CATALOG)) {
   assert(schema.includes(`WHERE p.codigo='${code}'`));
 }
 for (const feature of PRO_FEATURES) {
-  const isTeamFeature = feature === 'equipo_colaborativo';
-  assert((isTeamFeature ? teamMigration : migration).includes(`'${feature}'`), `La migracion no declara ${feature}`);
+  const featureMigration = feature === 'equipo_colaborativo'
+    ? teamMigration
+    : feature === 'portal_clientes' ? onlineStoreMigration : migration;
+  assert(featureMigration.includes(`'${feature}'`), `La migracion no declara ${feature}`);
   assert(subscriptionUi.includes(`${feature}:`), `Falta etiqueta visible para ${feature}`);
 }
 for (const feature of EXCLUDED_PUBLIC_FEATURES) {

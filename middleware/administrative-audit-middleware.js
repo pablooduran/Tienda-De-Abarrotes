@@ -13,6 +13,8 @@ const MUTATIONS = Object.freeze([
     before: { activo: false }, after: { activo: true }
   }],
   ['PUT', /^\/configuracion-credito\/?$/, 'configuracion_credito', 'configuracion_credito'],
+  ['PUT', /^\/tienda-online\/configuracion\/?$/, 'configuracion_tienda_online', 'tienda_online'],
+  ['PATCH', /^\/tienda-online\/productos\/(\d+)\/?$/, 'publicacion_producto_online', 'producto', 1],
   ['POST', /^\/productos\/?$/, 'creacion_producto', 'producto', null, { after: { activo: true } }],
   ['PUT', /^\/productos\/(\d+)\/?$/, 'modificacion_producto', 'producto', 1],
   ['DELETE', /^\/productos\/(\d+)\/?$/, 'ocultamiento_producto', 'producto', 1, {

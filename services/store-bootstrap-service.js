@@ -41,15 +41,29 @@ async function ensureCreditConfiguration(connection, idTienda, localDateTime) {
   }
 }
 
+async function ensureOnlineStoreConfiguration(connection, idTienda, localDateTime) {
+  await connection.query(
+    `INSERT INTO configuracionTiendaOnline
+     (idTienda,activa,mensajeBienvenida,permiteRecojo,permiteEntrega,
+      permiteEfectivo,permiteQr,pedidoMinimo,costoEntrega,tiempoPreparacionMinutos,
+      creadoEn,actualizadoEn,idAdministradorActualiza)
+     VALUES (?,0,NULL,1,0,1,0,0,0,30,?,?,NULL)
+     ON DUPLICATE KEY UPDATE idTienda=idTienda`,
+    [idTienda, localDateTime, localDateTime]
+  );
+}
+
 async function bootstrapStore(connection, idTienda, localDateTime) {
   await ensureBaseConfiguration(connection, idTienda, localDateTime);
   await ensureDefaultExpenseCategories(connection, idTienda, localDateTime);
   await ensureInventoryConfiguration(connection, idTienda, localDateTime);
   await ensureCreditConfiguration(connection, idTienda, localDateTime);
+  await ensureOnlineStoreConfiguration(connection, idTienda, localDateTime);
 }
 
 module.exports = {
   bootstrapStore,
   ensureBaseConfiguration,
-  ensureCreditConfiguration
+  ensureCreditConfiguration,
+  ensureOnlineStoreConfiguration
 };

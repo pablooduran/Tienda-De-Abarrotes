@@ -74,6 +74,8 @@ const inventoryIntelligenceRoutes = require('./routes/inventory-intelligence');
 const lotRoutes = require('./routes/lots');
 const masterCatalogRoutes = require('./routes/master-catalog');
 const onboardingRoutes = require('./routes/onboarding');
+const onlineStoreRoutes = require('./routes/online-store');
+const publicStorefrontRoutes = require('./routes/public-storefront');
 const storeConfigurationRoutes = require('./routes/store-configuration');
 const { createPaymentSubscriptionsRouter } = require('./routes/payment-subscriptions');
 const subscriptionRoutes = require('./routes/subscription');
@@ -237,6 +239,7 @@ app.use('/api/admin', rateLimiters.admin);
 app.use('/api', rateLimiters.api);
 
 app.use('/auth', authRoutes);
+app.use('/api/public/tiendas', publicStorefrontRoutes);
 app.use('/api/admin/health', requireAuth, requireRole('superadmin'), adminHealthRoutes);
 app.use('/api/admin/auditoria', requireAuth, requireRole('superadmin'), adminAuditRoutes);
 app.use('/api/admin/catalogo', requireAuth, requireRole('superadmin'), adminCatalogRoutes);
@@ -303,6 +306,16 @@ app.use(
   storeConfigurationRoutes
 );
 app.use(
+  '/api/tienda-online',
+  requireAuth,
+  requireTenant,
+  requireRole('dueno_tienda'),
+  resolveSubscription,
+  requireActiveSubscription,
+  requirePlanFeature('portal_clientes'),
+  onlineStoreRoutes
+);
+app.use(
   '/api',
   requireAuth,
   requireTenant,
@@ -351,6 +364,8 @@ app.get('/admin.html', requireAuth, (req, res) => {
   if (req.auth.rol !== 'superadmin') return res.redirect('/app.html');
   return res.sendFile(path.join(__dirname, 'public', 'admin.html'));
 });
+
+app.get('/tienda/:slug', (req, res) => res.sendFile(path.join(__dirname, 'public', 'storefront.html')));
 
 app.use(express.static(path.join(__dirname, 'public')));
 

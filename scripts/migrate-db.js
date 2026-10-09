@@ -1313,6 +1313,43 @@ const migrationRequirements = {
     checks: [
       ['administrador', 'chk_administrador_rol_tienda']
     ]
+  },
+  '031_tienda_online_base.sql': {
+    columns: {
+      configuracionTiendaOnline: [
+        'idTienda', 'activa', 'mensajeBienvenida', 'permiteRecojo', 'permiteEntrega',
+        'permiteEfectivo', 'permiteQr', 'pedidoMinimo', 'costoEntrega',
+        'tiempoPreparacionMinutos', 'creadoEn', 'actualizadoEn', 'idAdministradorActualiza'
+      ],
+      productoCatalogoOnline: [
+        'idTienda', 'idProducto', 'publicado', 'destacado', 'descripcionPublica',
+        'cantidadMaximaPedido', 'permiteSustitucion', 'creadoEn', 'actualizadoEn',
+        'idAdministradorActualiza'
+      ],
+      funcionalidad: ['codigo', 'nombre', 'descripcion', 'activo'],
+      planFuncionalidad: ['idPlan', 'idFuncionalidad', 'habilitada'],
+      suscripcionFuncionalidadSnapshot: ['idTienda', 'idSuscripcion', 'codigoFuncionalidad', 'nombreFuncionalidad']
+    },
+    indexes: [
+      ['configuracionTiendaOnline', 'PRIMARY', ['idTienda'], true],
+      ['configuracionTiendaOnline', 'idx_configTiendaOnline_admin', ['idTienda', 'idAdministradorActualiza'], false],
+      ['productoCatalogoOnline', 'PRIMARY', ['idTienda', 'idProducto'], true],
+      ['productoCatalogoOnline', 'idx_productoCatalogoOnline_publicado', ['idTienda', 'publicado', 'destacado', 'idProducto'], false],
+      ['productoCatalogoOnline', 'idx_productoCatalogoOnline_admin', ['idTienda', 'idAdministradorActualiza'], false]
+    ],
+    checks: [
+      ['configuracionTiendaOnline', 'chk_configTiendaOnline_booleanos'],
+      ['configuracionTiendaOnline', 'chk_configTiendaOnline_importes'],
+      ['configuracionTiendaOnline', 'chk_configTiendaOnline_preparacion'],
+      ['productoCatalogoOnline', 'chk_productoCatalogoOnline_booleanos'],
+      ['productoCatalogoOnline', 'chk_productoCatalogoOnline_cantidad']
+    ],
+    foreignKeyConstraints: [
+      ['configuracionTiendaOnline', 'fk_configTiendaOnline_tienda', ['idTienda'], 'tienda', ['idTienda'], 'RESTRICT', 'RESTRICT'],
+      ['configuracionTiendaOnline', 'fk_configTiendaOnline_admin', ['idTienda', 'idAdministradorActualiza'], 'administrador', ['idTienda', 'idAdministrador'], 'RESTRICT', 'RESTRICT'],
+      ['productoCatalogoOnline', 'fk_productoCatalogoOnline_producto', ['idTienda', 'idProducto'], 'producto', ['idTienda', 'idProducto'], 'RESTRICT', 'RESTRICT'],
+      ['productoCatalogoOnline', 'fk_productoCatalogoOnline_admin', ['idTienda', 'idAdministradorActualiza'], 'administrador', ['idTienda', 'idAdministrador'], 'RESTRICT', 'RESTRICT']
+    ]
   }
 };
 
@@ -1589,10 +1626,16 @@ async function normalizedHasForeignKeyConstraint(connection, relation) {
 }
 
 async function commercialPlanCatalogSatisfied(connection) {
+  const laterFeatures = new Set(['equipo_colaborativo', 'portal_clientes']);
   const expectedFeatures = new Map([
-    ['basico', new Set(BASIC_FEATURES)],
-    ['standard', new Set(STANDARD_FEATURES)],
-    ['pro', new Set(PRO_FEATURES)]
+    ['basico', new Set(BASIC_FEATURES.filter((feature) => !laterFeatures.has(feature)))],
+    ['standard', new Set(STANDARD_FEATURES.filter((feature) => !laterFeatures.has(feature)))],
+    ['pro', new Set(PRO_FEATURES.filter((feature) => !laterFeatures.has(feature)))]
+  ]);
+  const allowedLaterFeatures = new Map([
+    ['basico', new Set()],
+    ['standard', new Set(['portal_clientes'])],
+    ['pro', new Set(['equipo_colaborativo', 'portal_clientes'])]
   ]);
   const [plans] = await connection.query(
     `SELECT codigo,nombre,precioMensual,limitePropietarios,limiteProductos,
@@ -1630,16 +1673,22 @@ async function commercialPlanCatalogSatisfied(connection) {
       .filter((row) => row.planCodigo === code)
       .map((row) => row.funcionalidadCodigo));
     const expected = expectedFeatures.get(code);
-    if (actual.size !== expected.size || [...expected].some((feature) => !actual.has(feature))) return false;
+    if ([...expected].some((feature) => !actual.has(feature))) return false;
+    const extras = [...actual].filter((feature) => !expected.has(feature));
+    if (extras.some((feature) => !allowedLaterFeatures.get(code).has(feature))) return false;
   }
   return true;
 }
 
-async function activeSubscriptionSnapshotsSatisfied(connection, { allowAdditionalFeatures = false } = {}) {
+async function activeSubscriptionSnapshotsSatisfied(connection, {
+  allowAdditionalFeatures = false,
+  excludeExpectedFeatures = []
+} = {}) {
+  const excluded = new Set(excludeExpectedFeatures);
   const expectedFeatures = new Map([
-    ['basico', new Set(BASIC_FEATURES)],
-    ['standard', new Set(STANDARD_FEATURES)],
-    ['pro', new Set(PRO_FEATURES)]
+    ['basico', new Set(BASIC_FEATURES.filter((feature) => !excluded.has(feature)))],
+    ['standard', new Set(STANDARD_FEATURES.filter((feature) => !excluded.has(feature)))],
+    ['pro', new Set(PRO_FEATURES.filter((feature) => !excluded.has(feature)))]
   ]);
   const [rows] = await connection.query(
     `SELECT s.idTienda,s.idSuscripcion,p.codigo planCodigo,sf.codigoFuncionalidad
@@ -1686,7 +1735,7 @@ async function collaborativeTeamSatisfied(connection) {
   const enabledByPlan = Object.fromEntries(features.map((row) => [row.planCodigo, Number(row.habilitada)]));
   if (enabledByPlan.basico !== 0 || enabledByPlan.standard !== 0 || enabledByPlan.pro !== 1) return false;
 
-  return activeSubscriptionSnapshotsSatisfied(connection);
+  return activeSubscriptionSnapshotsSatisfied(connection, { excludeExpectedFeatures: ['portal_clientes'] });
 }
 
 async function requirementsSatisfied(connection, file) {
@@ -1697,7 +1746,10 @@ async function requirementsSatisfied(connection, file) {
     return commercialPlanCatalogSatisfied(connection);
   }
   if (file === '029_sincronizar_snapshot_funciones_plan.sql') {
-    return activeSubscriptionSnapshotsSatisfied(connection, { allowAdditionalFeatures: true });
+    return activeSubscriptionSnapshotsSatisfied(connection, {
+      allowAdditionalFeatures: true,
+      excludeExpectedFeatures: ['equipo_colaborativo', 'portal_clientes']
+    });
   }
   if (file === '030_equipo_colaborativo_pro.sql') {
     return collaborativeTeamSatisfied(connection);
@@ -1743,6 +1795,25 @@ async function requirementsSatisfied(connection, file) {
   }
   for (const relation of requirements.foreignKeyConstraints || []) {
     if (!await hasForeignKeyConstraint(connection, ...relation)) return false;
+  }
+  if (file === '031_tienda_online_base.sql') {
+    const [[configuration]] = await connection.query(
+      `SELECT COUNT(*) total,
+              SUM(CASE WHEN c.idTienda IS NULL THEN 1 ELSE 0 END) missing
+       FROM tienda t LEFT JOIN configuracionTiendaOnline c ON c.idTienda=t.idTienda`
+    );
+    if (Number(configuration.missing || 0) !== 0) return false;
+    const [features] = await connection.query(
+      `SELECT p.codigo planCodigo,pf.habilitada
+       FROM plan p
+       JOIN planFuncionalidad pf ON pf.idPlan=p.idPlan
+       JOIN funcionalidad f ON f.idFuncionalidad=pf.idFuncionalidad
+       WHERE p.codigo IN ('basico','standard','pro') AND f.codigo='portal_clientes'`
+    );
+    if (features.length !== 3) return false;
+    const enabled = Object.fromEntries(features.map((row) => [row.planCodigo, Number(row.habilitada)]));
+    if (enabled.basico !== 0 || enabled.standard !== 1 || enabled.pro !== 1) return false;
+    return activeSubscriptionSnapshotsSatisfied(connection);
   }
   if (file === '015_compensaciones_venta_inventario.sql') {
     const expectedDefinitions = {
@@ -2498,7 +2569,7 @@ async function requirementsSatisfied(connection, file) {
           JOIN planFuncionalidad pf ON pf.idPlan=p.idPlan AND pf.habilitada=1
           JOIN funcionalidad f ON f.idFuncionalidad=pf.idFuncionalidad
           WHERE p.codigo IN ('basico','standard','pro')
-            AND f.codigo IN ('portal_clientes','reportes_avanzados')) excludedFeatures`
+            AND f.codigo='reportes_avanzados') excludedFeatures`
     );
     if (Number(catalog.publicPlans) !== 3
       || Number(catalog.legacyPlans) !== 1
@@ -4121,7 +4192,8 @@ async function main() {
               '027_reestructurar_planes_comerciales.sql',
               '028_reordenar_funciones_por_plan.sql',
               '029_sincronizar_snapshot_funciones_plan.sql',
-              '030_equipo_colaborativo_pro.sql'
+              '030_equipo_colaborativo_pro.sql',
+              '031_tienda_online_base.sql'
             ].includes(file)
             && !await requirementsSatisfied(connection, file);
         if (registeredMigrationIsIncomplete) {
@@ -4162,7 +4234,8 @@ async function main() {
           '027_reestructurar_planes_comerciales.sql',
           '028_reordenar_funciones_por_plan.sql',
           '029_sincronizar_snapshot_funciones_plan.sql',
-          '030_equipo_colaborativo_pro.sql'
+          '030_equipo_colaborativo_pro.sql',
+          '031_tienda_online_base.sql'
         ].includes(file)) {
           await connection.query('INSERT IGNORE INTO schema_migrations (nombre) VALUES (?)', [file]);
           const [finalRecord] = await connection.query(
@@ -4260,7 +4333,8 @@ async function main() {
           '027_reestructurar_planes_comerciales.sql',
           '028_reordenar_funciones_por_plan.sql',
           '029_sincronizar_snapshot_funciones_plan.sql',
-          '030_equipo_colaborativo_pro.sql'
+          '030_equipo_colaborativo_pro.sql',
+          '031_tienda_online_base.sql'
         ].includes(file)
           ? structureElementFromStatement(statement)
           : null;
@@ -4342,7 +4416,8 @@ async function main() {
         '016_compensaciones_financieras.sql',
         '017_integracion_compensaciones.sql',
         '018_auditoria_administrativa_critica.sql',
-        '030_equipo_colaborativo_pro.sql'
+        '030_equipo_colaborativo_pro.sql',
+        '031_tienda_online_base.sql'
       ].includes(file)) {
         await connection.query('INSERT IGNORE INTO schema_migrations (nombre) VALUES (?)', [file]);
         const [finalRecord] = await connection.query(

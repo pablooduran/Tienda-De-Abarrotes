@@ -40,6 +40,8 @@
     revocacion_sesion: 'Se cerraron sesiones activas',
     creacion_producto: 'Se creó un producto',
     modificacion_producto: 'Se actualizó un producto',
+    configuracion_tienda_online: 'Se actualizó la tienda online',
+    publicacion_producto_online: 'Se cambió la publicación de un producto',
     activacion_producto: 'Se activó un producto',
     desactivacion_producto: 'Se desactivó un producto',
     registro_venta: 'Se registró una venta',

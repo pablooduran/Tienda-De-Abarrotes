@@ -150,6 +150,8 @@
     "test:saas-a-e2e": "node scripts/test-saas-a-e2e.js",
     "test:saas-c-schema": "node scripts/test-saas-c-schema.js",
     "test:plan-catalog-contract": "node scripts/test-plan-catalog-contract.js",
+    "test:online-store-foundation": "node scripts/test-online-store-foundation.js",
+    "test:online-store-browser": "node scripts/test-online-store-browser.js",
     "test:saas-c-idempotency-schema": "node scripts/test-saas-c-schema.js",
     "test:saas-c-payment-requests": "node scripts/test-saas-c-payment-requests.js",
     "test:saas-c-payment-request-security": "node scripts/test-saas-c-payment-request-security.js",
