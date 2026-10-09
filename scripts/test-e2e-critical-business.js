@@ -100,8 +100,12 @@ async function initializeSchema(connection) {
   );
   const migrations = fs.readdirSync(MIGRATIONS_DIR)
     .filter((name) => /^\d{3}_.+\.sql$/i.test(name)).sort();
-  ok(migrations.length === 25 && migrations.at(-1).startsWith('025_'),
-    'La base temporal representa exactamente las migraciones 001-025.');
+  const migrationSequence = migrations.map((name) => Number(name.slice(0, 3)));
+  const hasCompleteSequence = migrationSequence.length > 0
+    && migrationSequence.every((number, index) => number === index + 1);
+  const latestMigration = String(migrations.length).padStart(3, '0');
+  ok(hasCompleteSequence,
+    `La base temporal representa exactamente las migraciones 001-${latestMigration}.`);
   for (const migration of migrations) {
     await connection.query('INSERT INTO schema_migrations (nombre) VALUES (?)', [migration]);
   }
