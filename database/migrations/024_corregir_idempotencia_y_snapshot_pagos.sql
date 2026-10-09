@@ -4,9 +4,13 @@
 ALTER TABLE solicitudPagoSuscripcion
   ADD COLUMN planActualCodigoSnapshot
     VARCHAR(50) CHARACTER SET ascii COLLATE ascii_bin NULL
-    AFTER cantidadMeses,
+    AFTER cantidadMeses;
+
+ALTER TABLE solicitudPagoSuscripcion
   ADD COLUMN planActualNombreSnapshot VARCHAR(100) NULL
-    AFTER planActualCodigoSnapshot,
+    AFTER planActualCodigoSnapshot;
+
+ALTER TABLE solicitudPagoSuscripcion
   ADD CONSTRAINT chk_solicitudPago_plan_actual_snapshot CHECK (
     (operacion='nueva_activacion'
       AND ((idPlanActual IS NULL
@@ -22,19 +26,35 @@ ALTER TABLE solicitudPagoSuscripcion
   );
 
 ALTER TABLE operacionPagoSuscripcion
-  MODIFY COLUMN idTienda INT NULL,
+  MODIFY COLUMN idTienda INT NULL;
+
+ALTER TABLE operacionPagoSuscripcion
   MODIFY COLUMN alcance ENUM(
     'crear_solicitud','cargar_comprobante','enviar_revision',
     'revisar','aplicar','cancelar','registrar_tipo_cambio','configurar_metodo'
-  ) NOT NULL,
-  ADD COLUMN idTipoCambioResultado BIGINT NULL AFTER codigoResultado,
-  ADD COLUMN idMetodoPagoResultado INT NULL AFTER idTipoCambioResultado,
+  ) NOT NULL;
+
+ALTER TABLE operacionPagoSuscripcion
+  ADD COLUMN idTipoCambioResultado BIGINT NULL AFTER codigoResultado;
+
+ALTER TABLE operacionPagoSuscripcion
+  ADD COLUMN idMetodoPagoResultado INT NULL AFTER idTipoCambioResultado;
+
+ALTER TABLE operacionPagoSuscripcion
   ADD COLUMN idTiendaClave INT GENERATED ALWAYS AS
-    (COALESCE(idTienda,0)) STORED AFTER idActorClave,
+    (COALESCE(idTienda,0)) STORED AFTER idActorClave;
+
+ALTER TABLE operacionPagoSuscripcion
   ADD UNIQUE INDEX uq_operacionPago_clave_ambito
-    (idTiendaClave,actorTipo,idActorClave,alcance,claveHash),
-  ADD INDEX idx_operacionPago_tipoCambio_resultado (idTipoCambioResultado),
-  ADD INDEX idx_operacionPago_metodo_resultado (idMetodoPagoResultado),
+    (idTiendaClave,actorTipo,idActorClave,alcance,claveHash);
+
+ALTER TABLE operacionPagoSuscripcion
+  ADD INDEX idx_operacionPago_tipoCambio_resultado (idTipoCambioResultado);
+
+ALTER TABLE operacionPagoSuscripcion
+  ADD INDEX idx_operacionPago_metodo_resultado (idMetodoPagoResultado);
+
+ALTER TABLE operacionPagoSuscripcion
   ADD CONSTRAINT chk_operacionPago_alcance_tenant CHECK (
     (alcance IN ('registrar_tipo_cambio','configurar_metodo')
       AND idTienda IS NULL
@@ -45,7 +65,9 @@ ALTER TABLE operacionPagoSuscripcion
         'crear_solicitud','cargar_comprobante','enviar_revision',
         'revisar','aplicar','cancelar'
       ) AND idTienda IS NOT NULL)
-  ),
+  );
+
+ALTER TABLE operacionPagoSuscripcion
   ADD CONSTRAINT chk_operacionPago_resultado_tipado CHECK (
     (alcance='registrar_tipo_cambio'
       AND resultadoReferencia IS NULL
@@ -69,11 +91,15 @@ ALTER TABLE operacionPagoSuscripcion
       )
       AND idTipoCambioResultado IS NULL
       AND idMetodoPagoResultado IS NULL)
-  ),
+  );
+
+ALTER TABLE operacionPagoSuscripcion
   ADD CONSTRAINT fk_operacionPago_tipoCambio_resultado
     FOREIGN KEY (idTipoCambioResultado)
     REFERENCES tipoCambioSuscripcion(idTipoCambioSuscripcion)
-    ON UPDATE RESTRICT ON DELETE RESTRICT,
+    ON UPDATE RESTRICT ON DELETE RESTRICT;
+
+ALTER TABLE operacionPagoSuscripcion
   ADD CONSTRAINT fk_operacionPago_metodo_resultado
     FOREIGN KEY (idMetodoPagoResultado)
     REFERENCES metodoPagoSuscripcion(idMetodoPagoSuscripcion)
