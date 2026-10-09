@@ -81,6 +81,7 @@ async function verify(browser, baseUrl, width, catalogQueries) {
     const detailButton = page.locator('#storesTableBody .table-action').first();
     await detailButton.waitFor();
     assert.strictEqual(await page.locator('#storesTableBody tr').count(), 2);
+    await detailButton.evaluate((node) => node.scrollIntoView({ block: 'center' }));
     const before = await page.locator('.admin-main').evaluate((node) => node.scrollTop);
     await detailButton.click();
     await page.locator('#storeDetail[open]').waitFor();

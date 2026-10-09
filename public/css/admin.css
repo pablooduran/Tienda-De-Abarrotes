@@ -376,6 +376,26 @@ h3 {
   font-size: 1.7rem;
 }
 
+.summary-danger { border-color: #e9b1ab; background: linear-gradient(135deg, var(--surface), var(--danger-soft)); }
+.platform-overview {
+  margin: 18px 0 26px;
+  padding: 22px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: linear-gradient(135deg, color-mix(in srgb, var(--brand-soft) 70%, var(--surface)), var(--surface));
+  box-shadow: 0 10px 28px rgba(24, 32, 29, .06);
+}
+.platform-overview .section-heading { margin-bottom: 16px; }
+.platform-alert-list { display: grid; gap: 10px; }
+.platform-alert { display: flex; align-items: center; justify-content: space-between; gap: 16px; min-width: 0; padding: 14px 16px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); }
+.platform-alert > div { min-width: 0; }
+.platform-alert strong { display: block; font-size: .96rem; }
+.platform-alert p { margin: 3px 0 0; color: var(--muted); font-size: .86rem; }
+.platform-alert-high { border-left: 4px solid var(--danger); }
+.platform-alert-medium { border-left: 4px solid #c88715; }
+.platform-alert-good { justify-content: flex-start; border-color: #6dbf80; color: #176a2a; }
+.platform-alert-good > span { display: grid; flex: 0 0 32px; width: 32px; height: 32px; place-items: center; border-radius: 50%; color: #fff; background: var(--brand); font-weight: 900; }
+
 .summary-success {
   border-top-color: var(--brand);
 }
@@ -547,6 +567,21 @@ tbody tr:hover {
 .detail-facts strong {
   overflow-wrap: anywhere;
 }
+
+.store-health-panel { margin: 18px 0; padding: 18px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); }
+.store-health-heading { display: flex; align-items: center; justify-content: space-between; gap: 14px; }
+.store-health-heading .eyebrow { margin-bottom: 3px; }
+.store-health-heading h3 { margin: 0; }
+.store-health-message { margin: 9px 0 16px; color: var(--muted); }
+.store-usage-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+.store-usage { min-width: 0; padding: 12px; border: 1px solid var(--line); border-radius: 9px; }
+.store-usage > div { display: flex; justify-content: space-between; gap: 8px; font-size: .84rem; }
+.store-usage span { color: var(--muted); }
+.store-usage strong { text-align: right; }
+.store-usage i { display: block; height: 7px; margin-top: 10px; overflow: hidden; border-radius: 999px; background: var(--brand-soft); }
+.store-usage b { display: block; height: 100%; border-radius: inherit; background: var(--brand); }
+.store-usage.is-full { border-color: #d59618; }
+.store-usage.is-full b { background: #c88715; }
 
 .owners-heading {
   margin-bottom: 12px;

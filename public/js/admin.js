@@ -26,6 +26,10 @@ const elements = {
   activeStoreCount: document.getElementById('activeStoreCount'),
   inactiveStoreCount: document.getElementById('inactiveStoreCount'),
   ownerCount: document.getElementById('ownerCount'),
+  expiringStoreCount: document.getElementById('expiringStoreCount'),
+  attentionStoreCount: document.getElementById('attentionStoreCount'),
+  platformOverviewSummary: document.getElementById('platformOverviewSummary'),
+  platformAlertList: document.getElementById('platformAlertList'),
   storeSearch: document.getElementById('storeSearch'),
   storeFilterButton: document.getElementById('openStoreFilters'),
   storeFilterDialog: document.getElementById('storeFilterDialog'),
@@ -42,6 +46,9 @@ const elements = {
   detailProductCount: document.getElementById('detailProductCount'),
   detailClientCount: document.getElementById('detailClientCount'),
   detailLastActivity: document.getElementById('detailLastActivity'),
+  detailHealthStatus: document.getElementById('detailHealthStatus'),
+  detailHealthMessage: document.getElementById('detailHealthMessage'),
+  detailUsage: document.getElementById('detailUsage'),
   toggleStoreButton: document.getElementById('toggleStoreButton'),
   ownersTableBody: document.getElementById('ownersTableBody'),
   emptyOwners: document.getElementById('emptyOwners'),
@@ -214,6 +221,126 @@ function updateSummary() {
     (total, store) => total + Number(store.cantidadPropietarios || 0),
     0
   );
+  const alerts = platformAlerts();
+  elements.expiringStoreCount.textContent = String(alerts.filter((alert) => alert.kind === 'expiry').length);
+  elements.attentionStoreCount.textContent = String(alerts.filter((alert) => alert.priority === 'high').length);
+  renderPlatformAlerts(alerts);
+}
+
+function localDate(value) {
+  if (!value) return null;
+  const text = String(value).trim();
+  const date = new Date(/(?:Z|[+-]\d{2}:\d{2})$/i.test(text) ? text : `${text.replace(' ', 'T')}-04:00`);
+  return Number.isNaN(date.getTime()) ? null : date;
+}
+
+function daysToExpiry(value) {
+  const date = localDate(value);
+  if (!date) return null;
+  return Math.ceil((date.getTime() - Date.now()) / 86400000);
+}
+
+function planFor(store) {
+  return state.plans.find((plan) => plan.codigo === store.planCodigo) || null;
+}
+
+function storeLimitAlerts(store) {
+  const plan = planFor(store);
+  if (!plan) return [];
+  return [
+    ['productos', 'Productos', 'cantidadProductos', 'limiteProductos'],
+    ['clientes', 'Clientes', 'cantidadClientes', 'limiteClientes'],
+    ['propietarios', 'Propietarios', 'cantidadPropietarios', 'limitePropietarios']
+  ].flatMap(([key, label, usageKey, limitKey]) => {
+    const limit = plan[limitKey];
+    const used = Number(store[usageKey] || 0);
+    if (limit === null || limit === undefined || Number(limit) <= 0 || used < Number(limit)) return [];
+    return [{ store, kind: 'limit', priority: used > Number(limit) ? 'high' : 'medium', title: `${label}: límite alcanzado`, description: `${store.nombre} usa ${used} de ${limit} incluidos en ${plan.nombre}.`, key }];
+  });
+}
+
+function platformAlerts() {
+  return state.stores.flatMap((store) => {
+    const subscription = store.estadoSuscripcionEfectivo || 'sin_suscripcion';
+    const alerts = [];
+    if (!isActive(store.activo) || store.estado !== 'activa') {
+      alerts.push({ store, kind: 'store', priority: 'high', title: 'Tienda sin acceso activo', description: `${store.nombre} está ${statusLabel(store.estado).toLowerCase()}.` });
+    }
+    if (['sin_suscripcion', 'vencida', 'suspendida', 'cancelada'].includes(subscription)) {
+      alerts.push({ store, kind: 'subscription', priority: 'high', title: 'Suscripción requiere revisión', description: `${store.nombre}: ${subscriptionBadgeText(subscription)}.` });
+    }
+    const remaining = daysToExpiry(store.fechaFinSuscripcion);
+    if (subscription === 'activa' && remaining !== null && remaining >= 0 && remaining <= 7) {
+      alerts.push({ store, kind: 'expiry', priority: remaining <= 1 ? 'high' : 'medium', title: `Vence ${remaining === 0 ? 'hoy' : `en ${remaining} día${remaining === 1 ? '' : 's'}`}`, description: `${store.nombre} · ${store.planNombre || 'Sin plan'}.` });
+    }
+    return [...alerts, ...storeLimitAlerts(store)];
+  }).sort((left, right) => Number(right.priority === 'high') - Number(left.priority === 'high'));
+}
+
+function subscriptionBadgeText(status) {
+  return { sin_suscripcion: 'sin suscripción', vencida: 'suscripción vencida', suspendida: 'suscripción suspendida', cancelada: 'suscripción cancelada' }[status] || status;
+}
+
+function renderPlatformAlerts(alerts) {
+  elements.platformAlertList.replaceChildren();
+  const visible = alerts.slice(0, 6);
+  elements.platformOverviewSummary.textContent = visible.length
+    ? `${alerts.length} aviso${alerts.length === 1 ? '' : 's'} detectado${alerts.length === 1 ? '' : 's'}. Atiende primero los marcados como prioritarios.`
+    : 'Todo en orden: no hay vencimientos, límites alcanzados ni accesos que requieran revisión.';
+  if (!visible.length) {
+    const good = document.createElement('div');
+    good.className = 'platform-alert platform-alert-good';
+    good.innerHTML = '<span aria-hidden="true">✓</span><div><strong>La plataforma está al día</strong><p>No hay acciones administrativas urgentes.</p></div>';
+    elements.platformAlertList.appendChild(good);
+    return;
+  }
+  visible.forEach((alert) => {
+    const item = document.createElement('article');
+    item.className = `platform-alert platform-alert-${alert.priority}`;
+    const text = document.createElement('div');
+    const title = document.createElement('strong');
+    const description = document.createElement('p');
+    title.textContent = alert.title;
+    description.textContent = alert.description;
+    text.append(title, description);
+    const action = document.createElement('button');
+    action.type = 'button';
+    action.className = 'button button-secondary';
+    action.textContent = 'Revisar tienda';
+    action.addEventListener('click', () => selectStore(alert.store.idTienda));
+    item.append(text, action);
+    elements.platformAlertList.appendChild(item);
+  });
+}
+
+function renderStoreHealth(store) {
+  const plan = planFor(store);
+  const subscription = store.estadoSuscripcionEfectivo || 'sin_suscripcion';
+  const remaining = daysToExpiry(store.fechaFinSuscripcion);
+  const hasAccessIssue = !isActive(store.activo) || store.estado !== 'activa' || subscription !== 'activa';
+  const nearExpiry = subscription === 'activa' && remaining !== null && remaining <= 7;
+  elements.detailHealthStatus.className = `status-badge ${hasAccessIssue ? 'status-inactive' : nearExpiry ? 'status-suspended' : 'status-active'}`;
+  elements.detailHealthStatus.textContent = hasAccessIssue ? 'Requiere revisión' : nearExpiry ? 'Vence pronto' : 'Operación saludable';
+  elements.detailHealthMessage.textContent = hasAccessIssue
+    ? 'Revisa el estado administrativo y la suscripción antes de continuar con cambios operativos.'
+    : nearExpiry ? `La suscripción vence ${remaining === 0 ? 'hoy' : `en ${remaining} día${remaining === 1 ? '' : 's'}`}.`
+    : 'La tienda tiene acceso activo. Revisa el uso de límites antes de cambiar de plan.';
+  elements.detailUsage.replaceChildren();
+  [
+    ['Propietarios', 'cantidadPropietarios', 'limitePropietarios'],
+    ['Productos', 'cantidadProductos', 'limiteProductos'],
+    ['Clientes', 'cantidadClientes', 'limiteClientes']
+  ].forEach(([label, usageKey, limitKey]) => {
+    const used = Number(store[usageKey] || 0);
+    const rawLimit = plan?.[limitKey];
+    const unlimited = rawLimit === null || rawLimit === undefined;
+    const limit = unlimited ? null : Number(rawLimit);
+    const percent = unlimited ? 0 : Math.min(100, Math.round((used / Math.max(limit, 1)) * 100));
+    const row = document.createElement('div');
+    row.className = `store-usage${!unlimited && used >= limit ? ' is-full' : ''}`;
+    row.innerHTML = `<div><span>${label}</span><strong>${unlimited ? `${used} · Ilimitado` : `${used} de ${limit}`}</strong></div><i><b style="width:${percent}%"></b></i>`;
+    elements.detailUsage.appendChild(row);
+  });
 }
 
 function tableCell(content, className = '') {
@@ -388,6 +515,7 @@ async function selectStore(idTienda, openDetail = true) {
   elements.detailProductCount.textContent = String(store.cantidadProductos || 0);
   elements.detailClientCount.textContent = String(store.cantidadClientes || 0);
   elements.detailLastActivity.textContent = formatDate(store.ultimaActividad);
+  renderStoreHealth(store);
   elements.toggleStoreButton.textContent = isActive(store.activo) ? 'Suspender tienda' : 'Activar tienda';
   elements.toggleStoreButton.className = `button ${isActive(store.activo) ? 'button-danger' : 'button-primary'}`;
   renderOwners();

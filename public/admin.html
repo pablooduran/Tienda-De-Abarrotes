@@ -71,6 +71,26 @@
           <span>Propietarios</span>
           <strong id="ownerCount">0</strong>
         </article>
+        <article class="summary-item summary-warning">
+          <span>Vencen en 7 días</span>
+          <strong id="expiringStoreCount">0</strong>
+        </article>
+        <article class="summary-item summary-danger">
+          <span>Requieren acción</span>
+          <strong id="attentionStoreCount">0</strong>
+        </article>
+      </section>
+
+      <section class="platform-overview" data-admin-view="tiendas" aria-labelledby="platformOverviewHeading">
+        <div class="section-heading">
+          <div>
+            <p class="eyebrow">Centro de control</p>
+            <h2 id="platformOverviewHeading">Revisa primero esto</h2>
+            <p id="platformOverviewSummary">Cargando el estado operativo de las tiendas...</p>
+          </div>
+          <a class="button button-secondary" href="#suscripciones-saas">Ver suscripciones</a>
+        </div>
+        <div id="platformAlertList" class="platform-alert-list" aria-live="polite"></div>
       </section>
 
       <section id="pagos-suscripcion" data-admin-view="pagos-suscripcion" class="content-section payment-admin-section" aria-labelledby="paymentAdminHeading">
@@ -263,6 +283,15 @@
           <div><span>Clientes</span><strong id="detailClientCount"></strong></div>
           <div><span>Última actividad</span><strong id="detailLastActivity"></strong></div>
         </div>
+
+        <section class="store-health-panel" aria-labelledby="storeHealthHeading">
+          <div class="store-health-heading">
+            <div><p class="eyebrow">Lectura rápida</p><h3 id="storeHealthHeading">Estado operativo</h3></div>
+            <span id="detailHealthStatus" class="status-badge"></span>
+          </div>
+          <p id="detailHealthMessage" class="store-health-message"></p>
+          <div id="detailUsage" class="store-usage-grid"></div>
+        </section>
 
         <div class="owners-heading">
           <div>
