@@ -309,9 +309,10 @@ async function runBrowserFlow({ baseUrl, username, password, productName, custom
     ok(true, 'El detalle del historial conserva el producto vendido.');
     await page.locator('[data-modal-confirm]').click();
 
+    await page.locator('#accountMenu > summary').click();
     await Promise.all([
       page.waitForURL('**/suscripcion.html'),
-      page.locator('a[data-navigation-family="plan"][href="/suscripcion.html"]').click()
+      page.getByRole('link', { name: 'Mi plan y facturación' }).click()
     ]);
     await page.locator('[data-subscription-view]').waitFor();
     await page.locator('[data-payment-form]').waitFor();
