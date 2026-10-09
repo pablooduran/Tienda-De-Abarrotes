@@ -25,33 +25,25 @@ jobs:
       DB_PORT: '3306'
       DB_NAME: tienda_abarrotes_pruebas
       DB_USER: root
-      DB_PASSWORD: ci_local_mysql_root_2026_only
+      DB_PASSWORD: root
       DB_SSL_ENABLED: 'false'
       BACKUP_RESTORE_USER: root
-      BACKUP_RESTORE_PASSWORD: ci_local_mysql_root_2026_only
+      BACKUP_RESTORE_PASSWORD: root
       SESSION_SECRET: ci_local_session_secret_2026_only_long_enough
       PORT: '3000'
       TRUSTED_ORIGINS: http://localhost:3000
       PAYMENT_RECEIPT_STORAGE_DIR: /tmp/tienda-saas-c3-http-ci
       TEST_BASE_URL: http://localhost:3000
-    services:
-      mysql:
-        image: mysql:8.0
-        env:
-          MYSQL_DATABASE: tienda_abarrotes_pruebas
-          MYSQL_ROOT_PASSWORD: ci_local_mysql_root_2026_only
-          MYSQL_ROOT_HOST: '%'
-        ports:
-          - 3306:3306
-        options: >-
-          --health-cmd="mysqladmin ping -h localhost -uroot -p$MYSQL_ROOT_PASSWORD"
-          --health-interval=10s --health-timeout=5s --health-retries=12
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: 20.x
           cache: npm
+      - name: Start preinstalled MySQL 8
+        run: |
+          sudo systemctl start mysql.service
+          mysqladmin ping --host=localhost --user=root --password=root --wait=30
       - name: Install locked dependencies
         run: npm ci
       - name: Check CI isolation contract
