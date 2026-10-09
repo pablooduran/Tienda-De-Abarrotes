@@ -1625,18 +1625,7 @@ async function normalizedHasForeignKeyConstraint(connection, relation) {
     && normalizedIdentifier(rules[0].DELETE_RULE) === normalizedIdentifier(deleteRule);
 }
 
-async function commercialPlanCatalogSatisfied(connection) {
-  const laterFeatures = new Set(['equipo_colaborativo', 'portal_clientes']);
-  const expectedFeatures = new Map([
-    ['basico', new Set(BASIC_FEATURES.filter((feature) => !laterFeatures.has(feature)))],
-    ['standard', new Set(STANDARD_FEATURES.filter((feature) => !laterFeatures.has(feature)))],
-    ['pro', new Set(PRO_FEATURES.filter((feature) => !laterFeatures.has(feature)))]
-  ]);
-  const allowedLaterFeatures = new Map([
-    ['basico', new Set()],
-    ['standard', new Set(['portal_clientes'])],
-    ['pro', new Set(['equipo_colaborativo', 'portal_clientes'])]
-  ]);
+async function commercialPlanDefinitionsSatisfied(connection) {
   const [plans] = await connection.query(
     `SELECT codigo,nombre,precioMensual,limitePropietarios,limiteProductos,
             limiteClientes,limiteProveedores,visiblePublicamente,esLegado,ordenComercial
@@ -1661,6 +1650,21 @@ async function commercialPlanCatalogSatisfied(connection) {
       value === null ? row[column] !== null : Number(row[column]) !== Number(value)
     ))) return false;
   }
+  return true;
+}
+
+async function commercialPlanFeaturesSatisfied(connection) {
+  const laterFeatures = new Set(['equipo_colaborativo', 'portal_clientes']);
+  const expectedFeatures = new Map([
+    ['basico', new Set(BASIC_FEATURES.filter((feature) => !laterFeatures.has(feature)))],
+    ['standard', new Set(STANDARD_FEATURES.filter((feature) => !laterFeatures.has(feature)))],
+    ['pro', new Set(PRO_FEATURES.filter((feature) => !laterFeatures.has(feature)))]
+  ]);
+  const allowedLaterFeatures = new Map([
+    ['basico', new Set()],
+    ['standard', new Set(['portal_clientes'])],
+    ['pro', new Set(['equipo_colaborativo', 'portal_clientes'])]
+  ]);
   const [features] = await connection.query(
     `SELECT p.codigo planCodigo,f.codigo funcionalidadCodigo
      FROM plan p
@@ -1678,6 +1682,11 @@ async function commercialPlanCatalogSatisfied(connection) {
     if (extras.some((feature) => !allowedLaterFeatures.get(code).has(feature))) return false;
   }
   return true;
+}
+
+async function commercialPlanCatalogSatisfied(connection) {
+  return await commercialPlanDefinitionsSatisfied(connection)
+    && await commercialPlanFeaturesSatisfied(connection);
 }
 
 async function activeSubscriptionSnapshotsSatisfied(connection, {
@@ -1740,10 +1749,10 @@ async function collaborativeTeamSatisfied(connection) {
 
 async function requirementsSatisfied(connection, file) {
   if (file === '027_reestructurar_planes_comerciales.sql') {
-    return true;
+    return commercialPlanDefinitionsSatisfied(connection);
   }
   if (file === '028_reordenar_funciones_por_plan.sql') {
-    return commercialPlanCatalogSatisfied(connection);
+    return commercialPlanFeaturesSatisfied(connection);
   }
   if (file === '029_sincronizar_snapshot_funciones_plan.sql') {
     return activeSubscriptionSnapshotsSatisfied(connection, {
