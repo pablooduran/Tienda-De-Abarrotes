@@ -6,8 +6,10 @@ const {
   createMailDeliveryAdapter
 } = require('../services/mail-delivery-adapter');
 const { MAILTRAP_SANDBOX_ENDPOINT } = require('../services/mailtrap-sandbox-mail-adapter');
+const { RESEND_EMAIL_ENDPOINT } = require('../services/resend-mail-adapter');
 
 const TOKEN = 'A'.repeat(43);
+const VERIFICATION_CODE = '482731';
 const API_TOKEN = 'synthetic_mailtrap_token_1234567890';
 
 function hostedEnvironment(extra = {}) {
@@ -23,6 +25,17 @@ function mailtrapEnvironment(extra = {}) {
     EMAIL_FROM: 'Tienda Staging <notificaciones@staging.invalid>',
     ...extra
   });
+}
+
+function resendEnvironment(extra = {}) {
+  return {
+    APP_ENV: 'production',
+    EMAIL_DELIVERY_MODE: 'external',
+    EMAIL_DELIVERY_PROVIDER: 'resend',
+    RESEND_API_KEY: 're_synthetic_key_12345678901234567890',
+    EMAIL_FROM: 'Administrau <acceso@example.test>',
+    ...extra
+  };
 }
 
 async function main() {
@@ -95,7 +108,7 @@ async function main() {
     }
   });
   await configured.sendVerification({
-    recipient: 'verification@example.test', token: TOKEN, expiresAt: '2026-09-19 10:00:00'
+    recipient: 'verification@example.test', token: VERIFICATION_CODE, expiresAt: '2026-09-19 10:00:00'
   });
   await configured.sendPasswordRecovery({
     recipient: 'recovery@example.test', token: TOKEN, expiresAt: '2026-09-19 11:00:00'
@@ -112,12 +125,30 @@ async function main() {
     assert.deepStrictEqual(body.from, { email: 'notificaciones@staging.invalid', name: 'Tienda Staging' });
     assert.strictEqual(body.to.length, 1);
     assert.match(body.to[0].email, /@(example\.test)$/);
-    assert.match(body.text, new RegExp(TOKEN));
-    assert.match(body.html, new RegExp(TOKEN));
+    const expectedToken = body.to[0].email.startsWith('verification') ? VERIFICATION_CODE : TOKEN;
+    assert.match(body.text, new RegExp(expectedToken));
+    assert.match(body.html, new RegExp(expectedToken));
   }
 
+  const resendRequests = [];
+  const realDelivery = createConfiguredMailDeliveryAdapter(resendEnvironment(), {
+    fetchImpl: async (url, request) => {
+      resendRequests.push({ url, request });
+      return { ok: true, async json() { return { id: 'email_synthetic_123' }; } };
+    }
+  });
+  await realDelivery.sendVerification({
+    recipient: 'cliente@example.test', token: VERIFICATION_CODE, expiresAt: '2026-09-19 10:00:00'
+  });
+  assert.strictEqual(resendRequests[0].url, RESEND_EMAIL_ENDPOINT);
+  assert.match(resendRequests[0].request.headers.Authorization, /^Bearer re_/);
+  const resendBody = JSON.parse(resendRequests[0].request.body);
+  assert.deepStrictEqual(resendBody.to, ['cliente@example.test']);
+  assert.strictEqual(resendBody.from, 'Administrau <acceso@example.test>');
+  assert.match(resendBody.text, new RegExp(VERIFICATION_CODE));
+
   await assert.rejects(
-    configured.sendVerification({ recipient: 'invalid', token: TOKEN, expiresAt: '2026-09-19 10:00:00' }),
+    configured.sendVerification({ recipient: 'invalid', token: VERIFICATION_CODE, expiresAt: '2026-09-19 10:00:00' }),
     (error) => error.code === 'EMAIL_DELIVERY_INPUT_INVALID'
   );
   assert.strictEqual(requests.length, 2);
@@ -132,7 +163,7 @@ async function main() {
   });
   await assert.rejects(
     providerRejected.sendVerification({
-      recipient: 'verification@example.test', token: TOKEN, expiresAt: '2026-09-19 10:00:00'
+      recipient: 'verification@example.test', token: VERIFICATION_CODE, expiresAt: '2026-09-19 10:00:00'
     }),
     (error) => error.code === 'EMAIL_DELIVERY_PROVIDER_REJECTED'
       && !error.message.includes(API_TOKEN)
@@ -144,7 +175,7 @@ async function main() {
   });
   await assert.rejects(
     networkFailed.sendVerification({
-      recipient: 'verification@example.test', token: TOKEN, expiresAt: '2026-09-19 10:00:00'
+      recipient: 'verification@example.test', token: VERIFICATION_CODE, expiresAt: '2026-09-19 10:00:00'
     }),
     (error) => error.code === 'EMAIL_DELIVERY_NETWORK_FAILURE'
       && !error.message.includes(API_TOKEN)
@@ -180,7 +211,7 @@ async function main() {
     defaultHosted: 'disabled',
     realNetworkCalls: 0,
     mockedProviderCalls: requests.length,
-    providerIntegrated: 'mailtrap-sandbox',
+    providersIntegrated: ['mailtrap-sandbox', 'resend'],
     contracts: ['verification', 'recovery']
   }, null, 2));
 }

@@ -11,9 +11,10 @@ const { createLocalVerificationMailAdapter } = require('../services/local-verifi
 const { createPublicRegistrationService } = require('../services/public-registration-service');
 const {
   VERIFICATION_TOKEN,
+  EMAIL_VERIFICATION_CODE,
   createVerificationToken,
-  verificationTokenHash,
-  verificationTokenTtlHours
+  verificationCodeHash,
+  verificationCodeTtlMinutes
 } = require('../config/email-verification-contract');
 
 const ROOT = path.resolve(__dirname, '..');
@@ -119,11 +120,16 @@ function registration(marker, suffix = '') {
 async function main() {
   const primary = requireLocalhostDatabase('La prueba de verificacion de correo');
   if (!/(prueba|test)/i.test(primary.database)) throw new Error('La prueba requiere una base local de pruebas.');
-  assert.strictEqual(verificationTokenTtlHours({}), 24);
-  assert.throws(() => verificationTokenTtlHours({ EMAIL_VERIFICATION_TOKEN_TTL_HOURS: '0' }));
-  const entropyA = createVerificationToken();
-  const entropyB = createVerificationToken();
-  assert(VERIFICATION_TOKEN.test(entropyA) && entropyA !== entropyB, 'El token no tiene el formato o entropia esperados.');
+  assert.strictEqual(verificationCodeTtlMinutes({}), 15);
+  assert.throws(() => verificationCodeTtlMinutes({ EMAIL_VERIFICATION_CODE_TTL_MINUTES: '0' }));
+  assert(VERIFICATION_TOKEN.test(createVerificationToken()), 'El token de recuperación conserva su formato seguro.');
+  assert(EMAIL_VERIFICATION_CODE.test(require('../config/email-verification-contract').createVerificationCode()),
+    'El código de verificación debe contener exactamente seis números.');
+  assert.notStrictEqual(
+    verificationCodeHash('482731', 'primero@example.test'),
+    verificationCodeHash('482731', 'segundo@example.test'),
+    'El mismo código debe quedar vinculado al correo destinatario.'
+  );
   const marker = crypto.randomBytes(6).toString('hex');
   const database = `${TEMP_PREFIX}${marker}`;
   const serverOptions = await credentials();
@@ -169,10 +175,10 @@ async function main() {
       assert.strictEqual(before.estadoOnboarding, 'pendiente');
       assert.strictEqual(before.tipo, 'prueba');
       assert.notStrictEqual(before.tokenHash, message.token, 'El token no puede quedar en claro en la base.');
-      assert.strictEqual(before.tokenHash, verificationTokenHash(message.token));
+      assert.strictEqual(before.tokenHash, verificationCodeHash(message.token, first.correo));
       const subscriptionSnapshot = `${before.fechaInicio}|${before.fechaFin}|${before.tipo}`;
 
-      const confirmed = await verification.confirm({ token: message.token, requestId: '22222222-2222-4222-8222-222222222222' });
+      const confirmed = await verification.confirm({ token: message.token, email: first.correo, requestId: '22222222-2222-4222-8222-222222222222' });
       assert(/Correo verificado/.test(confirmed.message));
       const [[after]] = await connection.query(
         `SELECT a.correoVerificadoEn,a.estadoAcceso,t.estado,t.estadoOnboarding,
@@ -188,7 +194,7 @@ async function main() {
       assert.strictEqual(after.estadoOnboarding, 'pendiente');
       assert.strictEqual(`${after.fechaInicio}|${after.fechaFin}|${after.tipo}`, subscriptionSnapshot);
       await assert.rejects(
-        verification.confirm({ token: message.token, requestId: '33333333-3333-4333-8333-333333333333' }),
+        verification.confirm({ token: message.token, email: first.correo, requestId: '33333333-3333-4333-8333-333333333333' }),
         (error) => error.code === 'EMAIL_VERIFICATION_INVALID'
       );
 
@@ -203,10 +209,10 @@ async function main() {
       const replacement = mail.takeLatestForTests().token;
       assert.notStrictEqual(original, replacement);
       await assert.rejects(
-        verification.confirm({ token: original, requestId: '77777777-7777-4777-8777-777777777777' }),
+        verification.confirm({ token: original, email: second.correo, requestId: '77777777-7777-4777-8777-777777777777' }),
         (error) => error.code === 'EMAIL_VERIFICATION_INVALID'
       );
-      await verification.confirm({ token: replacement, requestId: '88888888-8888-4888-8888-888888888888' });
+      await verification.confirm({ token: replacement, email: second.correo, requestId: '88888888-8888-4888-8888-888888888888' });
 
       const third = registration(marker, 'expired');
       await registrationService.register({
@@ -217,7 +223,7 @@ async function main() {
         clock: () => new Date('2026-07-31T14:00:00Z')
       });
       await assert.rejects(
-        expiredVerifier.confirm({ token: expiredToken, requestId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa' }),
+        expiredVerifier.confirm({ token: expiredToken, email: third.correo, requestId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa' }),
         (error) => error.code === 'EMAIL_VERIFICATION_INVALID'
       );
 
@@ -227,8 +233,8 @@ async function main() {
       });
       const concurrentToken = mail.takeLatestForTests().token;
       const confirmations = await Promise.allSettled([
-        verification.confirm({ token: concurrentToken, requestId: 'cccccccc-cccc-4ccc-8ccc-cccccccccccc' }),
-        verification.confirm({ token: concurrentToken, requestId: 'dddddddd-dddd-4ddd-8ddd-dddddddddddd' })
+        verification.confirm({ token: concurrentToken, email: concurrent.correo, requestId: 'cccccccc-cccc-4ccc-8ccc-cccccccccccc' }),
+        verification.confirm({ token: concurrentToken, email: concurrent.correo, requestId: 'dddddddd-dddd-4ddd-8ddd-dddddddddddd' })
       ]);
       assert.strictEqual(confirmations.filter((item) => item.status === 'fulfilled').length, 1,
         'Dos confirmaciones concurrentes no pueden activar el mismo token dos veces.');

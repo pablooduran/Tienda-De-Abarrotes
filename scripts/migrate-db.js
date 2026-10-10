@@ -1350,6 +1350,16 @@ const migrationRequirements = {
       ['productoCatalogoOnline', 'fk_productoCatalogoOnline_producto', ['idTienda', 'idProducto'], 'producto', ['idTienda', 'idProducto'], 'RESTRICT', 'RESTRICT'],
       ['productoCatalogoOnline', 'fk_productoCatalogoOnline_admin', ['idTienda', 'idAdministradorActualiza'], 'administrador', ['idTienda', 'idAdministrador'], 'RESTRICT', 'RESTRICT']
     ]
+  },
+  '032_catalogo_online_visible_por_defecto.sql': {
+    columns: {
+      productoCatalogoOnline: ['publicado']
+    },
+    columnTypes: {
+      productoCatalogoOnline: {
+        publicado: { type: 'tinyint(1)', nullable: false, defaultValue: 1 }
+      }
+    }
   }
 };
 
@@ -4202,7 +4212,8 @@ async function main() {
               '028_reordenar_funciones_por_plan.sql',
               '029_sincronizar_snapshot_funciones_plan.sql',
               '030_equipo_colaborativo_pro.sql',
-              '031_tienda_online_base.sql'
+              '031_tienda_online_base.sql',
+              '032_catalogo_online_visible_por_defecto.sql'
             ].includes(file)
             && !await requirementsSatisfied(connection, file);
         if (registeredMigrationIsIncomplete) {
@@ -4244,7 +4255,8 @@ async function main() {
           '028_reordenar_funciones_por_plan.sql',
           '029_sincronizar_snapshot_funciones_plan.sql',
           '030_equipo_colaborativo_pro.sql',
-          '031_tienda_online_base.sql'
+          '031_tienda_online_base.sql',
+          '032_catalogo_online_visible_por_defecto.sql'
         ].includes(file)) {
           await connection.query('INSERT IGNORE INTO schema_migrations (nombre) VALUES (?)', [file]);
           const [finalRecord] = await connection.query(
@@ -4343,7 +4355,8 @@ async function main() {
           '028_reordenar_funciones_por_plan.sql',
           '029_sincronizar_snapshot_funciones_plan.sql',
           '030_equipo_colaborativo_pro.sql',
-          '031_tienda_online_base.sql'
+          '031_tienda_online_base.sql',
+          '032_catalogo_online_visible_por_defecto.sql'
         ].includes(file)
           ? structureElementFromStatement(statement)
           : null;
@@ -4426,7 +4439,8 @@ async function main() {
         '017_integracion_compensaciones.sql',
         '018_auditoria_administrativa_critica.sql',
         '030_equipo_colaborativo_pro.sql',
-        '031_tienda_online_base.sql'
+        '031_tienda_online_base.sql',
+        '032_catalogo_online_visible_por_defecto.sql'
       ].includes(file)) {
         await connection.query('INSERT IGNORE INTO schema_migrations (nombre) VALUES (?)', [file]);
         const [finalRecord] = await connection.query(

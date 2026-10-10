@@ -1,5 +1,6 @@
 const {
   MAILTRAP_SANDBOX_PROVIDER,
+  RESEND_PROVIDER,
   REGISTERED_EMAIL_PROVIDERS,
   emailDeliveryConfig
 } = require('../config/email-delivery');
@@ -7,6 +8,7 @@ const {
   localVerificationMailAdapter
 } = require('./local-verification-mail-adapter');
 const { createMailtrapSandboxMailAdapter } = require('./mailtrap-sandbox-mail-adapter');
+const { createResendMailAdapter } = require('./resend-mail-adapter');
 
 const REQUIRED_METHODS = Object.freeze(['sendVerification', 'sendPasswordRecovery']);
 
@@ -53,6 +55,10 @@ function createConfiguredMailDeliveryAdapter(environment = process.env, options 
   if (config.mode === 'external' && config.provider === MAILTRAP_SANDBOX_PROVIDER
     && !externalAdapters[MAILTRAP_SANDBOX_PROVIDER]) {
     externalAdapters[MAILTRAP_SANDBOX_PROVIDER] = createMailtrapSandboxMailAdapter(environment, options);
+  }
+  if (config.mode === 'external' && config.provider === RESEND_PROVIDER
+    && !externalAdapters[RESEND_PROVIDER]) {
+    externalAdapters[RESEND_PROVIDER] = createResendMailAdapter(environment, options);
   }
   return createMailDeliveryAdapter(config, { ...options, externalAdapters });
 }

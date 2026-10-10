@@ -18,13 +18,16 @@ check('Las familias operativas del propietario son explicitas', [
   "{ id: 'ventas', label: 'Ventas'",
   "{ id: 'inventario', label: 'Inventario'",
   "{ id: 'clientes', label: 'Clientes'",
-  "{ id: 'reportes', label: 'Reportes'"
+  "{ id: 'reportes', label: 'Reportes'",
+  "{ id: 'tiendaOnline', label: 'Tienda online'"
 ].every((value) => app.includes(value)));
-check('Configuracion y auditoria viven fuera de la barra operativa',
+check('Configuracion, equipo y auditoria viven en la tuerca',
   !app.includes("{ id: 'administracion', label: 'Administracion y configuracion'")
   && html.includes('id="settingsStoreButton"')
   && html.includes('id="settingsAuditButton"')
-  && app.includes("const settingsViews = new Set(['configuracion', 'auditoria'])")
+  && html.includes('id="settingsTeamButton"')
+  && !html.includes('id="settingsOnlineStoreButton"')
+  && app.includes("const settingsViews = new Set(['configuracion', 'equipo', 'auditoria'])")
   && app.includes("const isDedicatedWorkspace = settingsViews.has(id) || id === 'ayuda';")
   && css.includes('.layout.settings-workspace .sidebar')
   && app.includes('const hideQuickActions = id === \'ayuda\' || settingsViews.has(id);')
@@ -42,6 +45,10 @@ check('Los accesos por plan se conservan y los modulos bloqueados permanecen vis
   && app.includes("features.includes('anulaciones_operativas')")
   && app.includes("button.textContent = available ? label : `${label} 🔒`;")
   && app.includes('function openPlanAccessNotice(id)'));
+check('Tienda online aparece debajo de Reportes y se bloquea antes de Standard',
+  app.indexOf("{ id: 'tiendaOnline', label: 'Tienda online'") > app.indexOf("{ id: 'reportes', label: 'Reportes'")
+  && app.includes("features.includes('portal_clientes')")
+  && app.includes("id === 'tiendaOnline' ? 'Standard' : null"));
 check('La navegacion usa grupos accesibles y foco visible',
   app.includes("document.createElement('details')")
   && app.includes("document.createElement('summary')")

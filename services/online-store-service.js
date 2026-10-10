@@ -52,6 +52,7 @@ function publicConfiguration(row) {
     permiteEfectivo: Boolean(row.permiteEfectivo),
     permiteQr: Boolean(row.permiteQr),
     pedidoMinimo: Number(row.pedidoMinimo || 0),
+    entregaGratisDesde: Number(row.pedidoMinimo || 0),
     costoEntrega: Number(row.costoEntrega || 0),
     tiempoPreparacionMinutos: Number(row.tiempoPreparacionMinutos || 30)
   };
@@ -66,11 +67,7 @@ function ownerProduct(row) {
     precioVenta: Number(row.precioVenta),
     stockUnidadesTotal: Number(row.stockUnidadesTotal),
     stockMinimo: Number(row.stockMinimo),
-    publicado: Boolean(row.publicado),
-    destacado: Boolean(row.destacado),
-    descripcionPublica: row.descripcionPublica || '',
-    cantidadMaximaPedido: row.cantidadMaximaPedido === null ? null : Number(row.cantidadMaximaPedido),
-    permiteSustitucion: Boolean(row.permiteSustitucion)
+    publicado: Boolean(row.publicado)
   };
 }
 
@@ -88,9 +85,6 @@ function publicProduct(row) {
     categoria: row.categoria,
     unidadMedida: row.unidadMedida,
     precioVenta: Number(row.precioVenta),
-    destacado: Boolean(row.destacado),
-    descripcion: row.descripcionPublica || '',
-    cantidadMaximaPedido: row.cantidadMaximaPedido === null ? null : Number(row.cantidadMaximaPedido),
     disponibilidad: availabilityFor(row)
   };
 }
@@ -123,7 +117,7 @@ function createOnlineStoreService({
       permiteEntrega: booleanValue(body.permiteEntrega, 'La opcion de entrega'),
       permiteEfectivo: booleanValue(body.permiteEfectivo, 'La opcion de efectivo'),
       permiteQr: booleanValue(body.permiteQr, 'La opcion de QR'),
-      pedidoMinimo: decimalValue(body.pedidoMinimo, 'El pedido minimo'),
+      pedidoMinimo: decimalValue(body.entregaGratisDesde ?? body.pedidoMinimo, 'El monto para entrega sin costo'),
       costoEntrega: decimalValue(body.costoEntrega, 'El costo de entrega'),
       tiempoPreparacionMinutos: integerValue(body.tiempoPreparacionMinutos, 'El tiempo de preparacion', 5, 1440)
     };
@@ -150,12 +144,11 @@ function createOnlineStoreService({
     const [rows] = await database.query(
       `SELECT p.idProducto,p.nombre,p.categoria,p.unidadMedida,p.precioVenta,
               p.stockUnidadesTotal,p.stockMinimo,
-              COALESCE(o.publicado,0) publicado,COALESCE(o.destacado,0) destacado,
-              o.descripcionPublica,o.cantidadMaximaPedido,COALESCE(o.permiteSustitucion,0) permiteSustitucion
+              COALESCE(o.publicado,1) publicado
        FROM producto p
        LEFT JOIN productoCatalogoOnline o ON o.idTienda=p.idTienda AND o.idProducto=p.idProducto
        WHERE p.idTienda=? AND p.activo=1
-       ORDER BY COALESCE(o.destacado,0) DESC,p.nombre`,
+       ORDER BY p.nombre`,
       [storeId]
     );
     return { productos: rows.map(ownerProduct) };
@@ -166,10 +159,6 @@ function createOnlineStoreService({
     const idAdministrador = positiveId(context?.idAdministrador, 'El administrador');
     const productId = positiveId(idProducto, 'El producto');
     const published = booleanValue(body.publicado, 'La publicacion');
-    const featured = published ? booleanValue(body.destacado, 'El destacado') : 0;
-    const description = cleanText(body.descripcionPublica, 300, 'La descripcion publica');
-    const maxQuantity = integerValue(body.cantidadMaximaPedido, 'La cantidad maxima', 1, 10000, { nullable: true });
-    const substitution = published ? booleanValue(body.permiteSustitucion, 'La sustitucion') : 0;
     const [products] = await database.query(
       'SELECT idProducto FROM producto WHERE idTienda=? AND idProducto=? AND activo=1 LIMIT 1',
       [idTienda, productId]
@@ -185,7 +174,7 @@ function createOnlineStoreService({
          descripcionPublica=VALUES(descripcionPublica),cantidadMaximaPedido=VALUES(cantidadMaximaPedido),
          permiteSustitucion=VALUES(permiteSustitucion),actualizadoEn=VALUES(actualizadoEn),
          idAdministradorActualiza=VALUES(idAdministradorActualiza)`,
-      [idTienda, productId, published, featured, description, maxQuantity, substitution, now, now, idAdministrador]
+      [idTienda, productId, published, 0, null, null, 0, now, now, idAdministrador]
     );
     const data = await listProducts(idTienda);
     return { producto: data.productos.find((product) => product.idProducto === productId) };
@@ -216,11 +205,11 @@ function createOnlineStoreService({
     }
     const [rows] = await database.query(
       `SELECT p.idProducto,p.nombre,p.categoria,p.unidadMedida,p.precioVenta,
-              p.stockUnidadesTotal,p.stockMinimo,o.destacado,o.descripcionPublica,o.cantidadMaximaPedido
-       FROM productoCatalogoOnline o
-       JOIN producto p ON p.idTienda=o.idTienda AND p.idProducto=o.idProducto
-       WHERE o.idTienda=? AND o.publicado=1 AND p.activo=1
-       ORDER BY o.destacado DESC,p.nombre`,
+              p.stockUnidadesTotal,p.stockMinimo
+       FROM producto p
+       LEFT JOIN productoCatalogoOnline o ON o.idTienda=p.idTienda AND o.idProducto=p.idProducto
+       WHERE p.idTienda=? AND COALESCE(o.publicado,1)=1 AND p.activo=1
+       ORDER BY p.nombre`,
       [store.idTienda]
     );
     return {
@@ -235,6 +224,7 @@ function createOnlineStoreService({
           qr: Boolean(store.permiteQr)
         },
         pedidoMinimo: Number(store.pedidoMinimo || 0),
+        entregaGratisDesde: Number(store.pedidoMinimo || 0),
         costoEntrega: Number(store.costoEntrega || 0),
         tiempoPreparacionMinutos: Number(store.tiempoPreparacionMinutos || 30)
       },

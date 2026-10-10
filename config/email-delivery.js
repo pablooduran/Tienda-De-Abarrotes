@@ -3,7 +3,8 @@ const PLACEHOLDER = /(reemplazar|replace[-_ ]?me|change[-_ ]?me|placeholder|exam
 const PROVIDER_CODE = /^[a-z0-9][a-z0-9_-]{1,38}[a-z0-9]$/;
 const SIMPLE_EMAIL = /^[^\s<>@]+@[^\s<>@]+\.[^\s<>@]+$/;
 const MAILTRAP_SANDBOX_PROVIDER = 'mailtrap-sandbox';
-const REGISTERED_EMAIL_PROVIDERS = Object.freeze([MAILTRAP_SANDBOX_PROVIDER]);
+const RESEND_PROVIDER = 'resend';
+const REGISTERED_EMAIL_PROVIDERS = Object.freeze([MAILTRAP_SANDBOX_PROVIDER, RESEND_PROVIDER]);
 const DEFAULT_EMAIL_DELIVERY_TIMEOUT_MS = 8000;
 
 function normalized(value) {
@@ -47,6 +48,19 @@ function mailtrapSandboxConfig(environment = process.env) {
   });
 }
 
+function resendConfig(environment = process.env) {
+  const apiKey = String(environment.RESEND_API_KEY || '').trim();
+  if (!/^re_[A-Za-z0-9_-]{20,500}$/.test(apiKey) || PLACEHOLDER.test(apiKey)) {
+    throw new Error('RESEND_API_KEY debe ser una clave válida y no puede ser un placeholder.');
+  }
+  const rawTimeout = String(environment.EMAIL_DELIVERY_TIMEOUT_MS || '').trim();
+  const timeoutMs = rawTimeout ? Number(rawTimeout) : DEFAULT_EMAIL_DELIVERY_TIMEOUT_MS;
+  if (!Number.isInteger(timeoutMs) || timeoutMs < 1000 || timeoutMs > 30000) {
+    throw new Error('EMAIL_DELIVERY_TIMEOUT_MS debe ser un entero entre 1000 y 30000.');
+  }
+  return Object.freeze({ apiKey, from: parseEmailFrom(environment.EMAIL_FROM), timeoutMs });
+}
+
 function emailDeliveryConfig(environment = process.env, {
   registeredProviders = REGISTERED_EMAIL_PROVIDERS
 } = {}) {
@@ -75,9 +89,6 @@ function emailDeliveryConfig(environment = process.env, {
   if (mode !== 'external') {
     throw new Error('EMAIL_DELIVERY_MODE solo admite disabled o external en entornos hospedados.');
   }
-  if (appEnvironment !== 'staging') {
-    throw new Error('EMAIL_DELIVERY_MODE=external solo se permite en staging hasta aprobar produccion.');
-  }
   if (!PROVIDER_CODE.test(provider) || PLACEHOLDER.test(provider)) {
     throw new Error('EMAIL_DELIVERY_PROVIDER debe identificar un adaptador registrado.');
   }
@@ -85,15 +96,21 @@ function emailDeliveryConfig(environment = process.env, {
   if (!providers.has(provider)) {
     throw new Error('EMAIL_DELIVERY_PROVIDER no corresponde a un adaptador externo registrado.');
   }
-  if (provider === MAILTRAP_SANDBOX_PROVIDER) mailtrapSandboxConfig(environment);
+  if (provider === MAILTRAP_SANDBOX_PROVIDER) {
+    if (appEnvironment !== 'staging') throw new Error('mailtrap-sandbox solo se permite en staging.');
+    mailtrapSandboxConfig(environment);
+  }
+  if (provider === RESEND_PROVIDER) resendConfig(environment);
   return Object.freeze({ mode: 'external', provider });
 }
 
 module.exports = {
   DEFAULT_EMAIL_DELIVERY_TIMEOUT_MS,
   MAILTRAP_SANDBOX_PROVIDER,
+  RESEND_PROVIDER,
   REGISTERED_EMAIL_PROVIDERS,
   emailDeliveryConfig,
   mailtrapSandboxConfig,
-  parseEmailFrom
+  parseEmailFrom,
+  resendConfig
 };

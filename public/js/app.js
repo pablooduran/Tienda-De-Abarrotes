@@ -15,7 +15,6 @@ const helpBackTopbar = document.getElementById('helpBackTopbar');
 const settingsBackTopbar = document.getElementById('settingsBackTopbar');
 const quickActions = document.getElementById('quickActions');
 const settingsStoreButton = document.getElementById('settingsStoreButton');
-const settingsOnlineStoreButton = document.getElementById('settingsOnlineStoreButton');
 const settingsAuditButton = document.getElementById('settingsAuditButton');
 const settingsTeamButton = document.getElementById('settingsTeamButton');
 const serverWakeNotice = document.getElementById('serverWakeNotice');
@@ -79,10 +78,11 @@ const navigationFamilies = [
   { id: 'ventas', label: 'Ventas', sections: ['ventas', 'historialVentas', 'pagos', 'compensaciones'] },
   { id: 'inventario', label: 'Inventario', sections: ['productos', 'compras', 'proveedores', 'movimientosStock', 'inventarioInteligente', 'inventarioOperativo', 'lotesVencimientos'] },
   { id: 'clientes', label: 'Clientes', sections: ['clientes'] },
-  { id: 'reportes', label: 'Reportes', sections: ['reportes', 'finanzas', 'gastos', 'cierreCaja'] }
+  { id: 'reportes', label: 'Reportes', sections: ['reportes', 'finanzas', 'gastos', 'cierreCaja'] },
+  { id: 'tiendaOnline', label: 'Tienda online', sections: ['tiendaOnline'] }
 ];
 
-const settingsViews = new Set(['configuracion', 'tiendaOnline', 'equipo', 'auditoria']);
+const settingsViews = new Set(['configuracion', 'equipo', 'auditoria']);
 
 const inventoryWorkspaceSections = ['productos', 'compras', 'proveedores', 'movimientosStock', 'inventarioInteligente', 'inventarioOperativo', 'lotesVencimientos'];
 const salesWorkspaceSections = ['ventas', 'historialVentas', 'pagos', 'compensaciones'];
@@ -399,11 +399,6 @@ function renderSubscriptionContext() {
   summary.hidden = false;
   const owner = context.rol === 'dueno_tienda';
   settingsStoreButton.hidden = !owner;
-  if (settingsOnlineStoreButton) {
-    const onlineStoreEnabled = owner && context.caracteristicas?.includes('portal_clientes');
-    settingsOnlineStoreButton.hidden = !owner;
-    settingsOnlineStoreButton.textContent = onlineStoreEnabled ? 'Tienda online' : 'Tienda online 🔒';
-  }
   settingsAuditButton.hidden = !owner;
   if (settingsTeamButton) {
     const teamEnabled = owner && context.caracteristicas?.includes('equipo_colaborativo');
@@ -664,12 +659,13 @@ function openPlanAccessNotice(id) {
     return;
   }
   const planName = state.context?.plan?.nombre || 'tu plan actual';
+  const requiredPlan = id === 'tiendaOnline' ? 'Standard' : null;
   void modal({
-    title: 'Función disponible en otro plan',
-    body: `<p><strong>${escapeHtml(section?.[1] || 'Esta función')}</strong> no está incluida en ${escapeHtml(planName)}.</p><p>Podés revisar los planes disponibles y elegir el que mejor se adapte a tu negocio.</p>`,
+    title: requiredPlan ? `Disponible desde ${requiredPlan}` : 'Función disponible en otro plan',
+    body: `<p><strong>${escapeHtml(section?.[1] || 'Esta función')}</strong> no está incluida en ${escapeHtml(planName)}.</p><p>${requiredPlan ? `Se habilita desde el plan ${escapeHtml(requiredPlan)}.` : 'Podés revisar los planes disponibles y elegir el que mejor se adapte a tu negocio.'}</p>`,
     confirmText: 'Subir de plan', cancelText: 'Cerrar'
   }).then((upgrade) => {
-    if (upgrade) window.location.href = '/subscription.html';
+    if (upgrade) window.location.href = '/suscripcion.html';
   });
 }
 
@@ -690,7 +686,7 @@ function openFeatureAccessNotice(label, feature) {
     body: `<p><strong>${escapeHtml(label)}</strong> no está incluida en ${escapeHtml(planName)}.</p><p>Está disponible desde el plan ${escapeHtml(requiredPlan)}. Puedes revisar sus beneficios y mejorar tu plan cuando lo necesites.</p>`,
     confirmText: 'Ver planes', cancelText: 'Cerrar'
   }).then((upgrade) => {
-    if (upgrade) window.location.href = '/subscription.html';
+    if (upgrade) window.location.href = '/suscripcion.html';
   });
 }
 
@@ -892,7 +888,6 @@ function applyWorkspaceMode(id) {
   navigationToggle.hidden = isDedicatedWorkspace;
   if (isDedicatedWorkspace) closeMobileNavigation();
   settingsStoreButton.hidden = id === 'configuracion';
-  if (settingsOnlineStoreButton) settingsOnlineStoreButton.hidden = id === 'tiendaOnline';
   settingsAuditButton.hidden = id === 'auditoria' || !sectionAvailable('auditoria');
   settingsTeamButton.hidden = id === 'equipo';
 }
@@ -907,16 +902,24 @@ function renderMenu(activeView = 'inicio') {
     if (!destinations.length && !family.links?.length) return;
 
     if (destinations.length + (family.links?.length || 0) === 1) {
-      const [id] = destinations[0] || [];
+      const [id, label] = destinations[0] || [];
       const item = id ? document.createElement('button') : document.createElement('a');
       item.className = 'nav-family nav-family-single';
       item.dataset.navigationFamily = family.id;
       item.textContent = family.label;
       if (id) {
+        const available = sectionAvailable(id);
         item.type = 'button';
         item.dataset.view = id;
+        item.textContent = available ? label : `${label} 🔒`;
+        item.classList.toggle('nav-destination-locked', !available);
         item.classList.toggle('active', id === activeView);
-        item.addEventListener('click', () => navigateFromMenu(id));
+        if (!available) {
+          item.setAttribute('aria-label', `${label}: disponible en otro plan`);
+          item.addEventListener('click', () => openPlanAccessNotice(id));
+        } else {
+          item.addEventListener('click', () => navigateFromMenu(id));
+        }
       } else {
         item.href = family.links[0].href;
       }

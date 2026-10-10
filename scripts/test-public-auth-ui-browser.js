@@ -6,7 +6,8 @@ const { chromium } = require('playwright-core');
 
 const ROOT = path.resolve(__dirname, '..');
 const PUBLIC = path.join(ROOT, 'public');
-const TOKEN = 'A'.repeat(43);
+const TOKEN = '482731';
+const RECOVERY_TOKEN = 'A'.repeat(43);
 
 function executable() {
   const candidates = [
@@ -175,8 +176,6 @@ async function runFlow(browser, baseUrl, state) {
 
     await page.getByRole('button', { name: 'Crear cuenta', exact: true }).click();
     await page.getByRole('button', { name: 'Ya creé mi cuenta y tengo un código' }).click();
-    await page.locator('[data-auth-panel="verify"] .auth-secondary-flow summary').click();
-    await page.locator('#resend-email').fill('propietario@example.test');
     await page.locator('#resendVerificationForm button[type="submit"]').click();
     await page.locator('[data-auth-feedback="verify"]').getByText(/nuevo código/i).waitFor();
 
@@ -190,7 +189,7 @@ async function runFlow(browser, baseUrl, state) {
     assert.strictEqual(await page.locator('#resendRecoveryForm [data-resend-button]').isDisabled(), true,
       'El reenvío de recuperación aplica una espera visible para evitar solicitudes repetidas.');
 
-    await page.locator('#recovery-token').fill(TOKEN);
+    await page.locator('#recovery-token').fill(RECOVERY_TOKEN);
     await page.locator('#new-password').fill('NuevaClave1234');
     await page.locator('#new-password-confirmation').fill('NuevaClave1234');
     await page.locator('#passwordResetForm button[type="submit"]').click();
@@ -199,13 +198,14 @@ async function runFlow(browser, baseUrl, state) {
 
     await page.locator('#login-user').fill('propietario@example.test');
     await page.locator('#login-password').fill('NuevaClave1234');
+    await page.locator('#login-remember').check();
     await page.locator('#loginForm button[type="submit"]').focus();
     await page.keyboard.press('Enter');
     await page.waitForURL('**/app.html');
     await page.locator('#app-loaded').waitFor();
     assert(state.requests.some((item) => item.path === '/auth/login'
-      && item.payload.usuario === 'propietario@example.test'),
-    'El formulario debe aceptar y enviar el correo como identificador.');
+      && item.payload.usuario === 'propietario@example.test' && item.payload.recordarme === 'on'),
+    'El formulario debe enviar el correo y la preferencia de recordar la sesión.');
     assert.strictEqual(state.statusChecks, 1, 'El acceso debe confirmar la sesion antes de navegar.');
 
     assert(state.requests.every((item) => item.search === ''), 'Los tokens no deben viajar en la URL.');
@@ -289,6 +289,20 @@ async function assertTheme(browser, baseUrl, state) {
   }
 }
 
+async function assertPublicPlans(browser, baseUrl) {
+  const session = await open(browser, baseUrl, { width: 390, height: 844 });
+  try {
+    await session.page.locator('.auth-settings > summary').click();
+    await session.page.getByRole('link', { name: /Planes y facturación/ }).click();
+    await session.page.waitForURL('**/planes.html');
+    assert.strictEqual(await session.page.locator('.public-plan-grid article').count(), 3);
+    await assertNoPageOverflow(session.page, 'planes públicos en móvil');
+    assert.deepStrictEqual(session.errors, [], 'Los planes públicos mantienen la consola limpia.');
+  } finally {
+    await session.context.close();
+  }
+}
+
 async function assertViewport(browser, baseUrl, viewport) {
   const session = await open(browser, baseUrl, viewport);
   try {
@@ -333,6 +347,7 @@ async function main() {
     await runFlow(browser, baseUrl, fixture.state);
     await assertGoogleAvailability(browser, baseUrl, fixture.state);
     await assertTheme(browser, baseUrl, fixture.state);
+    await assertPublicPlans(browser, baseUrl);
     await assertMissingSession(browser, baseUrl, fixture.state);
     await assertViewport(browser, baseUrl, { width: 360, height: 800 });
     await assertViewport(browser, baseUrl, { width: 768, height: 1024 });
@@ -346,6 +361,6 @@ async function main() {
 }
 
 main().catch((error) => {
-  console.error(`test:public-auth-ui-browser FAIL: ${error.message}`);
+  console.error(`test:public-auth-ui-browser FAIL: ${error.stack || error.message}`);
   process.exitCode = 1;
 });

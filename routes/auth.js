@@ -23,6 +23,12 @@ const { normalizedVerificationIdentity } = require('../config/email-verification
 const { normalizeGoogleRegistration } = require('../config/public-registration-contract');
 const { googleIdentityService } = require('../services/google-identity-service');
 const { isTenantRole } = require('../config/team-roles');
+const {
+  configureAuthenticatedSession,
+  rememberRequested,
+  sessionExpired,
+  touchSession
+} = require('../config/session-persistence');
 
 const router = express.Router();
 const dummyPasswordHash = bcrypt.hash(crypto.randomBytes(32).toString('hex'), 12);
@@ -72,7 +78,7 @@ function googleRedirect(res, code) {
   return res.redirect(`/login.html?google=${encodeURIComponent(code)}`);
 }
 
-async function establishGoogleSession(req, res, admin) {
+async function establishGoogleSession(req, res, admin, remember = false) {
   if (!admin || admin.rol !== 'dueno_tienda' || !Number(admin.activo)
     || admin.estadoAcceso !== 'activo' || !Number(admin.idTienda)
     || !Number(admin.tiendaActiva) || admin.estadoTienda !== 'activa') {
@@ -87,6 +93,7 @@ async function establishGoogleSession(req, res, admin) {
     id: Number(admin.idAdministrador), usuario: admin.usuario, rol: admin.rol,
     idTienda: Number(admin.idTienda), versionSesion: Number(admin.versionSesion)
   };
+  configureAuthenticatedSession(req, remember);
   try {
     await administrativeAuditService.recordCritical(pool, {
       ...administratorActor(req.session.admin), action: 'inicio_sesion', result: 'correcto',
@@ -130,6 +137,7 @@ router.post('/login', async (req, res, next) => {
       return res.status(400).json({ error: 'Usuario o correo y contrasena son obligatorios.' });
     }
     const correo = normalizedVerificationIdentity(identificador);
+    const remember = rememberRequested(req.body?.recordarme);
 
     const [rows] = await pool.query(
       `SELECT a.idAdministrador, a.usuario, a.password, a.rol, a.idTienda, a.activo, a.estadoAcceso, a.versionSesion,
@@ -183,6 +191,7 @@ router.post('/login', async (req, res, next) => {
       idTienda: admin.idTienda === null ? null : Number(admin.idTienda),
       versionSesion: Number(admin.versionSesion)
     };
+    configureAuthenticatedSession(req, remember);
     try {
       const actor = administratorActor(req.session.admin);
       await administrativeAuditService.recordCritical(pool, {
@@ -204,6 +213,7 @@ router.post('/login', async (req, res, next) => {
       : admin.rol === 'dueno_tienda'
         ? ownerDestination(subscriptionContext, admin.estadoOnboarding)
         : '/app.html';
+    await saveSession(req);
     res.json({ message: 'Sesion iniciada.', admin: publicAdmin(req.session.admin), destination });
   } catch (error) {
     next(error);
@@ -229,7 +239,10 @@ router.post('/google/start', async (req, res, next) => {
     const codeVerifier = crypto.randomBytes(48).toString('base64url');
     const codeChallenge = crypto.createHash('sha256').update(codeVerifier).digest('base64url');
     delete req.session.googleRegistration;
-    req.session.googleOauth = { state, nonce, codeVerifier, mode, registration, createdAt: Date.now() };
+    req.session.googleOauth = {
+      state, nonce, codeVerifier, mode, registration,
+      remember: rememberRequested(req.body?.recordarme), createdAt: Date.now()
+    };
     await saveSession(req);
     return res.json({ authorizationUrl: googleClient.generateAuthUrl({
       access_type: 'online', response_type: 'code', scope: ['openid', 'email'],
@@ -277,14 +290,14 @@ router.get('/google/callback', async (req, res) => {
     } catch (error) {
       if (error?.code === 'GOOGLE_ACCOUNT_NOT_FOUND' && flow.mode === 'register' && !flow.registration) {
         req.session.googleRegistration = {
-          subject: String(payload.sub), email: String(payload.email), createdAt: Date.now()
+          subject: String(payload.sub), email: String(payload.email), remember: Boolean(flow.remember), createdAt: Date.now()
         };
         await saveSession(req);
         return googleRedirect(res, 'registration_required');
       }
       throw error;
     }
-    const destination = await establishGoogleSession(req, res, result.admin);
+    const destination = await establishGoogleSession(req, res, result.admin, flow.remember);
     return res.redirect(destination);
   } catch (error) {
     try {
@@ -319,7 +332,7 @@ router.post('/google/complete-registration', async (req, res, next) => {
     });
     delete req.session.googleRegistration;
     await saveSession(req);
-    const destination = await establishGoogleSession(req, res, result.admin);
+    const destination = await establishGoogleSession(req, res, result.admin, pending.remember);
     return res.status(201).json({ message: 'Tu cuenta fue creada con Google.', destination });
   } catch (error) {
     return next(error);
@@ -343,6 +356,7 @@ router.post('/verificar-correo', async (req, res, next) => {
   try {
     const result = await emailVerificationService.confirm({
       token: req.body?.token,
+      email: req.body?.correo,
       requestId: req.requestId
     });
     return res.json(result);
@@ -389,11 +403,16 @@ router.post('/restablecer-password', async (req, res, next) => {
 
 router.get('/status', async (req, res, next) => {
   try {
+    if (sessionExpired(req)) {
+      await destroyRequestSession(req, res);
+      return res.json({ authenticated: false, admin: null, code: 'SESSION_EXPIRED' });
+    }
     const validation = await validateSession(req.session?.admin);
     if (!validation.valid) {
       await destroyRequestSession(req, res);
       return res.json({ authenticated: false, admin: null, code: validation.code });
     }
+    touchSession(req);
     req.auth = validation.context;
     return res.json({ authenticated: true, admin: publicAdmin(validation.context) });
   } catch (error) {

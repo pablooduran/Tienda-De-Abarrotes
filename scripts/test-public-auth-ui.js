@@ -29,6 +29,9 @@ assert(html.includes('Empieza') === false, 'El acceso publico no debe duplicar l
 assert(html.includes('Crear cuenta'), 'Debe existir un CTA publico para crear cuenta.');
 assert(html.includes('¿Olvidaste tu contraseña?'), 'Debe existir recuperacion visible.');
 assert(html.includes('Correo o usuario'), 'El acceso debe ofrecer correo o usuario.');
+assert(html.includes('name="recordarme"'), 'El acceso debe ofrecer una sesión recordada opcional.');
+assert(html.includes('href="/planes.html"'), 'Las preferencias deben mostrar los planes antes del registro.');
+assert(html.includes('pattern="[0-9]{6}"'), 'La verificación debe pedir un código numérico de seis dígitos.');
 const loginPanel = html.split('data-auth-panel="login"')[1].split('data-auth-panel="register"')[0];
 const registerPanel = html.split('data-auth-panel="register"')[1].split('data-auth-panel="verify"')[0];
 assert(!loginPanel.includes('data-auth-target="verify"'), 'El login no debe mostrar verificacion antes de solicitar codigo.');
@@ -42,7 +45,7 @@ assert(!html.includes('login-box'), 'La superficie anterior no debe coexistir co
 
 for (const id of [
   'login-user', 'login-password', 'register-user', 'register-email',
-  'register-password', 'register-confirmation', 'verification-token', 'resend-email',
+  'register-password', 'register-confirmation', 'verification-token', 'verification-email',
   'recovery-email', 'recovery-resend-email', 'recovery-token', 'new-password', 'new-password-confirmation'
 ]) {
   assert(html.includes(`for="${id}"`), `Falta label persistente para ${id}.`);

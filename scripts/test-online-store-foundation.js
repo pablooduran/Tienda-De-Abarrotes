@@ -11,6 +11,7 @@ const { createOnlineStoreService, publicProduct } = require('../services/online-
 
 const root = path.resolve(__dirname, '..');
 const migration = fs.readFileSync(path.join(root, 'database', 'migrations', '031_tienda_online_base.sql'), 'utf8');
+const visibilityMigration = fs.readFileSync(path.join(root, 'database', 'migrations', '032_catalogo_online_visible_por_defecto.sql'), 'utf8');
 const schema = fs.readFileSync(path.join(root, 'database', 'tienda_abarrotes.sql'), 'utf8');
 const server = fs.readFileSync(path.join(root, 'server.js'), 'utf8');
 const migrator = fs.readFileSync(path.join(root, 'scripts', 'migrate-db.js'), 'utf8');
@@ -29,9 +30,18 @@ assert(server.match(/requirePlanFeature\('portal_clientes'\)[\s\S]{0,120}onlineS
 assert(server.includes("app.use('/api/public/tiendas', publicStorefrontRoutes)"));
 assert(migrator.includes("'031_tienda_online_base.sql':"));
 assert(migrator.includes("file === '031_tienda_online_base.sql'"));
+assert(migrator.includes("'032_catalogo_online_visible_por_defecto.sql':"));
+assert(visibilityMigration.includes('ALTER COLUMN publicado SET DEFAULT 1'));
+assert(schema.includes('publicado TINYINT(1) NOT NULL DEFAULT 1'));
 assert(app.includes("features.includes('portal_clientes')"));
 assert(ownerUi.includes('/api/tienda-online/productos/'));
+assert(ownerUi.includes('Todos se muestran por defecto'));
+assert(!ownerUi.includes('Descripción para el cliente'));
+assert(!ownerUi.includes('Máximo por pedido'));
+assert(!ownerUi.includes('Permitir sustitución'));
 assert(publicUi.includes('/api/public/tiendas/'));
+assert(publicUi.includes('data-cart-action'));
+assert(publicUi.includes('data-quantity-dialog'));
 assert(!publicUi.includes('stockUnidadesTotal'));
 
 const safeProduct = publicProduct({
@@ -74,7 +84,7 @@ async function serviceContract() {
           tiempoPreparacionMinutos: 30
         }]];
       }
-      if (sql.includes('FROM productoCatalogoOnline o')) {
+      if (sql.includes('FROM producto p') && sql.includes('productoCatalogoOnline o')) {
         assert.deepStrictEqual(params, [7]);
         return [[{
           idProducto: 11,

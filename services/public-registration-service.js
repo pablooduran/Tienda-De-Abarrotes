@@ -167,8 +167,8 @@ function createPublicRegistrationService({
         replayed: false,
         plan: subscription.planCodigo
       });
-      await verificationService.deliver(verificationIssue, requestId);
-      return safeRegistrationResponse(false);
+      const delivered = await verificationService.deliver(verificationIssue, requestId);
+      return safeRegistrationResponse(false, delivered);
     } catch (error) {
       if (connection) await connection.rollback();
       if (error?.code === 'IDEMPOTENCY_RACE') {

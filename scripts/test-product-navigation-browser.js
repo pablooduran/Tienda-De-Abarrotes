@@ -26,19 +26,20 @@ function json(response, body) {
 function context() {
   return {
     tienda: { nombre: 'Tienda navegacion' },
+    rol: 'dueno_tienda',
     plan: { nombre: 'Pro' },
     suscripcion: { fechaFin: '2026-12-31 00:00:00', diasRestantes: 120 },
     caracteristicas: [
       'gastos', 'reportes_financieros', 'anulaciones_operativas', 'cierre_caja',
       'inventario_resumen', 'historial_stock', 'ajuste_stock', 'control_lotes',
-      'clientes_basico', 'fiados_basico', 'pagos_fiado'
+      'clientes_basico', 'fiados_basico', 'pagos_fiado', 'portal_clientes'
     ]
   };
 }
 
 function dashboard() {
   return {
-    ventasHoy: 0, ventasAyer: 0, ventasMes: 0, ventasMesPasado: 0,
+    ventasHoy: 0, ventasAyer: 0, ventasSemana: 0, ventasSemanaPasada: 0, ventasMes: 0, ventasMesPasado: 0,
     gananciaHoy: 0, gananciaMes: 0, bajoStock: 0, fiados: {}, chartVentasDias: []
   };
 }
@@ -86,18 +87,28 @@ async function verifyViewport(browser, baseUrl, viewport, includeKeyboard) {
   try {
     await page.goto(`${baseUrl}/app.html`);
     await page.locator('[data-navigation-family="inicio"]').waitFor();
+    const incidentalNotice = page.locator('#modalRoot .modal-backdrop');
+    if (await incidentalNotice.count()) {
+      await incidentalNotice.getByRole('button', { name: 'Entendido' }).click();
+    }
     const usesDrawer = viewport.width <= 900;
-    if (usesDrawer) await page.locator('#navigationToggle').click();
+    if (usesDrawer) {
+      const blockingModal = page.locator('#modalRoot .modal-backdrop');
+      assert.strictEqual(await blockingModal.count(), 0, `Apareció un modal inesperado: ${await blockingModal.textContent().catch(() => '')}`);
+      await page.locator('#navigationToggle').click();
+    }
     assert.strictEqual(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 2), true,
       `La navegacion genera overflow a ${viewport.width}px.`);
 
     const families = await page.locator('[data-navigation-family]').evaluateAll((nodes) => nodes.map((node) => node.dataset.navigationFamily));
-    assert.deepStrictEqual(families, ['inicio', 'ventas', 'inventario', 'clientes', 'reportes']);
+    assert.deepStrictEqual(families, ['inicio', 'ventas', 'inventario', 'clientes', 'reportes', 'tiendaOnline']);
+    assert.strictEqual(await page.locator('[data-navigation-family="tiendaOnline"]').textContent(), 'Tienda online');
     assert.strictEqual(await page.locator('[data-navigation-family="ventas"] [data-view="compensaciones"]').textContent(), 'Devoluciones y anulaciones');
     assert.strictEqual(await page.locator('#accountMenu a[href="/suscripcion.html"]').count(), 1);
     assert.strictEqual(await page.locator('#subscriptionSummary').evaluate((element) => element.tagName), 'P');
     assert.strictEqual(await page.locator('#settingsStoreButton').count(), 1);
     assert.strictEqual(await page.locator('#settingsAuditButton').count(), 1);
+    assert.strictEqual(await page.locator('#settingsOnlineStoreButton').count(), 0);
     for (const family of ['inicio', 'clientes']) {
       assert.strictEqual(await page.locator(`[data-navigation-family="${family}"]`).evaluate((node) => node.tagName === 'DETAILS'), false,
         `${family} no debe mostrar un desplegable con una sola opcion.`);
@@ -117,15 +128,20 @@ async function verifyViewport(browser, baseUrl, viewport, includeKeyboard) {
     await page.locator('[data-navigation-family="ventas"] > summary').click();
     await page.locator('[data-navigation-family="ventas"] [data-view="ventas"]').click();
     await page.locator('#viewTitle').waitFor({ state: 'visible' });
-    assert.strictEqual(await page.locator('#viewTitle').textContent(), 'Punto de venta');
+    assert.strictEqual(await page.locator('#viewTitle').textContent(), 'Vender productos');
     assert.strictEqual(await page.locator('[data-navigation-family="ventas"] [data-view="ventas"]').evaluate((node) => node.classList.contains('active')), true);
 
-    if (usesDrawer) await page.locator('#navigationToggle').click();
+    if (usesDrawer) {
+      const blockingModal = page.locator('#modalRoot .modal-backdrop');
+      assert.strictEqual(await blockingModal.count(), 0, `Apareció un modal inesperado después de navegar: ${await blockingModal.textContent().catch(() => '')}`);
+      await page.locator('#navigationToggle').click();
+    }
     await page.locator('[data-navigation-family="reportes"] > summary').click();
     assert.strictEqual(await page.locator('[data-navigation-family="ventas"]').evaluate((node) => node.open), false,
       'Abrir Reportes debe cerrar Ventas.');
     await page.locator('[data-navigation-family="reportes"] [data-view="reportes"]').click();
     assert.strictEqual(await page.locator('#viewTitle').textContent(), 'Reportes');
+    if (usesDrawer) await page.locator('#navigationToggle').click();
     await page.locator('#accountMenu > summary').click();
     await page.locator('#settingsStoreButton').click();
     await page.locator('#viewTitle').waitFor();
@@ -150,7 +166,8 @@ async function main() {
     await verifyViewport(browser, baseUrl, { width: 768, height: 1024 }, false);
     await verifyViewport(browser, baseUrl, { width: 1366, height: 768 }, false);
     assert(requests.every((request) => !request.search.includes('idTienda')), 'La navegacion envio idTienda.');
-    assert(requests.every((request) => request.path.startsWith('/api/') || request.path.startsWith('/js/') || request.path.startsWith('/css/') || request.path === '/app.html' || request.path === '/favicon.ico'), 'El arnes uso una ruta inesperada.');
+    const unexpected = requests.filter((request) => !(request.path.startsWith('/api/') || request.path.startsWith('/js/') || request.path.startsWith('/css/') || request.path.startsWith('/assets/') || request.path === '/app.html' || request.path === '/favicon.ico' || request.path === '/manifest.webmanifest' || request.path === '/sw.js'));
+    assert.deepStrictEqual(unexpected, [], `El arnes uso rutas inesperadas: ${unexpected.map((request) => request.path).join(', ')}`);
     console.log('test:product-navigation-browser OK');
   } finally {
     await browser.close();

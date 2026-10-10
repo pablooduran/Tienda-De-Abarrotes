@@ -104,11 +104,14 @@ function requestFingerprint(registration, secret) {
   return crypto.createHmac('sha256', secret).update(serialized, 'utf8').digest('hex');
 }
 
-function safeRegistrationResponse(repeated = false) {
+function safeRegistrationResponse(repeated = false, delivered = true) {
   return Object.freeze({
-    message: 'Registro recibido correctamente. Debes verificar tu correo antes de ingresar.',
+    message: delivered
+      ? 'Cuenta creada. Enviamos un código de 6 números a tu correo.'
+      : 'Cuenta creada, pero no pudimos enviar el código. Usa Reenviar código en unos minutos.',
     estado: 'pendiente_verificacion',
-    repetida: repeated
+    repetida: repeated,
+    correoEnviado: Boolean(delivered)
   });
 }
 

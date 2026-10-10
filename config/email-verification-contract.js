@@ -5,6 +5,8 @@ const { normalizeEmail, registrationError, sha256 } = require('./public-registra
 const EMAIL_VERIFICATION_TYPE = 'verificacion_correo';
 const EMAIL_VERIFICATION_TTL_HOURS = 24;
 const VERIFICATION_TOKEN = /^[A-Za-z0-9_-]{43}$/;
+const EMAIL_VERIFICATION_CODE = /^\d{6}$/;
+const EMAIL_VERIFICATION_TTL_MINUTES = 15;
 
 function verificationError(status, code, message = 'No se pudo verificar el correo.') {
   return registrationError(status, code, message);
@@ -24,6 +26,28 @@ function createVerificationToken(randomBytes = crypto.randomBytes) {
   return randomBytes(32).toString('base64url');
 }
 
+function verificationCodeTtlMinutes(environment = process.env) {
+  const value = String(environment.EMAIL_VERIFICATION_CODE_TTL_MINUTES || '').trim();
+  if (!value) return EMAIL_VERIFICATION_TTL_MINUTES;
+  const minutes = Number(value);
+  if (!Number.isInteger(minutes) || minutes < 5 || minutes > 60) {
+    throw new Error('EMAIL_VERIFICATION_CODE_TTL_MINUTES debe ser un entero entre 5 y 60.');
+  }
+  return minutes;
+}
+
+function createVerificationCode(randomInt = crypto.randomInt) {
+  return String(randomInt(0, 1000000)).padStart(6, '0');
+}
+
+function validateVerificationCode(value) {
+  const code = typeof value === 'string' ? value.trim() : '';
+  if (!EMAIL_VERIFICATION_CODE.test(code)) {
+    throw verificationError(400, 'EMAIL_VERIFICATION_INVALID', 'El código debe tener 6 números.');
+  }
+  return code;
+}
+
 function validateVerificationToken(value) {
   const token = typeof value === 'string' ? value.trim() : '';
   if (!VERIFICATION_TOKEN.test(token)) {
@@ -36,9 +60,20 @@ function verificationTokenHash(token) {
   return sha256(validateVerificationToken(token));
 }
 
+function verificationCodeHash(code, email) {
+  const normalizedEmail = normalizedVerificationIdentity(email);
+  if (!normalizedEmail) throw verificationError(400, 'EMAIL_VERIFICATION_INVALID', 'No se pudo verificar el correo.');
+  return sha256(`${normalizedEmail}\0${validateVerificationCode(code)}`);
+}
+
 function expirationFrom(now, hours = verificationTokenTtlHours()) {
   const base = now instanceof Date ? now : parseLocalDateTime(now);
   return formatLocalDateTime(new Date(base.getTime() + (hours * 60 * 60 * 1000)));
+}
+
+function codeExpirationFrom(now, minutes = verificationCodeTtlMinutes()) {
+  const base = now instanceof Date ? now : parseLocalDateTime(now);
+  return formatLocalDateTime(new Date(base.getTime() + (minutes * 60 * 1000)));
 }
 
 function normalizedVerificationIdentity(value) {
@@ -50,12 +85,19 @@ function normalizedVerificationIdentity(value) {
 }
 
 module.exports = {
+  EMAIL_VERIFICATION_CODE,
+  EMAIL_VERIFICATION_TTL_MINUTES,
   EMAIL_VERIFICATION_TTL_HOURS,
   EMAIL_VERIFICATION_TYPE,
   VERIFICATION_TOKEN,
+  codeExpirationFrom,
+  createVerificationCode,
   createVerificationToken,
   expirationFrom,
   normalizedVerificationIdentity,
+  validateVerificationCode,
+  verificationCodeHash,
+  verificationCodeTtlMinutes,
   verificationError,
   verificationTokenHash,
   verificationTokenTtlHours,

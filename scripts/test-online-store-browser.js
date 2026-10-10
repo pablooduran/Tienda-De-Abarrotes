@@ -18,21 +18,21 @@ const catalog = {
     nombre: 'Tienda Prueba', slug: 'tienda-prueba', telefono: null, direccion: 'Zona central',
     mensajeBienvenida: 'Productos para tu hogar, listos para consultar.',
     opciones: { recojo: true, entrega: true, efectivo: true, qr: true },
-    pedidoMinimo: 20, costoEntrega: 5, tiempoPreparacionMinutos: 30
+    pedidoMinimo: 20, entregaGratisDesde: 20, costoEntrega: 5, tiempoPreparacionMinutos: 30
   },
   categorias: ['ABARROTES', 'BEBIDAS'],
   productos: [
-    { idProducto: 1, nombre: 'Arroz familiar 1 kg', categoria: 'ABARROTES', unidadMedida: 'unidad', precioVenta: 12.5, destacado: true, descripcion: 'Bolsa lista para tu despensa.', cantidadMaximaPedido: 5, disponibilidad: 'disponible' },
-    { idProducto: 2, nombre: 'Gaseosa 2 litros', categoria: 'BEBIDAS', unidadMedida: 'unidad', precioVenta: 15, destacado: false, descripcion: '', cantidadMaximaPedido: null, disponibilidad: 'pocas_unidades' },
-    { idProducto: 3, nombre: 'Aceite vegetal', categoria: 'ABARROTES', unidadMedida: 'unidad', precioVenta: 18, destacado: false, descripcion: '', cantidadMaximaPedido: null, disponibilidad: 'agotado' }
+    { idProducto: 1, nombre: 'Arroz familiar 1 kg', categoria: 'ABARROTES', unidadMedida: 'unidad', precioVenta: 12.5, disponibilidad: 'disponible' },
+    { idProducto: 2, nombre: 'Gaseosa 2 litros', categoria: 'BEBIDAS', unidadMedida: 'unidad', precioVenta: 15, disponibilidad: 'pocas_unidades' },
+    { idProducto: 3, nombre: 'Aceite vegetal', categoria: 'ABARROTES', unidadMedida: 'unidad', precioVenta: 18, disponibilidad: 'agotado' }
   ]
 };
 
 async function main() {
   const assets = new Map([
     ['/tienda/tienda-prueba', ['text/html', path.join(root, 'public', 'storefront.html')]],
-    ['/css/storefront.css?v=20261009-1', ['text/css', path.join(root, 'public', 'css', 'storefront.css')]],
-    ['/js/storefront.js?v=20261009-1', ['application/javascript', path.join(root, 'public', 'js', 'storefront.js')]],
+    ['/css/storefront.css?v=20261009-2', ['text/css', path.join(root, 'public', 'css', 'storefront.css')]],
+    ['/js/storefront.js?v=20261009-2', ['application/javascript', path.join(root, 'public', 'js', 'storefront.js')]],
     ['/js/http-security.js', ['application/javascript', path.join(root, 'public', 'js', 'http-security.js')]],
     ['/assets/administrau-icon.png', ['image/png', path.join(root, 'public', 'assets', 'administrau-icon.png')]]
   ]);
@@ -64,6 +64,22 @@ async function main() {
       assert.strictEqual(await page.locator('.storefront-product').count(), 3);
       assert.strictEqual(await page.getByText('Quedan pocas unidades').count(), 1);
       assert.strictEqual(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth), true);
+      await page.locator('[data-add-product="1"]').click();
+      await page.getByRole('button', { name: 'Agregar una unidad' }).last().click();
+      await page.getByRole('button', { name: 'Confirmar cantidad' }).click();
+      assert.strictEqual(await page.locator('[data-cart-count]').first().textContent(), '2');
+      await page.locator('[data-cart-action="decrease"]').click();
+      assert.strictEqual(await page.locator('[data-cart-count]').first().textContent(), '1');
+      await page.getByRole('button', { name: 'Eliminar Arroz familiar 1 kg' }).click();
+      assert.strictEqual(await page.locator('[data-cart-count]').first().textContent(), '0');
+      await page.locator('[data-add-product="1"]').click();
+      await page.getByRole('button', { name: 'Confirmar cantidad' }).click();
+      await page.getByRole('button', { name: 'Continuar pedido' }).click();
+      await page.getByText('Entrega a domicilio', { exact: true }).click();
+      assert.strictEqual(await page.getByLabel('Dirección de entrega').isVisible(), true);
+      assert.strictEqual(await page.getByText('Noche', { exact: true }).count(), 1);
+      assert.strictEqual(await page.getByText('QR', { exact: true }).count(), 1);
+      await page.getByRole('button', { name: 'Cerrar' }).click();
       await page.getByRole('button', { name: 'BEBIDAS' }).click();
       assert.strictEqual(await page.locator('.storefront-product').count(), 1);
       await page.getByLabel('Buscar productos').fill('no existe');

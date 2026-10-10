@@ -35,51 +35,38 @@
       container.innerHTML = filtered.map((product) => `
         <article class="online-product-card${product.publicado ? ' is-published' : ''}" data-online-product="${product.idProducto}">
           <div class="online-product-main">
-            <label class="online-publish-switch">
-              <input type="checkbox" name="publicado" ${checked(product.publicado)} ${isReadOnly() ? 'disabled' : ''}>
-              <span aria-hidden="true"></span><strong>${product.publicado ? 'Publicado' : 'Oculto'}</strong>
-            </label>
+            <div class="online-product-icon" aria-hidden="true">${escapeHtml(product.nombre.slice(0, 1).toUpperCase())}</div>
             <div class="online-product-copy">
               <span class="online-product-category">${escapeHtml(product.categoria)}</span>
               <h5>${escapeHtml(product.nombre)}</h5>
               <p>Bs ${Number(product.precioVenta).toFixed(2)} · ${product.stockUnidadesTotal > 0 ? 'Disponible' : 'Agotado'}</p>
             </div>
           </div>
-          <div class="online-product-options">
-            <label>Descripción para el cliente<textarea name="descripcionPublica" maxlength="300" rows="2" placeholder="Opcional: tamaño, sabor o detalle útil">${escapeHtml(product.descripcionPublica)}</textarea></label>
-            <label>Máximo por pedido<input name="cantidadMaximaPedido" type="number" min="1" max="10000" value="${product.cantidadMaximaPedido ?? ''}" placeholder="Sin límite"></label>
-            <label class="online-check"><input name="destacado" type="checkbox" ${checked(product.destacado)}><span>Mostrar como destacado</span></label>
-            <label class="online-check"><input name="permiteSustitucion" type="checkbox" ${checked(product.permiteSustitucion)}><span>Permitir sustitución</span></label>
-            ${isReadOnly() ? '' : '<button type="button" class="secondary" data-online-product-save>Guardar producto</button>'}
-          </div>
+          <label class="online-visibility-card">
+            <span><strong>${product.publicado ? 'Visible en la tienda' : 'Oculto para clientes'}</strong><small>${product.publicado ? 'El cliente puede agregarlo a su carrito.' : 'Sigue disponible en tu inventario.'}</small></span>
+            <input type="checkbox" name="publicado" ${checked(product.publicado)} ${isReadOnly() ? 'disabled' : ''}>
+            <i aria-hidden="true"></i>
+          </label>
         </article>`).join('');
       container.querySelectorAll('[data-online-product]').forEach((card) => {
         const publication = card.querySelector('[name="publicado"]');
         const syncState = () => {
           card.classList.toggle('is-published', publication.checked);
-          publication.closest('label').querySelector('strong').textContent = publication.checked ? 'Publicado' : 'Oculto';
-          card.querySelectorAll('.online-product-options input,.online-product-options textarea').forEach((control) => {
-            control.disabled = isReadOnly() || !publication.checked;
-          });
+          const copy = publication.closest('label').querySelector('span');
+          copy.innerHTML = publication.checked
+            ? '<strong>Visible en la tienda</strong><small>El cliente puede agregarlo a su carrito.</small>'
+            : '<strong>Oculto para clientes</strong><small>Sigue disponible en tu inventario.</small>';
         };
-        publication.addEventListener('change', syncState);
+        publication.addEventListener('change', async () => { syncState(); await saveProduct(card); });
         syncState();
-        card.querySelector('[data-online-product-save]')?.addEventListener('click', () => saveProduct(card));
       });
     }
 
     async function saveProduct(card) {
       const idProducto = Number(card.dataset.onlineProduct);
-      const button = card.querySelector('[data-online-product-save]');
-      const payload = {
-        publicado: card.querySelector('[name="publicado"]').checked,
-        destacado: card.querySelector('[name="destacado"]').checked,
-        descripcionPublica: card.querySelector('[name="descripcionPublica"]').value,
-        cantidadMaximaPedido: card.querySelector('[name="cantidadMaximaPedido"]').value,
-        permiteSustitucion: card.querySelector('[name="permiteSustitucion"]').checked
-      };
-      button.disabled = true;
-      button.textContent = 'Guardando…';
+      const control = card.querySelector('[name="publicado"]');
+      const payload = { publicado: control.checked };
+      control.disabled = true;
       try {
         const result = await api(`/api/tienda-online/productos/${idProducto}`, { method: 'PATCH', body: JSON.stringify(payload) });
         const index = products.findIndex((product) => product.idProducto === idProducto);
@@ -88,8 +75,9 @@
         setAnnouncement(`${result.producto.nombre} quedó ${result.producto.publicado ? 'publicado' : 'oculto'}.`);
       } catch (error) {
         setAnnouncement(messageFor(error), true);
-        button.disabled = false;
-        button.textContent = 'Guardar producto';
+        control.checked = !control.checked;
+        control.disabled = isReadOnly();
+        renderProductList();
       }
     }
 
@@ -117,13 +105,13 @@
 
           <div class="online-store-admin-grid">
             <section class="online-store-settings-card">
-              <div class="online-section-heading"><span>1</span><div><h4>Configura la experiencia</h4><p>Define cómo atenderás los pedidos cuando habilitemos su recepción.</p></div></div>
+              <div class="online-section-heading"><span>1</span><div><h4>Configura la experiencia</h4><p>Activa las alternativas que podrá elegir el cliente al finalizar su carrito.</p></div></div>
               <form data-online-config-form>
-                <label class="online-activation"><input name="activa" type="checkbox" ${checked(config.activa)}><span><strong>Publicar tienda online</strong><small>Al activarla, cualquier persona con el enlace podrá ver el catálogo.</small></span></label>
+                <label class="online-option-card online-activation"><span class="online-option-icon">↗</span><span><strong>Publicar tienda online</strong><small>Al activarla, cualquier persona con el enlace podrá ver el catálogo.</small></span><input name="activa" type="checkbox" ${checked(config.activa)}><i aria-hidden="true"></i></label>
                 <label>Mensaje de bienvenida<textarea name="mensajeBienvenida" maxlength="300" rows="3" placeholder="Ej.: Elige tus productos y nosotros preparamos tu pedido.">${escapeHtml(config.mensajeBienvenida)}</textarea></label>
-                <fieldset><legend>Cómo recibirá su compra</legend><label class="online-check"><input name="permiteRecojo" type="checkbox" ${checked(config.permiteRecojo)}><span>Recojo en tienda</span></label><label class="online-check"><input name="permiteEntrega" type="checkbox" ${checked(config.permiteEntrega)}><span>Entrega a domicilio</span></label></fieldset>
-                <fieldset><legend>Formas de pago disponibles</legend><label class="online-check"><input name="permiteEfectivo" type="checkbox" ${checked(config.permiteEfectivo)}><span>Efectivo</span></label><label class="online-check"><input name="permiteQr" type="checkbox" ${checked(config.permiteQr)}><span>QR</span></label></fieldset>
-                <div class="online-field-grid"><label>Pedido mínimo (Bs)<input name="pedidoMinimo" type="number" min="0" step="0.01" value="${config.pedidoMinimo}"></label><label>Costo de entrega (Bs)<input name="costoEntrega" type="number" min="0" step="0.01" value="${config.costoEntrega}"></label><label>Preparación estimada (min)<input name="tiempoPreparacionMinutos" type="number" min="5" max="1440" value="${config.tiempoPreparacionMinutos}"></label></div>
+                <fieldset class="online-choice-grid"><legend>Opciones que podrá escoger el cliente</legend><label class="online-option-card"><span class="online-option-icon">⌂</span><span><strong>Recojo en tienda</strong><small>El cliente elige mañana, tarde o noche.</small></span><input name="permiteRecojo" type="checkbox" ${checked(config.permiteRecojo)}><i aria-hidden="true"></i></label><label class="online-option-card"><span class="online-option-icon">⌖</span><span><strong>Entrega a domicilio</strong><small>La dirección y el horario se piden al confirmar.</small></span><input name="permiteEntrega" type="checkbox" ${checked(config.permiteEntrega)}><i aria-hidden="true"></i></label></fieldset>
+                <fieldset class="online-choice-grid"><legend>Formas de pago disponibles</legend><label class="online-option-card"><span class="online-option-icon">Bs</span><span><strong>Efectivo</strong><small>Pago al recoger o recibir.</small></span><input name="permiteEfectivo" type="checkbox" ${checked(config.permiteEfectivo)}><i aria-hidden="true"></i></label><label class="online-option-card"><span class="online-option-icon">QR</span><span><strong>Pago por QR</strong><small>La tienda coordina el comprobante.</small></span><input name="permiteQr" type="checkbox" ${checked(config.permiteQr)}><i aria-hidden="true"></i></label></fieldset>
+                <div class="online-delivery-settings"><div><strong>Condiciones para entrega</strong><p>Si el pedido no alcanza el monto indicado, se suma el costo base. La tienda puede confirmar un ajuste según la distancia.</p></div><div class="online-field-grid"><label>Entrega sin costo desde (Bs)<input name="entregaGratisDesde" type="number" min="0" step="0.01" value="${config.entregaGratisDesde ?? config.pedidoMinimo}"></label><label>Costo base si no alcanza (Bs)<input name="costoEntrega" type="number" min="0" step="0.01" value="${config.costoEntrega}"></label></div></div>
                 ${isReadOnly() ? '<p class="readonly-note">Puedes revisar esta configuración, pero tu suscripción está en modo de solo lectura.</p>' : '<button type="submit">Guardar configuración</button>'}
               </form>
             </section>
@@ -135,7 +123,7 @@
           </div>
 
           <section class="online-catalog-manager">
-            <div class="online-section-heading"><span>2</span><div><h4>Elige qué productos mostrar</h4><p>Los productos ocultos siguen disponibles en tu inventario, pero no aparecen para el cliente.</p></div></div>
+            <div class="online-section-heading"><span>2</span><div><h4>Productos de tu tienda</h4><p>Todos se muestran por defecto. Desactiva únicamente los que quieras ocultar al cliente.</p></div></div>
             <div class="online-catalog-toolbar"><label>Buscar producto<input type="search" data-online-product-search placeholder="Nombre o categoría"></label><div><strong>${enabledCount}</strong><span>publicados de ${products.length}</span></div></div>
             <div class="online-product-list" data-online-product-list></div>
           </section>
@@ -173,9 +161,9 @@
         permiteEntrega: value('permiteEntrega').checked,
         permiteEfectivo: value('permiteEfectivo').checked,
         permiteQr: value('permiteQr').checked,
-        pedidoMinimo: value('pedidoMinimo').value,
+        entregaGratisDesde: value('entregaGratisDesde').value,
         costoEntrega: value('costoEntrega').value,
-        tiempoPreparacionMinutos: value('tiempoPreparacionMinutos').value
+        tiempoPreparacionMinutos: 30
       };
       button.disabled = true;
       button.textContent = 'Guardando…';

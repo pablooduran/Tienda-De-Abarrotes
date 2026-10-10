@@ -1144,6 +1144,12 @@ La respuesta incluye `descripcion`, `criterios`, `parametrosAplicados`, resumen 
 
 La migracion `013` agrega `administrador.versionSesion`. Cada peticion autenticada contrasta el administrador, su rol, asociacion, tienda y version contra la base. Desactivar una cuenta o tienda, cambiar el usuario o restablecer una contrasena invalida las sesiones anteriores.
 
+El acceso permite elegir `Recordarme`. Sin esa opcion se usa una cookie de
+sesion que desaparece al cerrar el navegador y se invalida tras dos horas de
+inactividad. Con la opcion activa se usa una sesion persistente con un maximo
+absoluto de 30 dias; la validacion de administrador, tienda y `versionSesion`
+sigue ejecutandose en cada solicitud protegida.
+
 ### Registro publico y verificacion de correo
 
 `/login.html` concentra el acceso publico: inicio de sesion, alta de tienda,
@@ -1158,19 +1164,19 @@ del plan Basico por 30 dias en una unica transaccion. El servidor decide plan,
 duracion, rol y tenant; el cliente solo puede enviar nombre de tienda, slug,
 usuario, correo, contrasena y la cabecera `Idempotency-Key`. El propietario queda
 en `pendiente_verificacion` y no puede iniciar una sesion comercial hasta
-verificar el correo. La transaccion emite un token aleatorio de un solo uso y
-guarda exclusivamente su hash en `tokenAccesoAdministrador`; el adaptador local
+verificar el correo. La transaccion emite un codigo numerico de seis digitos y
+un solo uso, y guarda exclusivamente su hash en `tokenAccesoAdministrador`; el adaptador local
 lo conserva solo en memoria para las pruebas, sin SMTP, archivos ni respuestas
 HTTP con tokens.
 
-`POST /auth/verificar-correo` acepta unicamente el token. Si es vigente, activa
+`POST /auth/verificar-correo` acepta unicamente el codigo. Si es vigente, activa
 al propietario, conserva la suscripcion Basica de prueba y deja el onboarding en
 pendiente; no crea una sesion. `POST /auth/reenviar-verificacion` acepta correo,
-responde siempre de forma neutra e invalida el token anterior solo para una
+responde siempre de forma neutra e invalida el codigo anterior solo para una
 cuenta pendiente valida. Ambos endpoints usan `Cache-Control: no-store`,
-validacion de origen y limites dedicados. El token dura 24 horas por defecto,
-configurable mediante `EMAIL_VERIFICATION_TOKEN_TTL_HOURS` con limites validados
-de 1 a 72 horas.
+validacion de origen y limites dedicados. El codigo dura 15 minutos por defecto,
+configurable mediante `EMAIL_VERIFICATION_CODE_TTL_MINUTES` con limites validados
+de 5 a 60 minutos.
 
 Un fallo del adaptador local ocurre despues del commit: el registro y el token
 siguen vigentes para permitir un reenvio posterior. La recuperacion de
@@ -1180,8 +1186,10 @@ de forma neutra; `POST /auth/restablecer-password` acepta solo token y nueva
 contrasena, cambia la clave dentro de una transaccion, incrementa
 `versionSesion`, invalida sesiones previas y no modifica estado de tienda,
 suscripcion u onboarding. El token de recuperacion dura 60 minutos por defecto
- y nunca verifica el correo ni crea una sesion. No hay proveedor real de correo
-ni login por correo todavia.
+ y nunca verifica el correo ni crea una sesion. En entornos hospedados puede
+usarse Mailtrap Sandbox para pruebas o Resend para entrega real mediante
+`EMAIL_DELIVERY_MODE=external`, `EMAIL_DELIVERY_PROVIDER=resend`,
+`RESEND_API_KEY` y `EMAIL_FROM`.
 
 ### Onboarding inicial
 

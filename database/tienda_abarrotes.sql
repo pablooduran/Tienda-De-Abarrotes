@@ -918,7 +918,7 @@ CREATE TABLE IF NOT EXISTS configuracionTiendaOnline (
 CREATE TABLE IF NOT EXISTS productoCatalogoOnline (
   idTienda INT NOT NULL,
   idProducto INT NOT NULL,
-  publicado TINYINT(1) NOT NULL DEFAULT 0,
+  publicado TINYINT(1) NOT NULL DEFAULT 1,
   destacado TINYINT(1) NOT NULL DEFAULT 0,
   descripcionPublica VARCHAR(300) NULL,
   cantidadMaximaPedido INT NULL,

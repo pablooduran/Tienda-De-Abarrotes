@@ -1,5 +1,6 @@
 const { destroyRequestSession, validateSession } = require('../services/session-validation-service');
 const { administrativeAuditService } = require('../services/administrative-audit-service');
+const { sessionExpired, touchSession } = require('../config/session-persistence');
 
 function expectsJson(req) {
   return req.originalUrl.startsWith('/api')
@@ -10,9 +11,15 @@ function expectsJson(req) {
 async function requireAuth(req, res, next) {
   try {
     if (req.auth) return next();
+    if (sessionExpired(req)) {
+      await destroyRequestSession(req, res);
+      if (expectsJson(req)) return res.status(401).json({ error: 'La sesión venció por inactividad.', code: 'SESSION_EXPIRED' });
+      return res.redirect('/login.html');
+    }
     const validation = await validateSession(req.session?.admin);
     if (validation.valid) {
       req.auth = validation.context;
+      touchSession(req);
       return next();
     }
 

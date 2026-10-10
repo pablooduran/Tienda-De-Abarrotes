@@ -14,6 +14,7 @@
   const allowedDestinations = new Set(['/admin.html', '/app.html', '/onboarding.html', '/suscripcion.html']);
   let registrationKey = null;
   let googleRegistrationPending = false;
+  let pendingVerificationEmail = '';
   const resendTimers = new WeakMap();
   const googleMessages = Object.freeze({
     not_configured: 'El acceso con Google todavía no está configurado.',
@@ -47,6 +48,16 @@
     }
     document.title = `${panelTitles[panelName]} | Administrau`;
     if (focus) panels.get(panelName).querySelector('h2')?.focus();
+  }
+
+  function setVerificationEmail(email = '') {
+    pendingVerificationEmail = String(email || '').trim();
+    const output = document.querySelector('[data-verification-email]');
+    const input = document.getElementById('verification-email');
+    const inputLabel = input?.closest('label');
+    if (output) output.textContent = pendingVerificationEmail || 'el correo de tu cuenta';
+    if (input) input.value = pendingVerificationEmail;
+    if (inputLabel) inputLabel.hidden = Boolean(pendingVerificationEmail);
   }
 
   function setGoogleRegistrationMode(enabled) {
@@ -125,6 +136,7 @@
 
   async function submitGoogle(mode, button) {
     const fields = { mode };
+    if (mode === 'login') fields.recordarme = document.getElementById('login-remember')?.checked || false;
     button.disabled = true;
     try {
       const response = await SecurityHttp.secureFetch('/auth/google/start', {
@@ -191,6 +203,10 @@
     }
     window.history.replaceState({}, '', '/login.html');
   }
+  if (window.location.hash === '#crear-cuenta') {
+    showPanel('register', { focus: false });
+    window.history.replaceState({}, '', '/login.html');
+  }
 
   const loginForm = document.getElementById('loginForm');
   loginForm.addEventListener('submit', (event) => {
@@ -234,7 +250,7 @@
         }
         throw error;
       }
-      document.getElementById('resend-email').value = data.correo;
+      setVerificationEmail(data.correo);
       document.getElementById('recovery-email').value = data.correo;
       document.getElementById('login-user').value = data.usuario;
       registrationForm.reset();
@@ -245,6 +261,9 @@
   });
 
   const verificationForm = document.getElementById('verificationForm');
+  document.getElementById('verification-token')?.addEventListener('input', (event) => {
+    event.target.value = event.target.value.replace(/\D/g, '').slice(0, 6);
+  });
   verificationForm.addEventListener('submit', (event) => {
     event.preventDefault();
     mutate(verificationForm, 'verify', async () => {
@@ -259,9 +278,12 @@
   const resendForm = document.getElementById('resendVerificationForm');
   resendForm.addEventListener('submit', (event) => {
     event.preventDefault();
+    const verificationEmail = document.getElementById('verification-email');
+    if (!pendingVerificationEmail && !verificationEmail?.reportValidity()) return;
     mutate(resendForm, 'verify', async () => {
-      const data = Object.fromEntries(new FormData(resendForm).entries());
+      const data = { correo: pendingVerificationEmail || verificationEmail?.value || '' };
       const result = await requestJson('/auth/reenviar-verificacion', data);
+      setVerificationEmail(data.correo);
       setFeedback('verify', result.message || 'Si la cuenta sigue pendiente, recibirás un nuevo código.');
       window.setTimeout(() => startResendCooldown(resendForm), 0);
     });

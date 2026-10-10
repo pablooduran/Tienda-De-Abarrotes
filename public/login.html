@@ -34,8 +34,12 @@
       <details class="auth-settings">
         <summary class="theme-page-toggle" aria-label="Abrir apariencia"><span aria-hidden="true">⚙</span></summary>
         <div class="auth-settings-menu">
-          <strong>Apariencia</strong>
-          <button type="button" data-toggle-theme aria-pressed="false">Modo oscuro</button>
+          <strong>Preferencias</strong>
+          <div class="auth-setting-row">
+            <span><b>Apariencia</b><small data-theme-label>Claro</small></span>
+            <button class="auth-theme-switch" type="button" data-toggle-theme aria-pressed="false" aria-label="Cambiar a modo oscuro"><span aria-hidden="true">☀</span><i></i><span aria-hidden="true">☾</span></button>
+          </div>
+          <a class="auth-settings-link" href="/planes.html"><span aria-hidden="true">◇</span><span><b>Planes y facturación</b><small>Compara Basic, Standard y Pro</small></span></a>
         </div>
       </details>
       <section class="auth-panel" data-auth-panel="login" aria-labelledby="login-title">
@@ -50,6 +54,10 @@
           </label>
           <label for="login-password">Contraseña
             <input id="login-password" name="password" type="password" required autocomplete="current-password">
+          </label>
+          <label class="auth-remember" for="login-remember">
+            <input id="login-remember" name="recordarme" type="checkbox">
+            <span><b>Recordarme en este dispositivo</b><small>Mantiene tu cuenta abierta durante 30 días.</small></span>
           </label>
           <div class="auth-inline-link"><button type="button" class="auth-link" data-auth-target="recovery">¿Olvidaste tu contraseña?</button></div>
           <button type="submit" data-pending-label="Ingresando…">Iniciar sesión</button>
@@ -104,24 +112,21 @@
         <header class="auth-panel-heading">
           <p class="auth-eyebrow">Confirma tu correo</p>
           <h2 id="verify-title" tabindex="-1">Ingresa tu código de verificación</h2>
-          <p>El código se envía al correo asociado a la cuenta y solo puede usarse una vez.</p>
+          <p>Enviamos un código de 6 números a <strong data-verification-email>tu correo</strong>. Solo puede usarse una vez y vence en 15 minutos.</p>
         </header>
         <form id="verificationForm" class="auth-form" novalidate>
+          <label class="auth-verification-email-input" for="verification-email">Correo de la cuenta
+            <input id="verification-email" name="correo" type="email" required maxlength="160" autocomplete="email" placeholder="tu@correo.com">
+          </label>
           <label for="verification-token">Código de verificación
-            <input id="verification-token" name="token" type="password" required minlength="43" maxlength="43" autocomplete="one-time-code" spellcheck="false">
+            <input id="verification-token" name="token" type="text" required minlength="6" maxlength="6" inputmode="numeric" pattern="[0-9]{6}" autocomplete="one-time-code" spellcheck="false" placeholder="000000">
           </label>
           <button type="submit" data-pending-label="Verificando…">Verificar correo</button>
         </form>
-        <details class="auth-secondary-flow">
-          <summary>Reenviar código</summary>
-          <form id="resendVerificationForm" class="auth-form auth-form-compact" novalidate>
-            <label for="resend-email">Correo de la cuenta
-              <input id="resend-email" name="correo" type="email" required maxlength="160" autocomplete="email">
-            </label>
-            <button type="submit" class="secondary" data-pending-label="Solicitando…" data-resend-button>Solicitar otro código</button>
-            <p class="auth-resend-status" data-resend-status role="status" aria-live="polite"></p>
-          </form>
-        </details>
+        <form id="resendVerificationForm" class="auth-form auth-resend-direct" novalidate>
+          <button type="submit" class="auth-link auth-resend-button" data-pending-label="Reenviando…" data-resend-button>¿No llegó? Reenviar código</button>
+          <p class="auth-resend-status" data-resend-status role="status" aria-live="polite"></p>
+        </form>
         <p class="auth-message" data-auth-feedback="verify" role="status" aria-live="polite"></p>
         <button type="button" class="auth-link auth-back" data-auth-target="login">Volver a iniciar sesión</button>
       </section>

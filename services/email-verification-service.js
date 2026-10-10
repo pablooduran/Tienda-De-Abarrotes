@@ -5,17 +5,17 @@ const { formatLocalDateTime } = require('../utils/local-datetime');
 const { businessAnalytics } = require('./product-analytics');
 const {
   EMAIL_VERIFICATION_TYPE,
-  createVerificationToken,
-  expirationFrom,
+  codeExpirationFrom,
+  createVerificationCode,
   normalizedVerificationIdentity,
   verificationError,
-  verificationTokenHash,
-  verificationTokenTtlHours,
-  validateVerificationToken
+  validateVerificationCode,
+  verificationCodeHash,
+  verificationCodeTtlMinutes
 } = require('../config/email-verification-contract');
 
 const GENERIC_RESEND_RESPONSE = Object.freeze({
-  message: 'Si la cuenta puede recibir verificaciones, se enviara un enlace.',
+  message: 'Si la cuenta sigue pendiente, enviaremos un nuevo código de 6 números.',
   estado: 'pendiente_verificacion'
 });
 
@@ -38,8 +38,8 @@ function createEmailVerificationService({
   mailAdapter = mailDeliveryAdapter,
   analytics = businessAnalytics,
   clock = () => new Date(),
-  tokenFactory = createVerificationToken,
-  tokenTtlHours = verificationTokenTtlHours()
+  tokenFactory = createVerificationCode,
+  tokenTtlMinutes = verificationCodeTtlMinutes()
 } = {}) {
   async function issueWithinTransaction(connection, { idAdministrador, requestId = null }) {
     const now = nowFrom(clock);
@@ -56,9 +56,9 @@ function createEmailVerificationService({
       || !owner.correoNormalizado || !Number(owner.tiendaActiva) || owner.estadoTienda !== 'activa') {
       throw verificationError(409, 'EMAIL_VERIFICATION_UNAVAILABLE', 'No se pudo preparar la verificacion.');
     }
-    const token = validateVerificationToken(tokenFactory());
-    const tokenHash = verificationTokenHash(token);
-    const expiresAt = expirationFrom(now, tokenTtlHours);
+    const token = validateVerificationCode(tokenFactory());
+    const tokenHash = verificationCodeHash(token, owner.correoNormalizado);
+    const expiresAt = codeExpirationFrom(now, tokenTtlMinutes);
     await connection.query(
       `UPDATE tokenAccesoAdministrador
        SET invalidadoEn=?
@@ -115,10 +115,11 @@ function createEmailVerificationService({
     });
   }
 
-  async function confirm({ token, requestId = null }) {
+  async function confirm({ token, email, requestId = null }) {
     let connection;
     try {
-      const tokenHash = verificationTokenHash(token);
+      const normalizedEmail = normalizedVerificationIdentity(email);
+      const tokenHash = verificationCodeHash(token, normalizedEmail);
       const now = nowFrom(clock);
       connection = await database.getConnection();
       await connection.beginTransaction();
@@ -134,7 +135,7 @@ function createEmailVerificationService({
         throw safeVerificationError();
       }
       const [owners] = await connection.query(
-        `SELECT a.idAdministrador, a.idTienda, a.activo, a.estadoAcceso,
+        `SELECT a.idAdministrador, a.idTienda, a.correoNormalizado, a.activo, a.estadoAcceso,
                 t.activo AS tiendaActiva, t.estado AS estadoTienda
          FROM administrador a
          JOIN tienda t ON t.idTienda=a.idTienda
@@ -142,7 +143,8 @@ function createEmailVerificationService({
         [accessToken.idAdministrador]
       );
       const owner = owners[0];
-      if (!owner || !Number(owner.activo) || owner.estadoAcceso !== 'pendiente_verificacion'
+      if (!owner || owner.correoNormalizado !== normalizedEmail
+        || !Number(owner.activo) || owner.estadoAcceso !== 'pendiente_verificacion'
         || !Number(owner.tiendaActiva) || owner.estadoTienda !== 'activa') {
         throw safeVerificationError();
       }

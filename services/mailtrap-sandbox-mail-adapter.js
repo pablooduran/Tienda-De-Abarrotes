@@ -1,5 +1,5 @@
 const { normalizeEmail } = require('../config/public-registration-contract');
-const { validateVerificationToken } = require('../config/email-verification-contract');
+const { validateVerificationCode, validateVerificationToken } = require('../config/email-verification-contract');
 const {
   MAILTRAP_SANDBOX_PROVIDER,
   mailtrapSandboxConfig
@@ -23,12 +23,18 @@ function escapedHtml(value) {
     .replace(/'/g, '&#39;');
 }
 
-function deliveryInput({ recipient, token, expiresAt }) {
+function deliveryInput({ recipient, token, expiresAt }, kind = null) {
   let safeRecipient;
   let safeToken;
   try {
     safeRecipient = normalizeEmail(recipient);
-    safeToken = validateVerificationToken(token);
+    safeToken = kind === 'verification'
+      ? validateVerificationCode(token)
+      : kind === 'recovery'
+        ? validateVerificationToken(token)
+        : /^\d{6}$/.test(String(token || '').trim())
+          ? validateVerificationCode(token)
+          : validateVerificationToken(token);
   } catch {
     throw deliveryError('EMAIL_DELIVERY_INPUT_INVALID');
   }
@@ -53,14 +59,14 @@ function messageContent(kind, input) {
     `Codigo de ${action}:`,
     input.token,
     `Vence: ${input.expiresAt}`,
-    'Este mensaje pertenece al entorno sintetico de staging.'
+    'Si no solicitaste este código, puedes ignorar este mensaje.'
   ].join('\n\n');
   const html = [
     `<h1>${escapedHtml(subject)}</h1>`,
     `<p>Codigo de ${escapedHtml(action)}:</p>`,
     `<p><strong>${escapedHtml(input.token)}</strong></p>`,
     `<p>Vence: ${escapedHtml(input.expiresAt)}</p>`,
-    '<p>Este mensaje pertenece al entorno sintetico de staging.</p>'
+    '<p>Si no solicitaste este código, puedes ignorar este mensaje.</p>'
   ].join('');
   return Object.freeze({ html, subject, text });
 }
@@ -78,7 +84,7 @@ function createMailtrapSandboxMailAdapter(environment = process.env, {
   }
 
   async function send(kind, payload) {
-    const input = deliveryInput(payload || {});
+    const input = deliveryInput(payload || {}, kind);
     const content = messageContent(kind, input);
     const controller = new AbortControllerImpl();
     const timeout = setTimeoutImpl(() => controller.abort(), config.timeoutMs);
