@@ -31,6 +31,7 @@ assert(server.includes("app.use('/api/public/tiendas', publicStorefrontRoutes)")
 assert(migrator.includes("'031_tienda_online_base.sql':"));
 assert(migrator.includes("file === '031_tienda_online_base.sql'"));
 assert(migrator.includes("'032_catalogo_online_visible_por_defecto.sql':"));
+assert(migrator.includes("columnDefinitionMatches(details.publicado"));
 assert(visibilityMigration.includes('ALTER COLUMN publicado SET DEFAULT 1'));
 assert(schema.includes('publicado TINYINT(1) NOT NULL DEFAULT 1'));
 assert(app.includes("features.includes('portal_clientes')"));

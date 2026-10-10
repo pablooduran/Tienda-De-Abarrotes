@@ -1354,11 +1354,6 @@ const migrationRequirements = {
   '032_catalogo_online_visible_por_defecto.sql': {
     columns: {
       productoCatalogoOnline: ['publicado']
-    },
-    columnTypes: {
-      productoCatalogoOnline: {
-        publicado: { type: 'tinyint(1)', nullable: false, defaultValue: 1 }
-      }
     }
   }
 };
@@ -1833,6 +1828,12 @@ async function requirementsSatisfied(connection, file) {
     const enabled = Object.fromEntries(features.map((row) => [row.planCodigo, Number(row.habilitada)]));
     if (enabled.basico !== 0 || enabled.standard !== 1 || enabled.pro !== 1) return false;
     return activeSubscriptionSnapshotsSatisfied(connection);
+  }
+  if (file === '032_catalogo_online_visible_por_defecto.sql') {
+    const details = await normalizedColumnDetails(connection, 'productoCatalogoOnline', ['publicado']);
+    return columnDefinitionMatches(details.publicado, {
+      type: 'tinyint(1)', nullable: false, defaultValue: 1
+    });
   }
   if (file === '015_compensaciones_venta_inventario.sql') {
     const expectedDefinitions = {
