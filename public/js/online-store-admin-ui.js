@@ -101,7 +101,7 @@
         currentTarget.textContent = '';
         currentTarget.classList.remove('error');
         announcementTimer = null;
-      }, 3000);
+      }, 2000);
     }
 
     function orderLabel(value) {
@@ -180,6 +180,7 @@
             <button type="button" data-online-view="config" role="tab"><span class="online-nav-icon">⚙</span><span><strong>Configurar tienda</strong><small>Entrega, pagos y enlace</small></span></button>
             <button type="button" data-online-view="products" role="tab"><span class="online-nav-icon">▦</span><span><strong>Productos</strong><small>Define qué verá el cliente</small></span><b>${enabledCount}</b></button>
           </nav>
+          <p class="online-store-announcement" data-online-announcement role="status" aria-live="polite"></p>
 
           <section class="online-catalog-manager online-orders-manager" data-online-panel="orders">
             <div class="online-section-heading"><span>1</span><div><h4>Pedidos recibidos</h4><p>Lo esencial de tu tienda online: confirma, prepara y completa cada entrega.</p></div></div>
@@ -226,7 +227,6 @@
             <div class="online-catalog-toolbar"><label>Buscar producto<input type="search" data-online-product-search placeholder="Nombre o categoría"></label><div><strong>${enabledCount}</strong><span>publicados de ${products.length}</span></div></div>
             <div class="online-product-list" data-online-product-list></div>
           </section>
-          <p class="online-store-announcement" data-online-announcement role="status" aria-live="polite"></p>
         </section>`;
 
       const form = root.querySelector('[data-online-config-form]');

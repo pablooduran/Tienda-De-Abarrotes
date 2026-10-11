@@ -5271,6 +5271,10 @@ html:not([data-theme="dark"]) .online-order-card{
 html:not([data-theme="dark"]) .online-store-workspace-nav button{border-color:#bdc8b9;background:#fffdf8}
 html:not([data-theme="dark"]) .online-order-summary article{border-color:#c2ccbe;background:#f6f8f2;box-shadow:0 5px 13px rgba(31,53,34,.06)}
 html:not([data-theme="dark"]) .online-order-filters button{border-color:#bdc8b9;background:#fff}
+html:not([data-theme="dark"]) .online-order-filters button.active{border-color:var(--brand);background:var(--brand);color:#fff}
+html:not([data-theme="dark"]) :is(.online-option-card,.online-visibility-card) input:checked+i{border-color:#176f2d;background:var(--brand)}
+.online-store-announcement{position:static;bottom:auto;justify-self:stretch;padding:11px 16px;border:1px solid color-mix(in srgb,var(--brand) 42%,var(--line));border-radius:12px;background:color-mix(in srgb,var(--brand) 10%,var(--panel));color:var(--ink);box-shadow:none;text-align:center}
+.online-store-announcement.error{border-color:color-mix(in srgb,var(--danger,#9a3030) 55%,var(--line));background:color-mix(in srgb,var(--danger,#9a3030) 10%,var(--panel));color:var(--ink)}
 html:not([data-theme="dark"]) :is(.online-option-card>i,.online-visibility-card>i){border-color:#667267;background:#d5dad1}
 
 @media(max-width:800px){

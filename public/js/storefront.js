@@ -305,8 +305,9 @@
       catalog = data;
       restoreCartDraft();
       render();
-    } catch (_) {
-      root.innerHTML = '<section class="storefront-unavailable"><img src="/assets/administrau-icon.png" alt=""><p class="eyebrow">TIENDA NO DISPONIBLE</p><h1>Este catálogo no está publicado</h1><p>Puede estar en preparación o el enlace ya no está activo. Consulta con la tienda para recibir el enlace correcto.</p></section>';
+    } catch (error) {
+      const unavailable = Number(error?.status) === 404;
+      root.innerHTML = `<section class="storefront-unavailable"><img src="/assets/administrau-icon.png" alt=""><p class="eyebrow">${unavailable ? 'TIENDA NO DISPONIBLE' : 'NO PUDIMOS ABRIR LA TIENDA'}</p><h1>${unavailable ? 'Este catálogo no está publicado' : 'Ocurrió un problema al cargar el catálogo'}</h1><p>${unavailable ? 'Puede estar en preparación o el enlace ya no está activo. Consulta con la tienda para recibir el enlace correcto.' : 'Intenta recargar la página en unos momentos. Si continúa, avisa a la tienda.'}</p></section>`;
     }
   }
   void load();

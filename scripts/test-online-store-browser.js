@@ -43,7 +43,7 @@ async function main() {
   const assets = new Map([
     ['/tienda/tienda-prueba', ['text/html', path.join(root, 'public', 'storefront.html')]],
     ['/css/storefront.css?v=20261011-2', ['text/css', path.join(root, 'public', 'css', 'storefront.css')]],
-    ['/js/storefront.js?v=20261011-2', ['application/javascript', path.join(root, 'public', 'js', 'storefront.js')]],
+    ['/js/storefront.js?v=20261011-3', ['application/javascript', path.join(root, 'public', 'js', 'storefront.js')]],
     ['/js/http-security.js', ['application/javascript', path.join(root, 'public', 'js', 'http-security.js')]],
     ['/assets/administrau-icon.png', ['image/png', path.join(root, 'public', 'assets', 'administrau-icon.png')]]
   ]);

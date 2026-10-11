@@ -64,8 +64,17 @@ assert(ownerUi.includes('data-online-view="config"'));
 assert(ownerUi.includes('data-online-view="products"'));
 assert(ownerUi.includes('/api/tienda-online/pedidos?estado=todos'));
 assert(ownerUi.includes('global.setTimeout(() =>'));
-assert(ownerUi.includes('}, 3000);'));
+assert(ownerUi.includes('}, 2000);'));
 assert(ownerUi.includes("currentTarget.textContent = '';"));
+assert(ownerUi.indexOf('data-online-announcement') < ownerUi.indexOf('data-online-panel="orders"'));
+assert(ownerStyles.includes('html:not([data-theme="dark"]) .online-order-filters button.active'));
+assert(ownerStyles.lastIndexOf('html:not([data-theme="dark"]) .online-order-filters button.active')
+  > ownerStyles.lastIndexOf('html:not([data-theme="dark"]) .online-order-filters button{'));
+assert(ownerStyles.includes('input:checked+i{border-color:#176f2d;background:var(--brand)}'));
+assert(ownerStyles.includes('.online-store-announcement{position:static'));
+assert(publicUi.includes('Ocurrió un problema al cargar el catálogo'));
+assert(schema.includes('CREATE TABLE IF NOT EXISTS configuracionCreditoTienda'));
+assert(!fs.readFileSync(path.join(root, 'services', 'online-store-service.js'), 'utf8').includes('configuracionCobranza'));
 assert(!publicUi.includes('stockUnidadesTotal'));
 assert(/\.online-store-admin\{\r?\n\s+--primary:var\(--brand\);/.test(ownerStyles));
 assert(ownerStyles.includes('html:not([data-theme="dark"]) .online-store-hero'));
@@ -97,6 +106,7 @@ async function serviceContract() {
     async query(sql, params) {
       calls.push({ sql, params });
       if (sql.includes('FROM tienda t') && sql.includes("t.slug=?") && sql.includes('configuracionTiendaOnline')) {
+        assert(sql.includes('configuracionCreditoTienda'));
         return [[{
           idTienda: 7,
           slug: 'tienda-prueba',

@@ -136,7 +136,7 @@ function createOnlineStoreService({
        FROM tienda t
        JOIN configuracionTienda c ON c.idTienda=t.idTienda
        JOIN configuracionTiendaOnline o ON o.idTienda=t.idTienda
-       LEFT JOIN configuracionCobranza cc ON cc.idTienda=t.idTienda
+       LEFT JOIN configuracionCreditoTienda cc ON cc.idTienda=t.idTienda
        WHERE t.slug=? AND t.activo=1 AND t.estado='activa' LIMIT 1`,
       [slug]
     );
