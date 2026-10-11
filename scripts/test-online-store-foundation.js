@@ -75,10 +75,13 @@ assert(ownerUi.includes('order.productos.length > 12'));
 assert(ownerUi.includes('data-online-status="finalizados"'));
 assert(!ownerUi.includes('data-online-status="confirmado"'));
 assert(ownerUi.includes('online-order-progress'));
+assert(ownerUi.includes('online-order-card-bottom'));
+assert(ownerStyles.includes('.online-order-card-bottom{display:grid;gap:12px;margin-top:auto'));
 assert(ownerUi.includes('<span>Estado</span>'));
 assert(ownerUi.includes("order.estado === 'cancelado' ? '' : `<footer>"));
 assert(ownerUi.includes("padStart(3, '0')"));
 assert(fs.readFileSync(path.join(root, 'services', 'online-store-service.js'), 'utf8').includes('ONLINE_STORE_ORDER_INVALID_TRANSITION'));
+assert(fs.readFileSync(path.join(root, 'services', 'online-store-service.js'), 'utf8').includes("po.estado IN ('pendiente','confirmado','preparando')"));
 assert(fs.readFileSync(path.join(root, 'services', 'online-store-service.js'), 'utf8').includes('Salida por pedido de tienda online listo.'));
 assert(fs.readFileSync(path.join(root, 'services', 'online-store-service.js'), 'utf8').includes('Reposición por cancelación de pedido de tienda online.'));
 assert(fs.readFileSync(path.join(root, 'services', 'online-store-service.js'), 'utf8').includes("`pedido-online:${orderId}`"));
@@ -206,6 +209,7 @@ async function orderContract() {
         idProducto: 11, nombre: 'Leche', unidadMedida: 'unidad', precioVenta: 8.5,
         stockUnidadesTotal: 5, publicado: 1
       }]];
+      if (sql.includes('SUM(d.cantidad) stockReservado')) return [[]];
       if (sql.includes('FROM cliente') && sql.includes('FOR UPDATE')) return [[]];
       if (sql.includes('INSERT INTO cliente')) { writes.push('cliente'); return [{ insertId: 55 }]; }
       if (sql.includes('INSERT INTO pedidoTiendaOnline')) { writes.push('pedido'); return [{ insertId: 99 }]; }
@@ -247,6 +251,7 @@ async function orderWorkflowContract() {
   const writes = [];
   const database = {
     async query(sql, params) {
+      if (sql.startsWith('SELECT idTienda FROM tienda')) return [[{ idTienda: 7 }]];
       if (sql.startsWith('SELECT estado,idCliente,subtotal,metodoPago')) return [[{
         estado: 'listo', idCliente: 55, subtotal: 119, metodoPago: 'qr'
       }]];
@@ -311,6 +316,7 @@ async function orderInventoryContract() {
     async rollback() { events.push('rollback'); },
     release() { events.push('release'); },
     async query(sql, params) {
+      if (sql.startsWith('SELECT idTienda FROM tienda')) return [[{ idTienda: 7 }]];
       if (sql.startsWith('SELECT estado,idCliente,subtotal,metodoPago')) return [[{ estado: state }]];
       if (sql.includes('FROM detallePedidoTiendaOnline d')) return [[{
         idDetallePedidoOnline: 100,
@@ -365,6 +371,7 @@ async function orderReadyShortageContract() {
     async rollback() { events.push('rollback'); },
     release() { events.push('release'); },
     async query(sql) {
+      if (sql.startsWith('SELECT idTienda FROM tienda')) return [[{ idTienda: 7 }]];
       if (sql.startsWith('SELECT estado,idCliente,subtotal,metodoPago')) return [[{ estado: 'preparando' }]];
       if (sql.includes('FROM detallePedidoTiendaOnline d')) return [[{
         idDetallePedidoOnline: 101,
@@ -400,6 +407,7 @@ async function stockShortageContract() {
         idProducto: 11, nombre: 'MICII', unidadMedida: 'unidad', precioVenta: 8.5,
         stockUnidadesTotal: 14, publicado: 1
       }]];
+      if (sql.includes('SUM(d.cantidad) stockReservado')) return [[]];
       throw new Error(`Consulta inesperada: ${sql.slice(0, 80)}`);
     }
   };
@@ -424,11 +432,50 @@ async function stockShortageContract() {
       franjaEntrega: 'noche', metodoPago: 'efectivo', productos: [{ idProducto: 11, cantidad: 15 }]
     }),
     (error) => error.code === 'ONLINE_STORE_STOCK_CHANGED'
-      && error.message.includes('MICII: pediste 15 y solo quedan 14.')
+      && error.message.includes('MICII: pediste 15 y solo quedan 14 disponibles.')
   );
 }
 
-Promise.all([serviceContract(), orderContract(), orderWorkflowContract(), orderInventoryContract(), orderReadyShortageContract(), stockShortageContract()])
+async function reservedStockContract() {
+  const connection = {
+    async beginTransaction() {}, async rollback() {}, release() {},
+    async query(sql) {
+      if (sql.startsWith('SELECT idTienda FROM tienda')) return [[{ idTienda: 7 }]];
+      if (sql.includes('COUNT(*) total FROM pedidoTiendaOnline')) return [[{ total: 1 }]];
+      if (sql.includes('FROM producto p') && sql.includes('FOR UPDATE')) return [[{
+        idProducto: 11, nombre: 'Soda', unidadMedida: 'unidad', precioVenta: 10,
+        stockUnidadesTotal: 10, publicado: 1
+      }]];
+      if (sql.includes('SUM(d.cantidad) stockReservado')) return [[{ idProducto: 11, stockReservado: 10 }]];
+      throw new Error(`Consulta inesperada: ${sql.slice(0, 80)}`);
+    }
+  };
+  const database = {
+    async getConnection() { return connection; },
+    async query(sql) {
+      if (sql.includes('FROM tienda t') && sql.includes('configuracionTiendaOnline')) return [[{
+        idTienda: 7, slug: 'tienda-prueba', nombre: 'Tienda Prueba', nombreMostrado: 'Mi Tienda',
+        activa: 1, permiteRecojo: 1, permiteEntrega: 1, permiteEfectivo: 1, permiteQr: 1,
+        pedidoMinimo: 0, costoEntrega: 0, tiempoPreparacionMinutos: 30
+      }]];
+      throw new Error(`Consulta inesperada: ${sql.slice(0, 80)}`);
+    }
+  };
+  const service = createOnlineStoreService({
+    database,
+    subscriptionResolver: async () => ({ estadoAcceso: 'completo', caracteristicas: ['portal_clientes'], plan: { codigo: 'pro' } })
+  });
+  await assert.rejects(
+    () => service.createPublicOrder('tienda-prueba', {
+      telefono: '76543210', nombre: 'Cliente', tipoEntrega: 'recojo', franjaEntrega: 'noche',
+      metodoPago: 'efectivo', productos: [{ idProducto: 11, cantidad: 2 }]
+    }),
+    (error) => error.code === 'ONLINE_STORE_STOCK_CHANGED'
+      && error.message.includes('0 disponibles (10 reservadas para otros pedidos)')
+  );
+}
+
+Promise.all([serviceContract(), orderContract(), orderWorkflowContract(), orderInventoryContract(), orderReadyShortageContract(), stockShortageContract(), reservedStockContract()])
   .then(() => console.log('test:online-store-foundation OK'))
   .catch((error) => {
     console.error(`Error: ${error.message}`);

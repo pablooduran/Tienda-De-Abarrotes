@@ -5287,7 +5287,8 @@ html:not([data-theme="dark"]) :is(.online-option-card>i,.online-visibility-card>
 }
 
 /* Flujo operativo: pedido legible, progreso visual y acciones compactas. */
-.online-order-card{align-content:start;min-width:0;gap:12px;padding:20px}
+.online-order-card{display:flex;flex-direction:column;min-width:0;height:100%;gap:12px;padding:20px}
+.online-order-card-bottom{display:grid;gap:12px;margin-top:auto;padding-top:4px}
 .online-order-products{min-width:0;border-block:1px solid var(--line)}
 .online-order-products-heading{padding:12px 2px 7px;color:var(--ink)}
 .online-order-products summary{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 2px;cursor:pointer;font-weight:850;list-style:none}

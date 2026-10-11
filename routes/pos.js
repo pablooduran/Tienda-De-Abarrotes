@@ -81,6 +81,13 @@ async function listProducts(req, res, next, forcedView = null) {
                   AND l.estadoOperativo='disponible' AND l.cantidadRestante>0
                   AND (l.fechaVencimiento IS NULL OR l.fechaVencimiento>=?)
               ) ELSE p.stockUnidadesTotal END stockVendible,
+              COALESCE((
+                SELECT SUM(d.cantidad)
+                FROM detallePedidoTiendaOnline d
+                JOIN pedidoTiendaOnline po ON po.idTienda=d.idTienda AND po.idPedidoOnline=d.idPedidoOnline
+                WHERE d.idTienda=p.idTienda AND d.idProducto=p.idProducto
+                  AND po.estado IN ('pendiente','confirmado','preparando')
+              ),0) stockReservado,
               p.permiteVentaPorUnidad, p.permiteVentaPorPaquete,
               p.favoritoPos, pr.nombre proveedor,
               ${statsColumns},
@@ -119,6 +126,13 @@ router.get('/pos/productos/:idProducto', async (req, res, next) => {
                   AND l.estadoOperativo='disponible' AND l.cantidadRestante>0
                   AND (l.fechaVencimiento IS NULL OR l.fechaVencimiento>=?)
               ) ELSE p.stockUnidadesTotal END stockVendible,
+              COALESCE((
+                SELECT SUM(d.cantidad)
+                FROM detallePedidoTiendaOnline d
+                JOIN pedidoTiendaOnline po ON po.idTienda=d.idTienda AND po.idPedidoOnline=d.idPedidoOnline
+                WHERE d.idTienda=p.idTienda AND d.idProducto=p.idProducto
+                  AND po.estado IN ('pendiente','confirmado','preparando')
+              ),0) stockReservado,
               p.permiteVentaPorUnidad, p.permiteVentaPorPaquete,
               p.favoritoPos, pr.nombre proveedor
        FROM producto p

@@ -3061,9 +3061,10 @@ function posTotals() {
 }
 
 function posAvailableStock(product) {
-  return Number(product?.controlaLotes)
+  const sellable = Number(product?.controlaLotes)
     ? Number(product.stockVendible || 0)
     : Number(product?.stockUnidadesTotal || 0);
+  return Math.max(0, sellable - Number(product?.stockReservado || 0));
 }
 
 function posProductCard(product) {
@@ -3084,6 +3085,7 @@ function posProductCard(product) {
         <strong>${escapeHtml(product.nombre)}</strong>
         <span>${escapeHtml(product.categoria)} · ${escapeHtml(product.proveedor || 'Sin proveedor')}</span>
         <small class="pos-stock-label">${escapeHtml(stockState === 'out' ? 'Sin stock' : stockState === 'low' ? `Stock bajo · ${stockLabel(product)}` : stockLabel(product))}</small>
+        ${Number(product.stockReservado || 0) > 0 ? `<small class="lot-pos-stock">Reservado online: ${escapeHtml(product.stockReservado)} · disponible para caja: ${escapeHtml(availableStock)}</small>` : ''}
         ${Number(product.controlaLotes) ? `<small class="lot-pos-stock">Vendible: ${escapeHtml(posAvailableStock(product))} unidades · salida ${Number(product.controlaVencimiento) ? 'FEFO' : 'FIFO'}</small>${Number(product.stockUnidadesTotal) > posAvailableStock(product) ? '<small class="text-danger">Parte del stock está vencida o bloqueada.</small>' : ''}` : ''}
         <small>${escapeHtml(presentations)}</small>
       </div>
@@ -3429,7 +3431,7 @@ function renderPosCart() {
           <span>${units} unidades · Bs ${money(posLinePrice(line))} c/u</span>
           <strong>Bs ${money(Number(line.cantidad) * posLinePrice(line))}</strong>
         </div>
-        ${insufficient ? `<p class="text-danger">Requiere ${units}; vendibles ${available}.${Number(line.producto.controlaLotes) ? ' Hay stock físico vencido o bloqueado que no puede venderse.' : ''}</p>` : ''}
+        ${insufficient ? `<p class="text-danger">Requiere ${units}; disponibles para caja ${available}.${Number(line.producto.stockReservado || 0) ? ` ${line.producto.stockReservado} unidades están reservadas en pedidos online.` : ''}${Number(line.producto.controlaLotes) ? ' Parte del stock físico puede estar vencida o bloqueada.' : ''}</p>` : ''}
       </article>`;
   }).join('') : '<p class="muted empty-state">El carrito esta vacio.</p>';
   container.querySelectorAll('[data-pos-remove]').forEach((button) => button.addEventListener('click', () => {

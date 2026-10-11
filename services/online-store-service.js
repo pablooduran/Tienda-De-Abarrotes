@@ -97,13 +97,15 @@ function ownerProduct(row) {
     unidadMedida: row.unidadMedida,
     precioVenta: Number(row.precioVenta),
     stockUnidadesTotal: Number(row.stockUnidadesTotal),
+    stockReservado: Number(row.stockReservado || 0),
+    stockDisponible: Number(row.stockDisponible ?? row.stockUnidadesTotal),
     stockMinimo: Number(row.stockMinimo),
     publicado: Boolean(row.publicado)
   };
 }
 
 function availabilityFor(row) {
-  const stock = Number(row.stockUnidadesTotal);
+  const stock = Number(row.stockDisponible ?? row.stockUnidadesTotal);
   if (stock <= 0) return 'agotado';
   if (stock <= Number(row.stockMinimo)) return 'pocas_unidades';
   return 'disponible';
@@ -201,9 +203,18 @@ function createOnlineStoreService({
     const [rows] = await database.query(
       `SELECT p.idProducto,p.nombre,p.categoria,p.unidadMedida,p.precioVenta,
               p.stockUnidadesTotal,p.stockMinimo,
+              COALESCE(r.stockReservado,0) stockReservado,
+              GREATEST(p.stockUnidadesTotal-COALESCE(r.stockReservado,0),0) stockDisponible,
               COALESCE(o.publicado,1) publicado
        FROM producto p
        LEFT JOIN productoCatalogoOnline o ON o.idTienda=p.idTienda AND o.idProducto=p.idProducto
+       LEFT JOIN (
+         SELECT d.idTienda,d.idProducto,SUM(d.cantidad) stockReservado
+         FROM detallePedidoTiendaOnline d
+         JOIN pedidoTiendaOnline po ON po.idTienda=d.idTienda AND po.idPedidoOnline=d.idPedidoOnline
+         WHERE po.estado IN ('pendiente','confirmado','preparando')
+         GROUP BY d.idTienda,d.idProducto
+       ) r ON r.idTienda=p.idTienda AND r.idProducto=p.idProducto
        WHERE p.idTienda=? AND p.activo=1
        ORDER BY p.nombre`,
       [storeId]
@@ -241,9 +252,17 @@ function createOnlineStoreService({
     const { store, subscription } = await resolvePublicStore(slugValue);
     const [rows] = await database.query(
       `SELECT p.idProducto,p.nombre,p.categoria,p.unidadMedida,p.precioVenta,
-              p.stockUnidadesTotal,p.stockMinimo
+              p.stockUnidadesTotal,p.stockMinimo,
+              GREATEST(p.stockUnidadesTotal-COALESCE(r.stockReservado,0),0) stockDisponible
        FROM producto p
        LEFT JOIN productoCatalogoOnline o ON o.idTienda=p.idTienda AND o.idProducto=p.idProducto
+       LEFT JOIN (
+         SELECT d.idTienda,d.idProducto,SUM(d.cantidad) stockReservado
+         FROM detallePedidoTiendaOnline d
+         JOIN pedidoTiendaOnline po ON po.idTienda=d.idTienda AND po.idPedidoOnline=d.idPedidoOnline
+         WHERE po.estado IN ('pendiente','confirmado','preparando')
+         GROUP BY d.idTienda,d.idProducto
+       ) r ON r.idTienda=p.idTienda AND r.idProducto=p.idProducto
        WHERE p.idTienda=? AND COALESCE(o.publicado,1)=1 AND p.activo=1
        ORDER BY p.nombre`,
       [store.idTienda]
@@ -335,24 +354,37 @@ function createOnlineStoreService({
          WHERE p.idTienda=? AND p.idProducto IN (${placeholders}) AND p.activo=1 FOR UPDATE`,
         [store.idTienda, ...items.map((item) => item.idProducto)]
       );
+      const [reservationRows] = await connection.query(
+        `SELECT d.idProducto,SUM(d.cantidad) stockReservado
+         FROM detallePedidoTiendaOnline d
+         JOIN pedidoTiendaOnline po ON po.idTienda=d.idTienda AND po.idPedidoOnline=d.idPedidoOnline
+         WHERE d.idTienda=? AND d.idProducto IN (${placeholders})
+           AND po.estado IN ('pendiente','confirmado','preparando')
+         GROUP BY d.idProducto`,
+        [store.idTienda, ...items.map((item) => item.idProducto)]
+      );
+      const reservedByProduct = new Map(reservationRows.map((row) => [Number(row.idProducto), Number(row.stockReservado || 0)]));
       const byId = new Map(products.map((product) => [Number(product.idProducto), product]));
       let subtotalCents = 0;
       const stockProblems = [];
       for (const item of items) {
         const product = byId.get(item.idProducto);
-        const available = Math.max(0, Number(product?.stockUnidadesTotal || 0));
+        const reserved = reservedByProduct.get(item.idProducto) || 0;
+        const physical = Math.max(0, Number(product?.stockUnidadesTotal || 0));
+        const available = Math.max(0, physical - reserved);
         if (!product || !Number(product.publicado) || available < item.cantidad) {
           stockProblems.push({
             nombre: product?.nombre || `Producto ${item.idProducto}`,
             solicitado: item.cantidad,
-            disponible: product && Number(product.publicado) ? available : 0
+            disponible: product && Number(product.publicado) ? available : 0,
+            reservado: product && Number(product.publicado) ? reserved : 0
           });
           continue;
         }
         subtotalCents += Math.round(Number(product.precioVenta) * 100) * item.cantidad;
       }
       if (stockProblems.length) {
-        const detail = stockProblems.map((problem) => `${problem.nombre}: pediste ${problem.solicitado} y solo quedan ${problem.disponible}.`).join(' ');
+        const detail = stockProblems.map((problem) => `${problem.nombre}: pediste ${problem.solicitado} y solo quedan ${problem.disponible} disponibles${problem.reservado ? ` (${problem.reservado} reservadas para otros pedidos)` : ''}.`).join(' ');
         throw new AppError(409, `No alcanza el stock. ${detail} Reduce la cantidad en el carrito e intenta nuevamente.`, 'ONLINE_STORE_STOCK_CHANGED');
       }
       const subtotal = subtotalCents / 100;
@@ -661,6 +693,7 @@ function createOnlineStoreService({
     const connection = database.getConnection ? await database.getConnection() : database;
     try {
       await connection.beginTransaction?.();
+      await connection.query('SELECT idTienda FROM tienda WHERE idTienda=? FOR UPDATE', [idTienda]);
       const [orders] = await connection.query(
         `SELECT estado,idCliente,subtotal,metodoPago
          FROM pedidoTiendaOnline WHERE idTienda=? AND idPedidoOnline=? LIMIT 1 FOR UPDATE`,

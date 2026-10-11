@@ -22,6 +22,7 @@ check('Clientes usa filtros en ventana, skeleton y estado vacio', customers.incl
 check('Historial conserva detalle y comprobante con acciones compactas', app.includes('Historial de ventas') && app.includes('data-detail') && app.includes('data-receipt') && app.includes('Aún no hay ventas registradas'));
 check('Estilos mantienen selector, subnavegacion y layout responsive', css.includes('.pos-customer-mode') && css.includes('.sales-workspace-nav') && css.includes('@media (max-width: 560px)'));
 check('POS diferencia stock agotado y bajo', app.includes('pos-stock-${stockState}') && app.includes("stockState === 'out'") && css.includes('.pos-product.pos-stock-out') && css.includes('.pos-product.pos-stock-low'));
+check('POS descuenta reservas online del disponible y las explica', app.includes('sellable - Number(product?.stockReservado || 0)') && app.includes('Reservado online:') && pos.includes("po.estado IN ('pendiente','confirmado','preparando')"));
 check('POS explica y registra pagos parciales solo con cliente', app.includes('const frequentCustomer = Boolean(document.getElementById(\'posClient\')?.value)') && app.includes('Pago parcial: queda pendiente') && app.includes('Selecciona un cliente para dejar saldo pendiente.'));
 check('Comprobante abre WhatsApp con alternativa si se bloquea una pestaña', app.includes('const openWhatsApp = (url)') && app.includes("window.location.assign(url)"));
 

@@ -110,14 +110,28 @@ async function lockAndPriceItems(connection, idTienda, rawItems) {
   const locked = [];
   for (const item of [...items].sort((a, b) => a.idProducto - b.idProducto)) {
     const [rows] = await connection.query(
-      `SELECT idProducto, nombre, codigoBarras, precioVenta, precioVentaPaquete,
-              unidadesPorPaquete, ultimoPrecioCompra, stockUnidadesTotal,
-              permiteVentaPorUnidad, permiteVentaPorPaquete, activo,
-              controlaLotes, controlaVencimiento, lotesActivadosEn
-       FROM producto
-       WHERE idProducto=? AND idTienda=? AND activo=1
+      `SELECT p.idProducto,p.nombre,p.codigoBarras,p.precioVenta,p.precioVentaPaquete,
+              p.unidadesPorPaquete,p.ultimoPrecioCompra,p.stockUnidadesTotal,
+              p.permiteVentaPorUnidad,p.permiteVentaPorPaquete,p.activo,
+              p.controlaLotes,p.controlaVencimiento,p.lotesActivadosEn,
+              CASE WHEN p.controlaLotes=1 THEN (
+                SELECT COALESCE(SUM(l.cantidadRestante),0)
+                FROM loteProducto l
+                WHERE l.idTienda=p.idTienda AND l.idProducto=p.idProducto
+                  AND l.estadoOperativo='disponible' AND l.cantidadRestante>0
+                  AND (l.fechaVencimiento IS NULL OR l.fechaVencimiento>=?)
+              ) ELSE p.stockUnidadesTotal END stockVendible,
+              COALESCE((
+                SELECT SUM(d.cantidad)
+                FROM detallePedidoTiendaOnline d
+                JOIN pedidoTiendaOnline po ON po.idTienda=d.idTienda AND po.idPedidoOnline=d.idPedidoOnline
+                WHERE d.idTienda=p.idTienda AND d.idProducto=p.idProducto
+                  AND po.estado IN ('pendiente','confirmado','preparando')
+              ),0) stockReservado
+       FROM producto p
+       WHERE p.idProducto=? AND p.idTienda=? AND p.activo=1
        FOR UPDATE`,
-      [item.idProducto, idTienda]
+      [formatLocalDate(), item.idProducto, idTienda]
     );
     if (!rows.length) throw stockError(404, 'Producto no encontrado o inactivo.');
     const product = rows[0];
@@ -133,8 +147,14 @@ async function lockAndPriceItems(connection, idTienda, rawItems) {
       ? item.cantidad * Number(product.unidadesPorPaquete)
       : item.cantidad;
     if (!Number.isInteger(units) || units <= 0) throw stockError(400, 'La equivalencia de unidades no es valida.');
-    if (Number(product.stockUnidadesTotal) < units) {
-      throw stockError(400, `Stock insuficiente para ${product.nombre}. Disponible: ${product.stockUnidadesTotal} unidades.`);
+    const reserved = Number(product.stockReservado || 0);
+    const sellable = Number(product.controlaLotes) ? Number(product.stockVendible || 0) : Number(product.stockUnidadesTotal);
+    const available = Math.max(0, sellable - reserved);
+    if (available < units) {
+      const reason = reserved > 0
+        ? `Stock reservado para pedidos online. ${product.nombre}: disponibles para caja ${available}; reservadas ${reserved}.`
+        : `Stock insuficiente para ${product.nombre}. Disponible para caja: ${available} unidades.`;
+      throw stockError(409, reason);
     }
     const unitPriceCents = cents(product.precioVenta, `Precio de ${product.nombre}`, { allowZero: false });
     const packagePriceCents = product.precioVentaPaquete === null
@@ -236,6 +256,7 @@ async function registerSale({
   const connection = await pool.getConnection();
   try {
     await connection.beginTransaction();
+    await connection.query('SELECT idTienda FROM tienda WHERE idTienda=? FOR UPDATE', [idTienda]);
     const operationDate = new Date();
     const operationDateTime = formatLocalDateTime(operationDate);
     const [insert] = await connection.query(
