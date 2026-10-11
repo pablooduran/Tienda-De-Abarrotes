@@ -119,6 +119,44 @@
       return null;
     }
 
+    function confirmOrderCancellation(order, returnFocus) {
+      const modalRoot = global.document.getElementById('modalRoot');
+      if (!modalRoot || !order) return Promise.resolve(false);
+      const orderNumber = orderNumberLabel(order);
+      const stockMessage = order.estado === 'listo'
+        ? 'Los productos ya descontados volverán al stock automáticamente.'
+        : 'Las unidades reservadas volverán a quedar disponibles en el stock.';
+      return new Promise((resolve) => {
+        const close = (confirmed) => {
+          modalRoot.innerHTML = '';
+          returnFocus?.focus?.();
+          resolve(confirmed);
+        };
+        modalRoot.innerHTML = `
+          <div class="modal-backdrop" data-order-cancel-backdrop>
+            <section class="modal online-order-cancel-modal" role="dialog" aria-modal="true" aria-labelledby="onlineCancelTitle" aria-describedby="onlineCancelDescription">
+              <span class="online-order-cancel-icon" aria-hidden="true">!</span>
+              <div>
+                <p class="eyebrow">PEDIDO ${escapeHtml(orderNumber)}</p>
+                <h3 id="onlineCancelTitle">¿Cancelar este pedido?</h3>
+                <p id="onlineCancelDescription">Confirma que deseas cancelar el pedido de <strong>${escapeHtml(order.nombreCliente)}</strong>.</p>
+              </div>
+              <div class="online-order-cancel-impact"><strong>Qué ocurrirá</strong><p>${escapeHtml(stockMessage)}</p><small>El pedido quedará cancelado y esta acción no se puede deshacer.</small></div>
+              <div class="modal-actions">
+                <button type="button" class="secondary" data-modal-cancel>Volver</button>
+                <button type="button" class="danger" data-modal-confirm>Sí, cancelar pedido</button>
+              </div>
+            </section>
+          </div>`;
+        modalRoot.querySelector('[data-modal-cancel]').addEventListener('click', () => close(false));
+        modalRoot.querySelector('[data-modal-confirm]').addEventListener('click', () => close(true));
+        modalRoot.querySelector('[data-order-cancel-backdrop]').addEventListener('click', (event) => {
+          if (event.target === event.currentTarget) close(false);
+        });
+        modalRoot.querySelector('[data-modal-cancel]').focus();
+      });
+    }
+
     async function updateOrder(card, estado, estadoPago, successMessage) {
       const buttons = [...card.querySelectorAll('button')];
       const scrollTop = global.scrollY;
@@ -184,8 +222,9 @@
           const action = currentOrder ? nextOrderAction(currentOrder) : null;
           void updateOrder(card, button.dataset.nextState, button.dataset.nextPayment, action?.mensaje || 'El pedido avanzó al siguiente paso.');
         });
-        card.querySelector('[data-order-cancel]')?.addEventListener('click', () => {
-          if (!global.confirm('¿Quieres cancelar este pedido?')) return;
+        card.querySelector('[data-order-cancel]')?.addEventListener('click', async (event) => {
+          const currentOrder = orders.find((item) => Number(item.idPedidoOnline) === Number(card.dataset.onlineOrder));
+          if (!await confirmOrderCancellation(currentOrder, event.currentTarget)) return;
           const message = card.dataset.onlineState === 'listo'
             ? 'Pedido cancelado. El stock se repuso en el inventario.'
             : 'El pedido quedó cancelado.';
