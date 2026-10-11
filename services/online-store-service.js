@@ -429,8 +429,9 @@ function createOnlineStoreService({
 
   async function lockOrderItems(connection, idTienda, orderId) {
     const [items] = await connection.query(
-      `SELECT d.idDetallePedidoOnline,d.idProducto,d.nombreProductoSnapshot,d.cantidad,
-              p.nombre,p.stockUnidadesTotal,p.controlaLotes,p.controlaVencimiento,p.activo
+      `SELECT d.idDetallePedidoOnline,d.idProducto,d.nombreProductoSnapshot,d.unidadMedidaSnapshot,
+              d.cantidad,d.precioUnitario,d.subtotal,
+              p.nombre,p.stockUnidadesTotal,p.ultimoPrecioCompra,p.controlaLotes,p.controlaVencimiento,p.activo
        FROM detallePedidoTiendaOnline d
        JOIN producto p ON p.idTienda=d.idTienda AND p.idProducto=d.idProducto
        WHERE d.idTienda=? AND d.idPedidoOnline=?
@@ -591,6 +592,67 @@ function createOnlineStoreService({
     }
   }
 
+  async function registerOrderSale(connection, { idTienda, idAdministrador, orderId, order, now }) {
+    const operationKey = `pedido-online:${orderId}`;
+    const [existing] = await connection.query(
+      'SELECT idVenta,codigoComprobante FROM venta WHERE idTienda=? AND claveOperacion=? LIMIT 1 FOR UPDATE',
+      [idTienda, operationKey]
+    );
+    if (existing[0]) return { idVenta: Number(existing[0].idVenta), repetida: true };
+    const items = await lockOrderItems(connection, idTienda, orderId);
+    const subtotal = Number(order.subtotal || 0);
+    const [created] = await connection.query(
+      `INSERT INTO venta
+       (idTienda,fecha,subtotal,descuento,total,montoPagado,saldoPendiente,estadoPago,estadoOperacion,tipo,idCliente,claveOperacion)
+       VALUES (?,?,?,0,?,?,0,'pagada','vigente','pagada',?,?)`,
+      [idTienda, now, subtotal, subtotal, subtotal, order.idCliente || null, operationKey]
+    );
+    const saleId = Number(created.insertId);
+    const receiptCode = `V-${String(saleId).padStart(4, '0')}`;
+    await connection.query(
+      'UPDATE venta SET codigoComprobante=? WHERE idTienda=? AND idVenta=?',
+      [receiptCode, idTienda, saleId]
+    );
+    for (const item of items) {
+      const quantity = Number(item.cantidad);
+      const price = Number(item.precioUnitario);
+      const itemSubtotal = Number(item.subtotal);
+      const cost = Math.max(0, Number(item.ultimoPrecioCompra || 0));
+      const subtotalCost = Math.round(cost * quantity * 100) / 100;
+      const gain = Math.round((itemSubtotal - subtotalCost) * 100) / 100;
+      const [saleDetail] = await connection.query(
+        `INSERT INTO detalleVenta
+         (idTienda,idVenta,idProducto,cantidad,precioVenta,costoUnitario,subtotal,
+          subtotalCosto,ganancia,origenCosto,presentacionVenta,cantidadEquivalenteUnidades)
+         VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`,
+        [idTienda, saleId, item.idProducto, quantity, price, cost, itemSubtotal,
+          subtotalCost, gain, cost > 0 ? 'real' : 'desconocido', 'unidad', quantity]
+      );
+      const sourceKey = movementKey('pedido-online', `${orderId}:salida:${item.idDetallePedidoOnline}`);
+      const [linked] = await connection.query(
+        `UPDATE movimientoStock
+         SET origen='venta',idDetalleVenta=?,motivo='Salida por venta online entregada.'
+         WHERE idTienda=? AND idProducto=? AND claveOperacion=? AND idDetalleVenta IS NULL`,
+        [saleDetail.insertId, idTienda, item.idProducto, sourceKey]
+      );
+      if (!linked.affectedRows) {
+        throw new AppError(409, `${item.nombreProductoSnapshot}: no se pudo vincular la salida con la venta.`, 'ONLINE_STORE_SALE_STOCK_LINK_MISSING');
+      }
+    }
+    if (subtotal > 0) {
+      await connection.query(
+        `INSERT INTO pagoVenta
+         (idTienda,idVenta,metodoPago,monto,montoRecibido,cambio,referencia,claveOperacion,idAdministrador,creadoEn)
+         VALUES (?,?,?,?,?,0,?,?,?,?)`,
+        [idTienda, saleId, order.metodoPago, subtotal,
+          order.metodoPago === 'efectivo' ? subtotal : null,
+          order.metodoPago === 'qr' ? `Pedido online ${orderId}` : null,
+          `pedido-online:${orderId}:pago`, idAdministrador, now]
+      );
+    }
+    return { idVenta: saleId, repetida: false };
+  }
+
   async function updateOrder(context, idPedidoOnline, body = {}) {
     const idTienda = positiveId(context?.idTienda, 'La tienda');
     const idAdministrador = positiveId(context?.idAdministrador, 'El administrador');
@@ -600,7 +662,8 @@ function createOnlineStoreService({
     try {
       await connection.beginTransaction?.();
       const [orders] = await connection.query(
-        'SELECT estado FROM pedidoTiendaOnline WHERE idTienda=? AND idPedidoOnline=? LIMIT 1 FOR UPDATE',
+        `SELECT estado,idCliente,subtotal,metodoPago
+         FROM pedidoTiendaOnline WHERE idTienda=? AND idPedidoOnline=? LIMIT 1 FOR UPDATE`,
         [idTienda, orderId]
       );
       if (!orders.length) throw new AppError(404, 'El pedido no existe.', 'ONLINE_STORE_ORDER_NOT_FOUND');
@@ -618,6 +681,9 @@ function createOnlineStoreService({
       } else if (currentStatus === 'listo' && status === 'cancelado') {
         await restoreOrderInventory(connection, { idTienda, idAdministrador, orderId, now });
       }
+      const sale = currentStatus === 'listo' && status === 'entregado'
+        ? await registerOrderSale(connection, { idTienda, idAdministrador, orderId, order: orders[0], now })
+        : null;
       const paymentStatus = status === 'entregado' ? 'pagado' : 'pendiente';
       const [result] = await connection.query(
         `UPDATE pedidoTiendaOnline SET estado=?,estadoPago=?,actualizadoEn=?,idAdministradorActualiza=?
@@ -626,7 +692,11 @@ function createOnlineStoreService({
       );
       if (!result.affectedRows) throw new AppError(409, 'El pedido no pudo actualizarse.', 'ONLINE_STORE_ORDER_UPDATE_CONFLICT');
       await connection.commit?.();
-      return { actualizado: true, inventario: status === 'listo' ? 'descontado' : (currentStatus === 'listo' && status === 'cancelado' ? 'repuesto' : 'sin_cambios') };
+      return {
+        actualizado: true,
+        inventario: status === 'listo' ? 'descontado' : (currentStatus === 'listo' && status === 'cancelado' ? 'repuesto' : 'sin_cambios'),
+        venta: sale ? { idVenta: sale.idVenta, registrada: true } : null
+      };
     } catch (error) {
       await connection.rollback?.();
       throw error;

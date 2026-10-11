@@ -115,7 +115,7 @@
     function nextOrderAction(order) {
       if (['pendiente', 'confirmado'].includes(order.estado)) return { label: 'Alistar pedido', estado: 'preparando', estadoPago: 'pendiente' };
       if (order.estado === 'preparando') return { label: 'Pedido terminado', estado: 'listo', estadoPago: 'pendiente', mensaje: 'Pedido listo. El stock se descontó del inventario.' };
-      if (order.estado === 'listo') return { label: 'Marcar entregado', estado: 'entregado', estadoPago: 'pagado' };
+      if (order.estado === 'listo') return { label: 'Marcar entregado', estado: 'entregado', estadoPago: 'pagado', mensaje: 'Pedido entregado. La venta ya aparece en tus reportes.' };
       return null;
     }
 

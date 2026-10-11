@@ -81,8 +81,13 @@ assert(ownerUi.includes("padStart(3, '0')"));
 assert(fs.readFileSync(path.join(root, 'services', 'online-store-service.js'), 'utf8').includes('ONLINE_STORE_ORDER_INVALID_TRANSITION'));
 assert(fs.readFileSync(path.join(root, 'services', 'online-store-service.js'), 'utf8').includes('Salida por pedido de tienda online listo.'));
 assert(fs.readFileSync(path.join(root, 'services', 'online-store-service.js'), 'utf8').includes('Reposición por cancelación de pedido de tienda online.'));
+assert(fs.readFileSync(path.join(root, 'services', 'online-store-service.js'), 'utf8').includes("`pedido-online:${orderId}`"));
+assert(fs.readFileSync(path.join(root, 'services', 'online-store-service.js'), 'utf8').includes('INSERT INTO detalleVenta'));
+assert(fs.readFileSync(path.join(root, 'services', 'online-store-service.js'), 'utf8').includes('INSERT INTO pagoVenta'));
+assert(fs.readFileSync(path.join(root, 'services', 'online-store-service.js'), 'utf8').includes("SET origen='venta',idDetalleVenta=?"));
 assert(ownerUi.includes('El stock se descontó del inventario.'));
 assert(ownerUi.includes('El stock se repuso en el inventario.'));
+assert(ownerUi.includes('La venta ya aparece en tus reportes.'));
 assert(ownerUi.includes('global.setTimeout(() =>'));
 assert(ownerUi.includes('}, 2000);'));
 assert(ownerUi.includes("currentTarget.textContent = '';"));
@@ -239,12 +244,51 @@ async function orderContract() {
 }
 
 async function orderWorkflowContract() {
+  const writes = [];
   const database = {
     async query(sql, params) {
-      if (sql.startsWith('SELECT estado FROM pedidoTiendaOnline')) return [[{ estado: 'listo' }]];
+      if (sql.startsWith('SELECT estado,idCliente,subtotal,metodoPago')) return [[{
+        estado: 'listo', idCliente: 55, subtotal: 119, metodoPago: 'qr'
+      }]];
+      if (sql.startsWith('SELECT idVenta,codigoComprobante FROM venta')) return [[]];
+      if (sql.includes('FROM detallePedidoTiendaOnline d')) return [[{
+        idDetallePedidoOnline: 100,
+        idProducto: 11,
+        nombreProductoSnapshot: 'Aceite de oliva',
+        unidadMedidaSnapshot: 'unidad',
+        cantidad: 7,
+        precioUnitario: 17,
+        subtotal: 119,
+        stockUnidadesTotal: 10,
+        ultimoPrecioCompra: 12,
+        controlaLotes: 0,
+        controlaVencimiento: 0,
+        activo: 1
+      }]];
+      if (sql.includes('INSERT INTO venta')) { writes.push('venta'); return [{ insertId: 44 }]; }
+      if (sql.startsWith('UPDATE venta SET codigoComprobante')) { writes.push('comprobante'); return [{ affectedRows: 1 }]; }
+      if (sql.includes('INSERT INTO detalleVenta')) {
+        assert.strictEqual(params[1], 44);
+        assert.strictEqual(params[3], 7);
+        assert.strictEqual(params[9], 'real');
+        writes.push('detalle-venta');
+        return [{ insertId: 70 }];
+      }
+      if (sql.startsWith('UPDATE movimientoStock')) {
+        assert.strictEqual(params[0], 70);
+        writes.push('vinculo-stock');
+        return [{ affectedRows: 1 }];
+      }
+      if (sql.includes('INSERT INTO pagoVenta')) {
+        assert.strictEqual(params[2], 'qr');
+        assert.strictEqual(params[3], 119);
+        writes.push('pago');
+        return [{ insertId: 80 }];
+      }
       if (sql.startsWith('UPDATE pedidoTiendaOnline')) {
         assert.strictEqual(params[0], 'entregado');
         assert.strictEqual(params[1], 'pagado');
+        writes.push('pedido-entregado');
         return [{ affectedRows: 1 }];
       }
       throw new Error(`Consulta inesperada: ${sql.slice(0, 80)}`);
@@ -252,7 +296,8 @@ async function orderWorkflowContract() {
   };
   const service = createOnlineStoreService({ database, clock: () => '2026-10-11 11:45:00' });
   const result = await service.updateOrder({ idTienda: 7, idAdministrador: 3 }, 99, { estado: 'entregado', estadoPago: 'pendiente' });
-  assert.deepStrictEqual(result, { actualizado: true, inventario: 'sin_cambios' });
+  assert.deepStrictEqual(result, { actualizado: true, inventario: 'sin_cambios', venta: { idVenta: 44, registrada: true } });
+  assert.deepStrictEqual(writes, ['venta', 'comprobante', 'detalle-venta', 'vinculo-stock', 'pago', 'pedido-entregado']);
 }
 
 async function orderInventoryContract() {
@@ -266,7 +311,7 @@ async function orderInventoryContract() {
     async rollback() { events.push('rollback'); },
     release() { events.push('release'); },
     async query(sql, params) {
-      if (sql.startsWith('SELECT estado FROM pedidoTiendaOnline')) return [[{ estado: state }]];
+      if (sql.startsWith('SELECT estado,idCliente,subtotal,metodoPago')) return [[{ estado: state }]];
       if (sql.includes('FROM detallePedidoTiendaOnline d')) return [[{
         idDetallePedidoOnline: 100,
         idProducto: 11,
@@ -302,13 +347,13 @@ async function orderInventoryContract() {
     clock: () => '2026-10-11 12:00:00'
   });
   const ready = await service.updateOrder({ idTienda: 7, idAdministrador: 3 }, 99, { estado: 'listo' });
-  assert.deepStrictEqual(ready, { actualizado: true, inventario: 'descontado' });
+  assert.deepStrictEqual(ready, { actualizado: true, inventario: 'descontado', venta: null });
   assert.strictEqual(stock, 0);
   assert.deepStrictEqual(events.slice(0, 6), ['begin', 'stock:0', 'movimiento:salida', 'pedido:listo', 'commit', 'release']);
 
   events.length = 0;
   const cancelled = await service.updateOrder({ idTienda: 7, idAdministrador: 3 }, 99, { estado: 'cancelado' });
-  assert.deepStrictEqual(cancelled, { actualizado: true, inventario: 'repuesto' });
+  assert.deepStrictEqual(cancelled, { actualizado: true, inventario: 'repuesto', venta: null });
   assert.strictEqual(stock, 14);
   assert.deepStrictEqual(events, ['begin', 'stock:14', 'movimiento:entrada', 'pedido:cancelado', 'commit', 'release']);
 }
@@ -320,7 +365,7 @@ async function orderReadyShortageContract() {
     async rollback() { events.push('rollback'); },
     release() { events.push('release'); },
     async query(sql) {
-      if (sql.startsWith('SELECT estado FROM pedidoTiendaOnline')) return [[{ estado: 'preparando' }]];
+      if (sql.startsWith('SELECT estado,idCliente,subtotal,metodoPago')) return [[{ estado: 'preparando' }]];
       if (sql.includes('FROM detallePedidoTiendaOnline d')) return [[{
         idDetallePedidoOnline: 101,
         idProducto: 12,
