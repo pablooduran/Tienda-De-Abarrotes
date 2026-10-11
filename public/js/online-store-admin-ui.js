@@ -14,6 +14,7 @@
     if (!root || !api) throw new Error('La tienda online requiere un contenedor y un cliente API.');
     let model = null;
     let products = [];
+    let orders = [];
     let search = '';
 
     function messageFor(error) {
@@ -88,6 +89,39 @@
       target.classList.toggle('error', error);
     }
 
+    function orderLabel(value) {
+      return ({ pendiente: 'Nuevo', confirmado: 'Confirmado', preparando: 'Preparando', listo: 'Listo para entregar', entregado: 'Entregado', cancelado: 'Cancelado' })[value] || value;
+    }
+
+    function renderOrders() {
+      const target = root.querySelector('[data-online-orders]');
+      if (!target) return;
+      if (!orders.length) {
+        target.innerHTML = '<div class="online-store-empty"><strong>Aún no llegaron pedidos</strong><p>Cuando un cliente envíe su carrito, aparecerá aquí con sus datos y productos.</p></div>';
+        return;
+      }
+      target.innerHTML = orders.map((order) => `<article class="online-order-card" data-online-order="${order.idPedidoOnline}">
+        <header><div><span class="eyebrow">PEDIDO ${escapeHtml(order.codigoPublico)}</span><h5>${escapeHtml(order.nombreCliente)}</h5><p>${escapeHtml(order.telefonoCliente)} · ${order.tipoEntrega === 'entrega' ? 'Entrega a domicilio' : 'Recojo en tienda'} · ${order.franjaEntrega}</p></div><strong>Bs ${Number(order.total).toFixed(2)}</strong></header>
+        <ul>${order.productos.map((item) => `<li><span>${item.cantidad} × ${escapeHtml(item.nombreProductoSnapshot)}</span><strong>Bs ${Number(item.subtotal).toFixed(2)}</strong></li>`).join('')}</ul>
+        ${order.direccionEntrega ? `<p class="online-order-address"><strong>Dirección:</strong> ${escapeHtml(order.direccionEntrega)}</p>` : ''}
+        <footer><label>Preparación<select name="estado">${['pendiente','confirmado','preparando','listo','entregado','cancelado'].map((value) => `<option value="${value}" ${order.estado === value ? 'selected' : ''}>${orderLabel(value)}</option>`).join('')}</select></label><label>Pago<select name="estadoPago"><option value="pendiente" ${order.estadoPago === 'pendiente' ? 'selected' : ''}>Pendiente</option><option value="pagado" ${order.estadoPago === 'pagado' ? 'selected' : ''}>Pagado</option></select></label><button type="button" ${isReadOnly() ? 'disabled' : ''}>Guardar estado</button></footer>
+      </article>`).join('');
+      target.querySelectorAll('[data-online-order]').forEach((card) => card.querySelector('button').addEventListener('click', async () => {
+        const button = card.querySelector('button');
+        button.disabled = true;
+        try {
+          await api(`/api/tienda-online/pedidos/${card.dataset.onlineOrder}`, { method: 'PATCH', body: JSON.stringify({ estado: card.querySelector('[name="estado"]').value, estadoPago: card.querySelector('[name="estadoPago"]').value }) });
+          setAnnouncement('El estado del pedido quedó actualizado.');
+          const data = await api('/api/tienda-online/pedidos?estado=activos');
+          orders = data.pedidos;
+          renderOrders();
+        } catch (error) {
+          button.disabled = false;
+          setAnnouncement(messageFor(error), true);
+        }
+      }));
+    }
+
     function render() {
       const config = model.configuracion;
       const enabledCount = products.filter((product) => product.publicado).length;
@@ -127,6 +161,10 @@
             <div class="online-catalog-toolbar"><label>Buscar producto<input type="search" data-online-product-search placeholder="Nombre o categoría"></label><div><strong>${enabledCount}</strong><span>publicados de ${products.length}</span></div></div>
             <div class="online-product-list" data-online-product-list></div>
           </section>
+          <section class="online-catalog-manager online-orders-manager">
+            <div class="online-section-heading"><span>3</span><div><h4>Pedidos recibidos</h4><p>Confirma, prepara y entrega cada pedido. Recibirlo no descuenta stock ni registra una venta automáticamente.</p></div></div>
+            <div class="online-order-list" data-online-orders></div>
+          </section>
           <p class="online-store-announcement" data-online-announcement role="status" aria-live="polite"></p>
         </section>`;
 
@@ -146,6 +184,7 @@
         renderProductList();
       });
       renderProductList();
+      renderOrders();
     }
 
     async function saveConfiguration(event) {
@@ -181,9 +220,10 @@
     async function renderView() {
       root.innerHTML = '<section class="online-store-admin loading-panel" aria-busy="true"><p>Preparando tu tienda online…</p></section>';
       try {
-        [model, { productos: products }] = await Promise.all([
+        [model, { productos: products }, { pedidos: orders }] = await Promise.all([
           api('/api/tienda-online/configuracion'),
-          api('/api/tienda-online/productos')
+          api('/api/tienda-online/productos'),
+          api('/api/tienda-online/pedidos?estado=activos')
         ]);
         render();
       } catch (error) {

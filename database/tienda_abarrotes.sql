@@ -941,6 +941,56 @@ CREATE TABLE IF NOT EXISTS productoCatalogoOnline (
     REFERENCES administrador(idTienda,idAdministrador) ON UPDATE RESTRICT ON DELETE RESTRICT
 ) ENGINE=InnoDB;
 
+CREATE TABLE IF NOT EXISTS pedidoTiendaOnline (
+  idPedidoOnline BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  idTienda INT NOT NULL,
+  codigoPublico CHAR(12) NOT NULL,
+  idCliente INT NULL,
+  nombreCliente VARCHAR(100) NOT NULL,
+  telefonoCliente VARCHAR(30) NOT NULL,
+  telefonoNormalizado VARCHAR(30) NOT NULL,
+  direccionEntrega VARCHAR(255) NULL,
+  tipoEntrega ENUM('recojo','entrega') NOT NULL,
+  franjaEntrega ENUM('manana','tarde','noche') NOT NULL,
+  metodoPago ENUM('efectivo','qr') NOT NULL,
+  estado ENUM('pendiente','confirmado','preparando','listo','entregado','cancelado') NOT NULL DEFAULT 'pendiente',
+  estadoPago ENUM('pendiente','pagado') NOT NULL DEFAULT 'pendiente',
+  subtotal DECIMAL(12,2) NOT NULL,
+  costoEntrega DECIMAL(12,2) NOT NULL DEFAULT 0,
+  total DECIMAL(12,2) NOT NULL,
+  notasCliente VARCHAR(500) NULL,
+  creadoEn DATETIME NOT NULL,
+  actualizadoEn DATETIME NOT NULL,
+  idAdministradorActualiza INT NULL,
+  UNIQUE KEY uq_pedidoOnline_codigo (codigoPublico),
+  UNIQUE KEY uq_pedidoOnline_tienda_id (idTienda,idPedidoOnline),
+  KEY idx_pedidoOnline_tienda_estado_fecha (idTienda,estado,creadoEn),
+  KEY idx_pedidoOnline_tienda_telefono (idTienda,telefonoNormalizado,creadoEn),
+  KEY idx_pedidoOnline_tienda_cliente (idTienda,idCliente,creadoEn),
+  CONSTRAINT chk_pedidoOnline_importes CHECK (subtotal>=0 AND costoEntrega>=0 AND total=subtotal+costoEntrega),
+  CONSTRAINT fk_pedidoOnline_tienda FOREIGN KEY (idTienda) REFERENCES tienda(idTienda) ON UPDATE RESTRICT ON DELETE RESTRICT,
+  CONSTRAINT fk_pedidoOnline_cliente FOREIGN KEY (idTienda,idCliente) REFERENCES cliente(idTienda,idCliente) ON UPDATE RESTRICT ON DELETE RESTRICT,
+  CONSTRAINT fk_pedidoOnline_admin FOREIGN KEY (idTienda,idAdministradorActualiza) REFERENCES administrador(idTienda,idAdministrador) ON UPDATE RESTRICT ON DELETE RESTRICT
+) ENGINE=InnoDB;
+
+CREATE TABLE IF NOT EXISTS detallePedidoTiendaOnline (
+  idDetallePedidoOnline BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  idTienda INT NOT NULL,
+  idPedidoOnline BIGINT UNSIGNED NOT NULL,
+  idProducto INT NOT NULL,
+  nombreProductoSnapshot VARCHAR(100) NOT NULL,
+  unidadMedidaSnapshot VARCHAR(30) NOT NULL,
+  cantidad INT NOT NULL,
+  precioUnitario DECIMAL(12,2) NOT NULL,
+  subtotal DECIMAL(12,2) NOT NULL,
+  UNIQUE KEY uq_detallePedidoOnline_producto (idTienda,idPedidoOnline,idProducto),
+  KEY idx_detallePedidoOnline_pedido (idTienda,idPedidoOnline),
+  CONSTRAINT chk_detallePedidoOnline_cantidad CHECK (cantidad BETWEEN 1 AND 10000),
+  CONSTRAINT chk_detallePedidoOnline_importes CHECK (precioUnitario>=0 AND subtotal>=0),
+  CONSTRAINT fk_detallePedidoOnline_pedido FOREIGN KEY (idTienda,idPedidoOnline) REFERENCES pedidoTiendaOnline(idTienda,idPedidoOnline) ON UPDATE RESTRICT ON DELETE RESTRICT,
+  CONSTRAINT fk_detallePedidoOnline_producto FOREIGN KEY (idTienda,idProducto) REFERENCES producto(idTienda,idProducto) ON UPDATE RESTRICT ON DELETE RESTRICT
+) ENGINE=InnoDB;
+
 INSERT INTO configuracionTiendaOnline
   (idTienda,activa,mensajeBienvenida,permiteRecojo,permiteEntrega,
    permiteEfectivo,permiteQr,pedidoMinimo,costoEntrega,tiempoPreparacionMinutos,

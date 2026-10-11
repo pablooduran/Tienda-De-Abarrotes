@@ -2,6 +2,7 @@
   'use strict';
   const root = document.getElementById('storefrontRoot');
   let catalog = null;
+  let slug = '';
   let search = '';
   let category = 'todas';
   const cart = new Map();
@@ -90,7 +91,73 @@
     dialog.querySelector('[data-delivery-estimate]').textContent = `Bs ${money(deliveryCost())}`;
     dialog.querySelector('[data-delivery-fields]').hidden = Boolean(store.opciones.recojo);
     dialog.querySelector('[data-delivery-row]').hidden = Boolean(store.opciones.recojo);
+    dialog.querySelector('[data-customer-result]').textContent = 'Tu teléfono funciona como identificador dentro de esta tienda.';
+    dialog.querySelector('[name="customerName"]').hidden = false;
     dialog.showModal();
+  }
+
+  async function identifyCustomer(dialog) {
+    const phone = dialog.querySelector('[name="phone"]').value.trim();
+    const result = dialog.querySelector('[data-customer-result]');
+    if (!phone) { result.textContent = 'Ingresa tu número para buscarte.'; return; }
+    result.textContent = 'Buscando cliente…';
+    try {
+      const response = await SecurityHttp.secureFetch(`/api/public/tiendas/${encodeURIComponent(slug)}/clientes/buscar`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ telefono: phone })
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw SecurityHttp.errorFromResponse(response, data, 'No pudimos buscar el cliente.');
+      const name = dialog.querySelector('[name="customerName"]');
+      if (data.encontrado) {
+        name.value = data.cliente.nombre;
+        name.hidden = true;
+        dialog.querySelector('[name="address"]').value ||= data.cliente.direccion || '';
+        result.textContent = `Te encontramos: ${data.cliente.nombre}. Revisa el pedido y envíalo.`;
+      } else {
+        name.hidden = false;
+        name.focus();
+        result.textContent = 'No hay un cliente asociado. Escribe tu nombre para registrarte con este pedido.';
+      }
+    } catch (error) {
+      result.textContent = error.message || 'No pudimos buscar el cliente.';
+    }
+  }
+
+  async function submitOrder(event) {
+    event.preventDefault();
+    const form = event.currentTarget;
+    const button = form.querySelector('[data-submit-order]');
+    const selected = (name) => form.querySelector(`[name="${name}"]:checked`)?.value;
+    const payload = {
+      telefono: form.elements.phone.value,
+      nombre: form.elements.customerName.value,
+      tipoEntrega: selected('fulfillment'),
+      direccionEntrega: form.elements.address.value,
+      franjaEntrega: selected('slot'),
+      metodoPago: selected('payment'),
+      notas: form.elements.notes.value,
+      productos: [...cart.values()].map((item) => ({ idProducto: item.producto.idProducto, cantidad: item.cantidad }))
+    };
+    button.disabled = true;
+    button.textContent = 'Enviando pedido…';
+    try {
+      const response = await SecurityHttp.secureFetch(`/api/public/tiendas/${encodeURIComponent(slug)}/pedidos`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload)
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw SecurityHttp.errorFromResponse(response, data, 'No pudimos enviar el pedido.');
+      cart.clear();
+      form.closest('dialog').close();
+      renderCart();
+      const confirmation = root.querySelector('[data-order-confirmation]');
+      confirmation.innerHTML = `<strong>¡Pedido enviado!</strong><span>Código ${escapeHtml(data.pedido.codigo)} · Total Bs ${money(data.pedido.total)}</span><small>La tienda lo revisará y coordinará contigo la entrega y el pago.</small>`;
+      confirmation.hidden = false;
+      confirmation.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    } catch (error) {
+      form.querySelector('[data-customer-result]').textContent = error.message || 'No pudimos enviar el pedido.';
+      button.disabled = false;
+      button.textContent = 'Enviar pedido a la tienda';
+    }
   }
 
   function render() {
@@ -98,11 +165,12 @@
     document.title = `${store.nombre} · Administrau`;
     root.innerHTML = `
       <section class="storefront-hero"><div class="storefront-hero-pattern" aria-hidden="true"></div><div class="storefront-store-mark"><img src="/assets/administrau-icon.png" alt=""></div><div class="storefront-hero-copy"><p class="eyebrow">TIENDA ONLINE</p><h1>${escapeHtml(store.nombre)}</h1><p>${escapeHtml(store.mensajeBienvenida || 'Elige lo que necesitas y nosotros preparamos tu pedido.')}</p></div><div class="storefront-service-card"><span>Opciones al confirmar</span><strong>${escapeHtml(deliverySummary(store))}</strong><small>Mañana, tarde o noche · ${store.opciones.efectivo ? 'Efectivo' : ''}${store.opciones.efectivo && store.opciones.qr ? ' o ' : ''}${store.opciones.qr ? 'QR' : ''}</small></div></section>
+      <section class="storefront-order-confirmation" data-order-confirmation hidden></section>
       <section class="storefront-shop-layout"><div class="storefront-catalog"><header class="storefront-catalog-heading"><div><p class="eyebrow">CATÁLOGO</p><h2>¿Qué estás buscando?</h2></div><span data-results-count></span></header><div class="storefront-search"><span aria-hidden="true">⌕</span><input type="search" placeholder="Buscar por nombre o categoría" aria-label="Buscar productos" data-storefront-search></div><div class="storefront-categories" role="group" aria-label="Filtrar por categoría"><button type="button" class="active" data-category="todas">Todos</button>${catalog.categorias.map((item) => `<button type="button" data-category="${escapeHtml(item)}">${escapeHtml(item)}</button>`).join('')}</div><div class="storefront-products" data-storefront-products></div></div>
       <aside class="storefront-cart" data-cart-panel><header><div><p class="eyebrow">TU PEDIDO</p><h2>Carrito <span data-cart-count>0</span></h2></div></header><div class="storefront-cart-items" data-cart-items></div><footer><div><span>Subtotal</span><strong data-cart-subtotal>Bs 0.00</strong></div><button type="button" data-checkout disabled>Continuar pedido</button><small>La disponibilidad y el costo de entrega se confirman con la tienda.</small></footer></aside></section>
       <button type="button" class="storefront-cart-fab" data-open-cart>Carrito · <span data-cart-count>0</span></button>
       <dialog class="storefront-dialog" data-quantity-dialog><form method="dialog"><button class="dialog-close" value="cancel" aria-label="Cerrar">×</button><p class="eyebrow">AGREGAR AL CARRITO</p><h2 data-quantity-name></h2><p data-quantity-price></p><div class="storefront-stepper"><button type="button" data-quantity-action="decrease" aria-label="Quitar una unidad">−</button><strong data-quantity-value>1</strong><button type="button" data-quantity-action="increase" aria-label="Agregar una unidad">+</button></div><button type="button" data-confirm-quantity>Confirmar cantidad</button></form></dialog>
-      <dialog class="storefront-dialog storefront-checkout" data-checkout-dialog><form method="dialog"><button class="dialog-close" value="cancel" aria-label="Cerrar">×</button><p class="eyebrow">REVISA TU PEDIDO</p><h2>¿Cómo quieres recibirlo?</h2><div class="checkout-choice-grid" data-fulfillment-options></div><label class="checkout-address" data-delivery-fields>Dirección de entrega<input type="text" name="address" maxlength="180" placeholder="Zona, calle y referencia"></label><fieldset><legend>¿En qué momento?</legend><div class="checkout-slot-grid"><label><input type="radio" name="slot" value="manana" checked><span>Mañana</span></label><label><input type="radio" name="slot" value="tarde"><span>Tarde</span></label><label><input type="radio" name="slot" value="noche"><span>Noche</span></label></div></fieldset><fieldset><legend>¿Cómo pagarás?</legend><div class="checkout-slot-grid" data-payment-options></div></fieldset><div class="checkout-totals"><span>Subtotal <strong data-checkout-subtotal></strong></span><span data-delivery-row>Costo base estimado de entrega <strong data-delivery-estimate></strong></span></div><p class="checkout-note">La elección queda preparada en tu carrito. El envío del pedido al panel de la tienda se habilitará en el siguiente bloque.</p><button value="cancel">Guardar selección y volver</button></form></dialog>`;
+      <dialog class="storefront-dialog storefront-checkout" data-checkout-dialog><form><button type="button" class="dialog-close" data-close-checkout aria-label="Cerrar">×</button><p class="eyebrow">ENVÍA TU PEDIDO</p><h2>Identifícate con tu teléfono</h2><div class="checkout-phone-row"><label>Número de teléfono<input name="phone" type="tel" maxlength="30" required placeholder="Ej.: 76543210"></label><button type="button" data-find-customer>Buscar cliente</button></div><p class="checkout-note" data-customer-result>Tu teléfono funciona como identificador dentro de esta tienda.</p><label data-customer-name>Nombre completo<input name="customerName" maxlength="100" required placeholder="Tu nombre"></label><h2>¿Cómo quieres recibirlo?</h2><div class="checkout-choice-grid" data-fulfillment-options></div><label class="checkout-address" data-delivery-fields>Dirección de entrega<input type="text" name="address" maxlength="255" placeholder="Zona, calle y referencia"></label><fieldset><legend>¿En qué momento?</legend><div class="checkout-slot-grid"><label><input type="radio" name="slot" value="manana" checked><span>Mañana</span></label><label><input type="radio" name="slot" value="tarde"><span>Tarde</span></label><label><input type="radio" name="slot" value="noche"><span>Noche</span></label></div></fieldset><fieldset><legend>¿Cómo pagarás?</legend><div class="checkout-slot-grid" data-payment-options></div></fieldset><label>Nota para la tienda (opcional)<textarea name="notes" maxlength="500" rows="2" placeholder="Alguna referencia o indicación"></textarea></label><div class="checkout-totals"><span>Subtotal <strong data-checkout-subtotal></strong></span><span data-delivery-row>Costo base estimado de entrega <strong data-delivery-estimate></strong></span></div><button type="submit" data-submit-order>Enviar pedido a la tienda</button></form></dialog>`;
 
     root.addEventListener('click', (event) => {
       const add = event.target.closest('[data-add-product]');
@@ -138,7 +206,11 @@
       }
     });
     root.querySelector('[data-checkout]').addEventListener('click', openCheckout);
-    root.querySelector('[data-checkout-dialog]').addEventListener('change', (event) => {
+    const checkoutDialog = root.querySelector('[data-checkout-dialog]');
+    checkoutDialog.addEventListener('submit', submitOrder);
+    checkoutDialog.querySelector('[data-find-customer]').addEventListener('click', () => identifyCustomer(checkoutDialog));
+    checkoutDialog.querySelector('[data-close-checkout]').addEventListener('click', () => checkoutDialog.close());
+    checkoutDialog.addEventListener('change', (event) => {
       if (event.target.name !== 'fulfillment') return;
       const delivery = event.target.value === 'entrega';
       root.querySelector('[data-delivery-fields]').hidden = !delivery;
@@ -150,7 +222,7 @@
   }
 
   async function load() {
-    const slug = decodeURIComponent(globalThis.location.pathname.split('/').filter(Boolean).pop() || '');
+    slug = decodeURIComponent(globalThis.location.pathname.split('/').filter(Boolean).pop() || '');
     try {
       const response = await SecurityHttp.secureFetch(`/api/public/tiendas/${encodeURIComponent(slug)}`);
       const data = await response.json().catch(() => ({}));

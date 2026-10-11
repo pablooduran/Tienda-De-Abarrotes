@@ -31,8 +31,8 @@ const catalog = {
 async function main() {
   const assets = new Map([
     ['/tienda/tienda-prueba', ['text/html', path.join(root, 'public', 'storefront.html')]],
-    ['/css/storefront.css?v=20261009-2', ['text/css', path.join(root, 'public', 'css', 'storefront.css')]],
-    ['/js/storefront.js?v=20261009-2', ['application/javascript', path.join(root, 'public', 'js', 'storefront.js')]],
+    ['/css/storefront.css?v=20261011-1', ['text/css', path.join(root, 'public', 'css', 'storefront.css')]],
+    ['/js/storefront.js?v=20261011-1', ['application/javascript', path.join(root, 'public', 'js', 'storefront.js')]],
     ['/js/http-security.js', ['application/javascript', path.join(root, 'public', 'js', 'http-security.js')]],
     ['/assets/administrau-icon.png', ['image/png', path.join(root, 'public', 'assets', 'administrau-icon.png')]]
   ]);
@@ -77,6 +77,8 @@ async function main() {
       await page.getByRole('button', { name: 'Continuar pedido' }).click();
       await page.getByText('Entrega a domicilio', { exact: true }).click();
       assert.strictEqual(await page.getByLabel('Dirección de entrega').isVisible(), true);
+      assert.strictEqual(await page.getByRole('button', { name: 'Buscar cliente' }).count(), 1);
+      assert.strictEqual(await page.getByRole('button', { name: 'Enviar pedido a la tienda' }).count(), 1);
       assert.strictEqual(await page.getByText('Noche', { exact: true }).count(), 1);
       assert.strictEqual(await page.getByText('QR', { exact: true }).count(), 1);
       await page.getByRole('button', { name: 'Cerrar' }).click();

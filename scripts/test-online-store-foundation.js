@@ -12,6 +12,7 @@ const { createOnlineStoreService, publicProduct } = require('../services/online-
 const root = path.resolve(__dirname, '..');
 const migration = fs.readFileSync(path.join(root, 'database', 'migrations', '031_tienda_online_base.sql'), 'utf8');
 const visibilityMigration = fs.readFileSync(path.join(root, 'database', 'migrations', '032_catalogo_online_visible_por_defecto.sql'), 'utf8');
+const ordersMigration = fs.readFileSync(path.join(root, 'database', 'migrations', '033_pedidos_tienda_online.sql'), 'utf8');
 const schema = fs.readFileSync(path.join(root, 'database', 'tienda_abarrotes.sql'), 'utf8');
 const server = fs.readFileSync(path.join(root, 'server.js'), 'utf8');
 const migrator = fs.readFileSync(path.join(root, 'scripts', 'migrate-db.js'), 'utf8');
@@ -34,6 +35,12 @@ assert(migrator.includes("'032_catalogo_online_visible_por_defecto.sql':"));
 assert(migrator.includes("columnDefinitionMatches(details.publicado"));
 assert(visibilityMigration.includes('ALTER COLUMN publicado SET DEFAULT 1'));
 assert(schema.includes('publicado TINYINT(1) NOT NULL DEFAULT 1'));
+for (const sql of [ordersMigration, schema]) {
+  assert(sql.includes('CREATE TABLE IF NOT EXISTS pedidoTiendaOnline'));
+  assert(sql.includes('CREATE TABLE IF NOT EXISTS detallePedidoTiendaOnline'));
+  assert(sql.includes('fk_detallePedidoOnline_pedido'));
+}
+assert(migrator.includes("'033_pedidos_tienda_online.sql':"));
 assert(app.includes("features.includes('portal_clientes')"));
 assert(ownerUi.includes('/api/tienda-online/productos/'));
 assert(ownerUi.includes('Todos se muestran por defecto'));
@@ -43,6 +50,9 @@ assert(!ownerUi.includes('Permitir sustitución'));
 assert(publicUi.includes('/api/public/tiendas/'));
 assert(publicUi.includes('data-cart-action'));
 assert(publicUi.includes('data-quantity-dialog'));
+assert(publicUi.includes('/clientes/buscar'));
+assert(publicUi.includes('/pedidos'));
+assert(ownerUi.includes('Pedidos recibidos'));
 assert(!publicUi.includes('stockUnidadesTotal'));
 
 const safeProduct = publicProduct({
@@ -121,7 +131,57 @@ async function serviceContract() {
   assert(calls.every((call) => !call.params?.includes(undefined)));
 }
 
-serviceContract()
+async function orderContract() {
+  const writes = [];
+  const connection = {
+    async beginTransaction() { writes.push('begin'); },
+    async commit() { writes.push('commit'); },
+    async rollback() { writes.push('rollback'); },
+    release() { writes.push('release'); },
+    async query(sql, params) {
+      if (sql.startsWith('SELECT idTienda FROM tienda')) return [[{ idTienda: 7 }]];
+      if (sql.includes('COUNT(*) total FROM pedidoTiendaOnline')) return [[{ total: 0 }]];
+      if (sql.includes('FROM producto p') && sql.includes('FOR UPDATE')) return [[{
+        idProducto: 11, nombre: 'Leche', unidadMedida: 'unidad', precioVenta: 8.5,
+        stockUnidadesTotal: 5, publicado: 1
+      }]];
+      if (sql.includes('FROM cliente') && sql.includes('FOR UPDATE')) return [[]];
+      if (sql.includes('INSERT INTO cliente')) { writes.push('cliente'); return [{ insertId: 55 }]; }
+      if (sql.includes('INSERT INTO pedidoTiendaOnline')) { writes.push('pedido'); return [{ insertId: 99 }]; }
+      if (sql.includes('INSERT INTO detallePedidoTiendaOnline')) { writes.push('detalle'); return [{ insertId: 100 }]; }
+      throw new Error(`Consulta inesperada: ${sql.slice(0, 80)} ${JSON.stringify(params)}`);
+    }
+  };
+  const database = {
+    async getConnection() { return connection; },
+    async query(sql, params) {
+      if (sql.includes('FROM tienda t') && sql.includes('configuracionTiendaOnline')) return [[{
+        idTienda: 7, slug: 'tienda-prueba', nombre: 'Tienda Prueba', nombreMostrado: 'Mi Tienda',
+        activa: 1, permiteRecojo: 1, permiteEntrega: 1, permiteEfectivo: 1, permiteQr: 1,
+        pedidoMinimo: 20, costoEntrega: 5, tiempoPreparacionMinutos: 30
+      }]];
+      throw new Error(`Consulta inesperada: ${sql.slice(0, 80)} ${JSON.stringify(params)}`);
+    }
+  };
+  const service = createOnlineStoreService({
+    database,
+    clock: () => '2026-10-11 11:30:00',
+    planLimitEnforcer: async (_connection, idTienda, entity) => {
+      assert.strictEqual(idTienda, 7);
+      assert.strictEqual(entity, 'clientes');
+    },
+    subscriptionResolver: async () => ({ estadoAcceso: 'completo', caracteristicas: ['portal_clientes'], plan: { codigo: 'standard' } })
+  });
+  const result = await service.createPublicOrder('tienda-prueba', {
+    telefono: '76543210', nombre: 'Cliente Nuevo', tipoEntrega: 'entrega',
+    direccionEntrega: 'Zona central', franjaEntrega: 'noche', metodoPago: 'qr',
+    productos: [{ idProducto: 11, cantidad: 2 }]
+  });
+  assert.strictEqual(result.pedido.total, 22);
+  assert.deepStrictEqual(writes, ['begin', 'cliente', 'pedido', 'detalle', 'commit', 'release']);
+}
+
+Promise.all([serviceContract(), orderContract()])
   .then(() => console.log('test:online-store-foundation OK'))
   .catch((error) => {
     console.error(`Error: ${error.message}`);

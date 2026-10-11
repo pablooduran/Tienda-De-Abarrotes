@@ -1,5 +1,7 @@
+const crypto = require('crypto');
 const pool = require('../config/db');
 const { resolveSubscriptionAccess } = require('./subscription-access-service');
+const { enforcePlanLimit } = require('./subscription-service');
 const { formatLocalDateTime } = require('../utils/local-datetime');
 const { AppError } = require('../utils/app-error');
 
@@ -41,6 +43,21 @@ function integerValue(value, label, minimum, maximum, { nullable = false } = {})
     throw new AppError(400, `${label} debe estar entre ${minimum} y ${maximum}.`, 'ONLINE_STORE_INPUT_INVALID');
   }
   return parsed;
+}
+
+function normalizePhone(value) {
+  const original = cleanText(value, 30, 'El telefono', { nullable: false });
+  const normalized = original.replace(/\D/g, '');
+  if (normalized.length < 7 || normalized.length > 15) {
+    throw new AppError(400, 'Ingresa un numero de telefono valido.', 'ONLINE_STORE_PHONE_INVALID');
+  }
+  return { original, normalized };
+}
+
+function enumValue(value, allowed, label) {
+  const normalized = String(value || '').trim().toLowerCase();
+  if (!allowed.includes(normalized)) throw new AppError(400, `${label} no es valido.`, 'ONLINE_STORE_INPUT_INVALID');
+  return normalized;
 }
 
 function publicConfiguration(row) {
@@ -92,8 +109,33 @@ function publicProduct(row) {
 function createOnlineStoreService({
   database = pool,
   subscriptionResolver = resolveSubscriptionAccess,
+  planLimitEnforcer = enforcePlanLimit,
   clock = () => formatLocalDateTime()
 } = {}) {
+  async function resolvePublicStore(slugValue) {
+    const slug = String(slugValue || '').trim().toLowerCase();
+    if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(slug) || slug.length > 120) {
+      throw new AppError(404, 'La tienda no esta disponible.', 'PUBLIC_STORE_NOT_FOUND');
+    }
+    const [stores] = await database.query(
+      `SELECT t.idTienda,t.slug,t.nombre,c.nombreMostrado,
+              o.activa,o.mensajeBienvenida,o.permiteRecojo,o.permiteEntrega,
+              o.permiteEfectivo,o.permiteQr,o.pedidoMinimo,o.costoEntrega,o.tiempoPreparacionMinutos
+       FROM tienda t
+       JOIN configuracionTienda c ON c.idTienda=t.idTienda
+       JOIN configuracionTiendaOnline o ON o.idTienda=t.idTienda
+       WHERE t.slug=? AND t.activo=1 AND t.estado='activa' LIMIT 1`,
+      [slug]
+    );
+    const store = stores[0];
+    if (!store || !Number(store.activa)) throw new AppError(404, 'La tienda no esta disponible.', 'PUBLIC_STORE_NOT_FOUND');
+    const subscription = await subscriptionResolver(database, Number(store.idTienda), { materialize: false });
+    if (subscription.estadoAcceso !== 'completo' || !subscription.caracteristicas?.includes('portal_clientes')) {
+      throw new AppError(404, 'La tienda no esta disponible.', 'PUBLIC_STORE_NOT_FOUND');
+    }
+    return { store, subscription };
+  }
+
   async function getConfiguration(idTienda) {
     const storeId = positiveId(idTienda, 'La tienda');
     const [rows] = await database.query(
@@ -181,28 +223,7 @@ function createOnlineStoreService({
   }
 
   async function getPublicCatalog(slugValue) {
-    const slug = String(slugValue || '').trim().toLowerCase();
-    if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(slug) || slug.length > 120) {
-      throw new AppError(404, 'La tienda no esta disponible.', 'PUBLIC_STORE_NOT_FOUND');
-    }
-    const [stores] = await database.query(
-      `SELECT t.idTienda,t.slug,t.nombre,c.nombreMostrado,
-              o.activa,o.mensajeBienvenida,o.permiteRecojo,o.permiteEntrega,
-              o.permiteEfectivo,o.permiteQr,o.pedidoMinimo,o.costoEntrega,o.tiempoPreparacionMinutos
-       FROM tienda t
-       JOIN configuracionTienda c ON c.idTienda=t.idTienda
-       JOIN configuracionTiendaOnline o ON o.idTienda=t.idTienda
-       WHERE t.slug=? AND t.activo=1 AND t.estado='activa' LIMIT 1`,
-      [slug]
-    );
-    const store = stores[0];
-    if (!store || !Number(store.activa)) {
-      throw new AppError(404, 'La tienda no esta disponible.', 'PUBLIC_STORE_NOT_FOUND');
-    }
-    const subscription = await subscriptionResolver(database, Number(store.idTienda), { materialize: false });
-    if (subscription.estadoAcceso !== 'completo' || !subscription.caracteristicas?.includes('portal_clientes')) {
-      throw new AppError(404, 'La tienda no esta disponible.', 'PUBLIC_STORE_NOT_FOUND');
-    }
+    const { store, subscription } = await resolvePublicStore(slugValue);
     const [rows] = await database.query(
       `SELECT p.idProducto,p.nombre,p.categoria,p.unidadMedida,p.precioVenta,
               p.stockUnidadesTotal,p.stockMinimo
@@ -228,12 +249,159 @@ function createOnlineStoreService({
         costoEntrega: Number(store.costoEntrega || 0),
         tiempoPreparacionMinutos: Number(store.tiempoPreparacionMinutos || 30)
       },
+      plan: {
+        codigo: subscription.plan?.codigo || null,
+        limitePedidosMes: subscription.plan?.codigo === 'standard' ? 30 : null
+      },
       categorias: [...new Set(rows.map((row) => row.categoria))].sort((a, b) => a.localeCompare(b, 'es')),
       productos: rows.map(publicProduct)
     };
   }
 
-  return Object.freeze({ getConfiguration, updateConfiguration, listProducts, updateProduct, getPublicCatalog });
+  async function identifyPublicCustomer(slugValue, phoneValue) {
+    const { store } = await resolvePublicStore(slugValue);
+    const phone = normalizePhone(phoneValue);
+    const [rows] = await database.query(
+      `SELECT nombre,direccion FROM cliente
+       WHERE idTienda=? AND telefonoNormalizado=? AND activo=1 LIMIT 1`,
+      [store.idTienda, phone.normalized]
+    );
+    return rows[0]
+      ? { encontrado: true, cliente: { nombre: rows[0].nombre, direccion: rows[0].direccion || '' } }
+      : { encontrado: false, cliente: null };
+  }
+
+  async function createPublicOrder(slugValue, body = {}) {
+    const { store, subscription } = await resolvePublicStore(slugValue);
+    const phone = normalizePhone(body.telefono);
+    const customerName = cleanText(body.nombre, 100, 'El nombre', { nullable: false });
+    const fulfillment = enumValue(body.tipoEntrega, ['recojo', 'entrega'], 'La forma de entrega');
+    const slot = enumValue(body.franjaEntrega, ['manana', 'tarde', 'noche'], 'El horario');
+    const payment = enumValue(body.metodoPago, ['efectivo', 'qr'], 'La forma de pago');
+    const address = cleanText(body.direccionEntrega, 255, 'La direccion');
+    const notes = cleanText(body.notas, 500, 'Las notas');
+    if (fulfillment === 'recojo' && !Number(store.permiteRecojo)) throw new AppError(400, 'El recojo no esta habilitado.', 'ONLINE_STORE_DELIVERY_INVALID');
+    if (fulfillment === 'entrega' && (!Number(store.permiteEntrega) || !address)) throw new AppError(400, 'Ingresa una direccion para la entrega.', 'ONLINE_STORE_DELIVERY_INVALID');
+    if (payment === 'efectivo' && !Number(store.permiteEfectivo)) throw new AppError(400, 'El pago en efectivo no esta habilitado.', 'ONLINE_STORE_PAYMENT_INVALID');
+    if (payment === 'qr' && !Number(store.permiteQr)) throw new AppError(400, 'El pago por QR no esta habilitado.', 'ONLINE_STORE_PAYMENT_INVALID');
+    const rawItems = Array.isArray(body.productos) ? body.productos : [];
+    if (!rawItems.length || rawItems.length > 100) throw new AppError(400, 'El pedido debe incluir entre 1 y 100 productos.', 'ONLINE_STORE_ITEMS_INVALID');
+    const items = rawItems.map((item) => ({
+      idProducto: positiveId(item.idProducto, 'El producto'),
+      cantidad: integerValue(item.cantidad, 'La cantidad', 1, 10000)
+    }));
+    if (new Set(items.map((item) => item.idProducto)).size !== items.length) throw new AppError(400, 'No repitas productos en el pedido.', 'ONLINE_STORE_ITEMS_INVALID');
+
+    const connection = database.getConnection ? await database.getConnection() : database;
+    try {
+      await connection.beginTransaction?.();
+      await connection.query('SELECT idTienda FROM tienda WHERE idTienda=? FOR UPDATE', [store.idTienda]);
+      if (subscription.plan?.codigo === 'standard') {
+        const [quotaRows] = await connection.query(
+          `SELECT COUNT(*) total FROM pedidoTiendaOnline
+           WHERE idTienda=? AND creadoEn>=DATE_FORMAT(?, '%Y-%m-01 00:00:00') AND estado<>'cancelado'`,
+          [store.idTienda, clock()]
+        );
+        if (Number(quotaRows[0]?.total || 0) >= 30) throw new AppError(403, 'El plan Standard alcanzo sus 30 pedidos online del mes. Puedes pasar a Pro para recibir pedidos sin limite.', 'ONLINE_STORE_MONTHLY_LIMIT');
+      }
+      const placeholders = items.map(() => '?').join(',');
+      const [products] = await connection.query(
+        `SELECT p.idProducto,p.nombre,p.unidadMedida,p.precioVenta,p.stockUnidadesTotal,
+                COALESCE(o.publicado,1) publicado
+         FROM producto p
+         LEFT JOIN productoCatalogoOnline o ON o.idTienda=p.idTienda AND o.idProducto=p.idProducto
+         WHERE p.idTienda=? AND p.idProducto IN (${placeholders}) AND p.activo=1 FOR UPDATE`,
+        [store.idTienda, ...items.map((item) => item.idProducto)]
+      );
+      const byId = new Map(products.map((product) => [Number(product.idProducto), product]));
+      let subtotalCents = 0;
+      for (const item of items) {
+        const product = byId.get(item.idProducto);
+        if (!product || !Number(product.publicado) || Number(product.stockUnidadesTotal) < item.cantidad) {
+          throw new AppError(409, 'Uno de los productos ya no tiene disponibilidad suficiente. Revisa el carrito.', 'ONLINE_STORE_STOCK_CHANGED');
+        }
+        subtotalCents += Math.round(Number(product.precioVenta) * 100) * item.cantidad;
+      }
+      const subtotal = subtotalCents / 100;
+      const freeFrom = Number(store.pedidoMinimo || 0);
+      const deliveryCost = fulfillment === 'entrega' && (freeFrom <= 0 || subtotal < freeFrom) ? Number(store.costoEntrega || 0) : 0;
+      const [customers] = await connection.query(
+        'SELECT idCliente,nombre,direccion FROM cliente WHERE idTienda=? AND telefonoNormalizado=? AND activo=1 LIMIT 1 FOR UPDATE',
+        [store.idTienda, phone.normalized]
+      );
+      let customerId = customers[0]?.idCliente || null;
+      if (!customerId) {
+        await planLimitEnforcer(connection, store.idTienda, 'clientes');
+        const now = clock();
+        const [createdCustomer] = await connection.query(
+          `INSERT INTO cliente (idTienda,nombre,telefono,direccion,telefonoNormalizado,permiteFiado,canalPreferido,aceptaRecordatorios,activo,creadoEn,actualizadoEn)
+           VALUES (?,?,?,?,?,0,'whatsapp',1,1,?,?)`,
+          [store.idTienda, customerName, phone.original, address, phone.normalized, now, now]
+        );
+        customerId = createdCustomer.insertId;
+      }
+      const code = crypto.randomBytes(6).toString('hex').toUpperCase();
+      const now = clock();
+      const [created] = await connection.query(
+        `INSERT INTO pedidoTiendaOnline
+         (idTienda,codigoPublico,idCliente,nombreCliente,telefonoCliente,telefonoNormalizado,direccionEntrega,tipoEntrega,franjaEntrega,metodoPago,estado,estadoPago,subtotal,costoEntrega,total,notasCliente,creadoEn,actualizadoEn)
+         VALUES (?,?,?,?,?,?,?,?,?,?,'pendiente','pendiente',?,?,?,?,?,?)`,
+        [store.idTienda, code, customerId, customers[0]?.nombre || customerName, phone.original, phone.normalized,
+          fulfillment === 'entrega' ? address : null, fulfillment, slot, payment, subtotal, deliveryCost,
+          subtotal + deliveryCost, notes, now, now]
+      );
+      for (const item of items) {
+        const product = byId.get(item.idProducto);
+        const price = Number(product.precioVenta);
+        await connection.query(
+          `INSERT INTO detallePedidoTiendaOnline
+           (idTienda,idPedidoOnline,idProducto,nombreProductoSnapshot,unidadMedidaSnapshot,cantidad,precioUnitario,subtotal)
+           VALUES (?,?,?,?,?,?,?,?)`,
+          [store.idTienda, created.insertId, item.idProducto, product.nombre, product.unidadMedida, item.cantidad, price, price * item.cantidad]
+        );
+      }
+      await connection.commit?.();
+      return { pedido: { codigo: code, estado: 'pendiente', total: subtotal + deliveryCost } };
+    } catch (error) {
+      await connection.rollback?.();
+      throw error;
+    } finally {
+      connection.release?.();
+    }
+  }
+
+  async function listOrders(idTienda, query = {}) {
+    const storeId = positiveId(idTienda, 'La tienda');
+    const status = String(query.estado || 'activos');
+    const condition = status === 'todos' ? '' : status === 'activos' ? "AND p.estado NOT IN ('entregado','cancelado')" : 'AND p.estado=?';
+    const params = status === 'todos' || status === 'activos' ? [storeId] : [storeId, enumValue(status, ['pendiente','confirmado','preparando','listo','entregado','cancelado'], 'El estado')];
+    const [rows] = await database.query(
+      `SELECT p.* FROM pedidoTiendaOnline p WHERE p.idTienda=? ${condition} ORDER BY p.creadoEn DESC LIMIT 200`, params
+    );
+    if (!rows.length) return { pedidos: [] };
+    const [details] = await database.query(
+      `SELECT * FROM detallePedidoTiendaOnline WHERE idTienda=? AND idPedidoOnline IN (${rows.map(() => '?').join(',')}) ORDER BY idDetallePedidoOnline`,
+      [storeId, ...rows.map((row) => row.idPedidoOnline)]
+    );
+    return { pedidos: rows.map((row) => ({ ...row, productos: details.filter((item) => Number(item.idPedidoOnline) === Number(row.idPedidoOnline)) })) };
+  }
+
+  async function updateOrder(context, idPedidoOnline, body = {}) {
+    const idTienda = positiveId(context?.idTienda, 'La tienda');
+    const idAdministrador = positiveId(context?.idAdministrador, 'El administrador');
+    const orderId = positiveId(idPedidoOnline, 'El pedido');
+    const status = enumValue(body.estado, ['pendiente','confirmado','preparando','listo','entregado','cancelado'], 'El estado');
+    const paymentStatus = enumValue(body.estadoPago, ['pendiente','pagado'], 'El estado de pago');
+    const [result] = await database.query(
+      `UPDATE pedidoTiendaOnline SET estado=?,estadoPago=?,actualizadoEn=?,idAdministradorActualiza=?
+       WHERE idTienda=? AND idPedidoOnline=?`,
+      [status, paymentStatus, clock(), idAdministrador, idTienda, orderId]
+    );
+    if (!result.affectedRows) throw new AppError(404, 'El pedido no existe.', 'ONLINE_STORE_ORDER_NOT_FOUND');
+    return { actualizado: true };
+  }
+
+  return Object.freeze({ getConfiguration, updateConfiguration, listProducts, updateProduct, getPublicCatalog, identifyPublicCustomer, createPublicOrder, listOrders, updateOrder });
 }
 
 const onlineStoreService = createOnlineStoreService();

@@ -1355,6 +1355,28 @@ const migrationRequirements = {
     columns: {
       productoCatalogoOnline: ['publicado']
     }
+  },
+  '033_pedidos_tienda_online.sql': {
+    columns: {
+      pedidoTiendaOnline: ['idPedidoOnline', 'idTienda', 'codigoPublico', 'idCliente', 'nombreCliente', 'telefonoNormalizado', 'tipoEntrega', 'franjaEntrega', 'metodoPago', 'estado', 'estadoPago', 'subtotal', 'costoEntrega', 'total', 'creadoEn', 'actualizadoEn'],
+      detallePedidoTiendaOnline: ['idDetallePedidoOnline', 'idTienda', 'idPedidoOnline', 'idProducto', 'nombreProductoSnapshot', 'cantidad', 'precioUnitario', 'subtotal']
+    },
+    indexes: [
+      ['pedidoTiendaOnline', 'uq_pedidoOnline_codigo', ['codigoPublico'], true],
+      ['pedidoTiendaOnline', 'idx_pedidoOnline_tienda_estado_fecha', ['idTienda', 'estado', 'creadoEn'], false],
+      ['detallePedidoTiendaOnline', 'uq_detallePedidoOnline_producto', ['idTienda', 'idPedidoOnline', 'idProducto'], true]
+    ],
+    checks: [
+      ['pedidoTiendaOnline', 'chk_pedidoOnline_importes'],
+      ['detallePedidoTiendaOnline', 'chk_detallePedidoOnline_cantidad'],
+      ['detallePedidoTiendaOnline', 'chk_detallePedidoOnline_importes']
+    ],
+    foreignKeyConstraints: [
+      ['pedidoTiendaOnline', 'fk_pedidoOnline_tienda', ['idTienda'], 'tienda', ['idTienda'], 'RESTRICT', 'RESTRICT'],
+      ['pedidoTiendaOnline', 'fk_pedidoOnline_cliente', ['idTienda', 'idCliente'], 'cliente', ['idTienda', 'idCliente'], 'RESTRICT', 'RESTRICT'],
+      ['detallePedidoTiendaOnline', 'fk_detallePedidoOnline_pedido', ['idTienda', 'idPedidoOnline'], 'pedidoTiendaOnline', ['idTienda', 'idPedidoOnline'], 'RESTRICT', 'RESTRICT'],
+      ['detallePedidoTiendaOnline', 'fk_detallePedidoOnline_producto', ['idTienda', 'idProducto'], 'producto', ['idTienda', 'idProducto'], 'RESTRICT', 'RESTRICT']
+    ]
   }
 };
 
@@ -4214,7 +4236,8 @@ async function main() {
               '029_sincronizar_snapshot_funciones_plan.sql',
               '030_equipo_colaborativo_pro.sql',
               '031_tienda_online_base.sql',
-              '032_catalogo_online_visible_por_defecto.sql'
+              '032_catalogo_online_visible_por_defecto.sql',
+              '033_pedidos_tienda_online.sql'
             ].includes(file)
             && !await requirementsSatisfied(connection, file);
         if (registeredMigrationIsIncomplete) {
@@ -4257,7 +4280,8 @@ async function main() {
           '029_sincronizar_snapshot_funciones_plan.sql',
           '030_equipo_colaborativo_pro.sql',
           '031_tienda_online_base.sql',
-          '032_catalogo_online_visible_por_defecto.sql'
+          '032_catalogo_online_visible_por_defecto.sql',
+          '033_pedidos_tienda_online.sql'
         ].includes(file)) {
           await connection.query('INSERT IGNORE INTO schema_migrations (nombre) VALUES (?)', [file]);
           const [finalRecord] = await connection.query(
@@ -4357,7 +4381,8 @@ async function main() {
           '029_sincronizar_snapshot_funciones_plan.sql',
           '030_equipo_colaborativo_pro.sql',
           '031_tienda_online_base.sql',
-          '032_catalogo_online_visible_por_defecto.sql'
+          '032_catalogo_online_visible_por_defecto.sql',
+          '033_pedidos_tienda_online.sql'
         ].includes(file)
           ? structureElementFromStatement(statement)
           : null;
@@ -4441,7 +4466,8 @@ async function main() {
         '018_auditoria_administrativa_critica.sql',
         '030_equipo_colaborativo_pro.sql',
         '031_tienda_online_base.sql',
-        '032_catalogo_online_visible_por_defecto.sql'
+        '032_catalogo_online_visible_por_defecto.sql',
+        '033_pedidos_tienda_online.sql'
       ].includes(file)) {
         await connection.query('INSERT IGNORE INTO schema_migrations (nombre) VALUES (?)', [file]);
         const [finalRecord] = await connection.query(
