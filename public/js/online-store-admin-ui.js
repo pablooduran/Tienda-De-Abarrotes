@@ -18,6 +18,8 @@
     let search = '';
     let activeView = 'orders';
     let orderStatus = 'todos';
+    let announcementTimer = null;
+    let announcementSequence = 0;
 
     function messageFor(error) {
       return patterns?.messageFor?.(error) || error?.message || 'No se pudo completar la operación.';
@@ -87,8 +89,19 @@
     function setAnnouncement(text, error = false) {
       const target = root.querySelector('[data-online-announcement]');
       if (!target) return;
+      announcementSequence += 1;
+      const sequence = announcementSequence;
+      if (announcementTimer) global.clearTimeout(announcementTimer);
       target.textContent = text;
       target.classList.toggle('error', error);
+      announcementTimer = global.setTimeout(() => {
+        if (sequence !== announcementSequence) return;
+        const currentTarget = root.querySelector('[data-online-announcement]');
+        if (!currentTarget) return;
+        currentTarget.textContent = '';
+        currentTarget.classList.remove('error');
+        announcementTimer = null;
+      }, 3000);
     }
 
     function orderLabel(value) {
