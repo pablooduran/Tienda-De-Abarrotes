@@ -108,6 +108,10 @@
       return ({ pendiente: 'Nuevo', confirmado: 'Confirmado', preparando: 'Preparando', listo: 'Listo para entregar', entregado: 'Entregado', cancelado: 'Cancelado' })[value] || value;
     }
 
+    function orderNumberLabel(order) {
+      return String(Number(order.numeroPedido || order.idPedidoOnline || 0)).padStart(3, '0');
+    }
+
     function nextOrderAction(order) {
       if (['pendiente', 'confirmado'].includes(order.estado)) return { label: 'Alistar pedido', estado: 'preparando', estadoPago: 'pendiente' };
       if (order.estado === 'preparando') return { label: 'Pedido terminado', estado: 'listo', estadoPago: 'pendiente' };
@@ -163,12 +167,12 @@
         const progress = ['pendiente', 'preparando', 'listo', 'entregado'];
         const progressIndex = progress.indexOf(progressStatus);
         return `<article class="online-order-card" data-online-order="${order.idPedidoOnline}">
-          <header><div><span class="eyebrow">PEDIDO ${escapeHtml(order.codigoPublico)}</span><h5>${escapeHtml(order.nombreCliente)}</h5><p>${escapeHtml(order.telefonoCliente)} · ${order.tipoEntrega === 'entrega' ? 'Entrega a domicilio' : 'Recojo en tienda'} · ${order.franjaEntrega}</p></div><strong>Bs ${Number(order.total).toFixed(2)}</strong></header>
+          <header><div><span class="eyebrow">PEDIDO ${orderNumberLabel(order)}</span><h5>${escapeHtml(order.nombreCliente)}</h5><p>${escapeHtml(order.telefonoCliente)} · ${order.tipoEntrega === 'entrega' ? 'Entrega a domicilio' : 'Recojo en tienda'} · ${order.franjaEntrega}</p></div><strong>Bs ${Number(order.total).toFixed(2)}</strong></header>
           ${productDetails}
           ${order.direccionEntrega ? `<p class="online-order-address"><strong>Dirección:</strong> ${escapeHtml(order.direccionEntrega)}</p>` : ''}
           <ol class="online-order-progress${order.estado === 'cancelado' ? ' is-cancelled' : ''}" aria-label="Progreso del pedido">${progress.map((state, index) => `<li class="${index < progressIndex ? 'done' : index === progressIndex ? 'active' : ''}"><i aria-hidden="true">${index < progressIndex ? '✓' : index + 1}</i><span>${({ pendiente: 'Nuevo', preparando: 'Preparando', listo: 'Listo', entregado: 'Entregado' })[state]}</span></li>`).join('')}</ol>
           ${order.estado === 'cancelado' ? '<p class="online-order-cancelled">Pedido cancelado</p>' : ''}
-          <footer><div class="online-payment-status"><span>Pago</span><strong>${order.estadoPago === 'pagado' ? 'Pagado' : 'Pendiente'}</strong></div><div class="online-order-actions">${action ? `<button type="button" data-order-advance data-next-state="${action.estado}" data-next-payment="${action.estadoPago}" ${isReadOnly() ? 'disabled' : ''}>${action.label}</button>` : order.estado === 'entregado' ? '<span class="online-order-finished">Pedido completado</span>' : ''}${!finalState ? `<button type="button" class="online-order-cancel-button" data-order-cancel ${isReadOnly() ? 'disabled' : ''}>Cancelar pedido</button>` : ''}</div></footer>
+          ${order.estado === 'cancelado' ? '' : `<footer><div class="online-payment-status"><span>Estado</span><strong>${order.estadoPago === 'pagado' ? 'Pagado' : 'Pendiente'}</strong></div><div class="online-order-actions">${action ? `<button type="button" data-order-advance data-next-state="${action.estado}" data-next-payment="${action.estadoPago}" ${isReadOnly() ? 'disabled' : ''}>${action.label}</button>` : order.estado === 'entregado' ? '<span class="online-order-finished">Pedido completado</span>' : ''}${!finalState ? `<button type="button" class="online-order-cancel-button" data-order-cancel ${isReadOnly() ? 'disabled' : ''}>Cancelar pedido</button>` : ''}</div></footer>`}
         </article>`;
       }).join('');
       target.querySelectorAll('[data-online-order]').forEach((card) => {

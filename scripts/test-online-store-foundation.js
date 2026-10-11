@@ -74,6 +74,9 @@ assert(ownerUi.includes('order.productos.length > 12'));
 assert(ownerUi.includes('data-online-status="finalizados"'));
 assert(!ownerUi.includes('data-online-status="confirmado"'));
 assert(ownerUi.includes('online-order-progress'));
+assert(ownerUi.includes('<span>Estado</span>'));
+assert(ownerUi.includes("order.estado === 'cancelado' ? '' : `<footer>"));
+assert(ownerUi.includes("padStart(3, '0')"));
 assert(fs.readFileSync(path.join(root, 'services', 'online-store-service.js'), 'utf8').includes('ONLINE_STORE_ORDER_INVALID_TRANSITION'));
 assert(ownerUi.includes('global.setTimeout(() =>'));
 assert(ownerUi.includes('}, 2000);'));
@@ -226,6 +229,7 @@ async function orderContract() {
     productos: [{ idProducto: 11, cantidad: 2 }]
   });
   assert.strictEqual(result.pedido.total, 22);
+  assert.strictEqual(result.pedido.codigo, '001');
   assert.deepStrictEqual(writes, ['begin', 'cliente', 'pedido', 'detalle', 'commit', 'release']);
 }
 

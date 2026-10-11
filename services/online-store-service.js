@@ -311,6 +311,11 @@ function createOnlineStoreService({
     try {
       await connection.beginTransaction?.();
       await connection.query('SELECT idTienda FROM tienda WHERE idTienda=? FOR UPDATE', [store.idTienda]);
+      const [sequenceRows] = await connection.query(
+        'SELECT COUNT(*) total FROM pedidoTiendaOnline WHERE idTienda=?',
+        [store.idTienda]
+      );
+      const orderNumber = Number(sequenceRows[0]?.total || 0) + 1;
       if (subscription.plan?.codigo === 'standard') {
         const [quotaRows] = await connection.query(
           `SELECT COUNT(*) total FROM pedidoTiendaOnline
@@ -381,7 +386,7 @@ function createOnlineStoreService({
         );
       }
       await connection.commit?.();
-      return { pedido: { codigo: code, estado: 'pendiente', total: subtotal + deliveryCost } };
+      return { pedido: { codigo: String(orderNumber).padStart(3, '0'), numero: orderNumber, estado: 'pendiente', total: subtotal + deliveryCost } };
     } catch (error) {
       await connection.rollback?.();
       throw error;
@@ -396,7 +401,10 @@ function createOnlineStoreService({
     const condition = status === 'todos' ? '' : status === 'activos' ? "AND p.estado NOT IN ('entregado','cancelado')" : 'AND p.estado=?';
     const params = status === 'todos' || status === 'activos' ? [storeId] : [storeId, enumValue(status, ['pendiente','confirmado','preparando','listo','entregado','cancelado'], 'El estado')];
     const [rows] = await database.query(
-      `SELECT p.* FROM pedidoTiendaOnline p WHERE p.idTienda=? ${condition} ORDER BY p.creadoEn DESC LIMIT 200`, params
+      `SELECT p.*,
+              (SELECT COUNT(*) FROM pedidoTiendaOnline secuencia
+               WHERE secuencia.idTienda=p.idTienda AND secuencia.idPedidoOnline<=p.idPedidoOnline) numeroPedido
+       FROM pedidoTiendaOnline p WHERE p.idTienda=? ${condition} ORDER BY p.creadoEn DESC LIMIT 200`, params
     );
     if (!rows.length) return { pedidos: [] };
     const [details] = await database.query(
