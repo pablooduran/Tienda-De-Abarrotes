@@ -79,6 +79,10 @@ assert(ownerUi.includes('<span>Estado</span>'));
 assert(ownerUi.includes("order.estado === 'cancelado' ? '' : `<footer>"));
 assert(ownerUi.includes("padStart(3, '0')"));
 assert(fs.readFileSync(path.join(root, 'services', 'online-store-service.js'), 'utf8').includes('ONLINE_STORE_ORDER_INVALID_TRANSITION'));
+assert(fs.readFileSync(path.join(root, 'services', 'online-store-service.js'), 'utf8').includes('Salida por pedido de tienda online listo.'));
+assert(fs.readFileSync(path.join(root, 'services', 'online-store-service.js'), 'utf8').includes('Reposición por cancelación de pedido de tienda online.'));
+assert(ownerUi.includes('El stock se descontó del inventario.'));
+assert(ownerUi.includes('El stock se repuso en el inventario.'));
 assert(ownerUi.includes('global.setTimeout(() =>'));
 assert(ownerUi.includes('}, 2000);'));
 assert(ownerUi.includes("currentTarget.textContent = '';"));
@@ -248,7 +252,95 @@ async function orderWorkflowContract() {
   };
   const service = createOnlineStoreService({ database, clock: () => '2026-10-11 11:45:00' });
   const result = await service.updateOrder({ idTienda: 7, idAdministrador: 3 }, 99, { estado: 'entregado', estadoPago: 'pendiente' });
-  assert.deepStrictEqual(result, { actualizado: true });
+  assert.deepStrictEqual(result, { actualizado: true, inventario: 'sin_cambios' });
+}
+
+async function orderInventoryContract() {
+  let state = 'preparando';
+  let stock = 14;
+  let movementId = 500;
+  const events = [];
+  const connection = {
+    async beginTransaction() { events.push('begin'); },
+    async commit() { events.push('commit'); },
+    async rollback() { events.push('rollback'); },
+    release() { events.push('release'); },
+    async query(sql, params) {
+      if (sql.startsWith('SELECT estado FROM pedidoTiendaOnline')) return [[{ estado: state }]];
+      if (sql.includes('FROM detallePedidoTiendaOnline d')) return [[{
+        idDetallePedidoOnline: 100,
+        idProducto: 11,
+        nombreProductoSnapshot: 'Aceite de oliva',
+        cantidad: 14,
+        stockUnidadesTotal: stock,
+        controlaLotes: 0,
+        controlaVencimiento: 0,
+        activo: 1
+      }]];
+      if (sql.startsWith('UPDATE producto SET stockUnidadesTotal')) {
+        assert.strictEqual(params[4], stock);
+        stock = Number(params[0]);
+        events.push(`stock:${stock}`);
+        return [{ affectedRows: 1 }];
+      }
+      if (sql.includes('INSERT INTO movimientoStock')) {
+        movementId += 1;
+        events.push(params[2] === 'salida' ? 'movimiento:salida' : 'movimiento:entrada');
+        return [{ insertId: movementId }];
+      }
+      if (sql.startsWith('SELECT idMovimientoStock FROM movimientoStock')) return [[{ idMovimientoStock: 501 }]];
+      if (sql.startsWith('UPDATE pedidoTiendaOnline')) {
+        state = params[0];
+        events.push(`pedido:${state}`);
+        return [{ affectedRows: 1 }];
+      }
+      throw new Error(`Consulta inesperada: ${sql.slice(0, 100)} ${JSON.stringify(params)}`);
+    }
+  };
+  const service = createOnlineStoreService({
+    database: { async getConnection() { return connection; } },
+    clock: () => '2026-10-11 12:00:00'
+  });
+  const ready = await service.updateOrder({ idTienda: 7, idAdministrador: 3 }, 99, { estado: 'listo' });
+  assert.deepStrictEqual(ready, { actualizado: true, inventario: 'descontado' });
+  assert.strictEqual(stock, 0);
+  assert.deepStrictEqual(events.slice(0, 6), ['begin', 'stock:0', 'movimiento:salida', 'pedido:listo', 'commit', 'release']);
+
+  events.length = 0;
+  const cancelled = await service.updateOrder({ idTienda: 7, idAdministrador: 3 }, 99, { estado: 'cancelado' });
+  assert.deepStrictEqual(cancelled, { actualizado: true, inventario: 'repuesto' });
+  assert.strictEqual(stock, 14);
+  assert.deepStrictEqual(events, ['begin', 'stock:14', 'movimiento:entrada', 'pedido:cancelado', 'commit', 'release']);
+}
+
+async function orderReadyShortageContract() {
+  const events = [];
+  const connection = {
+    async beginTransaction() { events.push('begin'); },
+    async rollback() { events.push('rollback'); },
+    release() { events.push('release'); },
+    async query(sql) {
+      if (sql.startsWith('SELECT estado FROM pedidoTiendaOnline')) return [[{ estado: 'preparando' }]];
+      if (sql.includes('FROM detallePedidoTiendaOnline d')) return [[{
+        idDetallePedidoOnline: 101,
+        idProducto: 12,
+        nombreProductoSnapshot: 'Aceite de oliva',
+        cantidad: 14,
+        stockUnidadesTotal: 8,
+        controlaLotes: 0,
+        controlaVencimiento: 0,
+        activo: 1
+      }]];
+      throw new Error(`No debía continuar después de detectar stock insuficiente: ${sql.slice(0, 80)}`);
+    }
+  };
+  const service = createOnlineStoreService({ database: { async getConnection() { return connection; } } });
+  await assert.rejects(
+    () => service.updateOrder({ idTienda: 7, idAdministrador: 3 }, 100, { estado: 'listo' }),
+    (error) => error.code === 'ONLINE_STORE_READY_STOCK_INSUFFICIENT'
+      && error.message.includes('el pedido necesita 14, pero solo quedan 8 unidades')
+  );
+  assert.deepStrictEqual(events, ['begin', 'rollback', 'release']);
 }
 
 async function stockShortageContract() {
@@ -291,7 +383,7 @@ async function stockShortageContract() {
   );
 }
 
-Promise.all([serviceContract(), orderContract(), orderWorkflowContract(), stockShortageContract()])
+Promise.all([serviceContract(), orderContract(), orderWorkflowContract(), orderInventoryContract(), orderReadyShortageContract(), stockShortageContract()])
   .then(() => console.log('test:online-store-foundation OK'))
   .catch((error) => {
     console.error(`Error: ${error.message}`);

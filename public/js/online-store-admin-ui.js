@@ -114,7 +114,7 @@
 
     function nextOrderAction(order) {
       if (['pendiente', 'confirmado'].includes(order.estado)) return { label: 'Alistar pedido', estado: 'preparando', estadoPago: 'pendiente' };
-      if (order.estado === 'preparando') return { label: 'Pedido terminado', estado: 'listo', estadoPago: 'pendiente' };
+      if (order.estado === 'preparando') return { label: 'Pedido terminado', estado: 'listo', estadoPago: 'pendiente', mensaje: 'Pedido listo. El stock se descontó del inventario.' };
       if (order.estado === 'listo') return { label: 'Marcar entregado', estado: 'entregado', estadoPago: 'pagado' };
       return null;
     }
@@ -166,7 +166,7 @@
         const progressStatus = order.estado === 'confirmado' ? 'preparando' : order.estado;
         const progress = ['pendiente', 'preparando', 'listo', 'entregado'];
         const progressIndex = progress.indexOf(progressStatus);
-        return `<article class="online-order-card" data-online-order="${order.idPedidoOnline}">
+        return `<article class="online-order-card" data-online-order="${order.idPedidoOnline}" data-online-state="${order.estado}">
           <header><div><span class="eyebrow">PEDIDO ${orderNumberLabel(order)}</span><h5>${escapeHtml(order.nombreCliente)}</h5><p>${escapeHtml(order.telefonoCliente)} · ${order.tipoEntrega === 'entrega' ? 'Entrega a domicilio' : 'Recojo en tienda'} · ${order.franjaEntrega}</p></div><strong>Bs ${Number(order.total).toFixed(2)}</strong></header>
           ${productDetails}
           ${order.direccionEntrega ? `<p class="online-order-address"><strong>Dirección:</strong> ${escapeHtml(order.direccionEntrega)}</p>` : ''}
@@ -178,11 +178,16 @@
       target.querySelectorAll('[data-online-order]').forEach((card) => {
         card.querySelector('[data-order-advance]')?.addEventListener('click', (event) => {
           const button = event.currentTarget;
-          void updateOrder(card, button.dataset.nextState, button.dataset.nextPayment, 'El pedido avanzó al siguiente paso.');
+          const currentOrder = orders.find((item) => Number(item.idPedidoOnline) === Number(card.dataset.onlineOrder));
+          const action = currentOrder ? nextOrderAction(currentOrder) : null;
+          void updateOrder(card, button.dataset.nextState, button.dataset.nextPayment, action?.mensaje || 'El pedido avanzó al siguiente paso.');
         });
         card.querySelector('[data-order-cancel]')?.addEventListener('click', () => {
           if (!global.confirm('¿Quieres cancelar este pedido?')) return;
-          void updateOrder(card, 'cancelado', 'pendiente', 'El pedido quedó cancelado.');
+          const message = card.dataset.onlineState === 'listo'
+            ? 'Pedido cancelado. El stock se repuso en el inventario.'
+            : 'El pedido quedó cancelado.';
+          void updateOrder(card, 'cancelado', 'pendiente', message);
         });
       });
     }

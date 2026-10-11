@@ -4,6 +4,8 @@ const { resolveSubscriptionAccess } = require('./subscription-access-service');
 const { enforcePlanLimit } = require('./subscription-service');
 const { formatLocalDateTime } = require('../utils/local-datetime');
 const { AppError } = require('../utils/app-error');
+const { insertStockMovement, movementKey } = require('./stock-movement-service');
+const { applyLotExit, insertLotMovement, prepareLotExit } = require('./lot-service');
 
 function positiveId(value, label) {
   const parsed = Number(value);
@@ -425,32 +427,212 @@ function createOnlineStoreService({
     return { pedidos: rows.map((row) => ({ ...row, productos: details.filter((item) => Number(item.idPedidoOnline) === Number(row.idPedidoOnline)) })) };
   }
 
+  async function lockOrderItems(connection, idTienda, orderId) {
+    const [items] = await connection.query(
+      `SELECT d.idDetallePedidoOnline,d.idProducto,d.nombreProductoSnapshot,d.cantidad,
+              p.nombre,p.stockUnidadesTotal,p.controlaLotes,p.controlaVencimiento,p.activo
+       FROM detallePedidoTiendaOnline d
+       JOIN producto p ON p.idTienda=d.idTienda AND p.idProducto=d.idProducto
+       WHERE d.idTienda=? AND d.idPedidoOnline=?
+       ORDER BY d.idProducto FOR UPDATE`,
+      [idTienda, orderId]
+    );
+    if (!items.length) throw new AppError(409, 'El pedido no tiene productos para descontar.', 'ONLINE_STORE_ORDER_ITEMS_MISSING');
+    return items;
+  }
+
+  async function deductOrderInventory(connection, { idTienda, idAdministrador, orderId, now }) {
+    const items = await lockOrderItems(connection, idTienda, orderId);
+    const prepared = [];
+    for (const item of items) {
+      const available = Number(item.stockUnidadesTotal || 0);
+      const quantity = Number(item.cantidad);
+      if (!Number(item.activo) || available < quantity) {
+        throw new AppError(409,
+          `${item.nombreProductoSnapshot}: el pedido necesita ${quantity}, pero solo quedan ${Math.max(0, available)} unidades. Repón stock o cancela el pedido.`,
+          'ONLINE_STORE_READY_STOCK_INSUFFICIENT');
+      }
+      prepared.push({
+        item,
+        lotExit: await prepareLotExit(connection, { idTienda, product: item, cantidad: quantity })
+      });
+    }
+    for (let index = 0; index < prepared.length; index += 1) {
+      const { item, lotExit } = prepared[index];
+      const stockBefore = Number(item.stockUnidadesTotal);
+      const stockAfter = stockBefore - Number(item.cantidad);
+      const [updated] = await connection.query(
+        `UPDATE producto SET stockUnidadesTotal=?,stock=?
+         WHERE idTienda=? AND idProducto=? AND activo=1 AND stockUnidadesTotal=?`,
+        [stockAfter, stockAfter, idTienda, item.idProducto, stockBefore]
+      );
+      if (!updated.affectedRows) {
+        throw new AppError(409, `${item.nombreProductoSnapshot}: el stock cambió mientras se preparaba el pedido. Intenta nuevamente.`, 'ONLINE_STORE_READY_STOCK_CHANGED');
+      }
+      const stockMovementId = await insertStockMovement(connection, {
+        idTienda,
+        idProducto: item.idProducto,
+        tipoMovimiento: 'salida',
+        origen: 'otro',
+        cantidad: -Number(item.cantidad),
+        stockAnterior: stockBefore,
+        stockPosterior: stockAfter,
+        cantidadOperacion: Number(item.cantidad),
+        unidadOperacion: 'unidad_base',
+        motivo: 'Salida por pedido de tienda online listo.',
+        observacion: `Pedido online ${orderId}.`,
+        referenciaTipo: 'pedido_tienda_online',
+        referenciaId: orderId,
+        claveOperacion: movementKey('pedido-online', `${orderId}:salida:${item.idDetallePedidoOnline}`),
+        idAdministrador,
+        creadoEn: now
+      });
+      await applyLotExit(connection, {
+        prepared: lotExit,
+        idTienda,
+        idProducto: item.idProducto,
+        idMovimientoStock: stockMovementId,
+        operation: `pedido-online:${orderId}:salida`,
+        detailIndex: index + 1,
+        creadoEn: now,
+        idAdministrador
+      });
+    }
+  }
+
+  async function restoreOrderLots(connection, { item, sourceMovementId, returnMovementId, idTienda, idAdministrador, orderId, detailIndex, now }) {
+    if (!Number(item.controlaLotes)) return;
+    const [allocations] = await connection.query(
+      `SELECT ml.idMovimientoLote,ml.idLoteProducto,ml.cantidad,lp.cantidadRestante
+       FROM movimientoLote ml
+       JOIN loteProducto lp ON lp.idTienda=ml.idTienda AND lp.idProducto=ml.idProducto AND lp.idLoteProducto=ml.idLoteProducto
+       WHERE ml.idTienda=? AND ml.idProducto=? AND ml.idMovimientoStock=? AND ml.cantidad<0
+       ORDER BY ml.idMovimientoLote FOR UPDATE`,
+      [idTienda, item.idProducto, sourceMovementId]
+    );
+    const allocated = allocations.reduce((sum, allocation) => sum + Math.abs(Number(allocation.cantidad)), 0);
+    if (allocated !== Number(item.cantidad)) {
+      throw new AppError(409, `${item.nombreProductoSnapshot}: no se pudo reconstruir la salida original de lotes.`, 'ONLINE_STORE_LOT_RESTORE_INCOMPLETE');
+    }
+    for (let index = 0; index < allocations.length; index += 1) {
+      const allocation = allocations[index];
+      const quantity = Math.abs(Number(allocation.cantidad));
+      const before = Number(allocation.cantidadRestante);
+      const after = before + quantity;
+      const [updated] = await connection.query(
+        `UPDATE loteProducto SET cantidadRestante=?,actualizadoEn=?,idAdministradorActualiza=?
+         WHERE idTienda=? AND idProducto=? AND idLoteProducto=? AND cantidadRestante=?`,
+        [after, now, idAdministrador, idTienda, item.idProducto, allocation.idLoteProducto, before]
+      );
+      if (!updated.affectedRows) throw new AppError(409, `${item.nombreProductoSnapshot}: un lote cambió durante la reposición.`, 'ONLINE_STORE_LOT_RESTORE_CHANGED');
+      await insertLotMovement(connection, {
+        idTienda,
+        idProducto: item.idProducto,
+        idLoteProducto: allocation.idLoteProducto,
+        idMovimientoStock: returnMovementId,
+        tipoRegistro: 'movimiento_stock',
+        cantidad: quantity,
+        cantidadAnterior: before,
+        cantidadPosterior: after,
+        claveOperacion: `ml:pedido-online:${orderId}:reintegro:d${detailIndex}:l${index + 1}`,
+        creadoEn: now,
+        idAdministrador
+      });
+    }
+  }
+
+  async function restoreOrderInventory(connection, { idTienda, idAdministrador, orderId, now }) {
+    const items = await lockOrderItems(connection, idTienda, orderId);
+    for (let index = 0; index < items.length; index += 1) {
+      const item = items[index];
+      const sourceKey = movementKey('pedido-online', `${orderId}:salida:${item.idDetallePedidoOnline}`);
+      const [sourceRows] = await connection.query(
+        `SELECT idMovimientoStock FROM movimientoStock
+         WHERE idTienda=? AND idProducto=? AND claveOperacion=? LIMIT 1 FOR UPDATE`,
+        [idTienda, item.idProducto, sourceKey]
+      );
+      if (!sourceRows[0]) throw new AppError(409, `${item.nombreProductoSnapshot}: no se encontró la salida de inventario original.`, 'ONLINE_STORE_STOCK_MOVEMENT_MISSING');
+      const stockBefore = Number(item.stockUnidadesTotal);
+      const stockAfter = stockBefore + Number(item.cantidad);
+      const [updated] = await connection.query(
+        `UPDATE producto SET stockUnidadesTotal=?,stock=?
+         WHERE idTienda=? AND idProducto=? AND stockUnidadesTotal=?`,
+        [stockAfter, stockAfter, idTienda, item.idProducto, stockBefore]
+      );
+      if (!updated.affectedRows) throw new AppError(409, `${item.nombreProductoSnapshot}: el stock cambió durante la reposición.`, 'ONLINE_STORE_RESTORE_STOCK_CHANGED');
+      const returnMovementId = await insertStockMovement(connection, {
+        idTienda,
+        idProducto: item.idProducto,
+        tipoMovimiento: 'entrada',
+        origen: 'otro',
+        cantidad: Number(item.cantidad),
+        stockAnterior: stockBefore,
+        stockPosterior: stockAfter,
+        cantidadOperacion: Number(item.cantidad),
+        unidadOperacion: 'unidad_base',
+        motivo: 'Reposición por cancelación de pedido de tienda online.',
+        observacion: `Pedido online ${orderId}.`,
+        referenciaTipo: 'pedido_tienda_online',
+        referenciaId: orderId,
+        claveOperacion: movementKey('pedido-online', `${orderId}:reintegro:${item.idDetallePedidoOnline}`),
+        idAdministrador,
+        creadoEn: now
+      });
+      await restoreOrderLots(connection, {
+        item,
+        sourceMovementId: sourceRows[0].idMovimientoStock,
+        returnMovementId,
+        idTienda,
+        idAdministrador,
+        orderId,
+        detailIndex: index + 1,
+        now
+      });
+    }
+  }
+
   async function updateOrder(context, idPedidoOnline, body = {}) {
     const idTienda = positiveId(context?.idTienda, 'La tienda');
     const idAdministrador = positiveId(context?.idAdministrador, 'El administrador');
     const orderId = positiveId(idPedidoOnline, 'El pedido');
     const status = enumValue(body.estado, ['pendiente','confirmado','preparando','listo','entregado','cancelado'], 'El estado');
-    const [orders] = await database.query(
-      'SELECT estado FROM pedidoTiendaOnline WHERE idTienda=? AND idPedidoOnline=? LIMIT 1',
-      [idTienda, orderId]
-    );
-    if (!orders.length) throw new AppError(404, 'El pedido no existe.', 'ONLINE_STORE_ORDER_NOT_FOUND');
-    const currentStatus = orders[0].estado;
-    const nextStatus = { pendiente: 'preparando', confirmado: 'preparando', preparando: 'listo', listo: 'entregado' }[currentStatus];
-    if (status !== 'cancelado' && status !== nextStatus) {
-      throw new AppError(409, 'El pedido debe avanzar al siguiente paso.', 'ONLINE_STORE_ORDER_INVALID_TRANSITION');
+    const connection = database.getConnection ? await database.getConnection() : database;
+    try {
+      await connection.beginTransaction?.();
+      const [orders] = await connection.query(
+        'SELECT estado FROM pedidoTiendaOnline WHERE idTienda=? AND idPedidoOnline=? LIMIT 1 FOR UPDATE',
+        [idTienda, orderId]
+      );
+      if (!orders.length) throw new AppError(404, 'El pedido no existe.', 'ONLINE_STORE_ORDER_NOT_FOUND');
+      const currentStatus = orders[0].estado;
+      const nextStatus = { pendiente: 'preparando', confirmado: 'preparando', preparando: 'listo', listo: 'entregado' }[currentStatus];
+      if (status !== 'cancelado' && status !== nextStatus) {
+        throw new AppError(409, 'El pedido debe avanzar al siguiente paso.', 'ONLINE_STORE_ORDER_INVALID_TRANSITION');
+      }
+      if (['entregado', 'cancelado'].includes(currentStatus)) {
+        throw new AppError(409, 'Este pedido ya está cerrado.', 'ONLINE_STORE_ORDER_CLOSED');
+      }
+      const now = clock();
+      if (currentStatus === 'preparando' && status === 'listo') {
+        await deductOrderInventory(connection, { idTienda, idAdministrador, orderId, now });
+      } else if (currentStatus === 'listo' && status === 'cancelado') {
+        await restoreOrderInventory(connection, { idTienda, idAdministrador, orderId, now });
+      }
+      const paymentStatus = status === 'entregado' ? 'pagado' : 'pendiente';
+      const [result] = await connection.query(
+        `UPDATE pedidoTiendaOnline SET estado=?,estadoPago=?,actualizadoEn=?,idAdministradorActualiza=?
+         WHERE idTienda=? AND idPedidoOnline=? AND estado=?`,
+        [status, paymentStatus, now, idAdministrador, idTienda, orderId, currentStatus]
+      );
+      if (!result.affectedRows) throw new AppError(409, 'El pedido no pudo actualizarse.', 'ONLINE_STORE_ORDER_UPDATE_CONFLICT');
+      await connection.commit?.();
+      return { actualizado: true, inventario: status === 'listo' ? 'descontado' : (currentStatus === 'listo' && status === 'cancelado' ? 'repuesto' : 'sin_cambios') };
+    } catch (error) {
+      await connection.rollback?.();
+      throw error;
+    } finally {
+      connection.release?.();
     }
-    if (['entregado', 'cancelado'].includes(currentStatus)) {
-      throw new AppError(409, 'Este pedido ya está cerrado.', 'ONLINE_STORE_ORDER_CLOSED');
-    }
-    const paymentStatus = status === 'entregado' ? 'pagado' : 'pendiente';
-    const [result] = await database.query(
-      `UPDATE pedidoTiendaOnline SET estado=?,estadoPago=?,actualizadoEn=?,idAdministradorActualiza=?
-       WHERE idTienda=? AND idPedidoOnline=?`,
-      [status, paymentStatus, clock(), idAdministrador, idTienda, orderId]
-    );
-    if (!result.affectedRows) throw new AppError(409, 'El pedido no pudo actualizarse.', 'ONLINE_STORE_ORDER_UPDATE_CONFLICT');
-    return { actualizado: true };
   }
 
   return Object.freeze({ getConfiguration, updateConfiguration, listProducts, updateProduct, getPublicCatalog, identifyPublicCustomer, createPublicOrder, listOrders, updateOrder });
