@@ -20,6 +20,7 @@ const ownerUi = fs.readFileSync(path.join(root, 'public', 'js', 'online-store-ad
 const publicUi = fs.readFileSync(path.join(root, 'public', 'js', 'storefront.js'), 'utf8');
 const app = fs.readFileSync(path.join(root, 'public', 'js', 'app.js'), 'utf8');
 const ownerStyles = fs.readFileSync(path.join(root, 'public', 'css', 'styles.css'), 'utf8');
+const onlineStoreRoutes = fs.readFileSync(path.join(root, 'routes', 'online-store.js'), 'utf8');
 
 for (const sql of [migration, schema]) {
   assert(sql.includes('CREATE TABLE IF NOT EXISTS configuracionTiendaOnline'));
@@ -82,6 +83,11 @@ assert(ownerUi.includes('Sí, cancelar pedido'));
 assert(ownerUi.includes('Las unidades reservadas volverán a quedar disponibles en el stock.'));
 assert(ownerUi.includes('Los productos ya descontados volverán al stock automáticamente.'));
 assert(!ownerUi.includes("global.confirm('¿Quieres cancelar este pedido?')"));
+assert(ownerUi.includes('data-announcement-close'));
+assert(ownerUi.includes("if (error) {\n        announcementTimer = null;\n        return;"));
+assert(ownerUi.includes('Editar productos del pedido'));
+assert(ownerUi.includes('/productos`, {'));
+assert(onlineStoreRoutes.includes("'/pedidos/:idPedidoOnline/productos'"));
 assert(ownerUi.includes('<span>Estado</span>'));
 assert(ownerUi.includes("order.estado === 'cancelado' ? '' : `<footer>"));
 assert(ownerUi.includes("padStart(3, '0')"));
@@ -98,7 +104,7 @@ assert(ownerUi.includes('El stock se repuso en el inventario.'));
 assert(ownerUi.includes('La venta ya aparece en tus reportes.'));
 assert(ownerUi.includes('global.setTimeout(() =>'));
 assert(ownerUi.includes('}, 2000);'));
-assert(ownerUi.includes("currentTarget.textContent = '';"));
+assert(ownerUi.includes("currentTarget.innerHTML = '';"));
 assert(ownerUi.indexOf('data-online-announcement') < ownerUi.indexOf('data-online-panel="orders"'));
 assert(ownerStyles.includes('html:not([data-theme="dark"]) .online-order-filters button.active'));
 assert(ownerStyles.lastIndexOf('html:not([data-theme="dark"]) .online-order-filters button.active')
@@ -480,7 +486,51 @@ async function reservedStockContract() {
   );
 }
 
-Promise.all([serviceContract(), orderContract(), orderWorkflowContract(), orderInventoryContract(), orderReadyShortageContract(), stockShortageContract(), reservedStockContract()])
+async function orderItemsEditContract() {
+  const events = [];
+  const connection = {
+    async beginTransaction() { events.push('begin'); },
+    async commit() { events.push('commit'); },
+    async rollback() { events.push('rollback'); },
+    release() { events.push('release'); },
+    async query(sql, params) {
+      if (sql.startsWith('SELECT idTienda FROM tienda')) return [[{ idTienda: 7 }]];
+      if (sql.startsWith('SELECT estado,tipoEntrega')) return [[{ estado: 'preparando', tipoEntrega: 'entrega' }]];
+      if (sql.startsWith('SELECT idDetallePedidoOnline,cantidad,precioUnitario')) return [[
+        { idDetallePedidoOnline: 101, cantidad: 4, precioUnitario: 10 },
+        { idDetallePedidoOnline: 102, cantidad: 2, precioUnitario: 15 }
+      ]];
+      if (sql.startsWith('UPDATE detallePedidoTiendaOnline')) {
+        assert.deepStrictEqual(params.slice(0, 2), [2, 20]);
+        events.push('detalle-actualizado');
+        return [{ affectedRows: 1 }];
+      }
+      if (sql.startsWith('DELETE FROM detallePedidoTiendaOnline')) {
+        assert.strictEqual(params[2], 102);
+        events.push('detalle-eliminado');
+        return [{ affectedRows: 1 }];
+      }
+      if (sql.startsWith('SELECT pedidoMinimo,costoEntrega')) return [[{ pedidoMinimo: 50, costoEntrega: 5 }]];
+      if (sql.startsWith('UPDATE pedidoTiendaOnline')) {
+        assert.deepStrictEqual(params.slice(0, 3), [20, 5, 25]);
+        events.push('pedido-recalculado');
+        return [{ affectedRows: 1 }];
+      }
+      throw new Error(`Consulta inesperada: ${sql.slice(0, 90)}`);
+    }
+  };
+  const service = createOnlineStoreService({
+    database: { async getConnection() { return connection; } },
+    clock: () => '2026-10-11 13:00:00'
+  });
+  const result = await service.updateOrderItems({ idTienda: 7, idAdministrador: 3 }, 99, {
+    productos: [{ idDetallePedidoOnline: 101, cantidad: 2 }]
+  });
+  assert.deepStrictEqual(result, { actualizado: true, subtotal: 20, costoEntrega: 5, total: 25 });
+  assert.deepStrictEqual(events, ['begin', 'detalle-actualizado', 'detalle-eliminado', 'pedido-recalculado', 'commit', 'release']);
+}
+
+Promise.all([serviceContract(), orderContract(), orderWorkflowContract(), orderInventoryContract(), orderReadyShortageContract(), stockShortageContract(), reservedStockContract(), orderItemsEditContract()])
   .then(() => console.log('test:online-store-foundation OK'))
   .catch((error) => {
     console.error(`Error: ${error.message}`);

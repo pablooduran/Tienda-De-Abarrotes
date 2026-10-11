@@ -738,7 +738,90 @@ function createOnlineStoreService({
     }
   }
 
-  return Object.freeze({ getConfiguration, updateConfiguration, listProducts, updateProduct, getPublicCatalog, identifyPublicCustomer, createPublicOrder, listOrders, updateOrder });
+  async function updateOrderItems(context, idPedidoOnline, body = {}) {
+    const idTienda = positiveId(context?.idTienda, 'La tienda');
+    const idAdministrador = positiveId(context?.idAdministrador, 'El administrador');
+    const orderId = positiveId(idPedidoOnline, 'El pedido');
+    const requestedItems = Array.isArray(body.productos) ? body.productos.map((item) => ({
+      idDetallePedidoOnline: positiveId(item.idDetallePedidoOnline, 'El detalle del pedido'),
+      cantidad: integerValue(item.cantidad, 'La cantidad', 1, 10000)
+    })) : [];
+    if (!requestedItems.length) {
+      throw new AppError(400, 'El pedido debe conservar al menos un producto. Si no entregarás ninguno, cancela el pedido.', 'ONLINE_STORE_ORDER_ITEMS_REQUIRED');
+    }
+    if (new Set(requestedItems.map((item) => item.idDetallePedidoOnline)).size !== requestedItems.length) {
+      throw new AppError(400, 'No repitas productos al editar el pedido.', 'ONLINE_STORE_ORDER_ITEMS_INVALID');
+    }
+    const connection = database.getConnection ? await database.getConnection() : database;
+    try {
+      await connection.beginTransaction?.();
+      await connection.query('SELECT idTienda FROM tienda WHERE idTienda=? FOR UPDATE', [idTienda]);
+      const [orders] = await connection.query(
+        `SELECT estado,tipoEntrega FROM pedidoTiendaOnline
+         WHERE idTienda=? AND idPedidoOnline=? LIMIT 1 FOR UPDATE`,
+        [idTienda, orderId]
+      );
+      if (!orders.length) throw new AppError(404, 'El pedido no existe.', 'ONLINE_STORE_ORDER_NOT_FOUND');
+      if (!['pendiente', 'confirmado', 'preparando'].includes(orders[0].estado)) {
+        throw new AppError(409, 'Solo puedes editar productos antes de que el pedido quede listo.', 'ONLINE_STORE_ORDER_ITEMS_CLOSED');
+      }
+      const [currentItems] = await connection.query(
+        `SELECT idDetallePedidoOnline,cantidad,precioUnitario
+         FROM detallePedidoTiendaOnline
+         WHERE idTienda=? AND idPedidoOnline=? ORDER BY idDetallePedidoOnline FOR UPDATE`,
+        [idTienda, orderId]
+      );
+      const currentById = new Map(currentItems.map((item) => [Number(item.idDetallePedidoOnline), item]));
+      const requestedById = new Map(requestedItems.map((item) => [item.idDetallePedidoOnline, item]));
+      let subtotalCents = 0;
+      for (const item of requestedItems) {
+        const current = currentById.get(item.idDetallePedidoOnline);
+        if (!current) throw new AppError(400, 'Uno de los productos no pertenece a este pedido.', 'ONLINE_STORE_ORDER_ITEMS_INVALID');
+        if (item.cantidad > Number(current.cantidad)) {
+          throw new AppError(400, 'Desde esta edición solo puedes reducir cantidades o quitar productos.', 'ONLINE_STORE_ORDER_ITEMS_INCREASE_NOT_ALLOWED');
+        }
+        const lineCents = Math.round(Number(current.precioUnitario) * 100) * item.cantidad;
+        subtotalCents += lineCents;
+        await connection.query(
+          `UPDATE detallePedidoTiendaOnline SET cantidad=?,subtotal=?
+           WHERE idTienda=? AND idPedidoOnline=? AND idDetallePedidoOnline=?`,
+          [item.cantidad, lineCents / 100, idTienda, orderId, item.idDetallePedidoOnline]
+        );
+      }
+      for (const current of currentItems) {
+        if (requestedById.has(Number(current.idDetallePedidoOnline))) continue;
+        await connection.query(
+          `DELETE FROM detallePedidoTiendaOnline
+           WHERE idTienda=? AND idPedidoOnline=? AND idDetallePedidoOnline=?`,
+          [idTienda, orderId, current.idDetallePedidoOnline]
+        );
+      }
+      const [configurationRows] = await connection.query(
+        'SELECT pedidoMinimo,costoEntrega FROM configuracionTiendaOnline WHERE idTienda=? LIMIT 1',
+        [idTienda]
+      );
+      const subtotal = subtotalCents / 100;
+      const freeFrom = Number(configurationRows[0]?.pedidoMinimo || 0);
+      const deliveryCost = orders[0].tipoEntrega === 'entrega' && (freeFrom <= 0 || subtotal < freeFrom)
+        ? Number(configurationRows[0]?.costoEntrega || 0)
+        : 0;
+      await connection.query(
+        `UPDATE pedidoTiendaOnline
+         SET subtotal=?,costoEntrega=?,total=?,actualizadoEn=?,idAdministradorActualiza=?
+         WHERE idTienda=? AND idPedidoOnline=?`,
+        [subtotal, deliveryCost, subtotal + deliveryCost, clock(), idAdministrador, idTienda, orderId]
+      );
+      await connection.commit?.();
+      return { actualizado: true, subtotal, costoEntrega: deliveryCost, total: subtotal + deliveryCost };
+    } catch (error) {
+      await connection.rollback?.();
+      throw error;
+    } finally {
+      connection.release?.();
+    }
+  }
+
+  return Object.freeze({ getConfiguration, updateConfiguration, listProducts, updateProduct, getPublicCatalog, identifyPublicCustomer, createPublicOrder, listOrders, updateOrder, updateOrderItems });
 }
 
 const onlineStoreService = createOnlineStoreService();

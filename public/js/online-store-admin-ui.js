@@ -86,19 +86,29 @@
       }
     }
 
-    function setAnnouncement(text, error = false) {
+    function setAnnouncement(text, error = false, action = null) {
       const target = root.querySelector('[data-online-announcement]');
       if (!target) return;
       announcementSequence += 1;
       const sequence = announcementSequence;
       if (announcementTimer) global.clearTimeout(announcementTimer);
-      target.textContent = text;
+      target.innerHTML = `<span>${escapeHtml(text)}</span>${action ? `<button type="button" class="secondary" data-announcement-action>${escapeHtml(action.label)}</button>` : ''}${error ? '<button type="button" class="online-announcement-close" data-announcement-close aria-label="Cerrar alerta">×</button>' : ''}`;
       target.classList.toggle('error', error);
+      target.querySelector('[data-announcement-action]')?.addEventListener('click', () => action.onClick?.());
+      target.querySelector('[data-announcement-close]')?.addEventListener('click', () => {
+        announcementSequence += 1;
+        target.innerHTML = '';
+        target.classList.remove('error');
+      });
+      if (error) {
+        announcementTimer = null;
+        return;
+      }
       announcementTimer = global.setTimeout(() => {
         if (sequence !== announcementSequence) return;
         const currentTarget = root.querySelector('[data-online-announcement]');
         if (!currentTarget) return;
-        currentTarget.textContent = '';
+        currentTarget.innerHTML = '';
         currentTarget.classList.remove('error');
         announcementTimer = null;
       }, 2000);
@@ -157,6 +167,74 @@
       });
     }
 
+    function openOrderEditor(order, returnFocus) {
+      const modalRoot = global.document.getElementById('modalRoot');
+      if (!modalRoot || !order || !['pendiente', 'confirmado', 'preparando'].includes(order.estado)) return;
+      const lines = order.productos.map((item) => ({
+        ...item,
+        originalQuantity: Number(item.cantidad),
+        cantidad: Number(item.cantidad)
+      }));
+      const close = () => {
+        modalRoot.innerHTML = '';
+        returnFocus?.focus?.();
+      };
+      modalRoot.innerHTML = `
+        <div class="modal-backdrop">
+          <section class="modal online-order-edit-modal" role="dialog" aria-modal="true" aria-labelledby="onlineEditTitle">
+            <div class="online-order-edit-heading"><div><p class="eyebrow">PEDIDO ${escapeHtml(orderNumberLabel(order))}</p><h3 id="onlineEditTitle">Editar productos del pedido</h3><p>Reduce cantidades o quita lo que no podrás entregar. El cliente no tendrá que armar el pedido nuevamente.</p></div><button type="button" class="icon-button" data-modal-cancel aria-label="Cerrar">×</button></div>
+            <div class="online-order-edit-list" data-order-edit-list></div>
+            <p class="online-order-edit-error" data-order-edit-error role="alert"></p>
+            <div class="online-order-edit-summary"><span>Nuevo subtotal</span><strong data-order-edit-total></strong></div>
+            <div class="modal-actions"><button type="button" class="secondary" data-modal-cancel>Volver</button><button type="button" data-order-edit-save>Guardar cambios</button></div>
+          </section>
+        </div>`;
+      const list = modalRoot.querySelector('[data-order-edit-list]');
+      const errorTarget = modalRoot.querySelector('[data-order-edit-error]');
+      const renderLines = () => {
+        list.innerHTML = lines.length ? lines.map((item) => `
+          <article class="online-order-edit-line" data-order-edit-line="${item.idDetallePedidoOnline}">
+            <div><strong>${escapeHtml(item.nombreProductoSnapshot)}</strong><small>Bs ${Number(item.precioUnitario).toFixed(2)} por unidad</small></div>
+            <div class="online-order-edit-controls"><button type="button" class="secondary" data-edit-decrease aria-label="Disminuir ${escapeHtml(item.nombreProductoSnapshot)}" ${item.cantidad <= 1 ? 'disabled' : ''}>−</button><input type="number" min="1" max="${item.originalQuantity}" value="${item.cantidad}" data-edit-quantity aria-label="Cantidad de ${escapeHtml(item.nombreProductoSnapshot)}"><button type="button" class="secondary" data-edit-increase aria-label="Aumentar ${escapeHtml(item.nombreProductoSnapshot)}" ${item.cantidad >= item.originalQuantity ? 'disabled' : ''}>+</button><button type="button" class="online-order-edit-remove" data-edit-remove>Quitar</button></div>
+          </article>`).join('') : '<div class="online-store-empty"><strong>El pedido quedó sin productos</strong><p>Conserva al menos uno o cancela el pedido completo.</p></div>';
+        modalRoot.querySelector('[data-order-edit-total]').textContent = `Bs ${lines.reduce((sum, item) => sum + Number(item.precioUnitario) * item.cantidad, 0).toFixed(2)}`;
+        list.querySelectorAll('[data-order-edit-line]').forEach((line) => {
+          const item = lines.find((candidate) => String(candidate.idDetallePedidoOnline) === line.dataset.orderEditLine);
+          line.querySelector('[data-edit-decrease]')?.addEventListener('click', () => { item.cantidad = Math.max(1, item.cantidad - 1); errorTarget.textContent = ''; renderLines(); });
+          line.querySelector('[data-edit-increase]')?.addEventListener('click', () => { item.cantidad = Math.min(item.originalQuantity, item.cantidad + 1); errorTarget.textContent = ''; renderLines(); });
+          line.querySelector('[data-edit-quantity]')?.addEventListener('change', (event) => { item.cantidad = Math.min(item.originalQuantity, Math.max(1, Number.parseInt(event.currentTarget.value, 10) || 1)); errorTarget.textContent = ''; renderLines(); });
+          line.querySelector('[data-edit-remove]')?.addEventListener('click', () => { lines.splice(lines.indexOf(item), 1); errorTarget.textContent = ''; renderLines(); });
+        });
+      };
+      modalRoot.querySelectorAll('[data-modal-cancel]').forEach((button) => button.addEventListener('click', close));
+      modalRoot.querySelector('[data-order-edit-save]').addEventListener('click', async (event) => {
+        if (!lines.length) {
+          errorTarget.textContent = 'El pedido debe conservar al menos un producto. Si no entregarás ninguno, cancélalo.';
+          return;
+        }
+        const button = event.currentTarget;
+        button.disabled = true;
+        errorTarget.textContent = '';
+        try {
+          await api(`/api/tienda-online/pedidos/${order.idPedidoOnline}/productos`, {
+            method: 'PATCH',
+            body: JSON.stringify({ productos: lines.map((item) => ({ idDetallePedidoOnline: item.idDetallePedidoOnline, cantidad: item.cantidad })) })
+          });
+          close();
+          const data = await api('/api/tienda-online/pedidos?estado=todos');
+          orders = data.pedidos;
+          renderOrderSummary();
+          renderOrders();
+          setAnnouncement('Pedido actualizado. Las unidades retiradas volvieron a quedar disponibles.');
+        } catch (error) {
+          button.disabled = false;
+          errorTarget.textContent = messageFor(error);
+        }
+      });
+      renderLines();
+      modalRoot.querySelector('[data-order-edit-save]').focus();
+    }
+
     async function updateOrder(card, estado, estadoPago, successMessage) {
       const buttons = [...card.querySelectorAll('button')];
       const scrollTop = global.scrollY;
@@ -174,7 +252,12 @@
         global.scrollTo({ top: scrollTop, behavior: 'auto' });
       } catch (error) {
         buttons.forEach((button) => { button.disabled = isReadOnly(); });
-        setAnnouncement(messageFor(error), true);
+        const currentOrder = orders.find((item) => Number(item.idPedidoOnline) === Number(card.dataset.onlineOrder));
+        const canEdit = currentOrder && ['pendiente', 'confirmado', 'preparando'].includes(currentOrder.estado) && !isReadOnly();
+        setAnnouncement(messageFor(error), true, canEdit ? {
+          label: 'Editar pedido',
+          onClick: () => openOrderEditor(currentOrder, card.querySelector('[data-order-edit], [data-order-advance]'))
+        } : null);
       }
     }
 
@@ -211,11 +294,15 @@
           <div class="online-order-card-bottom">
             <ol class="online-order-progress${order.estado === 'cancelado' ? ' is-cancelled' : ''}" aria-label="Progreso del pedido">${progress.map((state, index) => `<li class="${index < progressIndex ? 'done' : index === progressIndex ? 'active' : ''}"><i aria-hidden="true">${index < progressIndex ? '✓' : index + 1}</i><span>${({ pendiente: 'Nuevo', preparando: 'Preparando', listo: 'Listo', entregado: 'Entregado' })[state]}</span></li>`).join('')}</ol>
             ${order.estado === 'cancelado' ? '<p class="online-order-cancelled">Pedido cancelado</p>' : ''}
-            ${order.estado === 'cancelado' ? '' : `<footer><div class="online-payment-status"><span>Estado</span><strong>${order.estadoPago === 'pagado' ? 'Pagado' : 'Pendiente'}</strong></div><div class="online-order-actions">${action ? `<button type="button" data-order-advance data-next-state="${action.estado}" data-next-payment="${action.estadoPago}" ${isReadOnly() ? 'disabled' : ''}>${action.label}</button>` : order.estado === 'entregado' ? '<span class="online-order-finished">Pedido completado</span>' : ''}${!finalState ? `<button type="button" class="online-order-cancel-button" data-order-cancel ${isReadOnly() ? 'disabled' : ''}>Cancelar pedido</button>` : ''}</div></footer>`}
+            ${order.estado === 'cancelado' ? '' : `<footer><div class="online-payment-status"><span>Estado</span><strong>${order.estadoPago === 'pagado' ? 'Pagado' : 'Pendiente'}</strong></div><div class="online-order-actions">${['pendiente', 'confirmado', 'preparando'].includes(order.estado) ? `<button type="button" class="secondary online-order-edit-button" data-order-edit ${isReadOnly() ? 'disabled' : ''}>Editar pedido</button>` : ''}${action ? `<button type="button" data-order-advance data-next-state="${action.estado}" data-next-payment="${action.estadoPago}" ${isReadOnly() ? 'disabled' : ''}>${action.label}</button>` : order.estado === 'entregado' ? '<span class="online-order-finished">Pedido completado</span>' : ''}${!finalState ? `<button type="button" class="online-order-cancel-button" data-order-cancel ${isReadOnly() ? 'disabled' : ''}>Cancelar pedido</button>` : ''}</div></footer>`}
           </div>
         </article>`;
       }).join('');
       target.querySelectorAll('[data-online-order]').forEach((card) => {
+        card.querySelector('[data-order-edit]')?.addEventListener('click', (event) => {
+          const currentOrder = orders.find((item) => Number(item.idPedidoOnline) === Number(card.dataset.onlineOrder));
+          openOrderEditor(currentOrder, event.currentTarget);
+        });
         card.querySelector('[data-order-advance]')?.addEventListener('click', (event) => {
           const button = event.currentTarget;
           const currentOrder = orders.find((item) => Number(item.idPedidoOnline) === Number(card.dataset.onlineOrder));
@@ -274,7 +361,7 @@
             <button type="button" data-online-view="config" role="tab"><span class="online-nav-icon">⚙</span><span><strong>Configurar tienda</strong><small>Entrega, pagos y enlace</small></span></button>
             <button type="button" data-online-view="products" role="tab"><span class="online-nav-icon">▦</span><span><strong>Productos</strong><small>Define qué verá el cliente</small></span><b>${enabledCount}</b></button>
           </nav>
-          <p class="online-store-announcement" data-online-announcement role="status" aria-live="polite"></p>
+          <div class="online-store-announcement" data-online-announcement role="status" aria-live="polite"></div>
 
           <section class="online-catalog-manager online-orders-manager" data-online-panel="orders">
             <div class="online-section-heading"><span>1</span><div><h4>Pedidos recibidos</h4><p>Revisa lo nuevo, alista cada pedido y completa la entrega paso a paso.</p></div></div>

@@ -24,6 +24,7 @@ function createOnlineStoreRouter({ service = onlineStoreService } = {}) {
   router.get('/productos', asyncRoute(async (req, res) => res.json(await service.listProducts(req.tenant.idTienda))));
   router.patch('/productos/:idProducto', asyncRoute(async (req, res) => res.json(await service.updateProduct(context(req), req.params.idProducto, req.body))));
   router.get('/pedidos', asyncRoute(async (req, res) => res.json(await service.listOrders(req.tenant.idTienda, req.query))));
+  router.patch('/pedidos/:idPedidoOnline/productos', asyncRoute(async (req, res) => res.json(await service.updateOrderItems(context(req), req.params.idPedidoOnline, req.body))));
   router.patch('/pedidos/:idPedidoOnline', asyncRoute(async (req, res) => res.json(await service.updateOrder(context(req), req.params.idPedidoOnline, req.body))));
   return router;
 }
