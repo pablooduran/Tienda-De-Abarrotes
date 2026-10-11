@@ -19,6 +19,7 @@ const migrator = fs.readFileSync(path.join(root, 'scripts', 'migrate-db.js'), 'u
 const ownerUi = fs.readFileSync(path.join(root, 'public', 'js', 'online-store-admin-ui.js'), 'utf8');
 const publicUi = fs.readFileSync(path.join(root, 'public', 'js', 'storefront.js'), 'utf8');
 const app = fs.readFileSync(path.join(root, 'public', 'js', 'app.js'), 'utf8');
+const ownerStyles = fs.readFileSync(path.join(root, 'public', 'css', 'styles.css'), 'utf8');
 
 for (const sql of [migration, schema]) {
   assert(sql.includes('CREATE TABLE IF NOT EXISTS configuracionTiendaOnline'));
@@ -54,6 +55,9 @@ assert(publicUi.includes('/clientes/buscar'));
 assert(publicUi.includes('/pedidos'));
 assert(ownerUi.includes('Pedidos recibidos'));
 assert(!publicUi.includes('stockUnidadesTotal'));
+assert(/\.online-store-admin\{\r?\n\s+--primary:var\(--brand\);/.test(ownerStyles));
+assert(ownerStyles.includes('html:not([data-theme="dark"]) .online-store-hero'));
+assert(ownerStyles.includes('html:not([data-theme="dark"]) :is(.online-store-settings-card,.online-store-preview-card,.online-catalog-manager)'));
 
 const safeProduct = publicProduct({
   idProducto: 8,
