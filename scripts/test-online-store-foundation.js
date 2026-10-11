@@ -53,6 +53,11 @@ assert(publicUi.includes('data-cart-action'));
 assert(publicUi.includes('data-quantity-dialog'));
 assert(publicUi.includes('/clientes/buscar'));
 assert(publicUi.includes('/pedidos'));
+assert(publicUi.includes('CART_STORAGE_PREFIX'));
+assert(publicUi.includes('restoreCartDraft()'));
+assert(publicUi.includes('dataset.checkedPhone'));
+assert(publicUi.includes('checkout-section'));
+assert(publicUi.includes('Primero presiona “Buscar cliente”'));
 assert(ownerUi.includes('Pedidos recibidos'));
 assert(ownerUi.includes("let activeView = 'orders'"));
 assert(ownerUi.includes('data-online-view="config"'));
@@ -67,6 +72,8 @@ assert(ownerStyles.includes('html:not([data-theme="dark"]) .online-store-hero'))
 assert(ownerStyles.includes('html:not([data-theme="dark"]) :is(.online-store-settings-card,.online-store-preview-card,.online-catalog-manager)'));
 assert(ownerStyles.includes('.online-store-workspace-nav'));
 assert(ownerStyles.includes('border:2px solid color-mix(in srgb,var(--ink) 45%,var(--line))'));
+assert(ownerStyles.includes('.international-phone-field select option'));
+assert(ownerStyles.includes('.customer-credit-enabled-note'));
 
 const safeProduct = publicProduct({
   idProducto: 8,

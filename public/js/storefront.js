@@ -6,6 +6,7 @@
   let search = '';
   let category = 'todas';
   const cart = new Map();
+  const CART_STORAGE_PREFIX = 'administrau.storefront.cart.v1:';
 
   function escapeHtml(value) {
     return String(value ?? '').replace(/[&<>"']/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char]));
@@ -14,6 +15,33 @@
     return String(value || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
   }
   function money(value) { return Number(value || 0).toFixed(2); }
+  function digits(value) { return String(value || '').replace(/\D/g, ''); }
+  function cartStorageKey() { return `${CART_STORAGE_PREFIX}${slug}`; }
+  function saveCartDraft() {
+    try {
+      const items = [...cart.values()].map(({ producto, cantidad }) => ({ idProducto: producto.idProducto, cantidad }));
+      if (items.length) localStorage.setItem(cartStorageKey(), JSON.stringify(items));
+      else localStorage.removeItem(cartStorageKey());
+    } catch (_) { /* El carrito sigue funcionando aunque el navegador bloquee el almacenamiento. */ }
+  }
+  function restoreCartDraft() {
+    try {
+      const items = JSON.parse(localStorage.getItem(cartStorageKey()) || '[]');
+      if (!Array.isArray(items)) return;
+      items.forEach((item) => {
+        const product = catalog.productos.find((row) => Number(row.idProducto) === Number(item.idProducto));
+        const quantity = Number(item.cantidad);
+        if (product && product.disponibilidad !== 'agotado' && Number.isSafeInteger(quantity) && quantity > 0 && quantity <= 10000) {
+          cart.set(product.idProducto, { producto: product, cantidad: quantity });
+        }
+      });
+    } catch (_) { localStorage.removeItem(cartStorageKey()); }
+  }
+  function checkoutPhone(form) {
+    const local = digits(form.elements.phone.value);
+    const country = digits(catalog?.tienda?.codigoPaisTelefono || '591');
+    return local.startsWith(country) ? `+${local}` : `+${country}${local}`;
+  }
   function availabilityLabel(value) {
     return { disponible: 'Disponible', pocas_unidades: 'Quedan pocas unidades', agotado: 'Agotado' }[value] || 'Consultar';
   }
@@ -65,6 +93,7 @@
       : '<div class="storefront-cart-empty"><span>🛒</span><strong>Tu carrito está vacío</strong><p>Agrega productos y ajusta aquí las cantidades.</p></div>';
     panel.querySelector('[data-cart-subtotal]').textContent = `Bs ${money(cartTotal())}`;
     panel.querySelector('[data-checkout]').disabled = !cart.size;
+    saveCartDraft();
     renderProducts();
   }
 
@@ -91,15 +120,23 @@
     dialog.querySelector('[data-delivery-estimate]').textContent = `Bs ${money(deliveryCost())}`;
     dialog.querySelector('[data-delivery-fields]').hidden = Boolean(store.opciones.recojo);
     dialog.querySelector('[data-delivery-row]').hidden = Boolean(store.opciones.recojo);
+    dialog.querySelector('[name="address"]').required = !store.opciones.recojo;
     dialog.querySelector('[data-customer-result]').textContent = 'Tu teléfono funciona como identificador dentro de esta tienda.';
-    dialog.querySelector('[name="customerName"]').hidden = false;
+    dialog.dataset.customerStatus = '';
+    dialog.dataset.checkedPhone = '';
+    const name = dialog.querySelector('[name="customerName"]');
+    name.hidden = false;
+    name.placeholder = 'Tu nombre completo';
     dialog.showModal();
+    dialog.querySelector('form').scrollTop = 0;
   }
 
   async function identifyCustomer(dialog) {
-    const phone = dialog.querySelector('[name="phone"]').value.trim();
+    const form = dialog.querySelector('form');
+    const localPhone = digits(form.elements.phone.value);
+    const phone = checkoutPhone(form);
     const result = dialog.querySelector('[data-customer-result]');
-    if (!phone) { result.textContent = 'Ingresa tu número para buscarte.'; return; }
+    if (localPhone.length < 7) { result.textContent = 'Ingresa un número de teléfono válido para buscarte.'; return; }
     result.textContent = 'Buscando cliente…';
     try {
       const response = await SecurityHttp.secureFetch(`/api/public/tiendas/${encodeURIComponent(slug)}/clientes/buscar`, {
@@ -108,13 +145,20 @@
       const data = await response.json().catch(() => ({}));
       if (!response.ok) throw SecurityHttp.errorFromResponse(response, data, 'No pudimos buscar el cliente.');
       const name = dialog.querySelector('[name="customerName"]');
+      dialog.dataset.checkedPhone = digits(phone);
       if (data.encontrado) {
-        name.value = data.cliente.nombre;
-        name.hidden = true;
-        dialog.querySelector('[name="address"]').value ||= data.cliente.direccion || '';
-        result.textContent = `Te encontramos: ${data.cliente.nombre}. Revisa el pedido y envíalo.`;
-      } else {
+        dialog.dataset.customerStatus = 'found';
+        name.value = '';
         name.hidden = false;
+        name.placeholder = 'Escribe el nombre con el que estás registrado';
+        dialog.querySelector('[name="address"]').value ||= data.cliente.direccion || '';
+        result.textContent = 'Cliente encontrado. Escribe el nombre con el que estás registrado para confirmar que eres tú.';
+        name.focus();
+      } else {
+        dialog.dataset.customerStatus = 'new';
+        name.hidden = false;
+        name.value = '';
+        name.placeholder = 'Tu nombre completo';
         name.focus();
         result.textContent = 'No hay un cliente asociado. Escribe tu nombre para registrarte con este pedido.';
       }
@@ -125,11 +169,35 @@
 
   async function submitOrder(event) {
     event.preventDefault();
-    const form = event.currentTarget;
+    const form = event.target.closest('form');
     const button = form.querySelector('[data-submit-order]');
+    const result = form.querySelector('[data-customer-result]');
     const selected = (name) => form.querySelector(`[name="${name}"]:checked`)?.value;
+    const phone = checkoutPhone(form);
+    if (digits(form.elements.phone.value).length < 7) {
+      result.textContent = 'Ingresa un número de teléfono válido.';
+      form.elements.phone.focus();
+      return;
+    }
+    if (form.closest('dialog').dataset.checkedPhone !== digits(phone)) {
+      result.textContent = 'Primero presiona “Buscar cliente” para verificar tu teléfono.';
+      form.querySelector('[data-find-customer]').focus();
+      return;
+    }
+    if (!form.elements.customerName.value.trim()) {
+      result.textContent = form.closest('dialog').dataset.customerStatus === 'found'
+        ? 'Escribe el nombre con el que estás registrado para confirmar tu identidad.'
+        : 'Escribe tu nombre para registrar el pedido.';
+      form.elements.customerName.focus();
+      return;
+    }
+    if (selected('fulfillment') === 'entrega' && !form.elements.address.value.trim()) {
+      result.textContent = 'Escribe la dirección donde debemos entregar el pedido.';
+      form.elements.address.focus();
+      return;
+    }
     const payload = {
-      telefono: form.elements.phone.value,
+      telefono: phone,
       nombre: form.elements.customerName.value,
       tipoEntrega: selected('fulfillment'),
       direccionEntrega: form.elements.address.value,
@@ -147,6 +215,7 @@
       const data = await response.json().catch(() => ({}));
       if (!response.ok) throw SecurityHttp.errorFromResponse(response, data, 'No pudimos enviar el pedido.');
       cart.clear();
+      saveCartDraft();
       form.closest('dialog').close();
       renderCart();
       const confirmation = root.querySelector('[data-order-confirmation]');
@@ -154,7 +223,7 @@
       confirmation.hidden = false;
       confirmation.scrollIntoView({ behavior: 'smooth', block: 'center' });
     } catch (error) {
-      form.querySelector('[data-customer-result]').textContent = error.message || 'No pudimos enviar el pedido.';
+      result.textContent = error.message || 'No pudimos enviar el pedido.';
       button.disabled = false;
       button.textContent = 'Enviar pedido a la tienda';
     }
@@ -170,7 +239,7 @@
       <aside class="storefront-cart" data-cart-panel><header><div><p class="eyebrow">TU PEDIDO</p><h2>Carrito <span data-cart-count>0</span></h2></div></header><div class="storefront-cart-items" data-cart-items></div><footer><div><span>Subtotal</span><strong data-cart-subtotal>Bs 0.00</strong></div><button type="button" data-checkout disabled>Continuar pedido</button><small>La disponibilidad y el costo de entrega se confirman con la tienda.</small></footer></aside></section>
       <button type="button" class="storefront-cart-fab" data-open-cart>Carrito · <span data-cart-count>0</span></button>
       <dialog class="storefront-dialog" data-quantity-dialog><form method="dialog"><button class="dialog-close" value="cancel" aria-label="Cerrar">×</button><p class="eyebrow">AGREGAR AL CARRITO</p><h2 data-quantity-name></h2><p data-quantity-price></p><div class="storefront-stepper"><button type="button" data-quantity-action="decrease" aria-label="Quitar una unidad">−</button><strong data-quantity-value>1</strong><button type="button" data-quantity-action="increase" aria-label="Agregar una unidad">+</button></div><button type="button" data-confirm-quantity>Confirmar cantidad</button></form></dialog>
-      <dialog class="storefront-dialog storefront-checkout" data-checkout-dialog><form><button type="button" class="dialog-close" data-close-checkout aria-label="Cerrar">×</button><p class="eyebrow">ENVÍA TU PEDIDO</p><h2>Identifícate con tu teléfono</h2><div class="checkout-phone-row"><label>Número de teléfono<input name="phone" type="tel" maxlength="30" required placeholder="Ej.: 76543210"></label><button type="button" data-find-customer>Buscar cliente</button></div><p class="checkout-note" data-customer-result>Tu teléfono funciona como identificador dentro de esta tienda.</p><label data-customer-name>Nombre completo<input name="customerName" maxlength="100" required placeholder="Tu nombre"></label><h2>¿Cómo quieres recibirlo?</h2><div class="checkout-choice-grid" data-fulfillment-options></div><label class="checkout-address" data-delivery-fields>Dirección de entrega<input type="text" name="address" maxlength="255" placeholder="Zona, calle y referencia"></label><fieldset><legend>¿En qué momento?</legend><div class="checkout-slot-grid"><label><input type="radio" name="slot" value="manana" checked><span>Mañana</span></label><label><input type="radio" name="slot" value="tarde"><span>Tarde</span></label><label><input type="radio" name="slot" value="noche"><span>Noche</span></label></div></fieldset><fieldset><legend>¿Cómo pagarás?</legend><div class="checkout-slot-grid" data-payment-options></div></fieldset><label>Nota para la tienda (opcional)<textarea name="notes" maxlength="500" rows="2" placeholder="Alguna referencia o indicación"></textarea></label><div class="checkout-totals"><span>Subtotal <strong data-checkout-subtotal></strong></span><span data-delivery-row>Costo base estimado de entrega <strong data-delivery-estimate></strong></span></div><button type="submit" data-submit-order>Enviar pedido a la tienda</button></form></dialog>`;
+      <dialog class="storefront-dialog storefront-checkout" data-checkout-dialog><form novalidate><button type="button" class="dialog-close" data-close-checkout aria-label="Cerrar">×</button><header class="checkout-intro"><p class="eyebrow">ENVÍA TU PEDIDO</p><h2>Confirma los datos de tu compra</h2><p>Te identificamos, coordinamos la entrega y enviamos el pedido directamente a la tienda.</p></header><section class="checkout-section"><div class="checkout-section-title"><span>1</span><div><strong>Identifícate</strong><small>Tu teléfono es tu identificador en esta tienda.</small></div></div><div class="checkout-phone-row"><label>Número de teléfono<span class="checkout-phone-control"><b>+${escapeHtml(store.codigoPaisTelefono || '591')}</b><input name="phone" type="tel" inputmode="numeric" maxlength="15" required placeholder="76543210"></span></label><button type="button" data-find-customer>Buscar cliente</button></div><p class="checkout-note" data-customer-result role="status" aria-live="polite">Escribe tu número y presiona “Buscar cliente”.</p><label data-customer-name>Nombre completo<input name="customerName" maxlength="100" required placeholder="Tu nombre completo"></label></section><section class="checkout-section"><div class="checkout-section-title"><span>2</span><div><strong>Entrega y pago</strong><small>Elige cómo y cuándo quieres recibirlo.</small></div></div><fieldset><legend>¿Cómo quieres recibirlo?</legend><div class="checkout-choice-grid" data-fulfillment-options></div></fieldset><label class="checkout-address" data-delivery-fields>Dirección de entrega<input type="text" name="address" maxlength="255" placeholder="Zona, calle y referencia"></label><fieldset><legend>¿En qué momento?</legend><div class="checkout-slot-grid"><label><input type="radio" name="slot" value="manana" checked><span>Mañana</span></label><label><input type="radio" name="slot" value="tarde"><span>Tarde</span></label><label><input type="radio" name="slot" value="noche"><span>Noche</span></label></div></fieldset><fieldset><legend>¿Cómo pagarás?</legend><div class="checkout-slot-grid" data-payment-options></div></fieldset></section><section class="checkout-section"><div class="checkout-section-title"><span>3</span><div><strong>Revisa y envía</strong><small>La tienda confirmará disponibilidad y entrega.</small></div></div><label>Nota para la tienda (opcional)<textarea name="notes" maxlength="500" rows="2" placeholder="Alguna referencia o indicación"></textarea></label><div class="checkout-totals"><span>Subtotal <strong data-checkout-subtotal></strong></span><span data-delivery-row>Costo base estimado de entrega <strong data-delivery-estimate></strong></span></div></section><button type="submit" data-submit-order>Enviar pedido a la tienda</button></form></dialog>`;
 
     root.addEventListener('click', (event) => {
       const add = event.target.closest('[data-add-product]');
@@ -209,12 +278,18 @@
     const checkoutDialog = root.querySelector('[data-checkout-dialog]');
     checkoutDialog.addEventListener('submit', submitOrder);
     checkoutDialog.querySelector('[data-find-customer]').addEventListener('click', () => identifyCustomer(checkoutDialog));
+    checkoutDialog.querySelector('[name="phone"]').addEventListener('input', () => {
+      checkoutDialog.dataset.checkedPhone = '';
+      checkoutDialog.dataset.customerStatus = '';
+      checkoutDialog.querySelector('[data-customer-result]').textContent = 'Cuando termines, presiona “Buscar cliente”.';
+    });
     checkoutDialog.querySelector('[data-close-checkout]').addEventListener('click', () => checkoutDialog.close());
     checkoutDialog.addEventListener('change', (event) => {
       if (event.target.name !== 'fulfillment') return;
       const delivery = event.target.value === 'entrega';
       root.querySelector('[data-delivery-fields]').hidden = !delivery;
       root.querySelector('[data-delivery-row]').hidden = !delivery;
+      checkoutDialog.querySelector('[name="address"]').required = delivery;
     });
     root.querySelector('[data-open-cart]').addEventListener('click', () => root.querySelector('[data-cart-panel]').scrollIntoView({ behavior: 'smooth', block: 'start' }));
     renderProducts();
@@ -228,6 +303,7 @@
       const data = await response.json().catch(() => ({}));
       if (!response.ok) throw SecurityHttp.errorFromResponse(response, data, 'La tienda no está disponible.');
       catalog = data;
+      restoreCartDraft();
       render();
     } catch (_) {
       root.innerHTML = '<section class="storefront-unavailable"><img src="/assets/administrau-icon.png" alt=""><p class="eyebrow">TIENDA NO DISPONIBLE</p><h1>Este catálogo no está publicado</h1><p>Puede estar en preparación o el enlace ya no está activo. Consulta con la tienda para recibir el enlace correcto.</p></section>';

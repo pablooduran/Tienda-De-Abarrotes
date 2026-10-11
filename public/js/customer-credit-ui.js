@@ -539,7 +539,6 @@
 
     function customerFormBody(customer = {}) {
       const advanced = can('limites_credito');
-      const creditEnabled = Boolean(customer.permiteFiado);
       const phone = phoneCountry(customer.telefono);
       return `<div class="customer-form-sections">
         <section><h4>Datos basicos</h4><div class="form-grid customer-basic-fields">
@@ -547,8 +546,8 @@
           <label>Telefono<span class="international-phone-field"><select name="codigoPaisWhatsApp" aria-label="Código de país">${countryOptions(phone.code, true)}</select><input name="telefono" inputmode="numeric" maxlength="30" value="${e(phone.local || '')}" placeholder="Número"></span></label>
           <label class="wide">Direccion <span class="hint">(opcional)</span><input name="direccion" maxlength="255" value="${e(customer.direccion || '')}"></label>
         </div></section>
-        <section class="customer-credit-disclosure"><label class="check"><input name="permiteFiado" type="checkbox" ${creditEnabled ? 'checked' : ''}> Permitir compras fiadas</label>
-          <div class="form-grid" data-credit-fields ${creditEnabled ? '' : 'hidden'}>
+        <section class="customer-credit-disclosure"><p class="customer-credit-enabled-note"><strong>Compras fiadas habilitadas</strong><span>Todo cliente registrado puede comprar fiado. Si tu plan lo permite, puedes definir sus límites.</span></p>
+          <div class="form-grid" data-credit-fields>
             ${advanced ? `<label>Limite de credito<input name="limiteCredito" type="number" min="0" step="0.01" value="${e(customer.limiteCredito ?? '')}" placeholder="Sin limite individual"></label><label>Dias de credito<input name="diasCreditoDefault" type="number" min="1" max="365" value="${e(customer.diasCreditoDefault ?? '')}" placeholder="Usar valor de tienda"></label>` : '<p class="plan-note">Tu plan actual no incluye limites ni plazos personalizados.</p>'}
           </div>
         </section>
@@ -560,17 +559,6 @@
       await openFormModal({
         title: customer ? 'Editar cliente' : 'Agregar cliente',
         body: customerFormBody(customer || {}), wide: true, submitText: customer ? 'Guardar cambios' : 'Crear cliente',
-        onOpen: (form) => {
-          const toggle = form.elements.permiteFiado;
-          const fields = form.querySelector('[data-credit-fields]');
-          const syncCreditFields = () => {
-            const enabled = Boolean(toggle?.checked);
-            fields.hidden = !enabled;
-            fields.querySelectorAll('input, select').forEach((field) => { field.disabled = !enabled; });
-          };
-          toggle?.addEventListener('change', syncCreditFields);
-          syncCreditFields();
-        },
         onSubmit: async (form) => {
           const fd = new FormData(form);
           const payload = {
@@ -579,12 +567,11 @@
             direccion: nullable(fd.get('direccion'))
           };
           if (!payload.nombre) throw new Error('El nombre es obligatorio.');
-          const creditEnabled = booleanValue(form, 'permiteFiado');
           if (can('limites_credito')) {
-            payload.limiteCredito = creditEnabled ? nullable(fd.get('limiteCredito')) : null;
-            payload.diasCreditoDefault = creditEnabled ? nullable(fd.get('diasCreditoDefault')) : null;
+            payload.limiteCredito = nullable(fd.get('limiteCredito'));
+            payload.diasCreditoDefault = nullable(fd.get('diasCreditoDefault'));
           }
-          payload.permiteFiado = creditEnabled;
+          payload.permiteFiado = true;
           const result = await api(`/api/clientes${customer ? `/${customer.idCliente}` : ''}`, {
             method: customer ? 'PATCH' : 'POST', body: JSON.stringify(payload)
           });

@@ -54,6 +54,18 @@ function normalizePhone(value) {
   return { original, normalized };
 }
 
+function phoneCandidates(normalized, countryCode = '591') {
+  const code = String(countryCode || '591').replace(/\D/g, '') || '591';
+  const candidates = new Set([normalized]);
+  if (normalized.startsWith(code) && normalized.length > code.length + 5) candidates.add(normalized.slice(code.length));
+  else candidates.add(`${code}${normalized}`);
+  return [...candidates];
+}
+
+function normalizedIdentityName(value) {
+  return String(value || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-zA-Z0-9]+/g, ' ').trim().toLowerCase();
+}
+
 function enumValue(value, allowed, label) {
   const normalized = String(value || '').trim().toLowerCase();
   if (!allowed.includes(normalized)) throw new AppError(400, `${label} no es valido.`, 'ONLINE_STORE_INPUT_INVALID');
@@ -118,12 +130,13 @@ function createOnlineStoreService({
       throw new AppError(404, 'La tienda no esta disponible.', 'PUBLIC_STORE_NOT_FOUND');
     }
     const [stores] = await database.query(
-      `SELECT t.idTienda,t.slug,t.nombre,c.nombreMostrado,
+      `SELECT t.idTienda,t.slug,t.nombre,c.nombreMostrado,COALESCE(cc.codigoPaisWhatsApp,'591') codigoPaisTelefono,
               o.activa,o.mensajeBienvenida,o.permiteRecojo,o.permiteEntrega,
               o.permiteEfectivo,o.permiteQr,o.pedidoMinimo,o.costoEntrega,o.tiempoPreparacionMinutos
        FROM tienda t
        JOIN configuracionTienda c ON c.idTienda=t.idTienda
        JOIN configuracionTiendaOnline o ON o.idTienda=t.idTienda
+       LEFT JOIN configuracionCobranza cc ON cc.idTienda=t.idTienda
        WHERE t.slug=? AND t.activo=1 AND t.estado='activa' LIMIT 1`,
       [slug]
     );
@@ -237,6 +250,7 @@ function createOnlineStoreService({
       tienda: {
         nombre: store.nombreMostrado || store.nombre,
         slug: store.slug,
+        codigoPaisTelefono: store.codigoPaisTelefono || '591',
         mensajeBienvenida: store.mensajeBienvenida || '',
         opciones: {
           recojo: Boolean(store.permiteRecojo),
@@ -261,13 +275,14 @@ function createOnlineStoreService({
   async function identifyPublicCustomer(slugValue, phoneValue) {
     const { store } = await resolvePublicStore(slugValue);
     const phone = normalizePhone(phoneValue);
+    const candidates = phoneCandidates(phone.normalized, store.codigoPaisTelefono);
     const [rows] = await database.query(
       `SELECT nombre,direccion FROM cliente
-       WHERE idTienda=? AND telefonoNormalizado=? AND activo=1 LIMIT 1`,
-      [store.idTienda, phone.normalized]
+       WHERE idTienda=? AND telefonoNormalizado IN (${candidates.map(() => '?').join(',')}) AND activo=1 LIMIT 1`,
+      [store.idTienda, ...candidates]
     );
     return rows[0]
-      ? { encontrado: true, cliente: { nombre: rows[0].nombre, direccion: rows[0].direccion || '' } }
+      ? { encontrado: true, cliente: { direccion: rows[0].direccion || '' } }
       : { encontrado: false, cliente: null };
   }
 
@@ -326,16 +341,21 @@ function createOnlineStoreService({
       const freeFrom = Number(store.pedidoMinimo || 0);
       const deliveryCost = fulfillment === 'entrega' && (freeFrom <= 0 || subtotal < freeFrom) ? Number(store.costoEntrega || 0) : 0;
       const [customers] = await connection.query(
-        'SELECT idCliente,nombre,direccion FROM cliente WHERE idTienda=? AND telefonoNormalizado=? AND activo=1 LIMIT 1 FOR UPDATE',
-        [store.idTienda, phone.normalized]
+        `SELECT idCliente,nombre,direccion FROM cliente
+         WHERE idTienda=? AND telefonoNormalizado IN (${phoneCandidates(phone.normalized, store.codigoPaisTelefono).map(() => '?').join(',')})
+           AND activo=1 LIMIT 1 FOR UPDATE`,
+        [store.idTienda, ...phoneCandidates(phone.normalized, store.codigoPaisTelefono)]
       );
       let customerId = customers[0]?.idCliente || null;
+      if (customerId && normalizedIdentityName(customerName) !== normalizedIdentityName(customers[0].nombre)) {
+        throw new AppError(409, 'El nombre no coincide con el cliente registrado para este teléfono.', 'ONLINE_STORE_CUSTOMER_NAME_MISMATCH');
+      }
       if (!customerId) {
         await planLimitEnforcer(connection, store.idTienda, 'clientes');
         const now = clock();
         const [createdCustomer] = await connection.query(
           `INSERT INTO cliente (idTienda,nombre,telefono,direccion,telefonoNormalizado,permiteFiado,canalPreferido,aceptaRecordatorios,activo,creadoEn,actualizadoEn)
-           VALUES (?,?,?,?,?,0,'whatsapp',1,1,?,?)`,
+           VALUES (?,?,?,?,?,1,'whatsapp',1,1,?,?)`,
           [store.idTienda, customerName, phone.original, address, phone.normalized, now, now]
         );
         customerId = createdCustomer.insertId;

@@ -2716,11 +2716,14 @@ body:has([data-compensation-filter-form]) { overflow: hidden; }
 .customer-form-sections section { padding-top: 4px; border-top: 1px solid var(--line); }
 .customer-form-sections section:first-child { border-top: 0; }
 .customer-form-sections h4 { margin: 6px 0 10px; }
+.customer-credit-enabled-note { display: grid; gap: 3px; margin: 0 0 12px; padding: 12px 14px; border: 1px solid #9dcdb8; border-radius: 9px; color: #12603d; background: #edf8f3; }
+.customer-credit-enabled-note span { color: var(--muted); font-size: 13px; }
+html[data-theme="dark"] .customer-credit-enabled-note { color: #95e3a5; background: #143422; border-color: #316c42; }
 .customer-basic-fields { align-items: start; }
 .customer-basic-fields > label { display: grid; gap: 6px; align-content: start; }
 .international-phone-field {
   display: grid;
-  grid-template-columns: minmax(76px, auto) minmax(0, 1fr);
+  grid-template-columns: 100px minmax(0, 1fr);
   align-items: stretch;
   width: 100%;
   min-height: 42px;
@@ -2732,8 +2735,10 @@ body:has([data-compensation-filter-form]) { overflow: hidden; }
 .international-phone-field:focus-within { outline: 2px solid color-mix(in srgb, var(--brand) 72%, transparent); outline-offset: 2px; border-color: var(--brand); }
 .international-phone-field select,
 .international-phone-field input { min-width: 0; height: 40px; margin: 0; border: 0; border-radius: 0; background: transparent; box-shadow: none; }
-.international-phone-field select { width: 82px; padding-right: 24px; border-right: 1px solid var(--line); font-weight: 700; }
+.international-phone-field select { width: 100px; padding: 0 28px 0 12px; border-right: 1px solid var(--line); color: var(--ink); background-color: var(--panel); font-weight: 700; }
 .international-phone-field input { padding-left: 12px; }
+html[data-theme="dark"] .international-phone-field select,
+html[data-theme="dark"] .international-phone-field select option { color: #f0f5f0; background: #0b110b; }
 .plan-note,
 .readonly-note { border-left: 4px solid #d3a72b; background: #fffbeb; }
 .plan-note p, .readonly-note p { margin-bottom: 0; }
