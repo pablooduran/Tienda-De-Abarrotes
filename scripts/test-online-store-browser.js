@@ -45,8 +45,8 @@ function readBody(request) {
 async function main() {
   const assets = new Map([
     ['/tienda/tienda-prueba', ['text/html', path.join(root, 'public', 'storefront.html')]],
-    ['/css/storefront.css?v=20261011-5', ['text/css', path.join(root, 'public', 'css', 'storefront.css')]],
-    ['/js/storefront.js?v=20261011-5', ['application/javascript', path.join(root, 'public', 'js', 'storefront.js')]],
+    ['/css/storefront.css?v=20261011-6', ['text/css', path.join(root, 'public', 'css', 'storefront.css')]],
+    ['/js/storefront.js?v=20261011-6', ['application/javascript', path.join(root, 'public', 'js', 'storefront.js')]],
     ['/js/http-security.js', ['application/javascript', path.join(root, 'public', 'js', 'http-security.js')]],
     ['/assets/administrau-icon.png', ['image/png', path.join(root, 'public', 'assets', 'administrau-icon.png')]]
   ]);
@@ -132,11 +132,15 @@ async function main() {
       await page.getByRole('button', { name: 'Buscar cliente' }).click();
       await page.getByText('Cliente encontrado.', { exact: false }).waitFor();
       await page.getByText('Pablo', { exact: true }).waitFor();
+      await page.getByText('Tus datos ya están completos. Puedes continuar.', { exact: true }).waitFor();
       assert.strictEqual(await page.locator('[data-customer-name]').isHidden(), true);
+      assert.strictEqual(await page.locator('[data-customer-confirmation]').isVisible(), true);
+      assert.strictEqual(await page.locator('[data-customer-confirmation]').evaluate((node) => node.classList.contains('is-visible')), true);
+      assert.strictEqual(await page.getByRole('button', { name: '✓ Cliente encontrado' }).count(), 1);
       await page.getByText('Entrega a domicilio', { exact: true }).click();
       assert.strictEqual(await page.getByLabel('Dirección de entrega').isVisible(), true);
       await page.getByLabel('Dirección de entrega').fill('Zona central');
-      assert.strictEqual(await page.getByRole('button', { name: 'Buscar cliente' }).count(), 1);
+      assert.strictEqual(await page.getByRole('button', { name: '✓ Cliente encontrado' }).count(), 1);
       assert.strictEqual(await page.getByRole('button', { name: 'Enviar pedido a la tienda' }).count(), 1);
       assert.strictEqual(await page.getByText('Noche', { exact: true }).count(), 1);
       assert.strictEqual(await page.getByText('QR', { exact: true }).count(), 1);

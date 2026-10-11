@@ -123,7 +123,13 @@
     dialog.querySelector('[name="address"]').required = !store.opciones.recojo;
     dialog.querySelector('[data-customer-result]').textContent = 'Tu teléfono funciona como identificador dentro de esta tienda.';
     dialog.querySelector('[data-customer-result]').classList.remove('error');
-    dialog.querySelector('[data-customer-confirmation]').hidden = true;
+    const confirmation = dialog.querySelector('[data-customer-confirmation]');
+    confirmation.hidden = true;
+    confirmation.classList.remove('is-visible');
+    const findButton = dialog.querySelector('[data-find-customer]');
+    findButton.disabled = false;
+    findButton.textContent = 'Buscar cliente';
+    findButton.classList.remove('is-searching', 'is-success', 'is-new');
     dialog.dataset.customerStatus = '';
     dialog.dataset.checkedPhone = '';
     const name = dialog.querySelector('[name="customerName"]');
@@ -139,7 +145,20 @@
     const localPhone = digits(form.elements.phone.value);
     const phone = checkoutPhone(form);
     const result = dialog.querySelector('[data-customer-result]');
-    if (localPhone.length < 7) { result.textContent = 'Ingresa un número de teléfono válido para buscarte.'; return; }
+    const findButton = dialog.querySelector('[data-find-customer]');
+    const confirmation = dialog.querySelector('[data-customer-confirmation]');
+    if (localPhone.length < 7) {
+      result.textContent = 'Ingresa un número de teléfono válido para buscarte.';
+      result.classList.add('error');
+      form.elements.phone.focus();
+      return;
+    }
+    findButton.disabled = true;
+    findButton.textContent = 'Buscando…';
+    findButton.classList.remove('is-success', 'is-new');
+    findButton.classList.add('is-searching');
+    confirmation.hidden = true;
+    confirmation.classList.remove('is-visible');
     result.textContent = 'Buscando cliente…';
     result.classList.remove('error');
     try {
@@ -155,24 +174,32 @@
         dialog.dataset.customerStatus = 'found';
         name.value = data.cliente.nombre || '';
         dialog.querySelector('[data-customer-name]').hidden = true;
-        const confirmation = dialog.querySelector('[data-customer-confirmation]');
-        confirmation.innerHTML = `<span>Cliente registrado</span><strong>${escapeHtml(data.cliente.nombre || '')}</strong><small>Usaremos este nombre para enviar el pedido.</small>`;
+        confirmation.innerHTML = `<span class="checkout-customer-icon" aria-hidden="true">✓</span><span class="checkout-customer-copy"><small>¡Cliente encontrado!</small><strong>${escapeHtml(data.cliente.nombre || '')}</strong><span>Tus datos ya están completos. Puedes continuar.</span></span>`;
         confirmation.hidden = false;
+        confirmation.classList.add('is-visible');
         dialog.querySelector('[name="address"]').value ||= data.cliente.direccion || '';
-        result.textContent = 'Cliente encontrado. Confirma que eres tú y continúa con la entrega.';
+        findButton.textContent = '✓ Cliente encontrado';
+        findButton.classList.add('is-success');
+        result.textContent = 'Cliente encontrado. Tus datos ya están completos.';
       } else {
         dialog.dataset.customerStatus = 'new';
-        dialog.querySelector('[data-customer-confirmation]').hidden = true;
+        confirmation.hidden = true;
+        confirmation.classList.remove('is-visible');
         dialog.querySelector('[data-customer-name]').hidden = false;
         name.value = '';
         name.placeholder = 'Tu nombre completo';
+        findButton.textContent = 'Cliente nuevo';
+        findButton.classList.add('is-new');
         name.focus();
         result.textContent = 'No hay un cliente asociado. Escribe tu nombre para registrarte con este pedido.';
       }
     } catch (error) {
       result.textContent = error.message || 'No pudimos buscar el cliente.';
       result.classList.add('error');
+      findButton.textContent = 'Buscar cliente';
     }
+    findButton.disabled = false;
+    findButton.classList.remove('is-searching');
   }
 
   async function submitOrder(event) {
@@ -299,7 +326,13 @@
       checkoutDialog.dataset.customerStatus = '';
       checkoutDialog.querySelector('[name="customerName"]').value = '';
       checkoutDialog.querySelector('[data-customer-name]').hidden = true;
-      checkoutDialog.querySelector('[data-customer-confirmation]').hidden = true;
+      const confirmation = checkoutDialog.querySelector('[data-customer-confirmation]');
+      confirmation.hidden = true;
+      confirmation.classList.remove('is-visible');
+      const findButton = checkoutDialog.querySelector('[data-find-customer]');
+      findButton.disabled = false;
+      findButton.textContent = 'Buscar cliente';
+      findButton.classList.remove('is-searching', 'is-success', 'is-new');
       checkoutDialog.querySelector('[data-customer-result]').textContent = 'Cuando termines, presiona “Buscar cliente”.';
       checkoutDialog.querySelector('[data-customer-result]').classList.remove('error');
     });
