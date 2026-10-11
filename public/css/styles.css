@@ -5286,23 +5286,31 @@ html:not([data-theme="dark"]) :is(.online-option-card>i,.online-visibility-card>
   .online-order-summary article{padding:13px}
 }
 
-/* Flujo operativo: detalle desplegable y avance guiado del pedido. */
-.online-order-card{align-content:start;min-width:0}
+/* Flujo operativo: pedido legible, progreso visual y acciones compactas. */
+.online-order-card{align-content:start;min-width:0;gap:12px;padding:20px}
 .online-order-products{min-width:0;border-block:1px solid var(--line)}
+.online-order-products-heading{padding:12px 2px 7px;color:var(--ink)}
 .online-order-products summary{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 2px;cursor:pointer;font-weight:850;list-style:none}
 .online-order-products summary::-webkit-details-marker{display:none}
-.online-order-products summary::after{content:"+";display:grid;place-items:center;flex:0 0 28px;height:28px;border:1px solid var(--line);border-radius:9px;color:var(--brand)}
+.online-order-products summary::after{content:"+";display:grid;place-items:center;flex:0 0 28px;height:28px;border:1px solid color-mix(in srgb,var(--brand) 45%,var(--line));border-radius:9px;color:var(--brand);background:color-mix(in srgb,var(--brand) 6%,var(--panel))}
 .online-order-products[open] summary::after{content:"−"}
-.online-order-products summary small{margin-left:auto;color:var(--muted);font-weight:600}
-.online-order-products ul{max-height:270px;overflow-y:auto;margin:0;padding:2px 2px 12px;border:0;overscroll-behavior:contain;scrollbar-gutter:stable}
-.online-order-products li span{min-width:0;overflow-wrap:anywhere}
-.online-order-products li strong{flex:0 0 auto}
-.online-order-card footer{grid-template-columns:minmax(115px,.7fr) minmax(115px,.7fr) minmax(190px,1fr);align-items:stretch}
-.online-order-state{display:grid;align-content:center;gap:4px;padding:11px 13px;border:1px solid var(--line);border-radius:12px;background:var(--panel)}
-.online-order-state span{color:var(--muted);font-size:.75rem;font-weight:750}.online-order-state strong{font-size:.9rem}
-.online-order-actions{display:flex;align-items:stretch;justify-content:flex-end;gap:8px}
-.online-order-actions button{min-height:46px}.online-order-actions .secondary{padding-inline:12px}
-.online-order-finished{display:grid;place-items:center;min-height:46px;padding:10px 14px;border:1px solid color-mix(in srgb,var(--brand) 40%,var(--line));border-radius:11px;background:color-mix(in srgb,var(--brand) 8%,var(--panel));color:var(--brand);font-weight:850;text-align:center}
-html:not([data-theme="dark"]) .online-order-state{border-color:#c2ccbe;background:#fff}
-@media(max-width:760px){.online-order-card footer{grid-template-columns:1fr 1fr}.online-order-actions{grid-column:1/-1}.online-order-actions>*{flex:1}}
-@media(max-width:480px){.online-order-card footer{grid-template-columns:1fr}.online-order-actions{grid-column:auto;display:grid}.online-order-products summary small{display:none}}
+.online-order-products summary small{margin-left:auto;color:var(--muted);font-weight:650}
+.online-order-products ul{display:grid;gap:7px;max-height:none;overflow:visible;margin:0;padding:4px 2px 13px;border:0;list-style:none}
+.online-order-products.is-collapsible[open] ul{max-height:360px;overflow-y:auto;overscroll-behavior:contain;scrollbar-gutter:stable}
+.online-order-products li{display:flex;justify-content:space-between;gap:14px}.online-order-products li span{min-width:0;overflow-wrap:anywhere}.online-order-products li strong{flex:0 0 auto}
+.online-order-progress{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:0;margin:2px 0 0;padding:0;list-style:none}
+.online-order-progress li{position:relative;display:grid;justify-items:center;gap:5px;color:var(--muted);font-size:.7rem;font-weight:750;text-align:center}
+.online-order-progress li::before{content:"";position:absolute;z-index:0;top:13px;right:50%;width:100%;height:2px;background:var(--line)}
+.online-order-progress li:first-child::before{display:none}
+.online-order-progress i{position:relative;z-index:1;display:grid;place-items:center;width:28px;height:28px;border:2px solid var(--line);border-radius:999px;background:var(--panel);color:var(--muted);font-style:normal}
+.online-order-progress li.done i,.online-order-progress li.active i{border-color:var(--brand);background:var(--brand);color:#fff}.online-order-progress li.done::before,.online-order-progress li.active::before{background:var(--brand)}.online-order-progress li.active span{color:var(--ink);font-weight:900}
+.online-order-progress.is-cancelled{opacity:.48}
+.online-order-cancelled{margin:0;padding:10px 13px;border:1px solid color-mix(in srgb,var(--danger,#9a3030) 45%,var(--line));border-radius:11px;background:color-mix(in srgb,var(--danger,#9a3030) 8%,var(--panel));color:var(--danger,#9a3030);font-weight:850;text-align:center}
+.online-order-card footer{display:flex;align-items:center;justify-content:space-between;gap:12px;padding-top:4px}
+.online-payment-status{display:flex;align-items:center;gap:7px;min-width:0;padding:8px 11px;border:1px solid var(--line);border-radius:999px;background:var(--panel);font-size:.8rem}.online-payment-status span{color:var(--muted)}
+.online-order-actions{display:flex;align-items:center;justify-content:flex-end;gap:8px;min-width:0}.online-order-actions button{width:auto;min-height:40px;padding:9px 14px;white-space:nowrap}
+.online-order-cancel-button{border:0;background:transparent;color:var(--muted);font-size:.78rem;text-decoration:underline;text-underline-offset:3px}.online-order-cancel-button:hover{color:var(--danger,#9a3030)}
+.online-order-finished{display:grid;place-items:center;min-height:40px;padding:8px 13px;border:1px solid color-mix(in srgb,var(--brand) 40%,var(--line));border-radius:999px;background:color-mix(in srgb,var(--brand) 8%,var(--panel));color:var(--brand);font-size:.82rem;font-weight:850;text-align:center}
+html:not([data-theme="dark"]) .online-payment-status{border-color:#c2ccbe;background:#fff}
+@media(max-width:620px){.online-order-card{padding:16px}.online-order-card footer{align-items:stretch;flex-direction:column}.online-order-actions{justify-content:stretch}.online-order-actions button,.online-order-actions .online-order-finished{flex:1}.online-payment-status{width:max-content}.online-order-progress li span{font-size:.64rem}}
+@media(max-width:390px){.online-order-actions{display:grid}.online-order-progress li span{max-width:62px}.online-order-products summary small{display:none}}

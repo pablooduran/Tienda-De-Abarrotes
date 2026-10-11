@@ -111,7 +111,7 @@
     function nextOrderAction(order) {
       if (['pendiente', 'confirmado'].includes(order.estado)) return { label: 'Alistar pedido', estado: 'preparando', estadoPago: 'pendiente' };
       if (order.estado === 'preparando') return { label: 'Pedido terminado', estado: 'listo', estadoPago: 'pendiente' };
-      if (order.estado === 'listo') return { label: 'Marcar como entregado', estado: 'entregado', estadoPago: 'pagado' };
+      if (order.estado === 'listo') return { label: 'Marcar entregado', estado: 'entregado', estadoPago: 'pagado' };
       return null;
     }
 
@@ -139,7 +139,13 @@
     function renderOrders() {
       const target = root.querySelector('[data-online-orders]');
       if (!target) return;
-      const visibleOrders = orderStatus === 'todos' ? orders : orders.filter((order) => order.estado === orderStatus);
+      const visibleOrders = orderStatus === 'todos'
+        ? orders
+        : orders.filter((order) => {
+          if (orderStatus === 'preparando') return ['confirmado', 'preparando'].includes(order.estado);
+          if (orderStatus === 'finalizados') return ['entregado', 'cancelado'].includes(order.estado);
+          return order.estado === orderStatus;
+        });
       if (!visibleOrders.length) {
         target.innerHTML = `<div class="online-store-empty"><strong>${orders.length ? 'No hay pedidos en este estado' : 'Aún no llegaron pedidos'}</strong><p>${orders.length ? 'Prueba con otro filtro para revisar tus pedidos.' : 'Cuando un cliente envíe su carrito, aparecerá aquí con sus datos y productos.'}</p></div>`;
         return;
@@ -148,11 +154,21 @@
         const action = nextOrderAction(order);
         const productCount = order.productos.reduce((total, item) => total + Number(item.cantidad || 0), 0);
         const finalState = ['entregado', 'cancelado'].includes(order.estado);
+        const manyProducts = order.productos.length > 12;
+        const productRows = `<ul>${order.productos.map((item) => `<li><span>${item.cantidad} × ${escapeHtml(item.nombreProductoSnapshot)}</span><strong>Bs ${Number(item.subtotal).toFixed(2)}</strong></li>`).join('')}</ul>`;
+        const productDetails = manyProducts
+          ? `<details class="online-order-products is-collapsible"><summary><span>${productCount} ${productCount === 1 ? 'producto' : 'productos'}</span><small>Mostrar pedido completo</small></summary>${productRows}</details>`
+          : `<section class="online-order-products is-expanded"><div class="online-order-products-heading"><strong>${productCount} ${productCount === 1 ? 'producto' : 'productos'}</strong></div>${productRows}</section>`;
+        const progressStatus = order.estado === 'confirmado' ? 'preparando' : order.estado;
+        const progress = ['pendiente', 'preparando', 'listo', 'entregado'];
+        const progressIndex = progress.indexOf(progressStatus);
         return `<article class="online-order-card" data-online-order="${order.idPedidoOnline}">
           <header><div><span class="eyebrow">PEDIDO ${escapeHtml(order.codigoPublico)}</span><h5>${escapeHtml(order.nombreCliente)}</h5><p>${escapeHtml(order.telefonoCliente)} · ${order.tipoEntrega === 'entrega' ? 'Entrega a domicilio' : 'Recojo en tienda'} · ${order.franjaEntrega}</p></div><strong>Bs ${Number(order.total).toFixed(2)}</strong></header>
-          <details class="online-order-products" ${order.productos.length <= 3 ? 'open' : ''}><summary><span>${productCount} ${productCount === 1 ? 'producto' : 'productos'}</span><small>Ver detalle completo</small></summary><ul>${order.productos.map((item) => `<li><span>${item.cantidad} × ${escapeHtml(item.nombreProductoSnapshot)}</span><strong>Bs ${Number(item.subtotal).toFixed(2)}</strong></li>`).join('')}</ul></details>
+          ${productDetails}
           ${order.direccionEntrega ? `<p class="online-order-address"><strong>Dirección:</strong> ${escapeHtml(order.direccionEntrega)}</p>` : ''}
-          <footer><div class="online-order-state"><span>Preparación</span><strong>${orderLabel(order.estado)}</strong></div><div class="online-order-state"><span>Pago</span><strong>${order.estadoPago === 'pagado' ? 'Pagado' : 'Pendiente'}</strong></div><div class="online-order-actions">${action ? `<button type="button" data-order-advance data-next-state="${action.estado}" data-next-payment="${action.estadoPago}" ${isReadOnly() ? 'disabled' : ''}>${action.label}</button>` : `<span class="online-order-finished">${order.estado === 'entregado' ? 'Pedido completado' : 'Pedido cancelado'}</span>`}${!finalState ? `<button type="button" class="secondary" data-order-cancel ${isReadOnly() ? 'disabled' : ''}>Cancelar</button>` : ''}</div></footer>
+          <ol class="online-order-progress${order.estado === 'cancelado' ? ' is-cancelled' : ''}" aria-label="Progreso del pedido">${progress.map((state, index) => `<li class="${index < progressIndex ? 'done' : index === progressIndex ? 'active' : ''}"><i aria-hidden="true">${index < progressIndex ? '✓' : index + 1}</i><span>${({ pendiente: 'Nuevo', preparando: 'Preparando', listo: 'Listo', entregado: 'Entregado' })[state]}</span></li>`).join('')}</ol>
+          ${order.estado === 'cancelado' ? '<p class="online-order-cancelled">Pedido cancelado</p>' : ''}
+          <footer><div class="online-payment-status"><span>Pago</span><strong>${order.estadoPago === 'pagado' ? 'Pagado' : 'Pendiente'}</strong></div><div class="online-order-actions">${action ? `<button type="button" data-order-advance data-next-state="${action.estado}" data-next-payment="${action.estadoPago}" ${isReadOnly() ? 'disabled' : ''}>${action.label}</button>` : order.estado === 'entregado' ? '<span class="online-order-finished">Pedido completado</span>' : ''}${!finalState ? `<button type="button" class="online-order-cancel-button" data-order-cancel ${isReadOnly() ? 'disabled' : ''}>Cancelar pedido</button>` : ''}</div></footer>
         </article>`;
       }).join('');
       target.querySelectorAll('[data-online-order]').forEach((card) => {
@@ -211,15 +227,15 @@
           <p class="online-store-announcement" data-online-announcement role="status" aria-live="polite"></p>
 
           <section class="online-catalog-manager online-orders-manager" data-online-panel="orders">
-            <div class="online-section-heading"><span>1</span><div><h4>Pedidos recibidos</h4><p>Lo esencial de tu tienda online: confirma, prepara y completa cada entrega.</p></div></div>
+            <div class="online-section-heading"><span>1</span><div><h4>Pedidos recibidos</h4><p>Revisa lo nuevo, alista cada pedido y completa la entrega paso a paso.</p></div></div>
             <div class="online-order-summary">
-              <article><span>Nuevos</span><strong data-order-count="pendiente">0</strong><small>Esperan confirmación</small></article>
+              <article><span>Nuevos</span><strong data-order-count="pendiente">0</strong><small>Esperan ser alistados</small></article>
               <article><span>En preparación</span><strong data-order-count="confirmado,preparando">0</strong><small>Se están armando</small></article>
               <article><span>Listos</span><strong data-order-count="listo">0</strong><small>Para entregar o recoger</small></article>
               <article><span>Entregados</span><strong data-order-count="entregado">0</strong><small>Pedidos completados</small></article>
             </div>
             <div class="online-order-filters" role="group" aria-label="Filtrar pedidos por estado">
-              <button type="button" data-online-status="todos">Todos</button><button type="button" data-online-status="pendiente">Nuevos</button><button type="button" data-online-status="confirmado">Confirmados</button><button type="button" data-online-status="preparando">Preparando</button><button type="button" data-online-status="listo">Listos</button><button type="button" data-online-status="entregado">Entregados</button><button type="button" data-online-status="cancelado">Cancelados</button>
+              <button type="button" data-online-status="todos">Todos</button><button type="button" data-online-status="pendiente">Nuevos</button><button type="button" data-online-status="preparando">Preparando</button><button type="button" data-online-status="listo">Listos</button><button type="button" data-online-status="finalizados">Finalizados</button>
             </div>
             <div class="online-order-list" data-online-orders></div>
           </section>
