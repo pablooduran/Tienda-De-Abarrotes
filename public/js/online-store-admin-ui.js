@@ -108,6 +108,34 @@
       return ({ pendiente: 'Nuevo', confirmado: 'Confirmado', preparando: 'Preparando', listo: 'Listo para entregar', entregado: 'Entregado', cancelado: 'Cancelado' })[value] || value;
     }
 
+    function nextOrderAction(order) {
+      if (['pendiente', 'confirmado'].includes(order.estado)) return { label: 'Alistar pedido', estado: 'preparando', estadoPago: 'pendiente' };
+      if (order.estado === 'preparando') return { label: 'Pedido terminado', estado: 'listo', estadoPago: 'pendiente' };
+      if (order.estado === 'listo') return { label: 'Marcar como entregado', estado: 'entregado', estadoPago: 'pagado' };
+      return null;
+    }
+
+    async function updateOrder(card, estado, estadoPago, successMessage) {
+      const buttons = [...card.querySelectorAll('button')];
+      const scrollTop = global.scrollY;
+      buttons.forEach((button) => { button.disabled = true; });
+      try {
+        await api(`/api/tienda-online/pedidos/${card.dataset.onlineOrder}`, {
+          method: 'PATCH',
+          body: JSON.stringify({ estado, estadoPago })
+        });
+        setAnnouncement(successMessage);
+        const data = await api('/api/tienda-online/pedidos?estado=todos');
+        orders = data.pedidos;
+        renderOrderSummary();
+        renderOrders();
+        global.scrollTo({ top: scrollTop, behavior: 'auto' });
+      } catch (error) {
+        buttons.forEach((button) => { button.disabled = isReadOnly(); });
+        setAnnouncement(messageFor(error), true);
+      }
+    }
+
     function renderOrders() {
       const target = root.querySelector('[data-online-orders]');
       if (!target) return;
@@ -116,27 +144,27 @@
         target.innerHTML = `<div class="online-store-empty"><strong>${orders.length ? 'No hay pedidos en este estado' : 'Aún no llegaron pedidos'}</strong><p>${orders.length ? 'Prueba con otro filtro para revisar tus pedidos.' : 'Cuando un cliente envíe su carrito, aparecerá aquí con sus datos y productos.'}</p></div>`;
         return;
       }
-      target.innerHTML = visibleOrders.map((order) => `<article class="online-order-card" data-online-order="${order.idPedidoOnline}">
-        <header><div><span class="eyebrow">PEDIDO ${escapeHtml(order.codigoPublico)}</span><h5>${escapeHtml(order.nombreCliente)}</h5><p>${escapeHtml(order.telefonoCliente)} · ${order.tipoEntrega === 'entrega' ? 'Entrega a domicilio' : 'Recojo en tienda'} · ${order.franjaEntrega}</p></div><strong>Bs ${Number(order.total).toFixed(2)}</strong></header>
-        <ul>${order.productos.map((item) => `<li><span>${item.cantidad} × ${escapeHtml(item.nombreProductoSnapshot)}</span><strong>Bs ${Number(item.subtotal).toFixed(2)}</strong></li>`).join('')}</ul>
-        ${order.direccionEntrega ? `<p class="online-order-address"><strong>Dirección:</strong> ${escapeHtml(order.direccionEntrega)}</p>` : ''}
-        <footer><label>Preparación<select name="estado">${['pendiente','confirmado','preparando','listo','entregado','cancelado'].map((value) => `<option value="${value}" ${order.estado === value ? 'selected' : ''}>${orderLabel(value)}</option>`).join('')}</select></label><label>Pago<select name="estadoPago"><option value="pendiente" ${order.estadoPago === 'pendiente' ? 'selected' : ''}>Pendiente</option><option value="pagado" ${order.estadoPago === 'pagado' ? 'selected' : ''}>Pagado</option></select></label><button type="button" ${isReadOnly() ? 'disabled' : ''}>Guardar estado</button></footer>
-      </article>`).join('');
-      target.querySelectorAll('[data-online-order]').forEach((card) => card.querySelector('button').addEventListener('click', async () => {
-        const button = card.querySelector('button');
-        button.disabled = true;
-        try {
-          await api(`/api/tienda-online/pedidos/${card.dataset.onlineOrder}`, { method: 'PATCH', body: JSON.stringify({ estado: card.querySelector('[name="estado"]').value, estadoPago: card.querySelector('[name="estadoPago"]').value }) });
-          setAnnouncement('El estado del pedido quedó actualizado.');
-          const data = await api('/api/tienda-online/pedidos?estado=todos');
-          orders = data.pedidos;
-          renderOrderSummary();
-          renderOrders();
-        } catch (error) {
-          button.disabled = false;
-          setAnnouncement(messageFor(error), true);
-        }
-      }));
+      target.innerHTML = visibleOrders.map((order) => {
+        const action = nextOrderAction(order);
+        const productCount = order.productos.reduce((total, item) => total + Number(item.cantidad || 0), 0);
+        const finalState = ['entregado', 'cancelado'].includes(order.estado);
+        return `<article class="online-order-card" data-online-order="${order.idPedidoOnline}">
+          <header><div><span class="eyebrow">PEDIDO ${escapeHtml(order.codigoPublico)}</span><h5>${escapeHtml(order.nombreCliente)}</h5><p>${escapeHtml(order.telefonoCliente)} · ${order.tipoEntrega === 'entrega' ? 'Entrega a domicilio' : 'Recojo en tienda'} · ${order.franjaEntrega}</p></div><strong>Bs ${Number(order.total).toFixed(2)}</strong></header>
+          <details class="online-order-products" ${order.productos.length <= 3 ? 'open' : ''}><summary><span>${productCount} ${productCount === 1 ? 'producto' : 'productos'}</span><small>Ver detalle completo</small></summary><ul>${order.productos.map((item) => `<li><span>${item.cantidad} × ${escapeHtml(item.nombreProductoSnapshot)}</span><strong>Bs ${Number(item.subtotal).toFixed(2)}</strong></li>`).join('')}</ul></details>
+          ${order.direccionEntrega ? `<p class="online-order-address"><strong>Dirección:</strong> ${escapeHtml(order.direccionEntrega)}</p>` : ''}
+          <footer><div class="online-order-state"><span>Preparación</span><strong>${orderLabel(order.estado)}</strong></div><div class="online-order-state"><span>Pago</span><strong>${order.estadoPago === 'pagado' ? 'Pagado' : 'Pendiente'}</strong></div><div class="online-order-actions">${action ? `<button type="button" data-order-advance data-next-state="${action.estado}" data-next-payment="${action.estadoPago}" ${isReadOnly() ? 'disabled' : ''}>${action.label}</button>` : `<span class="online-order-finished">${order.estado === 'entregado' ? 'Pedido completado' : 'Pedido cancelado'}</span>`}${!finalState ? `<button type="button" class="secondary" data-order-cancel ${isReadOnly() ? 'disabled' : ''}>Cancelar</button>` : ''}</div></footer>
+        </article>`;
+      }).join('');
+      target.querySelectorAll('[data-online-order]').forEach((card) => {
+        card.querySelector('[data-order-advance]')?.addEventListener('click', (event) => {
+          const button = event.currentTarget;
+          void updateOrder(card, button.dataset.nextState, button.dataset.nextPayment, 'El pedido avanzó al siguiente paso.');
+        });
+        card.querySelector('[data-order-cancel]')?.addEventListener('click', () => {
+          if (!global.confirm('¿Quieres cancelar este pedido?')) return;
+          void updateOrder(card, 'cancelado', 'pendiente', 'El pedido quedó cancelado.');
+        });
+      });
     }
 
     function renderOrderSummary() {

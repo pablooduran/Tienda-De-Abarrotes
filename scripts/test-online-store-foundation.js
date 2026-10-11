@@ -58,11 +58,19 @@ assert(publicUi.includes('restoreCartDraft()'));
 assert(publicUi.includes('dataset.checkedPhone'));
 assert(publicUi.includes('checkout-section'));
 assert(publicUi.includes('Primero presiona “Buscar cliente”'));
+assert(publicUi.includes('Cliente registrado'));
+assert(publicUi.includes("data-customer-name]').hidden = true"));
 assert(ownerUi.includes('Pedidos recibidos'));
 assert(ownerUi.includes("let activeView = 'orders'"));
 assert(ownerUi.includes('data-online-view="config"'));
 assert(ownerUi.includes('data-online-view="products"'));
 assert(ownerUi.includes('/api/tienda-online/pedidos?estado=todos'));
+assert(ownerUi.includes('Alistar pedido'));
+assert(ownerUi.includes('Pedido terminado'));
+assert(ownerUi.includes('Marcar como entregado'));
+assert(ownerUi.includes('online-order-products'));
+assert(!ownerUi.includes('<select name="estado">'));
+assert(fs.readFileSync(path.join(root, 'services', 'online-store-service.js'), 'utf8').includes('ONLINE_STORE_ORDER_INVALID_TRANSITION'));
 assert(ownerUi.includes('global.setTimeout(() =>'));
 assert(ownerUi.includes('}, 2000);'));
 assert(ownerUi.includes("currentTarget.textContent = '';"));
@@ -140,6 +148,10 @@ async function serviceContract() {
           cantidadMaximaPedido: null
         }]];
       }
+      if (sql.includes('SELECT nombre,direccion FROM cliente')) {
+        assert.strictEqual(params[0], 7);
+        return [[{ nombre: 'Pablo', direccion: 'Zona central' }]];
+      }
       throw new Error(`Consulta inesperada: ${sql.slice(0, 80)}`);
     }
   };
@@ -158,6 +170,8 @@ async function serviceContract() {
   assert(!JSON.stringify(catalog).includes('stockUnidadesTotal'));
   assert(!Object.hasOwn(catalog.tienda, 'telefono'));
   assert(!Object.hasOwn(catalog.tienda, 'direccion'));
+  const customer = await service.identifyPublicCustomer('tienda-prueba', '+59177049566');
+  assert.deepStrictEqual(customer, { encontrado: true, cliente: { nombre: 'Pablo', direccion: 'Zona central' } });
   assert(calls.every((call) => !call.params?.includes(undefined)));
 }
 
@@ -211,7 +225,24 @@ async function orderContract() {
   assert.deepStrictEqual(writes, ['begin', 'cliente', 'pedido', 'detalle', 'commit', 'release']);
 }
 
-Promise.all([serviceContract(), orderContract()])
+async function orderWorkflowContract() {
+  const database = {
+    async query(sql, params) {
+      if (sql.startsWith('SELECT estado FROM pedidoTiendaOnline')) return [[{ estado: 'listo' }]];
+      if (sql.startsWith('UPDATE pedidoTiendaOnline')) {
+        assert.strictEqual(params[0], 'entregado');
+        assert.strictEqual(params[1], 'pagado');
+        return [{ affectedRows: 1 }];
+      }
+      throw new Error(`Consulta inesperada: ${sql.slice(0, 80)}`);
+    }
+  };
+  const service = createOnlineStoreService({ database, clock: () => '2026-10-11 11:45:00' });
+  const result = await service.updateOrder({ idTienda: 7, idAdministrador: 3 }, 99, { estado: 'entregado', estadoPago: 'pendiente' });
+  assert.deepStrictEqual(result, { actualizado: true });
+}
+
+Promise.all([serviceContract(), orderContract(), orderWorkflowContract()])
   .then(() => console.log('test:online-store-foundation OK'))
   .catch((error) => {
     console.error(`Error: ${error.message}`);

@@ -27,6 +27,9 @@ const catalog = {
     { idProducto: 3, nombre: 'Aceite vegetal', categoria: 'ABARROTES', unidadMedida: 'unidad', precioVenta: 18, disponibilidad: 'agotado' }
   ]
 };
+for (let idProducto = 4; idProducto <= 12; idProducto += 1) {
+  catalog.productos.push({ idProducto, nombre: `Producto de prueba ${idProducto}`, categoria: 'ABARROTES', unidadMedida: 'unidad', precioVenta: idProducto, disponibilidad: 'disponible' });
+}
 
 function readBody(request) {
   return new Promise((resolve, reject) => {
@@ -42,8 +45,8 @@ function readBody(request) {
 async function main() {
   const assets = new Map([
     ['/tienda/tienda-prueba', ['text/html', path.join(root, 'public', 'storefront.html')]],
-    ['/css/storefront.css?v=20261011-2', ['text/css', path.join(root, 'public', 'css', 'storefront.css')]],
-    ['/js/storefront.js?v=20261011-3', ['application/javascript', path.join(root, 'public', 'js', 'storefront.js')]],
+    ['/css/storefront.css?v=20261011-4', ['text/css', path.join(root, 'public', 'css', 'storefront.css')]],
+    ['/js/storefront.js?v=20261011-4', ['application/javascript', path.join(root, 'public', 'js', 'storefront.js')]],
     ['/js/http-security.js', ['application/javascript', path.join(root, 'public', 'js', 'http-security.js')]],
     ['/assets/administrau-icon.png', ['image/png', path.join(root, 'public', 'assets', 'administrau-icon.png')]]
   ]);
@@ -58,7 +61,7 @@ async function main() {
       const body = await readBody(request);
       response.writeHead(200, { 'Content-Type': 'application/json' });
       response.end(JSON.stringify(body.telefono === '+59177049566'
-        ? { encontrado: true, cliente: { direccion: 'Zona central' } }
+        ? { encontrado: true, cliente: { nombre: 'Pablo', direccion: 'Zona central' } }
         : { encontrado: false, cliente: null }));
       return;
     }
@@ -88,7 +91,7 @@ async function main() {
       page.on('pageerror', (error) => errors.push(error.message));
       await page.goto(`http://127.0.0.1:${server.address().port}/tienda/tienda-prueba`);
       await page.getByRole('heading', { name: 'Tienda Prueba' }).waitFor();
-      assert.strictEqual(await page.locator('.storefront-product').count(), 3);
+      assert.strictEqual(await page.locator('.storefront-product').count(), 12);
       assert.strictEqual(await page.getByText('Quedan pocas unidades').count(), 1);
       assert.strictEqual(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth), true);
       await page.locator('[data-add-product="1"]').click();
@@ -104,12 +107,24 @@ async function main() {
       await page.reload();
       await page.getByRole('heading', { name: 'Tienda Prueba' }).waitFor();
       assert.strictEqual(await page.locator('[data-cart-count]').first().textContent(), '1');
+      if (viewport.width === 1024) {
+        for (let idProducto = 4; idProducto <= 12; idProducto += 1) {
+          await page.locator(`[data-add-product="${idProducto}"]`).click();
+          await page.getByRole('button', { name: 'Confirmar cantidad' }).click();
+        }
+        const cartMetrics = await page.locator('[data-cart-items]').evaluate((node) => ({ clientHeight: node.clientHeight, scrollHeight: node.scrollHeight }));
+        assert(cartMetrics.scrollHeight > cartMetrics.clientHeight);
+        assert.strictEqual(await page.locator('.storefront-cart footer').isVisible(), true);
+        await page.locator('[data-cart-items]').evaluate((node) => { node.scrollTop = node.scrollHeight; });
+        assert((await page.locator('[data-cart-items]').evaluate((node) => node.scrollTop)) > 0);
+      }
       await page.getByRole('button', { name: 'Continuar pedido' }).click();
       assert.strictEqual(await page.getByText('+591', { exact: true }).count(), 1);
       await page.getByLabel('Número de teléfono').fill('77049566');
       await page.getByRole('button', { name: 'Buscar cliente' }).click();
       await page.getByText('Cliente encontrado.', { exact: false }).waitFor();
-      await page.getByLabel('Nombre completo').fill('Pablo');
+      await page.getByText('Pablo', { exact: true }).waitFor();
+      assert.strictEqual(await page.locator('[data-customer-name]').isHidden(), true);
       await page.getByText('Entrega a domicilio', { exact: true }).click();
       assert.strictEqual(await page.getByLabel('Dirección de entrega').isVisible(), true);
       await page.getByLabel('Dirección de entrega').fill('Zona central');

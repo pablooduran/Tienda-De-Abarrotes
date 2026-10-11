@@ -122,10 +122,12 @@
     dialog.querySelector('[data-delivery-row]').hidden = Boolean(store.opciones.recojo);
     dialog.querySelector('[name="address"]').required = !store.opciones.recojo;
     dialog.querySelector('[data-customer-result]').textContent = 'Tu teléfono funciona como identificador dentro de esta tienda.';
+    dialog.querySelector('[data-customer-confirmation]').hidden = true;
     dialog.dataset.customerStatus = '';
     dialog.dataset.checkedPhone = '';
     const name = dialog.querySelector('[name="customerName"]');
-    name.hidden = false;
+    name.value = '';
+    dialog.querySelector('[data-customer-name]').hidden = true;
     name.placeholder = 'Tu nombre completo';
     dialog.showModal();
     dialog.querySelector('form').scrollTop = 0;
@@ -148,15 +150,17 @@
       dialog.dataset.checkedPhone = digits(phone);
       if (data.encontrado) {
         dialog.dataset.customerStatus = 'found';
-        name.value = '';
-        name.hidden = false;
-        name.placeholder = 'Escribe el nombre con el que estás registrado';
+        name.value = data.cliente.nombre || '';
+        dialog.querySelector('[data-customer-name]').hidden = true;
+        const confirmation = dialog.querySelector('[data-customer-confirmation]');
+        confirmation.innerHTML = `<span>Cliente registrado</span><strong>${escapeHtml(data.cliente.nombre || '')}</strong><small>Usaremos este nombre para enviar el pedido.</small>`;
+        confirmation.hidden = false;
         dialog.querySelector('[name="address"]').value ||= data.cliente.direccion || '';
-        result.textContent = 'Cliente encontrado. Escribe el nombre con el que estás registrado para confirmar que eres tú.';
-        name.focus();
+        result.textContent = 'Cliente encontrado. Confirma que eres tú y continúa con la entrega.';
       } else {
         dialog.dataset.customerStatus = 'new';
-        name.hidden = false;
+        dialog.querySelector('[data-customer-confirmation]').hidden = true;
+        dialog.querySelector('[data-customer-name]').hidden = false;
         name.value = '';
         name.placeholder = 'Tu nombre completo';
         name.focus();
@@ -185,9 +189,8 @@
       return;
     }
     if (!form.elements.customerName.value.trim()) {
-      result.textContent = form.closest('dialog').dataset.customerStatus === 'found'
-        ? 'Escribe el nombre con el que estás registrado para confirmar tu identidad.'
-        : 'Escribe tu nombre para registrar el pedido.';
+      result.textContent = 'Escribe tu nombre para registrar el pedido.';
+      form.closest('dialog').querySelector('[data-customer-name]').hidden = false;
       form.elements.customerName.focus();
       return;
     }
@@ -241,6 +244,13 @@
       <dialog class="storefront-dialog" data-quantity-dialog><form method="dialog"><button class="dialog-close" value="cancel" aria-label="Cerrar">×</button><p class="eyebrow">AGREGAR AL CARRITO</p><h2 data-quantity-name></h2><p data-quantity-price></p><div class="storefront-stepper"><button type="button" data-quantity-action="decrease" aria-label="Quitar una unidad">−</button><strong data-quantity-value>1</strong><button type="button" data-quantity-action="increase" aria-label="Agregar una unidad">+</button></div><button type="button" data-confirm-quantity>Confirmar cantidad</button></form></dialog>
       <dialog class="storefront-dialog storefront-checkout" data-checkout-dialog><form novalidate><button type="button" class="dialog-close" data-close-checkout aria-label="Cerrar">×</button><header class="checkout-intro"><p class="eyebrow">ENVÍA TU PEDIDO</p><h2>Confirma los datos de tu compra</h2><p>Te identificamos, coordinamos la entrega y enviamos el pedido directamente a la tienda.</p></header><section class="checkout-section"><div class="checkout-section-title"><span>1</span><div><strong>Identifícate</strong><small>Tu teléfono es tu identificador en esta tienda.</small></div></div><div class="checkout-phone-row"><label>Número de teléfono<span class="checkout-phone-control"><b>+${escapeHtml(store.codigoPaisTelefono || '591')}</b><input name="phone" type="tel" inputmode="numeric" maxlength="15" required placeholder="76543210"></span></label><button type="button" data-find-customer>Buscar cliente</button></div><p class="checkout-note" data-customer-result role="status" aria-live="polite">Escribe tu número y presiona “Buscar cliente”.</p><label data-customer-name>Nombre completo<input name="customerName" maxlength="100" required placeholder="Tu nombre completo"></label></section><section class="checkout-section"><div class="checkout-section-title"><span>2</span><div><strong>Entrega y pago</strong><small>Elige cómo y cuándo quieres recibirlo.</small></div></div><fieldset><legend>¿Cómo quieres recibirlo?</legend><div class="checkout-choice-grid" data-fulfillment-options></div></fieldset><label class="checkout-address" data-delivery-fields>Dirección de entrega<input type="text" name="address" maxlength="255" placeholder="Zona, calle y referencia"></label><fieldset><legend>¿En qué momento?</legend><div class="checkout-slot-grid"><label><input type="radio" name="slot" value="manana" checked><span>Mañana</span></label><label><input type="radio" name="slot" value="tarde"><span>Tarde</span></label><label><input type="radio" name="slot" value="noche"><span>Noche</span></label></div></fieldset><fieldset><legend>¿Cómo pagarás?</legend><div class="checkout-slot-grid" data-payment-options></div></fieldset></section><section class="checkout-section"><div class="checkout-section-title"><span>3</span><div><strong>Revisa y envía</strong><small>La tienda confirmará disponibilidad y entrega.</small></div></div><label>Nota para la tienda (opcional)<textarea name="notes" maxlength="500" rows="2" placeholder="Alguna referencia o indicación"></textarea></label><div class="checkout-totals"><span>Subtotal <strong data-checkout-subtotal></strong></span><span data-delivery-row>Costo base estimado de entrega <strong data-delivery-estimate></strong></span></div></section><button type="submit" data-submit-order>Enviar pedido a la tienda</button></form></dialog>`;
 
+    const customerConfirmation = document.createElement('div');
+    customerConfirmation.className = 'checkout-customer-confirmation';
+    customerConfirmation.dataset.customerConfirmation = '';
+    customerConfirmation.hidden = true;
+    root.querySelector('[data-customer-name]').before(customerConfirmation);
+    root.querySelector('[data-customer-name]').hidden = true;
+
     root.addEventListener('click', (event) => {
       const add = event.target.closest('[data-add-product]');
       if (add) openQuantity(Number(add.dataset.addProduct));
@@ -281,6 +291,9 @@
     checkoutDialog.querySelector('[name="phone"]').addEventListener('input', () => {
       checkoutDialog.dataset.checkedPhone = '';
       checkoutDialog.dataset.customerStatus = '';
+      checkoutDialog.querySelector('[name="customerName"]').value = '';
+      checkoutDialog.querySelector('[data-customer-name]').hidden = true;
+      checkoutDialog.querySelector('[data-customer-confirmation]').hidden = true;
       checkoutDialog.querySelector('[data-customer-result]').textContent = 'Cuando termines, presiona “Buscar cliente”.';
     });
     checkoutDialog.querySelector('[data-close-checkout]').addEventListener('click', () => checkoutDialog.close());

@@ -5285,3 +5285,24 @@ html:not([data-theme="dark"]) :is(.online-option-card>i,.online-visibility-card>
   .online-order-summary{grid-template-columns:1fr 1fr}
   .online-order-summary article{padding:13px}
 }
+
+/* Flujo operativo: detalle desplegable y avance guiado del pedido. */
+.online-order-card{align-content:start;min-width:0}
+.online-order-products{min-width:0;border-block:1px solid var(--line)}
+.online-order-products summary{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 2px;cursor:pointer;font-weight:850;list-style:none}
+.online-order-products summary::-webkit-details-marker{display:none}
+.online-order-products summary::after{content:"+";display:grid;place-items:center;flex:0 0 28px;height:28px;border:1px solid var(--line);border-radius:9px;color:var(--brand)}
+.online-order-products[open] summary::after{content:"−"}
+.online-order-products summary small{margin-left:auto;color:var(--muted);font-weight:600}
+.online-order-products ul{max-height:270px;overflow-y:auto;margin:0;padding:2px 2px 12px;border:0;overscroll-behavior:contain;scrollbar-gutter:stable}
+.online-order-products li span{min-width:0;overflow-wrap:anywhere}
+.online-order-products li strong{flex:0 0 auto}
+.online-order-card footer{grid-template-columns:minmax(115px,.7fr) minmax(115px,.7fr) minmax(190px,1fr);align-items:stretch}
+.online-order-state{display:grid;align-content:center;gap:4px;padding:11px 13px;border:1px solid var(--line);border-radius:12px;background:var(--panel)}
+.online-order-state span{color:var(--muted);font-size:.75rem;font-weight:750}.online-order-state strong{font-size:.9rem}
+.online-order-actions{display:flex;align-items:stretch;justify-content:flex-end;gap:8px}
+.online-order-actions button{min-height:46px}.online-order-actions .secondary{padding-inline:12px}
+.online-order-finished{display:grid;place-items:center;min-height:46px;padding:10px 14px;border:1px solid color-mix(in srgb,var(--brand) 40%,var(--line));border-radius:11px;background:color-mix(in srgb,var(--brand) 8%,var(--panel));color:var(--brand);font-weight:850;text-align:center}
+html:not([data-theme="dark"]) .online-order-state{border-color:#c2ccbe;background:#fff}
+@media(max-width:760px){.online-order-card footer{grid-template-columns:1fr 1fr}.online-order-actions{grid-column:1/-1}.online-order-actions>*{flex:1}}
+@media(max-width:480px){.online-order-card footer{grid-template-columns:1fr}.online-order-actions{grid-column:auto;display:grid}.online-order-products summary small{display:none}}

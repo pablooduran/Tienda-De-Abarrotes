@@ -282,7 +282,7 @@ function createOnlineStoreService({
       [store.idTienda, ...candidates]
     );
     return rows[0]
-      ? { encontrado: true, cliente: { direccion: rows[0].direccion || '' } }
+      ? { encontrado: true, cliente: { nombre: rows[0].nombre, direccion: rows[0].direccion || '' } }
       : { encontrado: false, cliente: null };
   }
 
@@ -411,13 +411,26 @@ function createOnlineStoreService({
     const idAdministrador = positiveId(context?.idAdministrador, 'El administrador');
     const orderId = positiveId(idPedidoOnline, 'El pedido');
     const status = enumValue(body.estado, ['pendiente','confirmado','preparando','listo','entregado','cancelado'], 'El estado');
-    const paymentStatus = enumValue(body.estadoPago, ['pendiente','pagado'], 'El estado de pago');
+    const [orders] = await database.query(
+      'SELECT estado FROM pedidoTiendaOnline WHERE idTienda=? AND idPedidoOnline=? LIMIT 1',
+      [idTienda, orderId]
+    );
+    if (!orders.length) throw new AppError(404, 'El pedido no existe.', 'ONLINE_STORE_ORDER_NOT_FOUND');
+    const currentStatus = orders[0].estado;
+    const nextStatus = { pendiente: 'preparando', confirmado: 'preparando', preparando: 'listo', listo: 'entregado' }[currentStatus];
+    if (status !== 'cancelado' && status !== nextStatus) {
+      throw new AppError(409, 'El pedido debe avanzar al siguiente paso.', 'ONLINE_STORE_ORDER_INVALID_TRANSITION');
+    }
+    if (['entregado', 'cancelado'].includes(currentStatus)) {
+      throw new AppError(409, 'Este pedido ya está cerrado.', 'ONLINE_STORE_ORDER_CLOSED');
+    }
+    const paymentStatus = status === 'entregado' ? 'pagado' : 'pendiente';
     const [result] = await database.query(
       `UPDATE pedidoTiendaOnline SET estado=?,estadoPago=?,actualizadoEn=?,idAdministradorActualiza=?
        WHERE idTienda=? AND idPedidoOnline=?`,
       [status, paymentStatus, clock(), idAdministrador, idTienda, orderId]
     );
-    if (!result.affectedRows) throw new AppError(404, 'El pedido no existe.', 'ONLINE_STORE_ORDER_NOT_FOUND');
+    if (!result.affectedRows) throw new AppError(409, 'El pedido no pudo actualizarse.', 'ONLINE_STORE_ORDER_UPDATE_CONFLICT');
     return { actualizado: true };
   }
 
