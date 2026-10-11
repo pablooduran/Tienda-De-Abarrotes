@@ -16,6 +16,8 @@
     let products = [];
     let orders = [];
     let search = '';
+    let activeView = 'orders';
+    let orderStatus = 'todos';
 
     function messageFor(error) {
       return patterns?.messageFor?.(error) || error?.message || 'No se pudo completar la operación.';
@@ -96,11 +98,12 @@
     function renderOrders() {
       const target = root.querySelector('[data-online-orders]');
       if (!target) return;
-      if (!orders.length) {
-        target.innerHTML = '<div class="online-store-empty"><strong>Aún no llegaron pedidos</strong><p>Cuando un cliente envíe su carrito, aparecerá aquí con sus datos y productos.</p></div>';
+      const visibleOrders = orderStatus === 'todos' ? orders : orders.filter((order) => order.estado === orderStatus);
+      if (!visibleOrders.length) {
+        target.innerHTML = `<div class="online-store-empty"><strong>${orders.length ? 'No hay pedidos en este estado' : 'Aún no llegaron pedidos'}</strong><p>${orders.length ? 'Prueba con otro filtro para revisar tus pedidos.' : 'Cuando un cliente envíe su carrito, aparecerá aquí con sus datos y productos.'}</p></div>`;
         return;
       }
-      target.innerHTML = orders.map((order) => `<article class="online-order-card" data-online-order="${order.idPedidoOnline}">
+      target.innerHTML = visibleOrders.map((order) => `<article class="online-order-card" data-online-order="${order.idPedidoOnline}">
         <header><div><span class="eyebrow">PEDIDO ${escapeHtml(order.codigoPublico)}</span><h5>${escapeHtml(order.nombreCliente)}</h5><p>${escapeHtml(order.telefonoCliente)} · ${order.tipoEntrega === 'entrega' ? 'Entrega a domicilio' : 'Recojo en tienda'} · ${order.franjaEntrega}</p></div><strong>Bs ${Number(order.total).toFixed(2)}</strong></header>
         <ul>${order.productos.map((item) => `<li><span>${item.cantidad} × ${escapeHtml(item.nombreProductoSnapshot)}</span><strong>Bs ${Number(item.subtotal).toFixed(2)}</strong></li>`).join('')}</ul>
         ${order.direccionEntrega ? `<p class="online-order-address"><strong>Dirección:</strong> ${escapeHtml(order.direccionEntrega)}</p>` : ''}
@@ -112,8 +115,9 @@
         try {
           await api(`/api/tienda-online/pedidos/${card.dataset.onlineOrder}`, { method: 'PATCH', body: JSON.stringify({ estado: card.querySelector('[name="estado"]').value, estadoPago: card.querySelector('[name="estadoPago"]').value }) });
           setAnnouncement('El estado del pedido quedó actualizado.');
-          const data = await api('/api/tienda-online/pedidos?estado=activos');
+          const data = await api('/api/tienda-online/pedidos?estado=todos');
           orders = data.pedidos;
+          renderOrderSummary();
           renderOrders();
         } catch (error) {
           button.disabled = false;
@@ -122,24 +126,71 @@
       }));
     }
 
+    function renderOrderSummary() {
+      const counts = orders.reduce((result, order) => {
+        result[order.estado] = (result[order.estado] || 0) + 1;
+        return result;
+      }, {});
+      root.querySelectorAll('[data-order-count]').forEach((target) => {
+        const states = target.dataset.orderCount.split(',');
+        target.textContent = states.reduce((total, state) => total + (counts[state] || 0), 0);
+      });
+      root.querySelectorAll('[data-online-status]').forEach((button) => {
+        button.classList.toggle('active', button.dataset.onlineStatus === orderStatus);
+        button.setAttribute('aria-pressed', String(button.dataset.onlineStatus === orderStatus));
+      });
+    }
+
+    function applyActiveView() {
+      root.querySelectorAll('[data-online-panel]').forEach((panel) => {
+        panel.hidden = panel.dataset.onlinePanel !== activeView;
+      });
+      root.querySelectorAll('[data-online-view]').forEach((button) => {
+        const selected = button.dataset.onlineView === activeView;
+        button.classList.toggle('active', selected);
+        button.setAttribute('aria-selected', String(selected));
+      });
+    }
+
     function render() {
       const config = model.configuracion;
       const enabledCount = products.filter((product) => product.publicado).length;
       root.innerHTML = `
         <section class="online-store-admin">
           <header class="online-store-hero">
-            <div class="online-store-brand"><img src="/assets/administrau-icon.png" alt=""><div><p class="eyebrow">CATÁLOGO PARA TUS CLIENTES</p><h3>Tu tienda online</h3><p>Elige qué productos mostrar y comparte un enlace actualizado sin enviar listas por WhatsApp.</p></div></div>
+            <div class="online-store-brand"><img src="/assets/administrau-icon.png" alt=""><div><p class="eyebrow">PEDIDOS DE TUS CLIENTES</p><h3>Tu tienda online</h3><p>Revisa lo nuevo, organiza la preparación y mantén cada entrega bajo control.</p></div></div>
             <div class="online-store-status ${config.activa ? 'is-active' : ''}"><span>${config.activa ? 'En línea' : 'Sin publicar'}</span><strong>${enabledCount} productos visibles</strong></div>
           </header>
 
-          <section class="online-store-link-card">
-            <div><span class="eyebrow">ENLACE DE TU TIENDA</span><h4>${config.activa ? 'Listo para compartir' : 'Actívalo cuando termines de prepararlo'}</h4><p>${escapeHtml(publicUrl())}</p></div>
-            <div class="online-store-link-actions"><button type="button" class="secondary" data-copy-online-link>Copiar enlace</button><a class="button-link" href="${escapeHtml(model.enlacePublico)}" target="_blank" rel="noopener">Vista del cliente</a></div>
+          <nav class="online-store-workspace-nav" role="tablist" aria-label="Secciones de tienda online">
+            <button type="button" data-online-view="orders" role="tab"><span class="online-nav-icon">▤</span><span><strong>Pedidos</strong><small>Revisa y prepara pedidos</small></span><b data-order-count="pendiente,confirmado,preparando,listo">0</b></button>
+            <button type="button" data-online-view="config" role="tab"><span class="online-nav-icon">⚙</span><span><strong>Configurar tienda</strong><small>Entrega, pagos y enlace</small></span></button>
+            <button type="button" data-online-view="products" role="tab"><span class="online-nav-icon">▦</span><span><strong>Productos</strong><small>Define qué verá el cliente</small></span><b>${enabledCount}</b></button>
+          </nav>
+
+          <section class="online-catalog-manager online-orders-manager" data-online-panel="orders">
+            <div class="online-section-heading"><span>1</span><div><h4>Pedidos recibidos</h4><p>Lo esencial de tu tienda online: confirma, prepara y completa cada entrega.</p></div></div>
+            <div class="online-order-summary">
+              <article><span>Nuevos</span><strong data-order-count="pendiente">0</strong><small>Esperan confirmación</small></article>
+              <article><span>En preparación</span><strong data-order-count="confirmado,preparando">0</strong><small>Se están armando</small></article>
+              <article><span>Listos</span><strong data-order-count="listo">0</strong><small>Para entregar o recoger</small></article>
+              <article><span>Entregados</span><strong data-order-count="entregado">0</strong><small>Pedidos completados</small></article>
+            </div>
+            <div class="online-order-filters" role="group" aria-label="Filtrar pedidos por estado">
+              <button type="button" data-online-status="todos">Todos</button><button type="button" data-online-status="pendiente">Nuevos</button><button type="button" data-online-status="confirmado">Confirmados</button><button type="button" data-online-status="preparando">Preparando</button><button type="button" data-online-status="listo">Listos</button><button type="button" data-online-status="entregado">Entregados</button><button type="button" data-online-status="cancelado">Cancelados</button>
+            </div>
+            <div class="online-order-list" data-online-orders></div>
           </section>
 
-          <div class="online-store-admin-grid">
+          <div data-online-panel="config" hidden>
+            <section class="online-store-link-card">
+              <div><span class="eyebrow">ENLACE DE TU TIENDA</span><h4>${config.activa ? 'Listo para compartir' : 'Actívalo cuando termines de prepararlo'}</h4><p>${escapeHtml(publicUrl())}</p></div>
+              <div class="online-store-link-actions"><button type="button" class="secondary" data-copy-online-link>Copiar enlace</button><a class="button-link" href="${escapeHtml(model.enlacePublico)}" target="_blank" rel="noopener">Vista del cliente</a></div>
+            </section>
+
+            <div class="online-store-admin-grid">
             <section class="online-store-settings-card">
-              <div class="online-section-heading"><span>1</span><div><h4>Configura la experiencia</h4><p>Activa las alternativas que podrá elegir el cliente al finalizar su carrito.</p></div></div>
+              <div class="online-section-heading"><span>2</span><div><h4>Configura la experiencia</h4><p>Activa las alternativas que podrá elegir el cliente al finalizar su carrito.</p></div></div>
               <form data-online-config-form>
                 <label class="online-option-card online-activation"><span class="online-option-icon">↗</span><span><strong>Publicar tienda online</strong><small>Al activarla, cualquier persona con el enlace podrá ver el catálogo.</small></span><input name="activa" type="checkbox" ${checked(config.activa)}><i aria-hidden="true"></i></label>
                 <label>Mensaje de bienvenida<textarea name="mensajeBienvenida" maxlength="300" rows="3" placeholder="Ej.: Elige tus productos y nosotros preparamos tu pedido.">${escapeHtml(config.mensajeBienvenida)}</textarea></label>
@@ -154,16 +205,13 @@
               <span class="eyebrow">VISTA PREVIA</span><div class="online-preview-phone"><div class="online-preview-logo"><img src="/assets/administrau-icon.png" alt=""></div><strong>${escapeHtml(document.getElementById('storeName')?.textContent || 'Mi tienda')}</strong><p>${escapeHtml(config.mensajeBienvenida || 'Tu catálogo, claro y fácil de consultar.')}</p><div class="online-preview-search">Buscar productos</div><div class="online-preview-items"><span></span><span></span><span></span></div></div>
               <p>El catálogo se adapta automáticamente a celulares y no muestra cantidades exactas de stock.</p>
             </aside>
+            </div>
           </div>
 
-          <section class="online-catalog-manager">
-            <div class="online-section-heading"><span>2</span><div><h4>Productos de tu tienda</h4><p>Todos se muestran por defecto. Desactiva únicamente los que quieras ocultar al cliente.</p></div></div>
+          <section class="online-catalog-manager" data-online-panel="products" hidden>
+            <div class="online-section-heading"><span>3</span><div><h4>Productos de tu tienda</h4><p>Todos se muestran por defecto. Desactiva únicamente los que quieras ocultar al cliente.</p></div></div>
             <div class="online-catalog-toolbar"><label>Buscar producto<input type="search" data-online-product-search placeholder="Nombre o categoría"></label><div><strong>${enabledCount}</strong><span>publicados de ${products.length}</span></div></div>
             <div class="online-product-list" data-online-product-list></div>
-          </section>
-          <section class="online-catalog-manager online-orders-manager">
-            <div class="online-section-heading"><span>3</span><div><h4>Pedidos recibidos</h4><p>Confirma, prepara y entrega cada pedido. Recibirlo no descuenta stock ni registra una venta automáticamente.</p></div></div>
-            <div class="online-order-list" data-online-orders></div>
           </section>
           <p class="online-store-announcement" data-online-announcement role="status" aria-live="polite"></p>
         </section>`;
@@ -183,8 +231,19 @@
         search = event.target.value;
         renderProductList();
       });
+      root.querySelectorAll('[data-online-view]').forEach((button) => button.addEventListener('click', () => {
+        activeView = button.dataset.onlineView;
+        applyActiveView();
+      }));
+      root.querySelectorAll('[data-online-status]').forEach((button) => button.addEventListener('click', () => {
+        orderStatus = button.dataset.onlineStatus;
+        renderOrderSummary();
+        renderOrders();
+      }));
       renderProductList();
+      renderOrderSummary();
       renderOrders();
+      applyActiveView();
     }
 
     async function saveConfiguration(event) {
@@ -223,7 +282,7 @@
         [model, { productos: products }, { pedidos: orders }] = await Promise.all([
           api('/api/tienda-online/configuracion'),
           api('/api/tienda-online/productos'),
-          api('/api/tienda-online/pedidos?estado=activos')
+          api('/api/tienda-online/pedidos?estado=todos')
         ]);
         render();
       } catch (error) {

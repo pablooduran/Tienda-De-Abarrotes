@@ -54,10 +54,16 @@ assert(publicUi.includes('data-quantity-dialog'));
 assert(publicUi.includes('/clientes/buscar'));
 assert(publicUi.includes('/pedidos'));
 assert(ownerUi.includes('Pedidos recibidos'));
+assert(ownerUi.includes("let activeView = 'orders'"));
+assert(ownerUi.includes('data-online-view="config"'));
+assert(ownerUi.includes('data-online-view="products"'));
+assert(ownerUi.includes('/api/tienda-online/pedidos?estado=todos'));
 assert(!publicUi.includes('stockUnidadesTotal'));
 assert(/\.online-store-admin\{\r?\n\s+--primary:var\(--brand\);/.test(ownerStyles));
 assert(ownerStyles.includes('html:not([data-theme="dark"]) .online-store-hero'));
 assert(ownerStyles.includes('html:not([data-theme="dark"]) :is(.online-store-settings-card,.online-store-preview-card,.online-catalog-manager)'));
+assert(ownerStyles.includes('.online-store-workspace-nav'));
+assert(ownerStyles.includes('border:2px solid color-mix(in srgb,var(--ink) 45%,var(--line))'));
 
 const safeProduct = publicProduct({
   idProducto: 8,

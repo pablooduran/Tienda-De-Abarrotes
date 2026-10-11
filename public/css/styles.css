@@ -5189,3 +5189,75 @@ html:not([data-theme="dark"]) .online-order-card{
   background:#f7faf4;
   box-shadow:0 7px 18px rgba(34,61,38,.07);
 }
+
+/* Tienda online: navegación operativa y estados reconocibles. */
+.online-store-workspace-nav{
+  display:grid;
+  grid-template-columns:repeat(3,minmax(0,1fr));
+  gap:12px;
+}
+.online-store-workspace-nav button{
+  display:grid;
+  grid-template-columns:42px minmax(0,1fr) auto;
+  align-items:center;
+  gap:12px;
+  min-height:78px;
+  padding:14px 16px;
+  border:1px solid var(--line);
+  border-radius:16px;
+  background:var(--panel);
+  color:var(--ink);
+  text-align:left;
+  box-shadow:0 5px 14px rgba(26,48,30,.055);
+}
+.online-store-workspace-nav button:hover{
+  border-color:color-mix(in srgb,var(--brand) 55%,var(--line));
+  background:color-mix(in srgb,var(--brand) 5%,var(--panel));
+}
+.online-store-workspace-nav button.active{
+  border-color:var(--brand);
+  background:color-mix(in srgb,var(--brand) 10%,var(--panel));
+  box-shadow:inset 0 0 0 1px var(--brand),0 8px 20px rgba(26,122,46,.12);
+}
+.online-store-workspace-nav button>span:nth-child(2){display:grid;gap:3px}
+.online-store-workspace-nav small{color:var(--muted);font-weight:500}
+.online-store-workspace-nav b{display:grid;place-items:center;min-width:30px;height:30px;padding:0 7px;border-radius:999px;background:var(--surface-2);color:var(--ink)}
+.online-store-workspace-nav button.active b{background:var(--brand);color:#fff}
+.online-nav-icon{display:grid;place-items:center;width:42px;height:42px;border:1px solid color-mix(in srgb,var(--brand) 35%,var(--line));border-radius:13px;background:color-mix(in srgb,var(--brand) 9%,var(--surface));color:var(--brand);font-size:1.15rem;font-weight:900}
+[data-online-panel][hidden]{display:none!important}
+
+.online-order-summary{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin-bottom:16px}
+.online-order-summary article{display:grid;gap:5px;padding:16px;border:1px solid var(--line);border-radius:15px;background:color-mix(in srgb,var(--brand) 4%,var(--panel))}
+.online-order-summary span,.online-order-summary small{color:var(--muted)}
+.online-order-summary strong{font-size:1.8rem;color:var(--brand)}
+.online-order-summary small{font-size:.76rem}
+.online-order-filters{display:flex;gap:8px;overflow-x:auto;margin-bottom:18px;padding:2px 2px 7px;scrollbar-width:none}
+.online-order-filters::-webkit-scrollbar{display:none}
+.online-order-filters button{flex:0 0 auto;padding:9px 13px;border:1px solid var(--line);border-radius:999px;background:var(--panel);color:var(--ink);font-weight:750}
+.online-order-filters button.active{border-color:var(--brand);background:var(--brand);color:#fff;box-shadow:0 4px 12px rgba(26,122,46,.2)}
+
+.online-option-card>i,.online-visibility-card>i{
+  border:2px solid color-mix(in srgb,var(--ink) 45%,var(--line));
+  background:var(--surface-2);
+  box-shadow:inset 0 1px 2px rgba(20,35,22,.11);
+}
+.online-option-card>i::after,.online-visibility-card>i::after{top:1px;left:1px;border:1px solid rgba(28,43,30,.18)}
+.online-option-card input:checked+i,.online-visibility-card input:checked+i{
+  border-color:color-mix(in srgb,var(--brand) 78%,#0d4b1b);
+  background:var(--brand);
+}
+.online-option-card:focus-within,.online-visibility-card:focus-within{outline:3px solid color-mix(in srgb,var(--brand) 24%,transparent);outline-offset:2px}
+
+html:not([data-theme="dark"]) .online-store-workspace-nav button{border-color:#bdc8b9;background:#fffdf8}
+html:not([data-theme="dark"]) .online-order-summary article{border-color:#c2ccbe;background:#f6f8f2;box-shadow:0 5px 13px rgba(31,53,34,.06)}
+html:not([data-theme="dark"]) .online-order-filters button{border-color:#bdc8b9;background:#fff}
+html:not([data-theme="dark"]) :is(.online-option-card>i,.online-visibility-card>i){border-color:#667267;background:#d5dad1}
+
+@media(max-width:800px){
+  .online-store-workspace-nav{grid-template-columns:1fr}
+  .online-order-summary{grid-template-columns:repeat(2,minmax(0,1fr))}
+}
+@media(max-width:480px){
+  .online-order-summary{grid-template-columns:1fr 1fr}
+  .online-order-summary article{padding:13px}
+}
