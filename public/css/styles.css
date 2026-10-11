@@ -855,7 +855,8 @@ thead { background: var(--surface); }
 th { color: var(--muted); font-size: 13px; font-weight: 700; }
 td { line-height: 1.4; }
 tbody tr:hover { background: var(--surface-2); }
-tr.low-stock { background: var(--warn); }
+tr.stock-low { background: #fff8dc; }
+tr.stock-out { background: #ffe9e6; }
 .actions { display: flex; gap: 6px; flex-wrap: wrap; }
 .message { min-height: 20px; margin: 10px 0; color: var(--ok); }
 .message.error { color: var(--danger); }
@@ -942,11 +943,19 @@ tr.low-stock { background: var(--warn); }
   box-shadow: 0 10px 22px rgba(29, 39, 51, 0.06);
   transform: translateY(-1px);
 }
-.product-result.is-low { background: var(--warn); }
+.product-result.is-low { background: #fff8dc; border-color: #e8cc72; }
+.product-result.is-out { background: #ffe9e6; border-color: #f5bbb5; }
 .product-result div {
   display: grid;
   gap: 3px;
 }
+.product-result .product-result-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+.product-result-heading .badge { flex: 0 0 auto; }
 .product-result span,
 .product-result small {
   color: var(--muted);
@@ -1518,6 +1527,8 @@ tr.low-stock { background: var(--warn); }
 .master-catalog-size:has(input:disabled) { cursor: not-allowed; opacity: .7; }
 .master-catalog-actions { display: flex; justify-content: end; flex-wrap: wrap; gap: 8px; }
 .badge.normal { color: #12603d; background: #e6f4ee; border-color: #b8e0cc; }
+.badge.stock-low { color: #725500; background: #fff3bd; border-color: #d9b940; }
+.badge.stock-out { color: #922b21; background: #ffe1dd; border-color: #e4958d; }
 .badge.pendiente {
   color: var(--danger);
   background: #ffe8e5;
@@ -4917,6 +4928,10 @@ html[data-theme="dark"] {
   ) { background: var(--surface); color: var(--ink); border-color: var(--line); }
   html[data-theme="dark"] .purchase-step { border-left-color: #4ade80; }
   html[data-theme="dark"] .content .badge.normal { color: #95e3a5; background: #143422; border-color: #316c42; }
+  html[data-theme="dark"] .content :is(tr.stock-low, .product-result.is-low) { background: #342a13; border-color: #8c701f; }
+  html[data-theme="dark"] .content :is(tr.stock-out, .product-result.is-out) { background: #371d1b; border-color: #a75b55; }
+  html[data-theme="dark"] .content .badge.stock-low { color: #ffdfa0; background: #4a3a0f; border-color: #d3a72b; }
+  html[data-theme="dark"] .content .badge.stock-out { color: #ffc4bc; background: #4b2421; border-color: #c67068; }
   html[data-theme="dark"] .subscription-actions { background: var(--panel); border-color: var(--line); }
   html[data-theme="dark"] .subscription-actions .button-link { color: var(--ink); background: var(--surface-2); border-color: var(--line); }
   html[data-theme="dark"] .content .pos-product:hover { background: var(--hover-surface); border-color: var(--brand); }

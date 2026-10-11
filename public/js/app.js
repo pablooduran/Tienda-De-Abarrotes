@@ -173,6 +173,16 @@ function stockLabel(product) {
   const unit = product?.unidadMedida === 'gramo' ? 'g' : product?.unidadMedida === 'mililitro' ? 'ml' : 'unidades';
   return `${data.total} ${unit}`;
 }
+function productStockState(product) {
+  if (stockBreakdown(product).total <= 0) return 'out';
+  return Number(product?.bajoStock) ? 'low' : 'normal';
+}
+function productStockBadge(product) {
+  const stockState = productStockState(product);
+  if (stockState === 'out') return '<span class="badge stock-out">Agotado</span>';
+  if (stockState === 'low') return '<span class="badge stock-low">Bajo stock</span>';
+  return '<span class="badge normal">Normal</span>';
+}
 function packageText(product) {
   if (!product) return '';
   return `${product.unidadesPorPaquete || 1} unidades por paquete`;
@@ -2223,10 +2233,10 @@ function renderProductTable(rows) {
   }
   target.innerHTML = `<div class="table-wrap"><table>
     <thead><tr><th>Nombre</th><th>Proveedor</th><th>Categoría</th><th>Precio</th><th>Stock</th><th>Presentación</th><th>Estado</th><th>Acciones</th></tr></thead>
-    <tbody>${rows.map((p) => `<tr class="${p.bajoStock ? 'low-stock' : ''}">
+    <tbody>${rows.map((p) => `<tr class="stock-${productStockState(p)}">
       <td>${escapeHtml(p.nombre)}</td><td>${escapeHtml(p.proveedor || 'SIN PROVEEDOR')}</td><td>${escapeHtml(p.categoria)}</td>
       <td>Bs ${money(p.precioVenta)}</td><td>${stockLabel(p)}</td><td>${packageText(p)}</td>
-      <td>${p.bajoStock ? '<span class="badge pendiente">Bajo stock</span>' : '<span class="badge normal">Normal</span>'}${Number(p.controlaLotes) ? `<span class="lot-control-label">Lotes${Number(p.controlaVencimiento) ? ' y vencimiento' : ''}</span>` : ''}</td>
+      <td>${productStockBadge(p)}${Number(p.controlaLotes) ? `<span class="lot-control-label">Lotes${Number(p.controlaVencimiento) ? ' y vencimiento' : ''}</span>` : ''}</td>
       <td class="actions"><button class="small secondary" data-edit="${p.idProducto}">Editar</button><details class="row-actions"><summary>Más opciones</summary><div class="row-actions-menu">${hasFeature('ajuste_stock') && !state.context?.soloLectura ? `<button class="small" data-adjust-stock="${p.idProducto}">Ajustar stock</button>` : ''}<button class="small secondary" data-product-movements="${p.idProducto}">Ver movimientos</button><button class="small secondary" data-product-purchase-history="${p.idProducto}">Historial de costos</button>${Number(p.controlaLotes) || hasFeature('control_lotes') ? `<button class="small secondary" data-lot-config="${p.idProducto}">${Number(p.controlaLotes) ? 'Configurar lotes' : 'Activar lotes'}</button>` : ''}<button class="small danger" data-delete="${p.idProducto}">Ocultar</button><button type="button" class="small secondary secondary-actions-close" data-secondary-actions-close>Cerrar</button></div></details></td>
     </tr>`).join('')}</tbody></table></div>`;
   target.querySelectorAll('[data-edit]').forEach((btn) => btn.addEventListener('click', () => openProductModal(state.productos.find((p) => String(p.idProducto) === btn.dataset.edit))));
@@ -2661,8 +2671,7 @@ function operationFilters(kind) {
   const category = document.getElementById(`${kind}Category`)?.value || '';
   const provider = document.getElementById(`${kind}Provider`)?.value || document.querySelector(`#${kind}Form [name="idProveedor"]`)?.value || '';
   const lowStock = document.getElementById(`${kind}LowStock`)?.checked || false;
-  const showAll = kind === 'compras' ? document.getElementById('showAllProducts')?.checked : true;
-  return { q, category, provider, lowStock, showAll };
+  return { q, category, provider, lowStock };
 }
 
 function filteredOperationProducts(kind) {
@@ -2672,19 +2681,16 @@ function filteredOperationProducts(kind) {
     const byCategory = !filters.category || p.categoria === filters.category;
     const byProvider = !filters.provider || String(p.idProveedor || '') === filters.provider;
     const byLowStock = !filters.lowStock || p.bajoStock;
-    const purchaseProvider = kind !== 'compras'
-      || filters.showAll
-      || (filters.provider ? String(p.idProveedor || '') === filters.provider : !p.idProveedor);
-    return byText && byCategory && byLowStock && (kind === 'ventas' ? byProvider : purchaseProvider);
+    return byText && byCategory && byLowStock && (kind === 'ventas' ? byProvider : true);
   }).slice(0, 24);
 }
 
 function renderAutocomplete(kind) {
   const rows = filteredOperationProducts(kind);
   const target = document.getElementById(`${kind}Results`);
-  target.innerHTML = rows.length ? rows.map((p) => `<article class="product-result ${p.bajoStock ? 'is-low' : ''}">
+  target.innerHTML = rows.length ? rows.map((p) => `<article class="product-result is-${productStockState(p)}">
     <div>
-      <strong>${escapeHtml(p.nombre)}</strong>
+      <div class="product-result-heading"><strong>${escapeHtml(p.nombre)}</strong>${productStockBadge(p)}</div>
       <span>${escapeHtml(p.categoria)} | ${escapeHtml(p.proveedor || 'SIN PROVEEDOR')}</span>
       <small>${stockLabel(p)}</small>
       <small>${kind === 'compras' ? `Última compra: Bs ${money(p.ultimoPrecioCompra)}` : `Precio: Bs ${money(p.precioVenta)}`}</small>
@@ -2711,7 +2717,6 @@ function operationView(kind) {
           ` : `
             <label>Proveedor de la compra<select name="idProveedor" id="${kind}Provider">${options(state.proveedores, 'idProveedor', 'nombre', 'Sin proveedor')}</select></label>
             <label>Categoría<select id="${kind}Category"><option value="">Todas</option>${categoryOptions()}</select></label>
-            <label class="check"><input id="showAllProducts" type="checkbox"> Incluir productos de otros proveedores</label>
           `}
         </div>
         ${autocompleteBox(kind)}
@@ -2743,12 +2748,9 @@ function operationView(kind) {
   wireUppercase(view);
   search.addEventListener('input', () => renderAutocomplete(kind));
   document.getElementById(`${kind}Category`).addEventListener('change', () => renderAutocomplete(kind));
-  document.getElementById(`${kind}Provider`).addEventListener('change', () => renderAutocomplete(kind));
+  if (isSale) document.getElementById(`${kind}Provider`).addEventListener('change', () => renderAutocomplete(kind));
   const lowStockFilter = document.getElementById(`${kind}LowStock`);
   if (lowStockFilter) lowStockFilter.addEventListener('change', () => renderAutocomplete(kind));
-  if (!isSale) {
-    document.getElementById('showAllProducts').addEventListener('change', () => renderAutocomplete(kind));
-  }
   document.getElementById(`${kind}Form`).addEventListener('submit', (event) => saveOperation(event, kind));
   renderAutocomplete(kind);
   wireOperationDraft(kind);
@@ -2931,7 +2933,6 @@ function captureOperationDraft(kind) {
   workspaceExperience.saveDraft(kind, {
     provider: document.getElementById(`${kind}Provider`)?.value || '',
     category: document.getElementById(`${kind}Category`)?.value || '',
-    showAll: Boolean(document.getElementById('showAllProducts')?.checked),
     items: collectItems(kind)
   });
 }
@@ -2943,7 +2944,6 @@ function restoreOperationDraft(kind) {
   const category = document.getElementById(`${kind}Category`);
   if (provider) provider.value = draft.provider || '';
   if (category) category.value = draft.category || '';
-  if (document.getElementById('showAllProducts')) document.getElementById('showAllProducts').checked = Boolean(draft.showAll);
   draft.items.forEach((item) => {
     const product = state.productos.find((row) => String(row.idProducto) === String(item.idProducto));
     if (!product) return;
