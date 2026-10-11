@@ -335,12 +335,23 @@ function createOnlineStoreService({
       );
       const byId = new Map(products.map((product) => [Number(product.idProducto), product]));
       let subtotalCents = 0;
+      const stockProblems = [];
       for (const item of items) {
         const product = byId.get(item.idProducto);
-        if (!product || !Number(product.publicado) || Number(product.stockUnidadesTotal) < item.cantidad) {
-          throw new AppError(409, 'Uno de los productos ya no tiene disponibilidad suficiente. Revisa el carrito.', 'ONLINE_STORE_STOCK_CHANGED');
+        const available = Math.max(0, Number(product?.stockUnidadesTotal || 0));
+        if (!product || !Number(product.publicado) || available < item.cantidad) {
+          stockProblems.push({
+            nombre: product?.nombre || `Producto ${item.idProducto}`,
+            solicitado: item.cantidad,
+            disponible: product && Number(product.publicado) ? available : 0
+          });
+          continue;
         }
         subtotalCents += Math.round(Number(product.precioVenta) * 100) * item.cantidad;
+      }
+      if (stockProblems.length) {
+        const detail = stockProblems.map((problem) => `${problem.nombre}: pediste ${problem.solicitado} y solo quedan ${problem.disponible}.`).join(' ');
+        throw new AppError(409, `No alcanza el stock. ${detail} Reduce la cantidad en el carrito e intenta nuevamente.`, 'ONLINE_STORE_STOCK_CHANGED');
       }
       const subtotal = subtotalCents / 100;
       const freeFrom = Number(store.pedidoMinimo || 0);

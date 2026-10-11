@@ -45,12 +45,13 @@ function readBody(request) {
 async function main() {
   const assets = new Map([
     ['/tienda/tienda-prueba', ['text/html', path.join(root, 'public', 'storefront.html')]],
-    ['/css/storefront.css?v=20261011-4', ['text/css', path.join(root, 'public', 'css', 'storefront.css')]],
-    ['/js/storefront.js?v=20261011-4', ['application/javascript', path.join(root, 'public', 'js', 'storefront.js')]],
+    ['/css/storefront.css?v=20261011-5', ['text/css', path.join(root, 'public', 'css', 'storefront.css')]],
+    ['/js/storefront.js?v=20261011-5', ['application/javascript', path.join(root, 'public', 'js', 'storefront.js')]],
     ['/js/http-security.js', ['application/javascript', path.join(root, 'public', 'js', 'http-security.js')]],
     ['/assets/administrau-icon.png', ['image/png', path.join(root, 'public', 'assets', 'administrau-icon.png')]]
   ]);
   const receivedOrders = [];
+  let rejectNextOrderForStock = false;
   const server = http.createServer(async (request, response) => {
     if (request.url === '/api/public/tiendas/tienda-prueba') {
       response.writeHead(200, { 'Content-Type': 'application/json' });
@@ -66,7 +67,14 @@ async function main() {
       return;
     }
     if (request.url === '/api/public/tiendas/tienda-prueba/pedidos' && request.method === 'POST') {
-      receivedOrders.push(await readBody(request));
+      const body = await readBody(request);
+      if (rejectNextOrderForStock) {
+        rejectNextOrderForStock = false;
+        response.writeHead(409, { 'Content-Type': 'application/json' });
+        response.end(JSON.stringify({ error: 'No alcanza el stock. MICII: pediste 15 y solo quedan 14. Reduce la cantidad en el carrito e intenta nuevamente.', code: 'ONLINE_STORE_STOCK_CHANGED' }));
+        return;
+      }
+      receivedOrders.push(body);
       response.writeHead(201, { 'Content-Type': 'application/json' });
       response.end(JSON.stringify({ pedido: { codigo: 'ABC123', total: 12.5 } }));
       return;
@@ -136,6 +144,12 @@ async function main() {
       assert.strictEqual(new Set(fulfillmentHeights).size, 1);
       await page.getByText('Noche', { exact: true }).click();
       await page.getByText('QR', { exact: true }).click();
+      rejectNextOrderForStock = true;
+      await page.getByRole('button', { name: 'Enviar pedido a la tienda' }).click();
+      await page.getByText('MICII: pediste 15 y solo quedan 14.', { exact: false }).waitFor();
+      assert.strictEqual(await page.locator('[data-customer-result]').evaluate((node) => node.classList.contains('error')), true);
+      assert(errors.some((message) => message.includes('409')));
+      errors.length = 0;
       await page.getByRole('button', { name: 'Enviar pedido a la tienda' }).click();
       try {
         await page.getByText('¡Pedido enviado!', { exact: true }).waitFor({ timeout: 5000 });

@@ -122,6 +122,7 @@
     dialog.querySelector('[data-delivery-row]').hidden = Boolean(store.opciones.recojo);
     dialog.querySelector('[name="address"]').required = !store.opciones.recojo;
     dialog.querySelector('[data-customer-result]').textContent = 'Tu teléfono funciona como identificador dentro de esta tienda.';
+    dialog.querySelector('[data-customer-result]').classList.remove('error');
     dialog.querySelector('[data-customer-confirmation]').hidden = true;
     dialog.dataset.customerStatus = '';
     dialog.dataset.checkedPhone = '';
@@ -140,12 +141,14 @@
     const result = dialog.querySelector('[data-customer-result]');
     if (localPhone.length < 7) { result.textContent = 'Ingresa un número de teléfono válido para buscarte.'; return; }
     result.textContent = 'Buscando cliente…';
+    result.classList.remove('error');
     try {
       const response = await SecurityHttp.secureFetch(`/api/public/tiendas/${encodeURIComponent(slug)}/clientes/buscar`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ telefono: phone })
       });
       const data = await response.json().catch(() => ({}));
       if (!response.ok) throw SecurityHttp.errorFromResponse(response, data, 'No pudimos buscar el cliente.');
+      result.classList.remove('error');
       const name = dialog.querySelector('[name="customerName"]');
       dialog.dataset.checkedPhone = digits(phone);
       if (data.encontrado) {
@@ -168,6 +171,7 @@
       }
     } catch (error) {
       result.textContent = error.message || 'No pudimos buscar el cliente.';
+      result.classList.add('error');
     }
   }
 
@@ -211,6 +215,7 @@
     };
     button.disabled = true;
     button.textContent = 'Enviando pedido…';
+    result.classList.remove('error');
     try {
       const response = await SecurityHttp.secureFetch(`/api/public/tiendas/${encodeURIComponent(slug)}/pedidos`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload)
@@ -227,6 +232,7 @@
       confirmation.scrollIntoView({ behavior: 'smooth', block: 'center' });
     } catch (error) {
       result.textContent = error.message || 'No pudimos enviar el pedido.';
+      result.classList.add('error');
       button.disabled = false;
       button.textContent = 'Enviar pedido a la tienda';
     }
@@ -295,6 +301,7 @@
       checkoutDialog.querySelector('[data-customer-name]').hidden = true;
       checkoutDialog.querySelector('[data-customer-confirmation]').hidden = true;
       checkoutDialog.querySelector('[data-customer-result]').textContent = 'Cuando termines, presiona “Buscar cliente”.';
+      checkoutDialog.querySelector('[data-customer-result]').classList.remove('error');
     });
     checkoutDialog.querySelector('[data-close-checkout]').addEventListener('click', () => checkoutDialog.close());
     checkoutDialog.addEventListener('change', (event) => {

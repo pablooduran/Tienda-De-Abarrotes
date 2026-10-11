@@ -250,7 +250,47 @@ async function orderWorkflowContract() {
   assert.deepStrictEqual(result, { actualizado: true });
 }
 
-Promise.all([serviceContract(), orderContract(), orderWorkflowContract()])
+async function stockShortageContract() {
+  const connection = {
+    async beginTransaction() {},
+    async rollback() {},
+    release() {},
+    async query(sql) {
+      if (sql.startsWith('SELECT idTienda FROM tienda')) return [[{ idTienda: 7 }]];
+      if (sql.includes('COUNT(*) total FROM pedidoTiendaOnline')) return [[{ total: 0 }]];
+      if (sql.includes('FROM producto p') && sql.includes('FOR UPDATE')) return [[{
+        idProducto: 11, nombre: 'MICII', unidadMedida: 'unidad', precioVenta: 8.5,
+        stockUnidadesTotal: 14, publicado: 1
+      }]];
+      throw new Error(`Consulta inesperada: ${sql.slice(0, 80)}`);
+    }
+  };
+  const database = {
+    async getConnection() { return connection; },
+    async query(sql) {
+      if (sql.includes('FROM tienda t') && sql.includes('configuracionTiendaOnline')) return [[{
+        idTienda: 7, slug: 'tienda-prueba', nombre: 'Tienda Prueba', nombreMostrado: 'Mi Tienda',
+        activa: 1, permiteRecojo: 1, permiteEntrega: 1, permiteEfectivo: 1, permiteQr: 1,
+        pedidoMinimo: 0, costoEntrega: 0, tiempoPreparacionMinutos: 30
+      }]];
+      throw new Error(`Consulta inesperada: ${sql.slice(0, 80)}`);
+    }
+  };
+  const service = createOnlineStoreService({
+    database,
+    subscriptionResolver: async () => ({ estadoAcceso: 'completo', caracteristicas: ['portal_clientes'], plan: { codigo: 'pro' } })
+  });
+  await assert.rejects(
+    () => service.createPublicOrder('tienda-prueba', {
+      telefono: '76543210', nombre: 'Cliente', tipoEntrega: 'recojo',
+      franjaEntrega: 'noche', metodoPago: 'efectivo', productos: [{ idProducto: 11, cantidad: 15 }]
+    }),
+    (error) => error.code === 'ONLINE_STORE_STOCK_CHANGED'
+      && error.message.includes('MICII: pediste 15 y solo quedan 14.')
+  );
+}
+
+Promise.all([serviceContract(), orderContract(), orderWorkflowContract(), stockShortageContract()])
   .then(() => console.log('test:online-store-foundation OK'))
   .catch((error) => {
     console.error(`Error: ${error.message}`);
