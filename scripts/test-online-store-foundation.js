@@ -81,6 +81,8 @@ assert(ownerUi.includes('Pedido terminado'));
 assert(ownerUi.includes('Marcar entregado'));
 assert(ownerUi.includes('Ya está pagado'));
 assert(ownerUi.includes('Fiado · cobrar después'));
+assert(!ownerUi.includes('Fecha acordada de pago'));
+assert(!ownerUi.includes('data-credit-note'));
 assert(ownerUi.includes('La deuda ya aparece en Cobranza'));
 assert(ownerUi.includes('online-order-products'));
 assert(!ownerUi.includes('<select name="estado">'));
@@ -88,6 +90,9 @@ assert(ownerUi.includes('order.productos.length > 12'));
 assert(ownerUi.includes('data-online-status="finalizados"'));
 assert(!ownerUi.includes('data-online-status="confirmado"'));
 assert(ownerUi.includes('online-order-progress'));
+assert(ownerStyles.includes('.online-order-progress li:first-child::before{display:none}'));
+assert(ownerStyles.includes('.online-order-progress li.done::before,.online-order-progress li.active::before'));
+assert(ownerStyles.includes('.online-order-cancel-button{border:1px solid'));
 assert(ownerUi.includes('online-order-card-bottom'));
 assert(ownerStyles.includes('.online-order-card-bottom{display:grid;gap:12px;margin-top:auto'));
 assert(ownerUi.includes('confirmOrderCancellation'));
@@ -396,7 +401,7 @@ async function orderCreditWorkflowContract() {
   };
   const service = createOnlineStoreService({ database, clock: () => '2026-10-12 11:45:00' });
   const result = await service.updateOrder({ idTienda: 7, idAdministrador: 3 }, 100, {
-    estado: 'entregado', estadoPago: 'pendiente', observacionCredito: 'Pagará a fin de mes.'
+    estado: 'entregado', estadoPago: 'pendiente'
   });
   assert.deepStrictEqual(result, { actualizado: true, inventario: 'sin_cambios', venta: { idVenta: 45, idFiado: 91, registrada: true } });
   assert.deepStrictEqual(writes, ['venta-fiada', 'comprobante', 'detalle-venta', 'vinculo-stock', 'fiado', 'pedido-entregado-fiado']);

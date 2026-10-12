@@ -184,36 +184,18 @@
                 <label><input type="radio" name="onlineDeliveryPayment" value="pagado" checked><span><strong>Ya está pagado</strong><small>Registra el cobro por ${escapeHtml(order.metodoPago === 'qr' ? 'QR' : 'efectivo')}.</small></span></label>
                 <label><input type="radio" name="onlineDeliveryPayment" value="pendiente"><span><strong>Fiado · cobrar después</strong><small>Crea una deuda en la cuenta de ${escapeHtml(order.nombreCliente)}.</small></span></label>
               </div>
-              <div class="online-order-credit-fields" data-credit-fields hidden>
-                <label>Fecha acordada de pago (opcional)<input type="date" data-credit-due-date></label>
-                <label>Observación (opcional)<textarea rows="3" maxlength="1000" data-credit-note placeholder="Ej.: pagará a fin de mes"></textarea></label>
-                <small>Si el cliente ya tiene una deuda vencida, escribe el motivo por el que autorizas este nuevo fiado.</small>
-              </div>
               <p class="online-order-delivery-error" data-delivery-error role="alert"></p>
               <div class="modal-actions"><button type="button" class="secondary" data-modal-cancel>Volver</button><button type="button" data-delivery-confirm>Confirmar entrega</button></div>
             </section>
           </div>`;
-        const creditFields = modalRoot.querySelector('[data-credit-fields]');
-        const refreshChoice = () => {
-          const credit = modalRoot.querySelector('input[name="onlineDeliveryPayment"]:checked')?.value === 'pendiente';
-          creditFields.hidden = !credit;
-        };
-        modalRoot.querySelectorAll('input[name="onlineDeliveryPayment"]').forEach((input) => input.addEventListener('change', refreshChoice));
         modalRoot.querySelectorAll('[data-modal-cancel]').forEach((button) => button.addEventListener('click', () => close(null)));
         modalRoot.querySelector('[data-order-delivery-backdrop]').addEventListener('click', (event) => {
           if (event.target === event.currentTarget) close(null);
         });
         modalRoot.querySelector('[data-delivery-confirm]').addEventListener('click', () => {
           const estadoPago = modalRoot.querySelector('input[name="onlineDeliveryPayment"]:checked')?.value || 'pagado';
-          const observacionCredito = modalRoot.querySelector('[data-credit-note]').value.trim();
-          close({
-            estadoPago,
-            fechaVencimiento: modalRoot.querySelector('[data-credit-due-date]').value || null,
-            observacionCredito: observacionCredito || null,
-            confirmarDeudaVencida: estadoPago === 'pendiente' && Boolean(observacionCredito)
-          });
+          close({ estadoPago });
         });
-        refreshChoice();
         modalRoot.querySelector('[data-delivery-confirm]').focus();
       });
     }
