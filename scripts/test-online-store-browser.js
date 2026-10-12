@@ -45,8 +45,8 @@ function readBody(request) {
 async function main() {
   const assets = new Map([
     ['/tienda/tienda-prueba', ['text/html', path.join(root, 'public', 'storefront.html')]],
-    ['/css/storefront.css?v=20261012-1', ['text/css', path.join(root, 'public', 'css', 'storefront.css')]],
-    ['/js/storefront.js?v=20261012-1', ['application/javascript', path.join(root, 'public', 'js', 'storefront.js')]],
+    ['/css/storefront.css?v=20261012-2', ['text/css', path.join(root, 'public', 'css', 'storefront.css')]],
+    ['/js/storefront.js?v=20261012-2', ['application/javascript', path.join(root, 'public', 'js', 'storefront.js')]],
     ['/js/http-security.js', ['application/javascript', path.join(root, 'public', 'js', 'http-security.js')]],
     ['/assets/administrau-icon.png', ['image/png', path.join(root, 'public', 'assets', 'administrau-icon.png')]]
   ]);
@@ -91,7 +91,7 @@ async function main() {
   let browser;
   try {
     browser = await chromium.launch({ executablePath: executable(), headless: true });
-    for (const viewport of [{ width: 360, height: 800 }, { width: 768, height: 1024 }, { width: 1024, height: 600 }, { width: 1366, height: 768 }]) {
+    for (const viewport of [{ width: 320, height: 720 }, { width: 360, height: 800 }, { width: 390, height: 844 }, { width: 768, height: 1024 }, { width: 1024, height: 600 }, { width: 1366, height: 768 }]) {
       const context = await browser.newContext({ viewport });
       const page = await context.newPage();
       const errors = [];
@@ -191,6 +191,18 @@ async function main() {
       assert.deepStrictEqual(errors, []);
       await context.close();
     }
+    const scaledContext = await browser.newContext({ viewport: { width: 320, height: 720 } });
+    const scaledPage = await scaledContext.newPage();
+    await scaledPage.goto(`http://127.0.0.1:${server.address().port}/tienda/tienda-prueba`);
+    await scaledPage.getByRole('heading', { name: 'Tienda Prueba' }).waitFor();
+    await scaledPage.evaluate(() => { document.documentElement.style.fontSize = '125%'; });
+    assert.strictEqual(await scaledPage.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth), true,
+      'El catálogo no debe desbordarse cuando el teléfono amplía el texto.');
+    assert.strictEqual(await scaledPage.locator('.storefront-product').evaluateAll((cards) => cards.every((card) => {
+      const bounds = card.getBoundingClientRect();
+      return bounds.left >= 0 && bounds.right <= window.innerWidth + 1;
+    })), true);
+    await scaledContext.close();
     console.log('test:online-store-browser OK');
   } finally {
     await browser?.close();
