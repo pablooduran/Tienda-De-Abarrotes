@@ -51,6 +51,7 @@
     "test:master-catalog": "node scripts/test-master-catalog.js",
     "test:stock-movements": "node scripts/test-stock-movements.js",
     "test:pos-payments": "node scripts/test-pos-payments.js",
+    "test:receipt-channels": "node scripts/test-receipt-channels.js",
     "test:financial-reports": "node scripts/test-financial-reports.js",
     "test:inventory-intelligence": "node scripts/test-inventory-intelligence.js",
     "test:inventory-intelligence-frontend": "node scripts/test-inventory-intelligence-frontend.js",

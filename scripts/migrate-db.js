@@ -1377,6 +1377,14 @@ const migrationRequirements = {
       ['detallePedidoTiendaOnline', 'fk_detallePedidoOnline_pedido', ['idTienda', 'idPedidoOnline'], 'pedidoTiendaOnline', ['idTienda', 'idPedidoOnline'], 'RESTRICT', 'RESTRICT'],
       ['detallePedidoTiendaOnline', 'fk_detallePedidoOnline_producto', ['idTienda', 'idProducto'], 'producto', ['idTienda', 'idProducto'], 'RESTRICT', 'RESTRICT']
     ]
+  },
+  '034_separar_comprobantes_por_canal.sql': {
+    columns: {
+      venta: ['canalVenta']
+    },
+    indexes: [
+      ['venta', 'idx_venta_tienda_canal_id', ['idTienda', 'canalVenta', 'idVenta'], false]
+    ]
   }
 };
 
@@ -1856,6 +1864,21 @@ async function requirementsSatisfied(connection, file) {
     return columnDefinitionMatches(details.publicado, {
       type: 'tinyint(1)', nullable: false, defaultValue: 1
     });
+  }
+  if (file === '034_separar_comprobantes_por_canal.sql') {
+    const [[invalid]] = await connection.query(
+      `SELECT COUNT(*) total
+       FROM venta
+       WHERE idTienda IS NOT NULL AND (
+         canalVenta NOT IN ('tienda','online')
+         OR (claveOperacion LIKE 'pedido-online:%' AND canalVenta<>'online')
+         OR (claveOperacion NOT LIKE 'pedido-online:%' AND canalVenta<>'tienda')
+         OR codigoComprobante IS NULL
+         OR (canalVenta='tienda' AND codigoComprobante NOT REGEXP '^T-[0-9]{3,}$')
+         OR (canalVenta='online' AND codigoComprobante NOT REGEXP '^O-[0-9]{3,}$')
+       )`
+    );
+    return Number(invalid.total) === 0;
   }
   if (file === '015_compensaciones_venta_inventario.sql') {
     const expectedDefinitions = {
@@ -4237,7 +4260,8 @@ async function main() {
               '030_equipo_colaborativo_pro.sql',
               '031_tienda_online_base.sql',
               '032_catalogo_online_visible_por_defecto.sql',
-              '033_pedidos_tienda_online.sql'
+              '033_pedidos_tienda_online.sql',
+              '034_separar_comprobantes_por_canal.sql'
             ].includes(file)
             && !await requirementsSatisfied(connection, file);
         if (registeredMigrationIsIncomplete) {
@@ -4281,7 +4305,8 @@ async function main() {
           '030_equipo_colaborativo_pro.sql',
           '031_tienda_online_base.sql',
           '032_catalogo_online_visible_por_defecto.sql',
-          '033_pedidos_tienda_online.sql'
+          '033_pedidos_tienda_online.sql',
+          '034_separar_comprobantes_por_canal.sql'
         ].includes(file)) {
           await connection.query('INSERT IGNORE INTO schema_migrations (nombre) VALUES (?)', [file]);
           const [finalRecord] = await connection.query(
@@ -4382,7 +4407,8 @@ async function main() {
           '030_equipo_colaborativo_pro.sql',
           '031_tienda_online_base.sql',
           '032_catalogo_online_visible_por_defecto.sql',
-          '033_pedidos_tienda_online.sql'
+          '033_pedidos_tienda_online.sql',
+          '034_separar_comprobantes_por_canal.sql'
         ].includes(file)
           ? structureElementFromStatement(statement)
           : null;
@@ -4467,7 +4493,8 @@ async function main() {
         '030_equipo_colaborativo_pro.sql',
         '031_tienda_online_base.sql',
         '032_catalogo_online_visible_por_defecto.sql',
-        '033_pedidos_tienda_online.sql'
+        '033_pedidos_tienda_online.sql',
+        '034_separar_comprobantes_por_canal.sql'
       ].includes(file)) {
         await connection.query('INSERT IGNORE INTO schema_migrations (nombre) VALUES (?)', [file]);
         const [finalRecord] = await connection.query(

@@ -3,9 +3,15 @@ const pool = require('../config/db');
 const { resolveSubscriptionAccess } = require('./subscription-access-service');
 const { enforcePlanLimit } = require('./subscription-service');
 const { formatLocalDateTime } = require('../utils/local-datetime');
+const { nextSaleReceiptCode } = require('../utils/receipt-code');
 const { AppError } = require('../utils/app-error');
 const { insertStockMovement, movementKey } = require('./stock-movement-service');
 const { applyLotExit, insertLotMovement, prepareLotExit } = require('./lot-service');
+const {
+  lockCustomer,
+  recordOverdueCreditConfirmation,
+  validateNewCredit
+} = require('./customer-credit-service');
 
 function positiveId(value, label) {
   const parsed = Number(value);
@@ -448,7 +454,11 @@ function createOnlineStoreService({
     const [rows] = await database.query(
       `SELECT p.*,
               (SELECT COUNT(*) FROM pedidoTiendaOnline secuencia
-               WHERE secuencia.idTienda=p.idTienda AND secuencia.idPedidoOnline<=p.idPedidoOnline) numeroPedido
+               WHERE secuencia.idTienda=p.idTienda AND secuencia.idPedidoOnline<=p.idPedidoOnline) numeroPedido,
+              COALESCE((SELECT CASE WHEN v.saldoPendiente=0 THEN 'pagado' ELSE 'pendiente' END
+                        FROM venta v
+                        WHERE v.idTienda=p.idTienda AND v.claveOperacion=CONCAT('pedido-online:',p.idPedidoOnline)
+                        LIMIT 1),p.estadoPago) estadoPagoActual
        FROM pedidoTiendaOnline p WHERE p.idTienda=? ${condition} ORDER BY p.creadoEn DESC LIMIT 200`, params
     );
     if (!rows.length) return { pedidos: [] };
@@ -456,7 +466,13 @@ function createOnlineStoreService({
       `SELECT * FROM detallePedidoTiendaOnline WHERE idTienda=? AND idPedidoOnline IN (${rows.map(() => '?').join(',')}) ORDER BY idDetallePedidoOnline`,
       [storeId, ...rows.map((row) => row.idPedidoOnline)]
     );
-    return { pedidos: rows.map((row) => ({ ...row, productos: details.filter((item) => Number(item.idPedidoOnline) === Number(row.idPedidoOnline)) })) };
+    return {
+      pedidos: rows.map((row) => ({
+        ...row,
+        estadoPago: row.estadoPagoActual || row.estadoPago,
+        productos: details.filter((item) => Number(item.idPedidoOnline) === Number(row.idPedidoOnline))
+      }))
+    };
   }
 
   async function lockOrderItems(connection, idTienda, orderId) {
@@ -624,7 +640,17 @@ function createOnlineStoreService({
     }
   }
 
-  async function registerOrderSale(connection, { idTienda, idAdministrador, orderId, order, now }) {
+  async function registerOrderSale(connection, {
+    idTienda,
+    idAdministrador,
+    orderId,
+    order,
+    now,
+    paymentStatus,
+    requestedDueDate = null,
+    creditNote = null,
+    confirmOverdueDebt = false
+  }) {
     const operationKey = `pedido-online:${orderId}`;
     const [existing] = await connection.query(
       'SELECT idVenta,codigoComprobante FROM venta WHERE idTienda=? AND claveOperacion=? LIMIT 1 FOR UPDATE',
@@ -632,15 +658,34 @@ function createOnlineStoreService({
     );
     if (existing[0]) return { idVenta: Number(existing[0].idVenta), repetida: true };
     const items = await lockOrderItems(connection, idTienda, orderId);
-    const subtotal = Number(order.subtotal || 0);
+    const total = Number(order.total ?? order.subtotal ?? 0);
+    const isPaid = paymentStatus === 'pagado';
+    let creditValidation = null;
+    if (!isPaid) {
+      if (!order.idCliente) {
+        throw new AppError(409, 'El pedido necesita un cliente registrado para enviarlo a fiado.', 'ONLINE_STORE_CREDIT_CUSTOMER_REQUIRED');
+      }
+      const customer = await lockCustomer(connection, idTienda, order.idCliente, { requireActive: true });
+      creditValidation = await validateNewCredit(connection, {
+        idTienda,
+        idCliente: order.idCliente,
+        customer,
+        newDebt: total,
+        saleDate: String(now).slice(0, 10),
+        requestedDueDate,
+        confirmOverdueDebt,
+        overdueReason: creditNote
+      });
+    }
     const [created] = await connection.query(
       `INSERT INTO venta
-       (idTienda,fecha,subtotal,descuento,total,montoPagado,saldoPendiente,estadoPago,estadoOperacion,tipo,idCliente,claveOperacion)
-       VALUES (?,?,?,0,?,?,0,'pagada','vigente','pagada',?,?)`,
-      [idTienda, now, subtotal, subtotal, subtotal, order.idCliente || null, operationKey]
+       (idTienda,fecha,subtotal,descuento,total,montoPagado,saldoPendiente,estadoPago,estadoOperacion,tipo,idCliente,claveOperacion,canalVenta)
+       VALUES (?,?,?,0,?,?,?,?, 'vigente',?,?,?,'online')`,
+      [idTienda, now, total, total, isPaid ? total : 0, isPaid ? 0 : total,
+        isPaid ? 'pagada' : 'pendiente', isPaid ? 'pagada' : 'fiada', order.idCliente || null, operationKey]
     );
     const saleId = Number(created.insertId);
-    const receiptCode = `V-${String(saleId).padStart(4, '0')}`;
+    const receiptCode = await nextSaleReceiptCode(connection, idTienda, 'online');
     await connection.query(
       'UPDATE venta SET codigoComprobante=? WHERE idTienda=? AND idVenta=?',
       [receiptCode, idTienda, saleId]
@@ -671,18 +716,38 @@ function createOnlineStoreService({
         throw new AppError(409, `${item.nombreProductoSnapshot}: no se pudo vincular la salida con la venta.`, 'ONLINE_STORE_SALE_STOCK_LINK_MISSING');
       }
     }
-    if (subtotal > 0) {
+    if (isPaid && total > 0) {
       await connection.query(
         `INSERT INTO pagoVenta
          (idTienda,idVenta,metodoPago,monto,montoRecibido,cambio,referencia,claveOperacion,idAdministrador,creadoEn)
          VALUES (?,?,?,?,?,0,?,?,?,?)`,
-        [idTienda, saleId, order.metodoPago, subtotal,
-          order.metodoPago === 'efectivo' ? subtotal : null,
+        [idTienda, saleId, order.metodoPago, total,
+          order.metodoPago === 'efectivo' ? total : null,
           order.metodoPago === 'qr' ? `Pedido online ${orderId}` : null,
           `pedido-online:${orderId}:pago`, idAdministrador, now]
       );
     }
-    return { idVenta: saleId, repetida: false };
+    let creditId = null;
+    if (!isPaid) {
+      const [debt] = await connection.query(
+        `INSERT INTO fiado
+         (idTienda,idCliente,idVenta,fechaInicio,fechaVencimiento,fechaPrometidaPago,
+          observacionCredito,totalFiado,totalPagado,saldoPendiente,estado,cerradoEn,idAdministradorCrea)
+         VALUES (?,?,?,?,?,NULL,?,?,0,?,'pendiente',NULL,?)`,
+        [idTienda, order.idCliente, saleId, String(now).slice(0, 10), creditValidation.dueDate,
+          cleanText(creditNote, 1000, 'La observación del fiado'), total, total, idAdministrador]
+      );
+      creditId = Number(debt.insertId);
+      await recordOverdueCreditConfirmation(connection, {
+        idTienda,
+        idCliente: order.idCliente,
+        idFiado: creditId,
+        idAdministrador,
+        validation: creditValidation,
+        createdAt: now
+      });
+    }
+    return { idVenta: saleId, idFiado: creditId, repetida: false };
   }
 
   async function updateOrder(context, idPedidoOnline, body = {}) {
@@ -690,12 +755,15 @@ function createOnlineStoreService({
     const idAdministrador = positiveId(context?.idAdministrador, 'El administrador');
     const orderId = positiveId(idPedidoOnline, 'El pedido');
     const status = enumValue(body.estado, ['pendiente','confirmado','preparando','listo','entregado','cancelado'], 'El estado');
+    const requestedPaymentStatus = status === 'entregado'
+      ? enumValue(body.estadoPago, ['pendiente','pagado'], 'El estado de pago')
+      : 'pendiente';
     const connection = database.getConnection ? await database.getConnection() : database;
     try {
       await connection.beginTransaction?.();
       await connection.query('SELECT idTienda FROM tienda WHERE idTienda=? FOR UPDATE', [idTienda]);
       const [orders] = await connection.query(
-        `SELECT estado,idCliente,subtotal,metodoPago
+        `SELECT estado,idCliente,subtotal,costoEntrega,total,metodoPago
          FROM pedidoTiendaOnline WHERE idTienda=? AND idPedidoOnline=? LIMIT 1 FOR UPDATE`,
         [idTienda, orderId]
       );
@@ -715,9 +783,19 @@ function createOnlineStoreService({
         await restoreOrderInventory(connection, { idTienda, idAdministrador, orderId, now });
       }
       const sale = currentStatus === 'listo' && status === 'entregado'
-        ? await registerOrderSale(connection, { idTienda, idAdministrador, orderId, order: orders[0], now })
+        ? await registerOrderSale(connection, {
+          idTienda,
+          idAdministrador,
+          orderId,
+          order: orders[0],
+          now,
+          paymentStatus: requestedPaymentStatus,
+          requestedDueDate: body.fechaVencimiento,
+          creditNote: cleanText(body.observacionCredito, 1000, 'La observación del fiado'),
+          confirmOverdueDebt: body.confirmarDeudaVencida === true
+        })
         : null;
-      const paymentStatus = status === 'entregado' ? 'pagado' : 'pendiente';
+      const paymentStatus = status === 'entregado' ? requestedPaymentStatus : 'pendiente';
       const [result] = await connection.query(
         `UPDATE pedidoTiendaOnline SET estado=?,estadoPago=?,actualizadoEn=?,idAdministradorActualiza=?
          WHERE idTienda=? AND idPedidoOnline=? AND estado=?`,
@@ -728,7 +806,7 @@ function createOnlineStoreService({
       return {
         actualizado: true,
         inventario: status === 'listo' ? 'descontado' : (currentStatus === 'listo' && status === 'cancelado' ? 'repuesto' : 'sin_cambios'),
-        venta: sale ? { idVenta: sale.idVenta, registrada: true } : null
+        venta: sale ? { idVenta: sale.idVenta, idFiado: sale.idFiado || null, registrada: true } : null
       };
     } catch (error) {
       await connection.rollback?.();

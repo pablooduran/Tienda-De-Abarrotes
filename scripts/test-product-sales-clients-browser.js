@@ -45,11 +45,11 @@ function serverFor(requests) {
       if (url.pathname === '/api/contexto') return json(response, context(request.headers['x-test-plan'] || 'full'));
       if (url.pathname === '/api/lotes/acceso') return json(response, { productosControlados: 0 });
       if (url.pathname === '/api/dashboard') return json(response, { ventasHoy: 0, ventasAyer: 0, ventasMes: 0, ventasMesPasado: 0, gananciaHoy: 0, gananciaMes: 0, bajoStock: 0, fiados: {}, chartVentasDias: [] });
-      if (url.pathname === '/api/ventas') return json(response, [{ idVenta: 31, codigoComprobante: 'V-000031', fecha: '2026-09-22 10:00:00', cliente: 'Cliente ocasional', total: 20, montoPagado: 20, saldoPendiente: 0, metodosPago: 'efectivo', estadoPago: 'pagada' }]);
-      if (url.pathname === '/api/ventas/31') return json(response, { venta: { idVenta: 31, codigoComprobante: 'V-000031', fecha: '2026-09-22 10:00:00', cliente: 'Cliente ocasional', total: 20, montoPagado: 20, saldoPendiente: 0, estadoPago: 'pagada' }, detalle: [{ nombre: 'Arroz prueba', cantidad: 2, presentacionVenta: 'unidad', cantidadEquivalenteUnidades: 2, subtotal: 20, subtotalCosto: 12, ganancia: 8 }], pagos: [{ metodoPago: 'efectivo', monto: 20 }] });
-      if (url.pathname === '/api/ventas/31/comprobante') return json(response, { venta: { idVenta: 31, codigoComprobante: 'V-000031', tienda: 'Tienda ventas', fecha: '2026-09-22 10:00:00', subtotal: 20, total: 20, montoPagado: 20, saldoPendiente: 0 }, detalle: [{ nombre: 'Arroz prueba', cantidad: 2, presentacionVenta: 'unidad', precioVenta: 10, subtotal: 20 }], pagos: [{ metodoPago: 'efectivo', monto: 20 }] });
+      if (url.pathname === '/api/ventas') return json(response, [{ idVenta: 31, codigoComprobante: 'T-031', canalVenta: 'tienda', fecha: '2026-09-22 10:00:00', cliente: 'Cliente ocasional', total: 20, montoPagado: 20, saldoPendiente: 0, metodosPago: 'efectivo', estadoPago: 'pagada' }]);
+      if (url.pathname === '/api/ventas/31') return json(response, { venta: { idVenta: 31, codigoComprobante: 'T-031', canalVenta: 'tienda', fecha: '2026-09-22 10:00:00', cliente: 'Cliente ocasional', total: 20, montoPagado: 20, saldoPendiente: 0, estadoPago: 'pagada' }, detalle: [{ nombre: 'Arroz prueba', cantidad: 2, presentacionVenta: 'unidad', cantidadEquivalenteUnidades: 2, subtotal: 20, subtotalCosto: 12, ganancia: 8 }], pagos: [{ metodoPago: 'efectivo', monto: 20 }] });
+      if (url.pathname === '/api/ventas/31/comprobante') return json(response, { venta: { idVenta: 31, codigoComprobante: 'T-031', canalVenta: 'tienda', tienda: 'Tienda ventas', fecha: '2026-09-22 10:00:00', subtotal: 20, total: 20, montoPagado: 20, saldoPendiente: 0 }, detalle: [{ nombre: 'Arroz prueba', cantidad: 2, presentacionVenta: 'unidad', precioVenta: 10, subtotal: 20 }], pagos: [{ metodoPago: 'efectivo', monto: 20 }] });
       if (url.pathname === '/api/compensaciones/opciones') return json(response, { tipos: [], estados: [] });
-      if (url.pathname === '/api/compensaciones/ventas/31/contexto') return json(response, { venta: { idVenta: 31, codigoComprobante: 'V-000031', cliente: 'Cliente ocasional', fecha: '2026-09-22 10:00:00', estadoOperacion: 'vigente', total: 20 }, detalle: [], pagos: [], cobros: [] });
+      if (url.pathname === '/api/compensaciones/ventas/31/contexto') return json(response, { venta: { idVenta: 31, codigoComprobante: 'T-031', cliente: 'Cliente ocasional', fecha: '2026-09-22 10:00:00', estadoOperacion: 'vigente', total: 20 }, detalle: [], pagos: [], cobros: [] });
       if (url.pathname === '/api/compensaciones') return json(response, { resultados: [], resumen: { total: 0, compensacionComercial: 0, liquidacionesMateriales: 0, pendientes: 0 }, paginacion: { page: 1, totalPages: 1, total: 0, hasPreviousPage: false, hasNextPage: false } });
       if (url.pathname === '/api/catalogo-maestro/categorias' || url.pathname === '/api/catalogo-maestro/marcas') return json(response, []);
       if (url.pathname === '/api/catalogo-maestro') {
@@ -169,7 +169,8 @@ async function verifyViewport(browser, baseUrl, viewport) {
     assert.strictEqual(await page.locator('#view [data-receipt="31"]').isVisible(), true, 'Comprobante debe ser visible en la fila.');
     await page.locator('#view [data-receipt="31"]').click();
     await page.locator('[role="dialog"] #saleReceipt').waitFor();
-    assert.strictEqual(await page.locator('#saleReceipt').textContent().then((text) => text.includes('V-000031')), true, 'El comprobante debe corresponder a la venta.');
+    assert.strictEqual(await page.locator('#saleReceipt').textContent().then((text) => text.includes('T-031')), true, 'El comprobante debe corresponder a la venta física.');
+    assert.strictEqual(await page.locator('#saleReceipt').textContent().then((text) => text.includes('Tienda física')), true, 'El comprobante debe indicar su canal.');
     await page.emulateMedia({ media: 'print' });
     assert.deepStrictEqual(await page.locator('#saleReceipt').evaluate((node) => {
       const style = getComputedStyle(node);
@@ -246,14 +247,14 @@ async function verifyViewport(browser, baseUrl, viewport) {
     await page.locator('#customerFilters').waitFor();
     await salesView(page, 'compensaciones');
     await page.locator('[data-compensation-tab="ventas"]').click();
-    await page.locator('[data-recent-sale-search]').fill('V-000031');
+    await page.locator('[data-recent-sale-search]').fill('T-031');
     assert.strictEqual(await page.locator('[data-select-sale="31"]').count(), 1, 'Se puede buscar por comprobante sin recordar el ID.');
     await page.locator('[data-recent-sale-search]').fill('No existe');
     assert.strictEqual(await page.locator('[data-select-sale]').count(), 0, 'La búsqueda vacía informa que no hay coincidencias.');
     await page.locator('[data-recent-sale-search]').fill('Cliente ocasional');
     await page.locator('[data-select-sale="31"]').click();
     await page.locator('[data-sale-context] .compensation-sale-context').waitFor();
-    assert.strictEqual((await page.locator('[data-sale-context]').textContent()).includes('V-000031'), true);
+    assert.strictEqual((await page.locator('[data-sale-context]').textContent()).includes('T-031'), true);
     const inventoryFamily = page.locator('[data-navigation-family="inventario"]');
     if (!await inventoryFamily.evaluate((node) => node.open)) await inventoryFamily.locator('> summary').click();
     await page.locator('[data-view="compras"]').click();

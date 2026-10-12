@@ -13,6 +13,7 @@ const root = path.resolve(__dirname, '..');
 const migration = fs.readFileSync(path.join(root, 'database', 'migrations', '031_tienda_online_base.sql'), 'utf8');
 const visibilityMigration = fs.readFileSync(path.join(root, 'database', 'migrations', '032_catalogo_online_visible_por_defecto.sql'), 'utf8');
 const ordersMigration = fs.readFileSync(path.join(root, 'database', 'migrations', '033_pedidos_tienda_online.sql'), 'utf8');
+const receiptChannelsMigration = fs.readFileSync(path.join(root, 'database', 'migrations', '034_separar_comprobantes_por_canal.sql'), 'utf8');
 const schema = fs.readFileSync(path.join(root, 'database', 'tienda_abarrotes.sql'), 'utf8');
 const server = fs.readFileSync(path.join(root, 'server.js'), 'utf8');
 const migrator = fs.readFileSync(path.join(root, 'scripts', 'migrate-db.js'), 'utf8');
@@ -43,6 +44,14 @@ for (const sql of [ordersMigration, schema]) {
   assert(sql.includes('fk_detallePedidoOnline_pedido'));
 }
 assert(migrator.includes("'033_pedidos_tienda_online.sql':"));
+for (const sql of [receiptChannelsMigration, schema]) {
+  assert(sql.includes("canalVenta ENUM('tienda','online')"));
+  assert(sql.includes('idx_venta_tienda_canal_id'));
+}
+assert(receiptChannelsMigration.includes("THEN 'online'"));
+assert(receiptChannelsMigration.includes("THEN 'O' ELSE 'T'"));
+assert(migrator.includes("'034_separar_comprobantes_por_canal.sql':"));
+assert(app.includes("channel === 'online' ? 'Online' : 'Tienda física'"));
 assert(app.includes("features.includes('portal_clientes')"));
 assert(ownerUi.includes('/api/tienda-online/productos/'));
 assert(ownerUi.includes('Todos se muestran por defecto'));
@@ -70,6 +79,9 @@ assert(ownerUi.includes('/api/tienda-online/pedidos?estado=todos'));
 assert(ownerUi.includes('Alistar pedido'));
 assert(ownerUi.includes('Pedido terminado'));
 assert(ownerUi.includes('Marcar entregado'));
+assert(ownerUi.includes('Ya está pagado'));
+assert(ownerUi.includes('Fiado · cobrar después'));
+assert(ownerUi.includes('La deuda ya aparece en Cobranza'));
 assert(ownerUi.includes('online-order-products'));
 assert(!ownerUi.includes('<select name="estado">'));
 assert(ownerUi.includes('order.productos.length > 12'));
@@ -263,8 +275,8 @@ async function orderWorkflowContract() {
   const database = {
     async query(sql, params) {
       if (sql.startsWith('SELECT idTienda FROM tienda')) return [[{ idTienda: 7 }]];
-      if (sql.startsWith('SELECT estado,idCliente,subtotal,metodoPago')) return [[{
-        estado: 'listo', idCliente: 55, subtotal: 119, metodoPago: 'qr'
+      if (sql.startsWith('SELECT estado,idCliente,subtotal,costoEntrega,total,metodoPago')) return [[{
+        estado: 'listo', idCliente: 55, subtotal: 119, costoEntrega: 0, total: 119, metodoPago: 'qr'
       }]];
       if (sql.startsWith('SELECT idVenta,codigoComprobante FROM venta')) return [[]];
       if (sql.includes('FROM detallePedidoTiendaOnline d')) return [[{
@@ -282,7 +294,15 @@ async function orderWorkflowContract() {
         activo: 1
       }]];
       if (sql.includes('INSERT INTO venta')) { writes.push('venta'); return [{ insertId: 44 }]; }
-      if (sql.startsWith('UPDATE venta SET codigoComprobante')) { writes.push('comprobante'); return [{ affectedRows: 1 }]; }
+      if (sql.startsWith('SELECT COALESCE(MAX(CAST(SUBSTRING(codigoComprobante,3)')) {
+        assert.deepStrictEqual(params, [7, 'online', 'O-%']);
+        return [[{ ultimo: 3 }]];
+      }
+      if (sql.startsWith('UPDATE venta SET codigoComprobante')) {
+        assert.strictEqual(params[0], 'O-004');
+        writes.push('comprobante');
+        return [{ affectedRows: 1 }];
+      }
       if (sql.includes('INSERT INTO detalleVenta')) {
         assert.strictEqual(params[1], 44);
         assert.strictEqual(params[3], 7);
@@ -311,9 +331,75 @@ async function orderWorkflowContract() {
     }
   };
   const service = createOnlineStoreService({ database, clock: () => '2026-10-11 11:45:00' });
-  const result = await service.updateOrder({ idTienda: 7, idAdministrador: 3 }, 99, { estado: 'entregado', estadoPago: 'pendiente' });
-  assert.deepStrictEqual(result, { actualizado: true, inventario: 'sin_cambios', venta: { idVenta: 44, registrada: true } });
+  const result = await service.updateOrder({ idTienda: 7, idAdministrador: 3 }, 99, { estado: 'entregado', estadoPago: 'pagado' });
+  assert.deepStrictEqual(result, { actualizado: true, inventario: 'sin_cambios', venta: { idVenta: 44, idFiado: null, registrada: true } });
   assert.deepStrictEqual(writes, ['venta', 'comprobante', 'detalle-venta', 'vinculo-stock', 'pago', 'pedido-entregado']);
+}
+
+async function orderCreditWorkflowContract() {
+  const writes = [];
+  const database = {
+    async query(sql, params) {
+      if (sql.startsWith('SELECT idTienda FROM tienda')) return [[{ idTienda: 7 }]];
+      if (sql.startsWith('SELECT estado,idCliente,subtotal,costoEntrega,total,metodoPago')) return [[{
+        estado: 'listo', idCliente: 55, subtotal: 119, costoEntrega: 10, total: 129, metodoPago: 'efectivo'
+      }]];
+      if (sql.startsWith('SELECT idVenta,codigoComprobante FROM venta')) return [[]];
+      if (sql.startsWith('SELECT idCliente, nombre, telefono')) return [[{
+        idCliente: 55, nombre: 'Cliente conocido', telefono: '70000000', telefonoNormalizado: '59170000000',
+        telefonoAlternativo: null, limiteCredito: null, permiteFiado: 1, diasCreditoDefault: 30, activo: 1
+      }]];
+      if (sql.startsWith('SELECT limiteCreditoDefault')) return [[{
+        limiteCreditoDefault: null, diasCreditoDefault: 30, diasAvisoVencimiento: 3,
+        politicaFiadoVencido: 'permitir', requiereTelefonoParaFiado: 0, permiteFiadoSinFecha: 1
+      }]];
+      if (sql.startsWith('SELECT idFiado, idVenta, fechaInicio')) return [[]];
+      if (sql.includes('FROM detallePedidoTiendaOnline d')) return [[{
+        idDetallePedidoOnline: 100, idProducto: 11, nombreProductoSnapshot: 'Aceite de oliva',
+        unidadMedidaSnapshot: 'unidad', cantidad: 7, precioUnitario: 17, subtotal: 119,
+        stockUnidadesTotal: 10, ultimoPrecioCompra: 12, controlaLotes: 0,
+        controlaVencimiento: 0, activo: 1
+      }]];
+      if (sql.includes('INSERT INTO venta')) {
+        assert.strictEqual(params[3], 129);
+        assert.strictEqual(params[4], 0);
+        assert.strictEqual(params[5], 129);
+        assert.strictEqual(params[6], 'pendiente');
+        assert.strictEqual(params[7], 'fiada');
+        writes.push('venta-fiada');
+        return [{ insertId: 45 }];
+      }
+      if (sql.startsWith('SELECT COALESCE(MAX(CAST(SUBSTRING(codigoComprobante,3)')) return [[{ ultimo: 4 }]];
+      if (sql.startsWith('UPDATE venta SET codigoComprobante')) {
+        assert.strictEqual(params[0], 'O-005');
+        writes.push('comprobante');
+        return [{ affectedRows: 1 }];
+      }
+      if (sql.includes('INSERT INTO detalleVenta')) { writes.push('detalle-venta'); return [{ insertId: 71 }]; }
+      if (sql.startsWith('UPDATE movimientoStock')) { writes.push('vinculo-stock'); return [{ affectedRows: 1 }]; }
+      if (sql.includes('INSERT INTO fiado')) {
+        assert.strictEqual(params[1], 55);
+        assert.strictEqual(params[2], 45);
+        assert.strictEqual(params[6], 129);
+        assert.strictEqual(params[7], 129);
+        writes.push('fiado');
+        return [{ insertId: 91 }];
+      }
+      if (sql.startsWith('UPDATE pedidoTiendaOnline')) {
+        assert.strictEqual(params[0], 'entregado');
+        assert.strictEqual(params[1], 'pendiente');
+        writes.push('pedido-entregado-fiado');
+        return [{ affectedRows: 1 }];
+      }
+      throw new Error(`Consulta inesperada: ${sql.slice(0, 100)}`);
+    }
+  };
+  const service = createOnlineStoreService({ database, clock: () => '2026-10-12 11:45:00' });
+  const result = await service.updateOrder({ idTienda: 7, idAdministrador: 3 }, 100, {
+    estado: 'entregado', estadoPago: 'pendiente', observacionCredito: 'Pagará a fin de mes.'
+  });
+  assert.deepStrictEqual(result, { actualizado: true, inventario: 'sin_cambios', venta: { idVenta: 45, idFiado: 91, registrada: true } });
+  assert.deepStrictEqual(writes, ['venta-fiada', 'comprobante', 'detalle-venta', 'vinculo-stock', 'fiado', 'pedido-entregado-fiado']);
 }
 
 async function orderInventoryContract() {
@@ -328,7 +414,7 @@ async function orderInventoryContract() {
     release() { events.push('release'); },
     async query(sql, params) {
       if (sql.startsWith('SELECT idTienda FROM tienda')) return [[{ idTienda: 7 }]];
-      if (sql.startsWith('SELECT estado,idCliente,subtotal,metodoPago')) return [[{ estado: state }]];
+      if (sql.startsWith('SELECT estado,idCliente,subtotal,costoEntrega,total,metodoPago')) return [[{ estado: state }]];
       if (sql.includes('FROM detallePedidoTiendaOnline d')) return [[{
         idDetallePedidoOnline: 100,
         idProducto: 11,
@@ -383,7 +469,7 @@ async function orderReadyShortageContract() {
     release() { events.push('release'); },
     async query(sql) {
       if (sql.startsWith('SELECT idTienda FROM tienda')) return [[{ idTienda: 7 }]];
-      if (sql.startsWith('SELECT estado,idCliente,subtotal,metodoPago')) return [[{ estado: 'preparando' }]];
+      if (sql.startsWith('SELECT estado,idCliente,subtotal,costoEntrega,total,metodoPago')) return [[{ estado: 'preparando' }]];
       if (sql.includes('FROM detallePedidoTiendaOnline d')) return [[{
         idDetallePedidoOnline: 101,
         idProducto: 12,
@@ -530,7 +616,7 @@ async function orderItemsEditContract() {
   assert.deepStrictEqual(events, ['begin', 'detalle-actualizado', 'detalle-eliminado', 'pedido-recalculado', 'commit', 'release']);
 }
 
-Promise.all([serviceContract(), orderContract(), orderWorkflowContract(), orderInventoryContract(), orderReadyShortageContract(), stockShortageContract(), reservedStockContract(), orderItemsEditContract()])
+Promise.all([serviceContract(), orderContract(), orderWorkflowContract(), orderCreditWorkflowContract(), orderInventoryContract(), orderReadyShortageContract(), stockShortageContract(), reservedStockContract(), orderItemsEditContract()])
   .then(() => console.log('test:online-store-foundation OK'))
   .catch((error) => {
     console.error(`Error: ${error.message}`);

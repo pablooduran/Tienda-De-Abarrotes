@@ -167,6 +167,57 @@
       });
     }
 
+    function confirmOrderDelivery(order, returnFocus) {
+      const modalRoot = global.document.getElementById('modalRoot');
+      if (!modalRoot || !order) return Promise.resolve(null);
+      return new Promise((resolve) => {
+        const close = (result) => {
+          modalRoot.innerHTML = '';
+          returnFocus?.focus?.();
+          resolve(result);
+        };
+        modalRoot.innerHTML = `
+          <div class="modal-backdrop" data-order-delivery-backdrop>
+            <section class="modal online-order-delivery-modal" role="dialog" aria-modal="true" aria-labelledby="onlineDeliveryTitle">
+              <div class="online-order-delivery-heading"><div><p class="eyebrow">PEDIDO ${escapeHtml(orderNumberLabel(order))}</p><h3 id="onlineDeliveryTitle">Confirma la entrega y el pago</h3><p>El pedido se marcará como entregado. Elige si ya fue cobrado o si quedará en la cuenta del cliente.</p></div><button type="button" class="icon-button" data-modal-cancel aria-label="Cerrar">×</button></div>
+              <div class="online-order-payment-choice" role="radiogroup" aria-label="Estado de pago">
+                <label><input type="radio" name="onlineDeliveryPayment" value="pagado" checked><span><strong>Ya está pagado</strong><small>Registra el cobro por ${escapeHtml(order.metodoPago === 'qr' ? 'QR' : 'efectivo')}.</small></span></label>
+                <label><input type="radio" name="onlineDeliveryPayment" value="pendiente"><span><strong>Fiado · cobrar después</strong><small>Crea una deuda en la cuenta de ${escapeHtml(order.nombreCliente)}.</small></span></label>
+              </div>
+              <div class="online-order-credit-fields" data-credit-fields hidden>
+                <label>Fecha acordada de pago (opcional)<input type="date" data-credit-due-date></label>
+                <label>Observación (opcional)<textarea rows="3" maxlength="1000" data-credit-note placeholder="Ej.: pagará a fin de mes"></textarea></label>
+                <small>Si el cliente ya tiene una deuda vencida, escribe el motivo por el que autorizas este nuevo fiado.</small>
+              </div>
+              <p class="online-order-delivery-error" data-delivery-error role="alert"></p>
+              <div class="modal-actions"><button type="button" class="secondary" data-modal-cancel>Volver</button><button type="button" data-delivery-confirm>Confirmar entrega</button></div>
+            </section>
+          </div>`;
+        const creditFields = modalRoot.querySelector('[data-credit-fields]');
+        const refreshChoice = () => {
+          const credit = modalRoot.querySelector('input[name="onlineDeliveryPayment"]:checked')?.value === 'pendiente';
+          creditFields.hidden = !credit;
+        };
+        modalRoot.querySelectorAll('input[name="onlineDeliveryPayment"]').forEach((input) => input.addEventListener('change', refreshChoice));
+        modalRoot.querySelectorAll('[data-modal-cancel]').forEach((button) => button.addEventListener('click', () => close(null)));
+        modalRoot.querySelector('[data-order-delivery-backdrop]').addEventListener('click', (event) => {
+          if (event.target === event.currentTarget) close(null);
+        });
+        modalRoot.querySelector('[data-delivery-confirm]').addEventListener('click', () => {
+          const estadoPago = modalRoot.querySelector('input[name="onlineDeliveryPayment"]:checked')?.value || 'pagado';
+          const observacionCredito = modalRoot.querySelector('[data-credit-note]').value.trim();
+          close({
+            estadoPago,
+            fechaVencimiento: modalRoot.querySelector('[data-credit-due-date]').value || null,
+            observacionCredito: observacionCredito || null,
+            confirmarDeudaVencida: estadoPago === 'pendiente' && Boolean(observacionCredito)
+          });
+        });
+        refreshChoice();
+        modalRoot.querySelector('[data-delivery-confirm]').focus();
+      });
+    }
+
     function openOrderEditor(order, returnFocus) {
       const modalRoot = global.document.getElementById('modalRoot');
       if (!modalRoot || !order || !['pendiente', 'confirmado', 'preparando'].includes(order.estado)) return;
@@ -235,14 +286,14 @@
       modalRoot.querySelector('[data-order-edit-save]').focus();
     }
 
-    async function updateOrder(card, estado, estadoPago, successMessage) {
+    async function updateOrder(card, estado, estadoPago, successMessage, extraBody = {}) {
       const buttons = [...card.querySelectorAll('button')];
       const scrollTop = global.scrollY;
       buttons.forEach((button) => { button.disabled = true; });
       try {
         await api(`/api/tienda-online/pedidos/${card.dataset.onlineOrder}`, {
           method: 'PATCH',
-          body: JSON.stringify({ estado, estadoPago })
+          body: JSON.stringify({ estado, estadoPago, ...extraBody })
         });
         setAnnouncement(successMessage);
         const data = await api('/api/tienda-online/pedidos?estado=todos');
@@ -294,7 +345,7 @@
           <div class="online-order-card-bottom">
             <ol class="online-order-progress${order.estado === 'cancelado' ? ' is-cancelled' : ''}" aria-label="Progreso del pedido">${progress.map((state, index) => `<li class="${index < progressIndex ? 'done' : index === progressIndex ? 'active' : ''}"><i aria-hidden="true">${index < progressIndex ? '✓' : index + 1}</i><span>${({ pendiente: 'Nuevo', preparando: 'Preparando', listo: 'Listo', entregado: 'Entregado' })[state]}</span></li>`).join('')}</ol>
             ${order.estado === 'cancelado' ? '<p class="online-order-cancelled">Pedido cancelado</p>' : ''}
-            ${order.estado === 'cancelado' ? '' : `<footer><div class="online-payment-status"><span>Estado</span><strong>${order.estadoPago === 'pagado' ? 'Pagado' : 'Pendiente'}</strong></div><div class="online-order-actions">${['pendiente', 'confirmado', 'preparando'].includes(order.estado) ? `<button type="button" class="secondary online-order-edit-button" data-order-edit ${isReadOnly() ? 'disabled' : ''}>Editar pedido</button>` : ''}${action ? `<button type="button" data-order-advance data-next-state="${action.estado}" data-next-payment="${action.estadoPago}" ${isReadOnly() ? 'disabled' : ''}>${action.label}</button>` : order.estado === 'entregado' ? '<span class="online-order-finished">Pedido completado</span>' : ''}${!finalState ? `<button type="button" class="online-order-cancel-button" data-order-cancel ${isReadOnly() ? 'disabled' : ''}>Cancelar pedido</button>` : ''}</div></footer>`}
+            ${order.estado === 'cancelado' ? '' : `<footer><div class="online-payment-status"><span>Estado</span><strong>${order.estadoPago === 'pagado' ? 'Pagado' : order.estado === 'entregado' ? 'Fiado' : 'Pendiente'}</strong></div><div class="online-order-actions">${['pendiente', 'confirmado', 'preparando'].includes(order.estado) ? `<button type="button" class="secondary online-order-edit-button" data-order-edit ${isReadOnly() ? 'disabled' : ''}>Editar pedido</button>` : ''}${action ? `<button type="button" data-order-advance data-next-state="${action.estado}" data-next-payment="${action.estadoPago}" ${isReadOnly() ? 'disabled' : ''}>${action.label}</button>` : order.estado === 'entregado' ? '<span class="online-order-finished">Pedido completado</span>' : ''}${!finalState ? `<button type="button" class="online-order-cancel-button" data-order-cancel ${isReadOnly() ? 'disabled' : ''}>Cancelar pedido</button>` : ''}</div></footer>`}
           </div>
         </article>`;
       }).join('');
@@ -303,10 +354,19 @@
           const currentOrder = orders.find((item) => Number(item.idPedidoOnline) === Number(card.dataset.onlineOrder));
           openOrderEditor(currentOrder, event.currentTarget);
         });
-        card.querySelector('[data-order-advance]')?.addEventListener('click', (event) => {
+        card.querySelector('[data-order-advance]')?.addEventListener('click', async (event) => {
           const button = event.currentTarget;
           const currentOrder = orders.find((item) => Number(item.idPedidoOnline) === Number(card.dataset.onlineOrder));
           const action = currentOrder ? nextOrderAction(currentOrder) : null;
+          if (button.dataset.nextState === 'entregado') {
+            const delivery = await confirmOrderDelivery(currentOrder, button);
+            if (!delivery) return;
+            const message = delivery.estadoPago === 'pagado'
+              ? 'Pedido entregado y cobrado. La venta ya aparece en tus reportes.'
+              : 'Pedido entregado a fiado. La deuda ya aparece en Cobranza.';
+            void updateOrder(card, 'entregado', delivery.estadoPago, message, delivery);
+            return;
+          }
           void updateOrder(card, button.dataset.nextState, button.dataset.nextPayment, action?.mensaje || 'El pedido avanzó al siguiente paso.');
         });
         card.querySelector('[data-order-cancel]')?.addEventListener('click', async (event) => {

@@ -19,7 +19,7 @@ const {
 const { administrativeAuditService } = require('./administrative-audit-service');
 const { businessAnalytics } = require('./product-analytics');
 const { formatLocalDate, formatLocalDateTime } = require('../utils/local-datetime');
-const { compactSaleReceiptCode } = require('../utils/receipt-code');
+const { compactSaleReceiptCode, nextSaleReceiptCode } = require('../utils/receipt-code');
 
 const SALE_PRESENTATIONS = new Set(['unidad', 'paquete']);
 const PAYMENT_METHODS = new Set(['efectivo', 'qr']);
@@ -82,11 +82,6 @@ function normalizeBarcode(value) {
     throw stockError(400, 'El codigo de barras no es valido.');
   }
   return barcode;
-}
-
-function saleCode(idVenta) {
-  // El identificador interno ya garantiza unicidad; el comprobante visible debe ser fácil de dictar y reconocer.
-  return `V-${String(idVenta).padStart(4, '0')}`;
 }
 
 function normalizeItems(items) {
@@ -260,8 +255,8 @@ async function registerSale({
     const operationDate = new Date();
     const operationDateTime = formatLocalDateTime(operationDate);
     const [insert] = await connection.query(
-      `INSERT INTO venta (idTienda, fecha, total, tipo, idCliente, claveOperacion)
-       VALUES (?, ?, 0, 'pagada', NULL, ?)
+      `INSERT INTO venta (idTienda, fecha, total, tipo, idCliente, claveOperacion, canalVenta)
+       VALUES (?, ?, 0, 'pagada', NULL, ?, 'tienda')
        ON DUPLICATE KEY UPDATE idVenta=LAST_INSERT_ID(idVenta)`,
       [idTienda, operationDateTime, requestKey]
     );
@@ -318,7 +313,7 @@ async function registerSale({
       throw stockError(400, 'No se puede calcular cambio sin un pago en efectivo.');
     }
     const changeCents = cashPayment ? cashReceivedCents - cashPayment.montoCents : 0;
-    const code = saleCode(idVenta);
+    const code = await nextSaleReceiptCode(connection, idTienda, 'tienda');
     const saleType = balanceCents > 0 ? 'fiada' : 'pagada';
 
     await connection.query(
@@ -474,7 +469,7 @@ async function getSaleReceipt(idTienda, idVenta) {
   const [[sales], [details], [payments], [creditConfigurations]] = await Promise.all([
     pool.query(
       `SELECT v.idVenta, v.fecha, v.subtotal, v.descuento, v.total, v.montoPagado,
-              v.saldoPendiente, v.estadoPago, v.tipo, v.codigoComprobante,
+              v.saldoPendiente, v.estadoPago, v.tipo, v.codigoComprobante, v.canalVenta,
               c.idCliente, COALESCE(c.nombre, 'Cliente ocasional') cliente, c.telefono, c.telefonoNormalizado,
               t.nombre tienda, f.idFiado, f.saldoPendiente saldoActualFiado, f.estado estadoFiado
        FROM venta v

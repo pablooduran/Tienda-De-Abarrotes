@@ -3553,12 +3553,17 @@ function compactReceiptCode(code) {
   return legacy ? `V-${String(Number(legacy[1])).padStart(4, '0')}` : code;
 }
 
+function saleChannelLabel(channel) {
+  return channel === 'online' ? 'Online' : 'Tienda física';
+}
+
 function receiptText(receipt) {
   const sale = receipt.venta;
   const receiptCode = compactReceiptCode(sale.codigoComprobante) || `Venta #${sale.idVenta}`;
   const lines = [
     sale.tienda,
     `Comprobante ${receiptCode}`,
+    `Canal: ${saleChannelLabel(sale.canalVenta)}`,
     formatDate(sale.fecha),
     sale.idCliente ? `Cliente: ${sale.cliente}` : 'Cliente ocasional',
     ''
@@ -3585,7 +3590,7 @@ function receiptHtml(receipt) {
   const receiptCode = compactReceiptCode(sale.codigoComprobante) || `Venta #${sale.idVenta}`;
   return `
     <section class="receipt" id="saleReceipt">
-      <header><h2>${escapeHtml(sale.tienda)}</h2><strong>${escapeHtml(receiptCode)}</strong><span>${escapeHtml(formatDate(sale.fecha))}</span></header>
+      <header><h2>${escapeHtml(sale.tienda)}</h2><strong>${escapeHtml(receiptCode)}</strong><span>${escapeHtml(saleChannelLabel(sale.canalVenta))} · ${escapeHtml(formatDate(sale.fecha))}</span></header>
       <p>${sale.idCliente ? `Cliente: <strong>${escapeHtml(sale.cliente)}</strong>` : 'Cliente ocasional'}</p>
       <div class="receipt-lines">${receipt.detalle.map((item) => `
         <div><span>${escapeHtml(item.nombre)}<small>${intValue(item.cantidad)} ${escapeHtml(item.presentacionVenta)} × Bs ${money(item.precioVenta)}</small></span><strong>Bs ${money(item.subtotal)}</strong></div>`).join('')}</div>
@@ -4004,8 +4009,8 @@ async function compras() { operationView('compras'); }
 async function historialVentas() {
   const rows = state.ventas || [];
   view.innerHTML = `<section class="sales-section-heading"><div><h3>Historial de ventas</h3><p>Revisa comprobantes, cobros y saldos sin perder el contexto de cada venta.</p></div></section>${rows.length ? `<div class="panel table-wrap"><table>
-    <thead><tr><th>Comprobante</th><th>Fecha</th><th>Cliente</th><th>Total</th><th>Pagado</th><th>Saldo</th><th>Métodos</th><th>Estado</th><th>Acciones</th></tr></thead>
-    <tbody>${rows.map((v) => `<tr><td>${escapeHtml(compactReceiptCode(v.codigoComprobante) || `Venta #${v.idVenta}`)}</td><td>${formatDate(v.fecha)}</td><td>${escapeHtml(v.cliente)}</td><td>Bs ${money(v.total)}</td><td>Bs ${money(v.montoPagado)}</td><td class="${Number(v.saldoActualFiado ?? v.saldoPendiente) > 0 ? 'text-danger' : 'text-ok'}">Bs ${money(v.saldoActualFiado ?? v.saldoPendiente)}</td><td>${escapeHtml(String(v.metodosPago || 'No especificado').replaceAll(',', ', '))}</td><td>${statusBadge(v.estadoPago === 'pagada' ? 'pagado' : v.estadoPago)}</td><td class="actions sales-history-actions"><button class="small secondary" data-detail="${v.idVenta}">Ver detalle</button><button type="button" class="small secondary" data-receipt="${v.idVenta}">Comprobante</button></td></tr>`).join('')}</tbody>
+    <thead><tr><th>Comprobante</th><th>Canal</th><th>Fecha</th><th>Cliente</th><th>Total</th><th>Pagado</th><th>Saldo</th><th>Métodos</th><th>Estado</th><th>Acciones</th></tr></thead>
+    <tbody>${rows.map((v) => `<tr><td><strong>${escapeHtml(compactReceiptCode(v.codigoComprobante) || `Venta #${v.idVenta}`)}</strong></td><td><span class="badge sale-channel ${v.canalVenta === 'online' ? 'online' : 'store'}">${escapeHtml(saleChannelLabel(v.canalVenta))}</span></td><td>${formatDate(v.fecha)}</td><td>${escapeHtml(v.cliente)}</td><td>Bs ${money(v.total)}</td><td>Bs ${money(v.montoPagado)}</td><td class="${Number(v.saldoActualFiado ?? v.saldoPendiente) > 0 ? 'text-danger' : 'text-ok'}">Bs ${money(v.saldoActualFiado ?? v.saldoPendiente)}</td><td>${escapeHtml(String(v.metodosPago || 'No especificado').replaceAll(',', ', '))}</td><td>${statusBadge(v.estadoPago === 'pagada' ? 'pagado' : v.estadoPago)}</td><td class="actions sales-history-actions"><button class="small secondary" data-detail="${v.idVenta}">Ver detalle</button><button type="button" class="small secondary" data-receipt="${v.idVenta}">Comprobante</button></td></tr>`).join('')}</tbody>
   </table></div>` : UiPatterns.empty('Aún no hay ventas registradas', 'Cuando completes una venta, su comprobante y estado de cobro aparecerán aquí.')}`;
   view.querySelectorAll('[data-detail]').forEach((btn) => btn.addEventListener('click', () => showSaleDetail(btn.dataset.detail)));
   view.querySelectorAll('[data-receipt]').forEach((btn) => btn.addEventListener('click', async () => {
@@ -4039,7 +4044,7 @@ async function showSaleDetail(idVenta) {
       wide: true,
       confirmText: 'Cerrar',
       body: `
-        <p>${escapeHtml(compactReceiptCode(v.codigoComprobante) || `Venta #${v.idVenta}`)} · ${formatDate(v.fecha)} · ${escapeHtml(v.cliente)} · Bs ${money(v.total)}</p>
+        <p>${escapeHtml(compactReceiptCode(v.codigoComprobante) || `Venta #${v.idVenta}`)} · ${escapeHtml(saleChannelLabel(v.canalVenta))} · ${formatDate(v.fecha)} · ${escapeHtml(v.cliente)} · Bs ${money(v.total)}</p>
         <p>Pagado: <strong>Bs ${money(v.montoPagado)}</strong> · Saldo actual: <strong class="${Number(v.saldoActualFiado ?? v.saldoPendiente) > 0 ? 'text-danger' : 'text-ok'}">Bs ${money(v.saldoActualFiado ?? v.saldoPendiente)}</strong> ${statusBadge(v.estadoPago === 'pagada' ? 'pagado' : v.estadoPago)}</p>
         <p>${data.pagos.length ? data.pagos.map((payment) => `${escapeHtml(payment.metodoPago)}: <strong>Bs ${money(payment.monto)}</strong>${payment.referencia ? ` (${escapeHtml(payment.referencia)})` : ''}`).join(' · ') : 'Sin desglose de pagos para esta venta histórica.'}</p>
         ${v.idFiado ? `<p><button type="button" class="secondary" data-open-debt="${v.idFiado}" data-client="${v.idCliente || ''}" data-client-name="${escapeHtml(v.cliente)}">Ver en Cobranza</button></p>` : ''}
