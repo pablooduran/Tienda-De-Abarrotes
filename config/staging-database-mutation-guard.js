@@ -6,7 +6,8 @@ const REMOTE_STAGING_EXACT_MIGRATION_CONFIRMATION = 'CONFIRM_STAGING_MIGRATION_0
 const REMOTE_STAGING_EXACT_MIGRATION = '032_catalogo_online_visible_por_defecto.sql';
 const REMOTE_STAGING_EXACT_MIGRATIONS = Object.freeze([
   REMOTE_STAGING_EXACT_MIGRATION,
-  '033_pedidos_tienda_online.sql'
+  '033_pedidos_tienda_online.sql',
+  '034_separar_comprobantes_por_canal.sql'
 ]);
 const REMOTE_STAGING_SUPERADMIN_ARGUMENT = '--remote-staging-superadmin';
 const REMOTE_STAGING_SUPERADMIN_CONFIRMATION = 'CREATE_FIRST_STAGING_SUPERADMIN';

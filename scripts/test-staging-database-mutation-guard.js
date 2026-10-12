@@ -74,6 +74,12 @@ async function main() {
       STAGING_DB_MIGRATION_CONFIRMATION: REMOTE_STAGING_EXACT_MIGRATION_CONFIRMATION
     })
   }), { type: 'remote-staging-exact', migration: '033_pedidos_tienda_online.sql' });
+  assert.deepStrictEqual(resolveDatabaseMutationMode({
+    args: [REMOTE_STAGING_ARGUMENT, '--only', '034_separar_comprobantes_por_canal.sql'],
+    environment: stagingEnvironment({
+      STAGING_DB_MIGRATION_CONFIRMATION: REMOTE_STAGING_EXACT_MIGRATION_CONFIRMATION
+    })
+  }), { type: 'remote-staging-exact', migration: '034_separar_comprobantes_por_canal.sql' });
   assert.throws(() => resolveDatabaseMutationMode({
     args: [REMOTE_STAGING_ARGUMENT, '--only', REMOTE_STAGING_EXACT_MIGRATION],
     environment: stagingEnvironment({ STAGING_DB_MIGRATION_CONFIRMATION: '' })
