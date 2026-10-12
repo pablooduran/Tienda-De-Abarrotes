@@ -35,6 +35,12 @@ function fixture(catalogQueries) {
     const url = new URL(request.url, 'http://127.0.0.1');
     const pathname = url.pathname;
     if (pathname === '/auth/status') return json(response, { authenticated: true, admin: { rol: 'superadmin', usuario: 'admin_sintetico' } });
+    if (pathname === '/api/admin/resumen-plataforma') return json(response, {
+      tiendas: { total: 2, activas: 1, inactivas: 1 },
+      suscripciones: { pruebas: 0, vencidas: 1, pendientes: 0 },
+      ventas: { cantidad: 0, total: 0 },
+      pagosPendientes: 0
+    });
     if (pathname === '/api/admin/planes') return json(response, []);
     if (pathname === '/api/admin/tiendas') return json(response, [store, suspendedStore]);
     if (pathname === '/api/admin/tiendas/1') return json(response, store);
@@ -76,21 +82,56 @@ async function verify(browser, baseUrl, width, catalogQueries) {
   const errors = [];
   page.on('pageerror', (error) => errors.push(error.message));
   page.on('console', (message) => { if (message.type() === 'error') errors.push(message.text()); });
+  page.on('response', (response) => { if (response.status() === 404) errors.push(`404 ${response.url()}`); });
   try {
     await page.goto(`${baseUrl}/admin.html#tiendas`);
+    const pageWidth = await page.evaluate(() => ({
+      scrollWidth: document.documentElement.scrollWidth,
+      clientWidth: document.documentElement.clientWidth,
+      widest: [...document.querySelectorAll('body *')].map((node) => {
+        const bounds = node.getBoundingClientRect();
+        return { tag: node.tagName, className: node.className, id: node.id, left: bounds.left, right: bounds.right, width: bounds.width };
+      }).sort((a, b) => b.right - a.right).slice(0, 3)
+    }));
+    assert(pageWidth.scrollWidth <= pageWidth.clientWidth + 1,
+      `La vista administrativa no debe desbordar horizontalmente: ${JSON.stringify(pageWidth)}`);
+    if (width <= 900) {
+      const responsiveLayout = await page.evaluate(() => ({
+        mainWidth: Math.round(document.querySelector('.admin-main').getBoundingClientRect().width),
+        sidebarWidth: Math.round(document.querySelector('.admin-sidebar').getBoundingClientRect().width),
+        viewportWidth: window.innerWidth
+      }));
+      assert(responsiveLayout.mainWidth >= responsiveLayout.viewportWidth - 1, 'El contenido debe usar todo el ancho movil.');
+      assert.strictEqual(responsiveLayout.sidebarWidth, 0, 'La navegación cerrada no debe quitar ancho al contenido.');
+      await page.locator('#adminSidebarToggle').click();
+      assert.strictEqual(await page.locator('.admin-shell').evaluate((node) => node.classList.contains('sidebar-expanded')), true);
+      await page.waitForFunction(() => document.querySelector('.admin-sidebar').getBoundingClientRect().width > 240);
+      await page.locator('#adminSidebarToggle').click();
+    }
     const detailButton = page.locator('#storesTableBody .table-action').first();
     await detailButton.waitFor();
-    assert.strictEqual(await page.locator('#storesTableBody tr').count(), 2);
+    assert.strictEqual(await page.locator('#storesTableBody tr').count(), 2, 'Deben cargarse las dos tiendas de prueba.');
     await detailButton.evaluate((node) => node.scrollIntoView({ block: 'center' }));
     const before = await page.locator('.admin-main').evaluate((node) => node.scrollTop);
-    await detailButton.click();
+    if (width <= 900) {
+      await detailButton.focus();
+      await detailButton.evaluate((node) => node.click());
+    }
+    else await detailButton.click();
     await page.locator('#storeDetail[open]').waitFor();
     assert.strictEqual(await page.locator('#storeDetail').evaluate((node) => node.matches(':modal')), true);
-    assert.strictEqual(await page.locator('.admin-main').evaluate((node) => node.scrollTop), before,
-      'El detalle no debe desplazar la lista.');
+    if (width > 760) {
+      assert.strictEqual(await page.locator('.admin-main').evaluate((node) => node.scrollTop), before,
+        'El detalle no debe desplazar la lista.');
+    }
     assert.strictEqual(await page.evaluate(() => document.activeElement.id), 'closeStoreDetail');
     await page.keyboard.press('Escape');
     await page.locator('#storeDetail[open]').waitFor({ state: 'detached' });
+    if (width <= 900) {
+      const restored = await page.locator('.admin-main').evaluate((node) => node.scrollTop);
+      assert(Math.abs(restored - before) < 2,
+        `Al cerrar el detalle móvil debe recuperarse la posición de la lista: antes=${before}, después=${restored}.`);
+    }
     assert.strictEqual(await detailButton.evaluate((node) => document.activeElement === node), true,
       'El foco debe volver al boton Ver detalle.');
     await detailButton.click();
@@ -117,6 +158,7 @@ async function verify(browser, baseUrl, width, catalogQueries) {
     assert.strictEqual(await page.locator('#storesTableBody tr').count(), 0, 'La búsqueda visible debe combinarse con los filtros.');
     await page.locator('#storeSearch').fill('');
     assert.strictEqual(await page.locator('#storesTableBody tr').count(), 1);
+    if (width <= 900) await page.locator('#adminSidebarToggle').click();
     await page.locator('.admin-sidebar a[href="#catalogo"]').click();
     assert.strictEqual(await page.locator('#catalogo').isVisible(), true);
     assert.strictEqual(await page.locator('#tiendas').isVisible(), false);

@@ -1217,6 +1217,171 @@ textarea {
   .payment-admin-section td { padding: 6px 0; border: 0; }
 }
 
+/* Responsive final: en pantallas pequenas la navegacion se vuelve un panel
+   superpuesto para no quitarle ancho util al contenido administrativo. */
+@media (max-width: 760px) {
+  .admin-shell {
+    display: block;
+  }
+
+  .admin-sidebar {
+    position: fixed;
+    z-index: 30;
+    inset: 0 auto 0 0;
+    width: 0;
+    height: 100dvh;
+    padding: 0;
+    overflow: visible;
+    border: 0;
+    background: transparent;
+    box-shadow: none;
+  }
+
+  .admin-sidebar-toggle {
+    position: fixed;
+    z-index: 35;
+    top: max(12px, env(safe-area-inset-top));
+    left: max(12px, env(safe-area-inset-left));
+    display: grid;
+    width: 46px;
+    height: 46px;
+    place-items: center;
+    border-radius: 13px;
+    box-shadow: 0 8px 24px rgba(4, 17, 9, .22);
+    transition: left .22s ease, background-color .22s ease;
+  }
+
+  .admin-sidebar > :not(.admin-sidebar-toggle) {
+    visibility: hidden;
+  }
+
+  .admin-shell.sidebar-expanded .admin-sidebar {
+    width: min(288px, calc(100vw - 32px));
+    padding: 72px 18px max(18px, env(safe-area-inset-bottom));
+    overflow: hidden;
+    border-right: 1px solid rgba(188, 235, 216, .18);
+    background: #0e2117;
+  }
+
+  html[data-theme="dark"] .admin-shell.sidebar-expanded .admin-sidebar {
+    background: #050b07;
+  }
+
+  .admin-shell.sidebar-expanded .admin-sidebar > :not(.admin-sidebar-toggle) {
+    visibility: visible;
+  }
+
+  .admin-shell.sidebar-expanded .admin-sidebar-toggle {
+    left: min(230px, calc(100vw - 90px));
+  }
+
+  .admin-main,
+  .admin-shell.sidebar-expanded .admin-main {
+    grid-column: auto;
+    width: 100%;
+    min-width: 0;
+    height: 100dvh;
+    padding: calc(72px + env(safe-area-inset-top)) 14px max(40px, env(safe-area-inset-bottom));
+  }
+
+  .admin-main > *,
+  .page-header > *,
+  .section-heading > *,
+  .content-section,
+  .summary-item,
+  .platform-overview,
+  .platform-metrics,
+  .table-wrap {
+    min-width: 0;
+    max-width: 100%;
+  }
+
+  h1 {
+    font-size: clamp(1.85rem, 10vw, 2.55rem);
+    overflow-wrap: anywhere;
+  }
+
+  .page-header,
+  .section-heading,
+  .owners-heading,
+  .detail-heading,
+  .platform-alert,
+  .payment-guide,
+  .payment-guide-steps {
+    align-items: stretch;
+    grid-template-columns: 1fr;
+  }
+
+  .platform-alert {
+    flex-direction: column;
+  }
+
+  .platform-metric-value {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .payment-guide-steps {
+    display: grid;
+  }
+
+  .content-section,
+  .platform-overview,
+  .platform-metrics {
+    padding: 16px;
+  }
+
+  .modal,
+  .modal-product,
+  #storeDetail[open],
+  #saasSubscriptionDetail[open],
+  #paymentReviewDetail[open],
+  .admin-filter-dialog[open],
+  .audit-filter-dialog[open] {
+    width: calc(100vw - 16px);
+    max-height: calc(100dvh - 16px);
+    margin: auto;
+  }
+
+  .modal form {
+    max-height: calc(100dvh - 16px);
+  }
+}
+
+@media (min-width: 480px) and (max-width: 760px) {
+  .summary-grid,
+  .detail-facts {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 380px) {
+  .admin-main,
+  .admin-shell.sidebar-expanded .admin-main {
+    padding-right: 10px;
+    padding-left: 10px;
+  }
+
+  .content-section,
+  .platform-overview,
+  .platform-metrics,
+  .summary-item {
+    padding: 13px;
+  }
+
+  .button-row,
+  .modal footer {
+    display: grid;
+    grid-template-columns: 1fr;
+    width: 100%;
+  }
+
+  .button-row .button,
+  .modal footer .button {
+    width: 100%;
+  }
+}
+
 @media (max-width: 760px) {
   .admin-header-actions { width: 100%; flex-direction: column; }
   .global-search-field { width: 100%; }
@@ -1591,4 +1756,109 @@ html[data-theme="dark"] {
   .payment-admin-section thead { display: none; }
   .payment-admin-section tr { margin-bottom: 12px; padding: 10px; border: 1px solid var(--line); border-radius: 6px; }
   .payment-admin-section td { padding: 6px 0; border: 0; }
+}
+
+/* Capa responsive definitiva; conserva todo el ancho util en telefono y tablet vertical. */
+@media (max-width: 900px) {
+  .admin-shell { display: block; }
+  .admin-sidebar {
+    position: fixed;
+    inset: 0 auto 0 0;
+    width: 0;
+    height: 100dvh;
+    padding: 0;
+    gap: 0;
+    overflow: visible;
+    border: 0;
+    background: transparent;
+    box-shadow: none;
+  }
+  .admin-sidebar-toggle {
+    position: fixed;
+    top: max(12px, env(safe-area-inset-top));
+    left: max(12px, env(safe-area-inset-left));
+    display: grid;
+    place-items: center;
+    width: 46px;
+    height: 46px;
+    padding: 0;
+    border: 1px solid rgba(188, 235, 216, .28);
+    border-radius: 13px;
+    color: #f7fbf9;
+    background: #173b29;
+    box-shadow: 0 8px 24px rgba(4, 17, 9, .22);
+  }
+  .admin-sidebar > :not(.admin-sidebar-toggle) { visibility: hidden; }
+  .admin-shell.sidebar-expanded .admin-sidebar {
+    position: fixed;
+    inset: 0 auto 0 0;
+    width: min(288px, calc(100vw - 32px));
+    padding: 72px 18px max(18px, env(safe-area-inset-bottom));
+    overflow: hidden;
+    background: #0e2117;
+  }
+  .admin-shell.sidebar-expanded .admin-sidebar > :not(.admin-sidebar-toggle) { visibility: visible; }
+  .admin-shell.sidebar-expanded .admin-sidebar-toggle { left: min(230px, calc(100vw - 90px)); }
+  .admin-main,
+  .admin-shell.sidebar-expanded .admin-main {
+    grid-column: auto;
+    width: 100%;
+    height: 100dvh;
+    padding: calc(72px + env(safe-area-inset-top)) 14px max(40px, env(safe-area-inset-bottom));
+  }
+  .admin-main > *, .content-section, .table-wrap { min-width: 0; max-width: 100%; }
+  .content-section { overflow: hidden; }
+  .table-wrap { width: 100%; contain: inline-size; overflow-x: auto; overscroll-behavior-inline: contain; }
+  h1 { font-size: clamp(1.85rem, 10vw, 2.55rem); overflow-wrap: anywhere; }
+  .content-section, .platform-overview, .platform-metrics { padding: 16px; }
+  .payment-guide, .payment-guide-steps { grid-template-columns: 1fr; }
+  .payment-guide-steps { display: grid; }
+  .platform-alert { align-items: stretch; flex-direction: column; }
+  .platform-metric-value { width: 100%; min-width: 0; }
+  .admin-main > section.content-section[data-admin-view="tiendas"] > .table-wrap { overflow: visible; contain: none; }
+  .admin-main > section.content-section[data-admin-view="tiendas"] > .table-wrap table,
+  .admin-main > section.content-section[data-admin-view="tiendas"] > .table-wrap tbody,
+  .admin-main > section.content-section[data-admin-view="tiendas"] > .table-wrap tr,
+  .admin-main > section.content-section[data-admin-view="tiendas"] > .table-wrap td { display: block; width: 100%; }
+  .admin-main > section.content-section[data-admin-view="tiendas"] > .table-wrap thead { display: none; }
+  .admin-main > section.content-section[data-admin-view="tiendas"] > .table-wrap tr {
+    margin-bottom: 12px;
+    padding: 12px;
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    background: var(--surface);
+  }
+  .admin-main > section.content-section[data-admin-view="tiendas"] > .table-wrap td {
+    display: grid;
+    grid-template-columns: minmax(82px, .42fr) minmax(0, 1fr);
+    gap: 10px;
+    padding: 8px 0;
+    border: 0;
+    overflow-wrap: anywhere;
+  }
+  .admin-main > section.content-section[data-admin-view="tiendas"] > .table-wrap td::before {
+    color: var(--muted);
+    font-size: .69rem;
+    font-weight: 800;
+    text-transform: uppercase;
+  }
+  .admin-main > section.content-section[data-admin-view="tiendas"] > .table-wrap td:nth-child(1)::before { content: 'Tienda'; }
+  .admin-main > section.content-section[data-admin-view="tiendas"] > .table-wrap td:nth-child(2)::before { content: 'Estado'; }
+  .admin-main > section.content-section[data-admin-view="tiendas"] > .table-wrap td:nth-child(3)::before { content: 'Plan'; }
+  .admin-main > section.content-section[data-admin-view="tiendas"] > .table-wrap td:nth-child(4)::before { content: 'Suscripción'; }
+  .admin-main > section.content-section[data-admin-view="tiendas"] > .table-wrap td:nth-child(5)::before { content: 'Propietarios'; }
+  .admin-main > section.content-section[data-admin-view="tiendas"] > .table-wrap td:nth-child(6)::before { content: 'Productos'; }
+  .admin-main > section.content-section[data-admin-view="tiendas"] > .table-wrap td:nth-child(7)::before { content: 'Clientes'; }
+  .admin-main > section.content-section[data-admin-view="tiendas"] > .table-wrap td:nth-child(8)::before { content: 'Actividad'; }
+  .admin-main > section.content-section[data-admin-view="tiendas"] > .table-wrap td:nth-child(9)::before { content: 'Acción'; }
+  .admin-main > section.content-section[data-admin-view="tiendas"] > .table-wrap .table-action { width: 100%; }
+}
+
+@media (min-width: 480px) and (max-width: 900px) {
+  .summary-grid, .detail-facts { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+@media (max-width: 380px) {
+  .admin-main,
+  .admin-shell.sidebar-expanded .admin-main { padding-right: 10px; padding-left: 10px; }
 }

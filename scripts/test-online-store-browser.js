@@ -45,8 +45,8 @@ function readBody(request) {
 async function main() {
   const assets = new Map([
     ['/tienda/tienda-prueba', ['text/html', path.join(root, 'public', 'storefront.html')]],
-    ['/css/storefront.css?v=20261011-6', ['text/css', path.join(root, 'public', 'css', 'storefront.css')]],
-    ['/js/storefront.js?v=20261011-6', ['application/javascript', path.join(root, 'public', 'js', 'storefront.js')]],
+    ['/css/storefront.css?v=20261012-1', ['text/css', path.join(root, 'public', 'css', 'storefront.css')]],
+    ['/js/storefront.js?v=20261012-1', ['application/javascript', path.join(root, 'public', 'js', 'storefront.js')]],
     ['/js/http-security.js', ['application/javascript', path.join(root, 'public', 'js', 'http-security.js')]],
     ['/assets/administrau-icon.png', ['image/png', path.join(root, 'public', 'assets', 'administrau-icon.png')]]
   ]);
@@ -102,14 +102,20 @@ async function main() {
       assert.strictEqual(await page.locator('.storefront-product').count(), 12);
       assert.strictEqual(await page.getByText('Quedan pocas unidades').count(), 1);
       assert.strictEqual(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth), true);
+      assert.strictEqual(await page.locator('.storefront-product').evaluateAll((cards) => cards.every((card) => {
+        const bounds = card.getBoundingClientRect();
+        return bounds.left >= 0 && bounds.right <= window.innerWidth + 1;
+      })), true);
       await page.locator('[data-add-product="1"]').click();
       await page.getByRole('button', { name: 'Agregar una unidad' }).last().click();
       await page.getByRole('button', { name: 'Confirmar cantidad' }).click();
       assert.strictEqual(await page.locator('[data-cart-count]').first().textContent(), '2');
+      if (viewport.width <= 680) await page.getByRole('button', { name: /Carrito ·/ }).click();
       await page.locator('[data-cart-action="decrease"]').click();
       assert.strictEqual(await page.locator('[data-cart-count]').first().textContent(), '1');
       await page.getByRole('button', { name: 'Eliminar Arroz familiar 1 kg' }).click();
       assert.strictEqual(await page.locator('[data-cart-count]').first().textContent(), '0');
+      if (viewport.width <= 680) await page.getByRole('button', { name: 'Cerrar carrito' }).last().click();
       await page.locator('[data-add-product="1"]').click();
       await page.getByRole('button', { name: 'Confirmar cantidad' }).click();
       await page.reload();
@@ -125,6 +131,11 @@ async function main() {
         assert.strictEqual(await page.locator('.storefront-cart footer').isVisible(), true);
         await page.locator('[data-cart-items]').evaluate((node) => { node.scrollTop = node.scrollHeight; });
         assert((await page.locator('[data-cart-items]').evaluate((node) => node.scrollTop)) > 0);
+      }
+      if (viewport.width <= 680) {
+        await page.getByRole('button', { name: /Carrito ·/ }).click();
+        assert.strictEqual(await page.locator('[data-cart-panel]').evaluate((node) => node.classList.contains('is-open')), true);
+        assert.strictEqual(await page.getByRole('button', { name: 'Cerrar carrito' }).last().isVisible(), true);
       }
       await page.getByRole('button', { name: 'Continuar pedido' }).click();
       assert.strictEqual(await page.getByText('+591', { exact: true }).count(), 1);

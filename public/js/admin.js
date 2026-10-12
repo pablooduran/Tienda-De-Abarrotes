@@ -124,7 +124,7 @@ function isCommercialPlan(plan) {
 }
 
 function setAdminSidebarExpanded(expanded, { restoreFocus = false } = {}) {
-  const mobile = window.matchMedia('(max-width: 760px)').matches;
+  const mobile = window.matchMedia('(max-width: 900px)').matches;
   const visible = mobile && Boolean(expanded);
   elements.adminShell.classList.toggle('sidebar-expanded', visible);
   elements.adminSidebarToggle.setAttribute('aria-expanded', String(visible));
@@ -506,18 +506,21 @@ async function loadStores(selectedId = state.selectedStore?.idTienda) {
 }
 
 let storeDetailReturnFocus = null;
+let storeDetailScrollTop = 0;
 elements.storeDetail.addEventListener('close', () => {
   elements.storeDetail.hidden = true;
   document.body.classList.remove('admin-detail-open');
   const target = storeDetailReturnFocus?.isConnected && storeDetailReturnFocus.getClientRects().length
     ? storeDetailReturnFocus : document.querySelector('.admin-sidebar .nav-link.active');
-  target?.focus();
+  target?.focus({ preventScroll: true });
+  document.querySelector('.admin-main').scrollTop = storeDetailScrollTop;
   storeDetailReturnFocus = null;
 });
 document.getElementById('closeStoreDetail').addEventListener('click', () => elements.storeDetail.close());
 
 async function selectStore(idTienda, openDetail = true) {
   const returnFocus = document.activeElement;
+  const currentScrollTop = document.querySelector('.admin-main').scrollTop;
   const [store, owners, subscriptions] = await Promise.all([
     api(`/api/admin/tiendas/${idTienda}`),
     api(`/api/admin/tiendas/${idTienda}/propietarios`),
@@ -545,10 +548,12 @@ async function selectStore(idTienda, openDetail = true) {
   renderSubscriptions();
   if (openDetail && !elements.storeDetail.open) {
     storeDetailReturnFocus = returnFocus;
+    storeDetailScrollTop = currentScrollTop;
     elements.storeDetail.hidden = false;
     elements.storeDetail.showModal();
     document.body.classList.add('admin-detail-open');
-    document.getElementById('closeStoreDetail').focus();
+    document.getElementById('closeStoreDetail').focus({ preventScroll: true });
+    document.querySelector('.admin-main').scrollTop = storeDetailScrollTop;
   }
 }
 
@@ -1394,7 +1399,7 @@ window.addEventListener('keydown', (event) => {
   }
 });
 window.addEventListener('resize', () => {
-  if (!window.matchMedia('(max-width: 760px)').matches) setAdminSidebarExpanded(false);
+  if (!window.matchMedia('(max-width: 900px)').matches) setAdminSidebarExpanded(false);
 });
 document.getElementById('addMasterProductButton').addEventListener('click', () => openMasterProduct());
 document.getElementById('addMasterCategoryButton').addEventListener('click', () => openTaxonomy('categoria'));

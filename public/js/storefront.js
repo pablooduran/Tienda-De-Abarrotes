@@ -272,7 +272,7 @@
       <section class="storefront-hero"><div class="storefront-hero-pattern" aria-hidden="true"></div><div class="storefront-store-mark"><img src="/assets/administrau-icon.png" alt=""></div><div class="storefront-hero-copy"><p class="eyebrow">TIENDA ONLINE</p><h1>${escapeHtml(store.nombre)}</h1><p>${escapeHtml(store.mensajeBienvenida || 'Elige lo que necesitas y nosotros preparamos tu pedido.')}</p></div><div class="storefront-service-card"><span>Opciones al confirmar</span><strong>${escapeHtml(deliverySummary(store))}</strong><small>Mañana, tarde o noche · ${store.opciones.efectivo ? 'Efectivo' : ''}${store.opciones.efectivo && store.opciones.qr ? ' o ' : ''}${store.opciones.qr ? 'QR' : ''}</small></div></section>
       <section class="storefront-order-confirmation" data-order-confirmation hidden></section>
       <section class="storefront-shop-layout"><div class="storefront-catalog"><header class="storefront-catalog-heading"><div><p class="eyebrow">CATÁLOGO</p><h2>¿Qué estás buscando?</h2></div><span data-results-count></span></header><div class="storefront-search"><span aria-hidden="true">⌕</span><input type="search" placeholder="Buscar por nombre o categoría" aria-label="Buscar productos" data-storefront-search></div><div class="storefront-categories" role="group" aria-label="Filtrar por categoría"><button type="button" class="active" data-category="todas">Todos</button>${catalog.categorias.map((item) => `<button type="button" data-category="${escapeHtml(item)}">${escapeHtml(item)}</button>`).join('')}</div><div class="storefront-products" data-storefront-products></div></div>
-      <aside class="storefront-cart" data-cart-panel><header><div><p class="eyebrow">TU PEDIDO</p><h2>Carrito <span data-cart-count>0</span></h2></div></header><div class="storefront-cart-items" data-cart-items></div><footer><div><span>Subtotal</span><strong data-cart-subtotal>Bs 0.00</strong></div><button type="button" data-checkout disabled>Continuar pedido</button><small>La disponibilidad y el costo de entrega se confirman con la tienda.</small></footer></aside></section>
+      <button type="button" class="storefront-cart-scrim" data-close-cart aria-label="Cerrar carrito" hidden></button><aside class="storefront-cart" data-cart-panel aria-label="Carrito de compras"><header><div><p class="eyebrow">TU PEDIDO</p><h2>Carrito <span data-cart-count>0</span></h2></div><button type="button" class="storefront-cart-close" data-close-cart aria-label="Cerrar carrito">×</button></header><div class="storefront-cart-items" data-cart-items></div><footer><div><span>Subtotal</span><strong data-cart-subtotal>Bs 0.00</strong></div><button type="button" data-checkout disabled>Continuar pedido</button><small>La disponibilidad y el costo de entrega se confirman con la tienda.</small></footer></aside></section>
       <button type="button" class="storefront-cart-fab" data-open-cart>Carrito · <span data-cart-count>0</span></button>
       <dialog class="storefront-dialog" data-quantity-dialog><form method="dialog"><button class="dialog-close" value="cancel" aria-label="Cerrar">×</button><p class="eyebrow">AGREGAR AL CARRITO</p><h2 data-quantity-name></h2><p data-quantity-price></p><div class="storefront-stepper"><button type="button" data-quantity-action="decrease" aria-label="Quitar una unidad">−</button><strong data-quantity-value>1</strong><button type="button" data-quantity-action="increase" aria-label="Agregar una unidad">+</button></div><button type="button" data-confirm-quantity>Confirmar cantidad</button></form></dialog>
       <dialog class="storefront-dialog storefront-checkout" data-checkout-dialog><form novalidate><button type="button" class="dialog-close" data-close-checkout aria-label="Cerrar">×</button><header class="checkout-intro"><p class="eyebrow">ENVÍA TU PEDIDO</p><h2>Confirma los datos de tu compra</h2><p>Te identificamos, coordinamos la entrega y enviamos el pedido directamente a la tienda.</p></header><section class="checkout-section"><div class="checkout-section-title"><span>1</span><div><strong>Identifícate</strong><small>Tu teléfono es tu identificador en esta tienda.</small></div></div><div class="checkout-phone-row"><label>Número de teléfono<span class="checkout-phone-control"><b>+${escapeHtml(store.codigoPaisTelefono || '591')}</b><input name="phone" type="tel" inputmode="numeric" maxlength="15" required placeholder="76543210"></span></label><button type="button" data-find-customer>Buscar cliente</button></div><p class="checkout-note" data-customer-result role="status" aria-live="polite">Escribe tu número y presiona “Buscar cliente”.</p><label data-customer-name>Nombre completo<input name="customerName" maxlength="100" required placeholder="Tu nombre completo"></label></section><section class="checkout-section"><div class="checkout-section-title"><span>2</span><div><strong>Entrega y pago</strong><small>Elige cómo y cuándo quieres recibirlo.</small></div></div><fieldset><legend>¿Cómo quieres recibirlo?</legend><div class="checkout-choice-grid" data-fulfillment-options></div></fieldset><label class="checkout-address" data-delivery-fields>Dirección de entrega<input type="text" name="address" maxlength="255" placeholder="Zona, calle y referencia"></label><fieldset><legend>¿En qué momento?</legend><div class="checkout-slot-grid"><label><input type="radio" name="slot" value="manana" checked><span>Mañana</span></label><label><input type="radio" name="slot" value="tarde"><span>Tarde</span></label><label><input type="radio" name="slot" value="noche"><span>Noche</span></label></div></fieldset><fieldset><legend>¿Cómo pagarás?</legend><div class="checkout-slot-grid" data-payment-options></div></fieldset></section><section class="checkout-section"><div class="checkout-section-title"><span>3</span><div><strong>Revisa y envía</strong><small>La tienda confirmará disponibilidad y entrega.</small></div></div><label>Nota para la tienda (opcional)<textarea name="notes" maxlength="500" rows="2" placeholder="Alguna referencia o indicación"></textarea></label><div class="checkout-totals"><span>Subtotal <strong data-checkout-subtotal></strong></span><span data-delivery-row>Costo base estimado de entrega <strong data-delivery-estimate></strong></span></div></section><button type="submit" data-submit-order>Enviar pedido a la tienda</button></form></dialog>`;
@@ -317,7 +317,10 @@
         renderCart();
       }
     });
-    root.querySelector('[data-checkout]').addEventListener('click', openCheckout);
+    root.querySelector('[data-checkout]').addEventListener('click', () => {
+      closeCart({ restoreFocus: false });
+      openCheckout();
+    });
     const checkoutDialog = root.querySelector('[data-checkout-dialog]');
     checkoutDialog.addEventListener('submit', submitOrder);
     checkoutDialog.querySelector('[data-find-customer]').addEventListener('click', () => identifyCustomer(checkoutDialog));
@@ -344,7 +347,32 @@
       root.querySelector('[data-delivery-row]').hidden = !delivery;
       checkoutDialog.querySelector('[name="address"]').required = delivery;
     });
-    root.querySelector('[data-open-cart]').addEventListener('click', () => root.querySelector('[data-cart-panel]').scrollIntoView({ behavior: 'smooth', block: 'start' }));
+    const cartPanel = root.querySelector('[data-cart-panel]');
+    const cartScrim = root.querySelector('.storefront-cart-scrim');
+    const mobileCart = () => window.matchMedia('(max-width: 680px)').matches;
+    const closeCart = ({ restoreFocus = true } = {}) => {
+      cartPanel.classList.remove('is-open');
+      cartScrim.hidden = true;
+      document.body.classList.remove('storefront-cart-open');
+      if (restoreFocus && mobileCart()) root.querySelector('[data-open-cart]').focus();
+    };
+    root.querySelector('[data-open-cart]').addEventListener('click', () => {
+      if (!mobileCart()) {
+        cartPanel.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        return;
+      }
+      cartPanel.classList.add('is-open');
+      cartScrim.hidden = false;
+      document.body.classList.add('storefront-cart-open');
+      cartPanel.querySelector('.storefront-cart-close').focus();
+    });
+    root.querySelectorAll('[data-close-cart]').forEach((button) => button.addEventListener('click', closeCart));
+    document.addEventListener('keydown', (event) => {
+      if (event.key === 'Escape' && cartPanel.classList.contains('is-open')) closeCart();
+    });
+    window.addEventListener('resize', () => {
+      if (!mobileCart()) closeCart({ restoreFocus: false });
+    });
     renderProducts();
     renderCart();
   }
