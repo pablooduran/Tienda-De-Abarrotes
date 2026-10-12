@@ -6,6 +6,10 @@ const { nextSaleReceiptCode } = require('../utils/receipt-code');
 const root = path.resolve(__dirname, '..');
 const posService = fs.readFileSync(path.join(root, 'services', 'pos-sale-service.js'), 'utf8');
 const onlineService = fs.readFileSync(path.join(root, 'services', 'online-store-service.js'), 'utf8');
+const receiptMigration = fs.readFileSync(
+  path.join(root, 'database', 'migrations', '034_separar_comprobantes_por_canal.sql'),
+  'utf8'
+);
 
 async function run() {
   const calls = [];
@@ -28,6 +32,8 @@ async function run() {
   assert(/canalVenta\)\s+VALUES \(\?, \?, 0, 'pagada', NULL, \?, 'tienda'\)/.test(posService));
   assert(onlineService.includes("nextSaleReceiptCode(connection, idTienda, 'online')"));
   assert(onlineService.includes("?,'online')"));
+  assert(/CREATE TEMPORARY TABLE tmp_secuencia_comprobante_venta\s*\([\s\S]*idVenta INT NOT NULL PRIMARY KEY/.test(receiptMigration));
+  assert(receiptMigration.includes('INSERT INTO tmp_secuencia_comprobante_venta'));
   console.log('test:receipt-channels OK');
 }
 

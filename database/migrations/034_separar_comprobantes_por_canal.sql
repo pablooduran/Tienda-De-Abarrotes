@@ -20,7 +20,14 @@ WHERE idTienda IS NOT NULL;
 
 DROP TEMPORARY TABLE IF EXISTS tmp_secuencia_comprobante_venta;
 
-CREATE TEMPORARY TABLE tmp_secuencia_comprobante_venta AS
+CREATE TEMPORARY TABLE tmp_secuencia_comprobante_venta (
+  idVenta INT NOT NULL PRIMARY KEY,
+  idTienda INT NOT NULL,
+  canalVenta ENUM('tienda','online') NOT NULL,
+  numeroCanal BIGINT UNSIGNED NOT NULL
+);
+
+INSERT INTO tmp_secuencia_comprobante_venta (idVenta,idTienda,canalVenta,numeroCanal)
 SELECT idVenta,idTienda,canalVenta,
        ROW_NUMBER() OVER (PARTITION BY idTienda,canalVenta ORDER BY idVenta) numeroCanal
 FROM venta
