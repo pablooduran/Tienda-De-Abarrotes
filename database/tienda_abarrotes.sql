@@ -75,7 +75,9 @@ CREATE TABLE IF NOT EXISTS administrador (
   idTienda INT NULL,
   usuario VARCHAR(50) NOT NULL UNIQUE,
   correoNormalizado VARCHAR(160) NULL,
+  correoPendiente VARCHAR(160) NULL,
   correoVerificadoEn DATETIME NULL,
+  telefono VARCHAR(30) NULL,
   password VARCHAR(255) NOT NULL,
   rol ENUM('superadmin','dueno_tienda','encargado','cajero','inventario') NOT NULL DEFAULT 'dueno_tienda',
   activo TINYINT(1) NOT NULL DEFAULT 1,
@@ -83,6 +85,7 @@ CREATE TABLE IF NOT EXISTS administrador (
   versionSesion INT UNSIGNED NOT NULL DEFAULT 1,
   UNIQUE KEY uq_administrador_tienda_id (idTienda, idAdministrador),
   UNIQUE KEY uq_administrador_correo_normalizado (correoNormalizado),
+  KEY idx_administrador_correo_pendiente (correoPendiente),
   KEY idx_administrador_tienda_activo (idTienda, activo),
   KEY idx_administrador_estado_acceso (estadoAcceso, activo),
   CONSTRAINT fk_administrador_tienda FOREIGN KEY (idTienda) REFERENCES tienda(idTienda),
@@ -90,7 +93,13 @@ CREATE TABLE IF NOT EXISTS administrador (
     (rol = 'superadmin' AND idTienda IS NULL)
     OR (rol IN ('dueno_tienda','encargado','cajero','inventario') AND idTienda IS NOT NULL)
   ),
-  CONSTRAINT chk_administrador_version_sesion CHECK (versionSesion >= 1)
+  CONSTRAINT chk_administrador_version_sesion CHECK (versionSesion >= 1),
+  CONSTRAINT chk_administrador_correo_pendiente CHECK (
+    correoPendiente IS NULL OR CHAR_LENGTH(TRIM(correoPendiente)) BETWEEN 5 AND 160
+  ),
+  CONSTRAINT chk_administrador_telefono CHECK (
+    telefono IS NULL OR CHAR_LENGTH(TRIM(telefono)) BETWEEN 7 AND 30
+  )
 );
 
 CREATE TABLE IF NOT EXISTS plan (

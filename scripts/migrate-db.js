@@ -1385,6 +1385,18 @@ const migrationRequirements = {
     indexes: [
       ['venta', 'idx_venta_tienda_canal_id', ['idTienda', 'canalVenta', 'idVenta'], false]
     ]
+  },
+  '035_datos_cuenta_administrador.sql': {
+    columns: {
+      administrador: ['correoPendiente', 'telefono']
+    },
+    indexes: [
+      ['administrador', 'idx_administrador_correo_pendiente', ['correoPendiente'], false]
+    ],
+    checks: [
+      ['administrador', 'chk_administrador_correo_pendiente'],
+      ['administrador', 'chk_administrador_telefono']
+    ]
   }
 };
 

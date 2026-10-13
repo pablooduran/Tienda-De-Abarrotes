@@ -64,7 +64,7 @@ function createStoreConfigurationService({ database = pool, audit = administrati
     if (!store || !Number(store.activo) || store.estado !== 'activa'
       || !administrator || Number(administrator.idTienda) !== context.idTienda
       || administrator.rol !== 'dueno_tienda' || !Number(administrator.activo)
-      || administrator.estadoAcceso !== 'activo' || !administrator.correoVerificadoEn) {
+      || administrator.estadoAcceso !== 'activo') {
       throw onboardingError(403, 'CONFIGURATION_ACCESS_DENIED', 'No tiene acceso a la configuracion.');
     }
     const [rows] = await connection.query(

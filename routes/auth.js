@@ -17,6 +17,7 @@ const {
 const { publicRegistrationService } = require('../services/public-registration-service');
 const { emailVerificationService } = require('../services/email-verification-service');
 const { passwordRecoveryService } = require('../services/password-recovery-service');
+const { accountProfileService } = require('../services/account-profile-service');
 const { ownerDestination, resolveSubscriptionAccess } = require('../services/subscription-access-service');
 const { validPasswordLength } = require('../config/password-policy');
 const { normalizedVerificationIdentity } = require('../config/email-verification-contract');
@@ -126,6 +127,14 @@ function validateNewPassword(password, confirmation) {
     throw error;
   }
   return password;
+}
+
+function accountContext(req) {
+  return {
+    idAdministrador: req.auth.idAdministrador,
+    idTienda: req.auth.idTienda,
+    requestId: req.requestId
+  };
 }
 
 router.post('/login', async (req, res, next) => {
@@ -420,6 +429,38 @@ router.get('/status', async (req, res, next) => {
   }
 });
 
+router.get('/account', requireAuth, async (req, res, next) => {
+  try {
+    return res.json(await accountProfileService.get(accountContext(req)));
+  } catch (error) {
+    return next(error);
+  }
+});
+
+router.patch('/account', requireAuth, async (req, res, next) => {
+  try {
+    return res.json(await accountProfileService.savePhone(accountContext(req), req.body));
+  } catch (error) {
+    return next(error);
+  }
+});
+
+router.post('/account/email', requireAuth, async (req, res, next) => {
+  try {
+    return res.status(202).json(await accountProfileService.requestEmail(accountContext(req), req.body));
+  } catch (error) {
+    return next(error);
+  }
+});
+
+router.post('/account/email/confirm', requireAuth, async (req, res, next) => {
+  try {
+    return res.json(await accountProfileService.confirmEmail(accountContext(req), req.body));
+  } catch (error) {
+    return next(error);
+  }
+});
+
 router.post('/change-password', requireAuth, async (req, res, next) => {
   const connection = await pool.getConnection();
   try {
@@ -445,7 +486,7 @@ router.post('/change-password', requireAuth, async (req, res, next) => {
     }
     if (!await bcrypt.compare(currentPassword, rows[0].password)) {
       const error = new Error('La contrasena actual es incorrecta.');
-      error.status = 401;
+      error.status = 400;
       throw error;
     }
     if (await bcrypt.compare(newPassword, rows[0].password)) {

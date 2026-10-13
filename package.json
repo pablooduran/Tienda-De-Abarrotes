@@ -105,6 +105,8 @@
     "test:public-auth-ui": "node scripts/test-public-auth-ui.js",
     "test:public-auth-ui-browser": "node scripts/test-public-auth-ui-browser.js",
     "test:store-configuration": "node scripts/test-store-configuration.js",
+    "test:account-configuration": "node scripts/test-account-configuration.js",
+    "test:account-configuration-browser": "node scripts/test-account-configuration-browser.js",
     "test:subscription-lifecycle-schema": "node scripts/test-subscription-lifecycle-schema.js",
     "test:subscription-lifecycle-engine": "node scripts/test-subscription-lifecycle-engine.js",
     "test:subscription-access": "node scripts/test-subscription-access.js",

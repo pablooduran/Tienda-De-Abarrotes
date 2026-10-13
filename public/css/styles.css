@@ -4729,6 +4729,29 @@ td.actions { position: relative; }
 .configuration-actions { display: flex; align-items: center; justify-content: space-between; gap: 14px; padding: 15px 18px; border: 1px solid var(--line); border-radius: 14px; background: var(--panel); box-shadow: 0 10px 24px rgba(9, 32, 18, .06); }
 .configuration-actions .primary-action { min-width: 176px; margin-left: auto; }
 .configuration-message { min-height: 1.3em; margin: 0; color: var(--brand); font-weight: 650; }
+.configuration-message.error { color: var(--danger); }
+.configuration-account-group { border-color: color-mix(in srgb, var(--brand) 38%, var(--line)); }
+.account-identity-summary { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; margin-bottom: 18px; }
+.account-identity-summary div { display: grid; gap: 4px; min-width: 0; padding: 12px 14px; border: 1px solid var(--line); border-radius: 11px; background: var(--surface-2); }
+.account-identity-summary span { color: var(--muted); font-size: 12px; }
+.account-identity-summary strong { overflow-wrap: anywhere; font-size: 14px; }
+.account-contact-grid { align-items: start; }
+.account-field-status { min-height: 24px; }
+.account-status { display: inline-flex; width: fit-content; padding: 4px 8px; border: 1px solid var(--line); border-radius: 999px; color: var(--muted); background: var(--surface-2); font-size: 11px; font-weight: 800; }
+.account-status-ok { border-color: color-mix(in srgb, var(--brand) 50%, var(--line)); color: var(--brand); background: color-mix(in srgb, var(--brand) 8%, var(--panel)); }
+.account-status-warning { border-color: color-mix(in srgb, var(--warning) 55%, var(--line)); color: var(--warning); background: var(--warning-soft); }
+.account-action-row { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; margin-top: 12px; }
+.account-email-verification { display: grid; grid-template-columns: minmax(0, 1fr) minmax(190px, .55fr) auto; align-items: end; gap: 12px; margin-top: 16px; padding: 14px; border: 1px solid color-mix(in srgb, var(--warning) 50%, var(--line)); border-radius: 12px; background: var(--warning-soft); }
+.account-email-verification p { margin: 3px 0 0; color: var(--muted); font-size: 12px; }
+.account-email-verification label { display: grid; gap: 5px; color: var(--muted); font-size: 12px; font-weight: 800; }
+.account-email-verification input { width: 100%; min-height: 42px; letter-spacing: .18em; }
+.account-password-panel { margin-top: 18px; padding-top: 16px; border-top: 1px solid var(--line); }
+.account-password-panel summary { width: fit-content; color: var(--brand); cursor: pointer; font-weight: 800; }
+.account-password-panel > p { margin: 10px 0 14px; color: var(--muted); font-size: 13px; }
+.account-password-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.account-show-passwords { display: flex; align-items: center; gap: 8px; width: fit-content; margin: 12px 0; color: var(--muted); font-size: 13px; }
+.account-show-passwords input { width: 18px; height: 18px; }
+.account-message { margin-top: 12px; }
 .field-help, .readonly-note { color: var(--muted); margin: .65rem 0 0; font-size: 13px; }
 .loading-panel, .empty-state { padding: 1rem; border: 1px solid var(--line); border-radius: 8px; }
 @media (max-width: 840px) {
@@ -4738,6 +4761,8 @@ td.actions { position: relative; }
   .configuration-grid-identity { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .configuration-field-wide { grid-column: 1 / -1; }
   .configuration-secondary-grid { grid-template-columns: 1fr; }
+  .account-password-grid { grid-template-columns: 1fr; }
+  .account-email-verification { grid-template-columns: 1fr; align-items: stretch; }
 }
 @media (max-width: 700px) {
   .configuration-experience { gap: 13px; }
@@ -4748,6 +4773,11 @@ td.actions { position: relative; }
   .configuration-field-wide { grid-column: auto; }
   .configuration-actions { align-items: stretch; flex-direction: column; }
   .configuration-actions .primary-action { width: 100%; margin-left: 0; }
+  .account-identity-summary { grid-template-columns: 1fr; }
+  .account-action-row { display: grid; grid-template-columns: 1fr; }
+  .account-action-row button,
+  .account-email-verification button,
+  .account-password-panel > button { width: 100%; }
 }
 
 .owner-filter-dialog[open] {
