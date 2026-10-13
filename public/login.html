@@ -156,10 +156,22 @@
           <h2 id="reset-title" tabindex="-1">Restablece tu contraseña</h2>
           <p>Usa el código recibido y elige una contraseña nueva.</p>
         </header>
+        <div class="auth-recovery-notice" data-recovery-notice hidden role="status" aria-live="polite" tabindex="-1">
+          <span class="auth-recovery-notice-icon" aria-hidden="true">✓</span>
+          <div>
+            <strong data-recovery-notice-title>Solicitud recibida</strong>
+            <p>Si existe una cuenta asociada, enviaremos las instrucciones a <b data-recovery-destination>tu correo</b>.</p>
+            <ul>
+              <li>Revisa también Spam o Correo no deseado.</li>
+              <li>El código vence en 60 minutos y solo puede usarse una vez.</li>
+            </ul>
+          </div>
+        </div>
         <form id="passwordResetForm" class="auth-form" novalidate>
           <label for="recovery-token">Código de recuperación
-            <input id="recovery-token" name="token" type="password" required minlength="43" maxlength="43" autocomplete="one-time-code" spellcheck="false">
+            <input id="recovery-token" name="token" type="text" required minlength="43" maxlength="43" autocomplete="one-time-code" autocapitalize="none" spellcheck="false" aria-describedby="recovery-token-help">
           </label>
+          <p id="recovery-token-help" class="auth-field-help">Copia y pega el código completo que recibiste por correo.</p>
           <div class="auth-form-row">
             <label for="new-password">Nueva contraseña
               <input id="new-password" name="nuevaPassword" type="password" required minlength="12" maxlength="72" autocomplete="new-password">

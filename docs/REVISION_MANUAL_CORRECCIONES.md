@@ -4,6 +4,22 @@ Fuente: lista de 12 fases y prioridades P0–P3 proporcionada por el propietario
 Este registro evita repetir diagnósticos cerrados. Un test local aprobado no
 equivale a una validación del entorno hospedado.
 
+## Actualización previa a la siguiente revisión manual — 13 de octubre de 2026
+
+- Staging está desplegado desde `mejora-multitienda` con migraciones `001-036`.
+- Tienda online incluye catálogo responsive, carrito persistente, reconocimiento
+  de cliente, pedidos secuenciales, reserva/descuento/reposición de stock,
+  venta online, pago o fiado, comprobantes separados y novedades pendientes.
+- Configuración incluye datos de cuenta, cambio de contraseña, correo y teléfono.
+- El registro usa códigos numéricos de seis dígitos y Resend entrega correo real.
+- Administrador, propietario y catálogo público tienen diseños específicos para
+  teléfono, tableta y escritorio; queda pendiente la revisión manual en equipos reales.
+- La auditoría npm completa marca cero vulnerabilidades.
+- El monitor programado consulta staging cada 15 minutos. Backup/restore remoto,
+  storage privado y revisión manual integral continúan pendientes.
+- Recuperación de acceso muestra un feedback destacado y seguro después de la
+  solicitud, identifica parcialmente el correo, explica vencimiento y reenvío.
+
 ## Estado al 22 de septiembre de 2026
 
 | Fase | Estado comprobado | Trabajo que sigue |

@@ -1,0 +1,31 @@
+name: Staging monitor
+
+on:
+  schedule:
+    - cron: '*/15 * * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: staging-monitor
+  cancel-in-progress: true
+
+jobs:
+  health:
+    name: Verify hosted health
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    env:
+      HOSTED_MONITOR_URL: https://tienda-de-abarrotes-staging.onrender.com
+      HOSTED_MONITOR_ATTEMPTS: '3'
+      HOSTED_MONITOR_TIMEOUT_MS: '20000'
+      HOSTED_MONITOR_RETRY_DELAY_MS: '10000'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20.x
+      - name: Check liveness and readiness
+        run: node scripts/check-hosted-health.js

@@ -47,6 +47,8 @@ jobs:
           mysql --host=localhost --user=root --password=root --execute="CREATE DATABASE tienda_abarrotes_pruebas CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;"
       - name: Install locked dependencies
         run: npm ci
+      - name: Audit production dependencies
+        run: npm audit --omit=dev --audit-level=moderate
       - name: Check CI isolation contract
         run: npm run check:ci-environment
       - name: Check workflow contract
@@ -54,6 +56,7 @@ jobs:
       - name: Validate hosted configuration contract
         run: |
           npm run test:staging-configuration
+          npm run test:hosted-monitor
           npm run test:email-delivery
           npm run test:google-oauth
           npm run test:public-auth-ui

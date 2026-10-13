@@ -39,6 +39,26 @@
     node.className = `auth-message${type === 'error' ? ' error' : ''}`;
   }
 
+  function maskedEmail(value = '') {
+    const email = String(value || '').trim();
+    const separator = email.lastIndexOf('@');
+    if (separator < 1) return 'tu correo';
+    const local = email.slice(0, separator);
+    const domain = email.slice(separator + 1);
+    return `${local.slice(0, 1)}${local.length > 1 ? '•••' : ''}@${domain}`;
+  }
+
+  function showRecoveryNotice(email, resent = false) {
+    const notice = document.querySelector('[data-recovery-notice]');
+    const destination = document.querySelector('[data-recovery-destination]');
+    const title = document.querySelector('[data-recovery-notice-title]');
+    if (!notice || !destination || !title) return;
+    destination.textContent = maskedEmail(email);
+    title.textContent = resent ? 'Nueva solicitud recibida' : 'Solicitud recibida';
+    notice.hidden = false;
+    notice.focus({ preventScroll: true });
+  }
+
   function showPanel(panelName, { focus = true } = {}) {
     if (!panels.has(panelName)) return;
     for (const [name, panel] of panels) panel.hidden = name !== panelName;
@@ -301,6 +321,7 @@
       recoveryForm.reset();
       showPanel('reset');
       setFeedback('reset', result.message || 'Si existe una cuenta asociada, recibirás instrucciones para continuar.');
+      showRecoveryNotice(data.correo);
       window.setTimeout(() => startResendCooldown(document.getElementById('resendRecoveryForm')), 0);
     });
   });
@@ -312,6 +333,7 @@
       const data = Object.fromEntries(new FormData(resendRecoveryForm).entries());
       const result = await requestJson('/auth/solicitar-recuperacion', data);
       setFeedback('reset', result.message || 'Si existe una cuenta asociada, recibirás instrucciones para continuar.');
+      showRecoveryNotice(data.correo, true);
       window.setTimeout(() => startResendCooldown(resendRecoveryForm), 0);
     });
   });

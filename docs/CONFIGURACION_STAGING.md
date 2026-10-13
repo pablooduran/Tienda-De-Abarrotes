@@ -78,7 +78,23 @@ nunca desde Git. La migracion 025 guarda unicamente el identificador estable
 `sub` y el correo verificado usado como referencia; no persiste access tokens,
 refresh tokens ni ID tokens.
 
-## Inventario seguro de infraestructura existente (auditoria 2026-08-24)
+## Estado operativo actualizado al 13 de octubre de 2026
+
+- Render despliega automaticamente la rama `mejora-multitienda`; el commit
+  `7f8801f` fue confirmado `Live` y `/health/ready` devolvio `healthy`.
+- Staging tiene las migraciones `001-036`, MySQL y rate limit distribuido
+  disponibles. El storage privado permanece deshabilitado de forma explicita.
+- Resend entrega codigos desde el subdominio verificado; las credenciales solo
+  existen en el gestor de secretos de Render.
+- El heartbeat `Monitoreo staging Administrau` comprueba liveness y readiness
+  cada 30 minutos y avisa solo ante fallo o recuperacion. El workflow versionado
+  hará la misma comprobacion cada 15 minutos cuando se integre en la rama
+  principal, requisito de GitHub para tareas programadas. No hay SMS ni guardia externa.
+- La auditoria npm completa del 13 de octubre termino con cero vulnerabilidades.
+- Antes de datos reales siguen pendientes la revision manual integral y el
+  ensayo de restauracion remota sobre una base temporal.
+
+## Inventario historico de infraestructura (auditoria 2026-08-24)
 
 - Render: existe un unico Web Service publico con HTTPS y variables de MySQL,
   entorno, puerto y sesion presentes por nombre. Esta desplegado desde `main`,
@@ -93,7 +109,7 @@ refresh tokens ni ID tokens.
 - Correo permanece deshabilitado. No se inspeccionaron ni registraron nombres
   de host, usuarios, URIs, certificados ni valores secretos.
 
-## Contrato tecnico de staging — pendiente de ejecucion
+## Contrato tecnico de staging — ejecutado parcialmente
 
 Este contrato se deriva del codigo actual y no autoriza crear, cambiar ni pagar
 recursos externos. El objetivo es validar un unico entorno hospedado con datos

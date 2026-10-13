@@ -69,6 +69,12 @@ assert(styles.includes('@media (prefers-reduced-motion: reduce)'), 'Falta respet
 assert(styles.includes('.auth-form-row { grid-template-columns: 1fr; }'), 'Los formularios deben reordenarse a una columna en movil.');
 assert(styles.includes('.auth-settings') && styles.includes('background-image:'), 'El acceso debe integrar apariencia en una rueda y un fondo visual ligero.');
 assert(script.includes('startResendCooldown') && html.includes('id="resendRecoveryForm"'), 'La recuperacion debe permitir reenvio con espera visible.');
+assert(html.includes('data-recovery-notice') && html.includes('data-recovery-destination'),
+  'La recuperacion debe mostrar un estado visible sin confirmar si la cuenta existe.');
+assert(script.includes('showRecoveryNotice') && script.includes('maskedEmail'),
+  'El feedback de recuperacion debe destacar el destino de forma parcial.');
+assert(html.includes('Copia y pega el código completo'),
+  'El campo de recuperacion debe explicar como usar el codigo recibido.');
 assert(script.includes("Math.ceil(remaining / 60)") && !script.includes('en ${remaining} segundos'), 'Las esperas visibles deben expresarse en minutos.');
 assert(html.includes('data-google-action="login"') && html.includes('data-google-action="register"'),
   'El acceso debe incluir las dos entradas configurables de Google.');

@@ -185,6 +185,11 @@ async function runFlow(browser, baseUrl, state) {
     await page.locator('#recoveryRequestForm button[type="submit"]').click();
     await page.locator('[data-auth-panel="reset"]:visible').waitFor();
     assert.match(await page.locator('[data-auth-feedback="reset"]').textContent(), /instrucciones/i);
+    assert.strictEqual(await page.locator('[data-recovery-notice]').isVisible(), true,
+      'La solicitud debe mostrar un feedback destacado.');
+    assert.strictEqual(await page.locator('[data-recovery-destination]').textContent(), 'p•••@example.test',
+      'El feedback muestra el destino parcial sin exponer el correo completo.');
+    assert.match(await page.locator('[data-recovery-notice]').textContent(), /60 minutos/i);
     assert.strictEqual(await page.locator('#recovery-resend-email').inputValue(), 'propietario@example.test');
     assert.strictEqual(await page.locator('#resendRecoveryForm [data-resend-button]').isDisabled(), true,
       'El reenvío de recuperación aplica una espera visible para evitar solicitudes repetidas.');

@@ -826,10 +826,27 @@ Solo admite `APP_ENV=local` y `DB_HOST=localhost`. No restaura, no escribe datos
 `mysql`, `mysqldump` ni otros procesos. Sus codigos de salida son `0 healthy`, `1 degraded`,
 `2 unhealthy` y `3 configuracion o ejecucion invalida`.
 
-No existe un `setInterval` obligatorio ni un proveedor externo. Un proceso caido no puede
-alertarse a si mismo, por lo que la invocacion periodica mediante un monitor autorizado y los
-adaptadores reales de correo, webhook u otro canal quedan para una fase posterior. El tracker, la
-cache y el rate limiting son por instancia.
+No existe un `setInterval` obligatorio dentro del servidor. Un proceso caido no puede alertarse a
+si mismo. Staging incorpora `.github/workflows/staging-monitor.yml`: cuando esta rama se integre
+en la rama principal, GitHub Actions consultara cada 15 minutos `/health/live` y `/health/ready`, realiza tres intentos y falla si la
+aplicacion, MySQL, las migraciones o el store distribuido no estan saludables. El historial del
+workflow conserva la evidencia y GitHub puede enviar la notificacion de workflow fallido según las
+preferencias de la cuenta. Hasta esa integracion, el heartbeat de Codex
+`Monitoreo staging Administrau` realiza la comprobacion cada 30 minutos y solo
+avisa al fallar, requerir intervencion o recuperarse. No se guardan secretos ni
+datos comerciales en ninguno de los monitores.
+
+La misma comprobacion puede ejecutarse manualmente contra un origen HTTPS:
+
+```powershell
+$env:HOSTED_MONITOR_URL='https://tienda-de-abarrotes-staging.onrender.com'
+npm.cmd run check:hosted-monitor
+npm.cmd run test:hosted-monitor
+```
+
+Este monitor no valida backups ni almacenamiento privado y no sustituye metricas persistentes,
+un canal de guardia ni una prueba de restauracion. El tracker, la cache y el rate limiting siguen
+siendo por instancia.
 
 ```powershell
 npm.cmd run test:operational-monitoring
