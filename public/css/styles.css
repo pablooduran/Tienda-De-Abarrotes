@@ -4743,7 +4743,7 @@ td.actions { position: relative; }
 .configuration-message { min-height: 1.3em; margin: 0; color: var(--brand); font-weight: 650; }
 .configuration-message.error { color: var(--danger); }
 .configuration-account-group { border-color: color-mix(in srgb, var(--brand) 38%, var(--line)); }
-.account-identity-summary { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; margin-bottom: 18px; }
+.account-identity-summary { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin-bottom: 18px; }
 .account-identity-summary div { display: grid; gap: 4px; min-width: 0; padding: 12px 14px; border: 1px solid var(--line); border-radius: 11px; background: var(--surface-2); }
 .account-identity-summary span { color: var(--muted); font-size: 12px; }
 .account-identity-summary strong { overflow-wrap: anywhere; font-size: 14px; }
@@ -4759,10 +4759,12 @@ td.actions { position: relative; }
 .account-email-verification input { width: 100%; min-height: 42px; letter-spacing: .18em; }
 .account-password-panel { margin-top: 18px; padding-top: 16px; border-top: 1px solid var(--line); }
 .account-password-panel summary { width: fit-content; color: var(--brand); cursor: pointer; font-weight: 800; }
-.account-password-panel > p { margin: 10px 0 14px; color: var(--muted); font-size: 13px; }
+.account-security-note { margin: 12px 0 14px; padding: 12px 14px; border: 1px solid color-mix(in srgb, var(--brand) 35%, var(--line)); border-radius: 11px; background: color-mix(in srgb, var(--brand) 7%, var(--panel)); }
+.account-security-note strong { display: block; margin-bottom: 4px; }
+.account-security-note p { margin: 0; color: var(--muted); font-size: 13px; line-height: 1.45; }
 .account-password-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
-.account-show-passwords { display: flex; align-items: center; gap: 8px; width: fit-content; margin: 12px 0; color: var(--muted); font-size: 13px; }
-.account-show-passwords input { width: 18px; height: 18px; }
+.account-password-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; margin-top: 14px; }
+.button-link { display: inline-flex; align-items: center; justify-content: center; text-decoration: none; }
 .account-message { margin-top: 12px; }
 .field-help, .readonly-note { color: var(--muted); margin: .65rem 0 0; font-size: 13px; }
 .loading-panel, .empty-state { padding: 1rem; border: 1px solid var(--line); border-radius: 8px; }
@@ -4786,6 +4788,8 @@ td.actions { position: relative; }
   .configuration-actions { align-items: stretch; flex-direction: column; }
   .configuration-actions .primary-action { width: 100%; margin-left: 0; }
   .account-identity-summary { grid-template-columns: 1fr; }
+  .account-password-actions { display: grid; grid-template-columns: 1fr; }
+  .account-password-actions > * { width: 100%; }
   .account-action-row { display: grid; grid-template-columns: 1fr; }
   .account-action-row button,
   .account-email-verification button,

@@ -26,6 +26,8 @@
     failed: 'No pudimos completar el acceso con Google. Inténtalo nuevamente.'
   });
 
+  const requestedPanel = new URLSearchParams(window.location.search).get('panel');
+
   function feedback(panelName) {
     return panelName === 'login'
       ? document.getElementById('loginMessage')
@@ -69,6 +71,8 @@
     document.title = `${panelTitles[panelName]} | Administrau`;
     if (focus) panels.get(panelName).querySelector('h2')?.focus();
   }
+
+  if (requestedPanel && panels.has(requestedPanel)) showPanel(requestedPanel, { focus: false });
 
   function setVerificationEmail(email = '') {
     pendingVerificationEmail = String(email || '').trim();

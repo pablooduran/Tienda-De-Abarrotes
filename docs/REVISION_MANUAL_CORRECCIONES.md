@@ -19,6 +19,10 @@ equivale a una validación del entorno hospedado.
   storage privado y revisión manual integral continúan pendientes.
 - Recuperación de acceso muestra un feedback destacado y seguro después de la
   solicitud, identifica parcialmente el correo, explica vencimiento y reenvío.
+- Configuración de cuenta no muestra ni permite revelar la contraseña actual;
+  el cambio exige escribirla, confirmar una nueva y ofrece recuperación separada.
+- El acceso con huella, Face ID y Windows Hello queda registrado como passkeys
+  WebAuthn para SECURITY-FINAL; no se utilizará la contraseña del dispositivo.
 
 ## Estado al 22 de septiembre de 2026
 

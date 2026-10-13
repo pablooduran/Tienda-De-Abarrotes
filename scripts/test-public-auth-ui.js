@@ -73,6 +73,8 @@ assert(html.includes('data-recovery-notice') && html.includes('data-recovery-des
   'La recuperacion debe mostrar un estado visible sin confirmar si la cuenta existe.');
 assert(script.includes('showRecoveryNotice') && script.includes('maskedEmail'),
   'El feedback de recuperacion debe destacar el destino de forma parcial.');
+assert(script.includes("new URLSearchParams(window.location.search).get('panel')"),
+  'La recuperacion debe poder abrirse directamente desde configuracion de cuenta.');
 assert(html.includes('Copia y pega el código completo'),
   'El campo de recuperacion debe explicar como usar el codigo recibido.');
 assert(script.includes("Math.ceil(remaining / 60)") && !script.includes('en ${remaining} segundos'), 'Las esperas visibles deben expresarse en minutos.');

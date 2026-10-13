@@ -70,8 +70,13 @@ async function verify(browser, baseUrl, width) {
     await page.locator('.account-status-ok').waitFor();
     assert.strictEqual(await page.locator('[name="correoCuenta"]').inputValue(), 'nuevo@example.com');
     await page.locator('.account-password-panel summary').click();
-    await page.locator('[data-account-show-passwords]').check();
-    assert.strictEqual(await page.locator('[name="passwordNueva"]').getAttribute('type'), 'text');
+    assert.strictEqual(await page.locator('[data-account-show-passwords]').count(), 0);
+    for (const name of ['passwordActual', 'passwordNueva', 'confirmacionPasswordCuenta']) {
+      assert.strictEqual(await page.locator(`[name="${name}"]`).getAttribute('type'), 'password');
+    }
+    assert.strictEqual(await page.locator('[name="passwordActual"]').getAttribute('autocomplete'), 'off');
+    assert.match(await page.locator('.account-security-note').textContent(), /nunca se muestra/i);
+    assert.strictEqual(await page.locator('a[href="/login.html?panel=recovery"]').count(), 1);
     assert.strictEqual(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth + 1), true);
     assert.deepStrictEqual(errors, []);
   } finally {

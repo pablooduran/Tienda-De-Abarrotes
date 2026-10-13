@@ -27,5 +27,11 @@ for (const label of ['Datos de tu cuenta', 'Teléfono de la cuenta', 'Cambiar co
   assert(ui.includes(label), `La interfaz no muestra ${label}.`);
 }
 assert(ui.includes("api('/auth/change-password'") && ui.includes("api('/auth/account/email/confirm'"), 'La interfaz no conecta las acciones seguras de cuenta.');
+assert(!ui.includes('data-account-show-passwords') && !ui.includes('Mostrar contraseñas'),
+  'La cuenta no debe permitir revelar la contraseña actual en texto visible.');
+assert(!ui.includes('<span>Contraseña</span><strong>••••••••••••</strong>'),
+  'El resumen no debe representar una contraseña recuperable.');
+assert(ui.includes('Tu contraseña actual nunca se muestra.') && ui.includes('/login.html?panel=recovery'),
+  'El cambio debe explicar la protección y ofrecer recuperación separada.');
 
 console.log('test:account-configuration OK');

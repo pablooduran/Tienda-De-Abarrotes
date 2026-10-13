@@ -58,7 +58,6 @@
               <div class="account-identity-summary">
                 <div><span>Usuario</span><strong>${escapeHtml(account.usuario || 'Sin usuario')}</strong></div>
                 <div><span>Tipo de cuenta</span><strong>${escapeHtml(roleLabel)}</strong></div>
-                <div><span>Contraseña</span><strong>••••••••••••</strong></div>
               </div>
               <div class="configuration-grid account-contact-grid">
                 <label>Correo electrónico
@@ -82,14 +81,20 @@
                 </div>` : ''}
               <details class="account-password-panel">
                 <summary>Cambiar contraseña</summary>
-                <p>Por seguridad, al cambiarla se cerrará la sesión y tendrás que ingresar nuevamente.</p>
-                <div class="configuration-grid account-password-grid">
-                  <label>Contraseña actual<input name="passwordActual" type="password" autocomplete="current-password"></label>
-                  <label>Nueva contraseña<input name="passwordNueva" type="password" minlength="12" maxlength="72" autocomplete="new-password"></label>
-                  <label>Confirmar nueva contraseña<input name="confirmacionPasswordCuenta" type="password" minlength="12" maxlength="72" autocomplete="new-password"></label>
+                <div class="account-security-note">
+                  <strong>Tu contraseña actual nunca se muestra.</strong>
+                  <p>Para cambiarla debes escribir la actual y crear una nueva. Al finalizar se cerrará la sesión en todos tus dispositivos.</p>
                 </div>
-                <label class="account-show-passwords"><input type="checkbox" data-account-show-passwords> Mostrar contraseñas</label>
-                <button type="button" class="secondary" data-account-password>Actualizar contraseña</button>
+                <div class="configuration-grid account-password-grid">
+                  <label>Contraseña actual<input name="passwordActual" type="password" maxlength="200" autocomplete="off" aria-describedby="accountPasswordHelp"></label>
+                  <label>Nueva contraseña<input name="passwordNueva" type="password" minlength="12" maxlength="72" autocomplete="new-password" aria-describedby="accountPasswordHelp"></label>
+                  <label>Confirmar nueva contraseña<input name="confirmacionPasswordCuenta" type="password" minlength="12" maxlength="72" autocomplete="new-password" aria-describedby="accountPasswordHelp"></label>
+                </div>
+                <p id="accountPasswordHelp" class="field-help">Debes escribir nuevamente la contraseña actual. Usa al menos 12 caracteres para la nueva. Los campos permanecen ocultos y Administrau no puede recuperar la contraseña anterior.</p>
+                <div class="account-password-actions">
+                  <a class="secondary button-link" href="/login.html?panel=recovery">No recuerdo mi contraseña</a>
+                  <button type="button" class="secondary" data-account-password>Actualizar contraseña</button>
+                </div>
               </details>
               <p class="configuration-message account-message" data-account-message role="status" aria-live="polite"></p>
             </section>
@@ -200,11 +205,6 @@
         accountAction(event.currentTarget, 'Verificando...', () => api('/auth/account/email/confirm', {
           method: 'POST', body: JSON.stringify({ codigo: input.value })
         }));
-      });
-      root.querySelector('[data-account-show-passwords]')?.addEventListener('change', (event) => {
-        root.querySelectorAll('.account-password-grid input').forEach((input) => {
-          input.type = event.currentTarget.checked ? 'text' : 'password';
-        });
       });
       root.querySelector('[data-account-password]')?.addEventListener('click', async (event) => {
         const current = root.querySelector('[name="passwordActual"]');

@@ -95,6 +95,7 @@ Las migraciones son posibilidades; ninguna se crea por estar mencionada aqui.
 | UX-003 | Centro de configuracion de tienda | Ajustes base, credito e inventario estan repartidos entre onboarding y modulos | media antes de beta | navegacion, permisos y copy; no crea configuracion nueva | No | Aprobado para fase futura; alcance tecnico por definir | PRODUCTO-1 P5 |
 | UX-004 | Busqueda escalable de clientes en POS | El selector actual conserva un limite operativo de 500 clientes; la busqueda remota paginada esta diferida | media antes de beta | POS, rendimiento, tenant y experiencia de venta fiada | No determinada | Aprobado para fase futura; priorizacion tecnica pendiente | PRODUCTO-1 P4 |
 | UX-005 | Jerarquia analitica del Inicio | Las graficas diarias conservan sus dos lecturas: ventas de los ultimos cinco dias como resumen principal y participacion diaria como detalle expandible | baja | Inicio, lectura rapida y decisiones del propietario; no modifica datos ni metricas | No | Resuelto en P7E; validado con arnes browser local | PRODUCTO-1 P7E |
+| SECURITY-ACCOUNT-001 | Acceso sin contraseña con passkeys | La cuenta exige contraseña y recuperación por correo; la interfaz ya no permite revelar la contraseña actual | alta antes de beta | WebAuthn, HTTPS, alta y revocación de dispositivos, recuperación, auditoría, compatibilidad con huella, Face ID y Windows Hello | Probable tabla de credenciales WebAuthn | Pendiente de diseño e implementación segura. Nunca solicitar ni reutilizar la contraseña de Microsoft o del dispositivo | SECURITY-FINAL |
 | SECURITY-FINAL | Auditoria y endurecimiento integral previo a lanzamiento; sustituye el pendiente conceptual SECURITY-2 | Las dependencias ya fueron actualizadas y `npm audit` marca cero vulnerabilidades | critica antes del lanzamiento | autenticacion, sesiones, tenant, web, datos, negocio, repositorio, CI y pruebas ofensivas controladas | No determinada | Dependencias cerradas el 2026-10-13; la auditoria ofensiva y regresion integral siguen pendientes | SECURITY-FINAL |
 
 ## 4. Desarrollo tecnico pendiente
@@ -114,6 +115,12 @@ no se asume bloqueo permanente tras tres intentos. Las pruebas ofensivas seran
 controladas, con local, bases temporales, datos sinteticos y storage de prueba.
 Cada hallazgo debe incluir evidencia, reproduccion, impacto, correccion,
 regresion y estado final, clasificado como critico, alto, medio o bajo.
+
+La solicitud de acceso con huella, Face ID o Windows Hello se implementará con
+passkeys/WebAuthn: el dispositivo confirma localmente la identidad y la
+aplicación recibe una prueba criptográfica. Administrau no pedirá, almacenará
+ni reutilizará la contraseña de Microsoft, el PIN, la huella o los datos
+biométricos del dispositivo.
 
 La salida requiere cero criticos abiertos, altas corregidas o bloqueo explicito
 del lanzamiento, validacion de autenticacion, tenant, datos, codigo,
