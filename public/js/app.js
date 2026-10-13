@@ -19,7 +19,7 @@ const settingsAuditButton = document.getElementById('settingsAuditButton');
 const settingsTeamButton = document.getElementById('settingsTeamButton');
 const serverWakeNotice = document.getElementById('serverWakeNotice');
 
-let state = { productos: [], clientes: [], proveedores: [], fiados: [], ventas: [], categorias: [], context: null, lotAccess: null };
+let state = { productos: [], clientes: [], proveedores: [], fiados: [], ventas: [], categorias: [], context: null, lotAccess: null, onlineOrderSummary: { pendientes: 0, noLeidos: [] } };
 let debtFocus = null;
 let posCart = [];
 let posOperationKey = null;
@@ -46,6 +46,7 @@ let catalogRefreshPromise = null;
 let catalogClientsLoaded = false;
 let pendingApiRequests = 0;
 let serverWakeNoticeTimer = null;
+let onlineOrderPollTimer = null;
 
 const sections = [
   ['inicio', 'Inicio', 'Resumen general del negocio'],
@@ -478,10 +479,15 @@ async function loadContext() {
       navigate: (id) => loadView(id),
       getState: () => state,
       api,
-      escapeHtml
+      escapeHtml,
+      onOnlineOrderRead: () => {
+        updateOnlineOrderBadge();
+        workspaceExperience?.refresh();
+      }
     });
     workspaceExperience.init();
   }
+  await refreshOnlineOrderSummary();
 }
 
 function hasFeature(code) {
@@ -573,6 +579,7 @@ function onlineStoreUi() {
 
 async function tiendaOnline() {
   await onlineStoreUi().render();
+  await refreshOnlineOrderSummary();
 }
 
 async function auditoria() {
@@ -934,6 +941,7 @@ function renderMenu(activeView = 'inicio') {
         item.href = family.links[0].href;
       }
       menu.appendChild(item);
+      if (id === 'tiendaOnline' && sectionAvailable(id)) appendOnlineOrderBadge(item);
       return;
     }
 
@@ -982,6 +990,44 @@ function renderMenu(activeView = 'inicio') {
     group.appendChild(items);
     menu.appendChild(group);
   });
+}
+
+function appendOnlineOrderBadge(item) {
+  item.querySelector('.nav-order-count')?.remove();
+  const count = Number(state.onlineOrderSummary?.pendientes || 0);
+  if (!count) return;
+  const badge = document.createElement('span');
+  badge.className = 'nav-order-count';
+  badge.textContent = count > 99 ? '99+' : String(count);
+  badge.setAttribute('aria-label', `${count} pedido${count === 1 ? '' : 's'} online nuevo${count === 1 ? '' : 's'}`);
+  item.appendChild(badge);
+}
+
+function updateOnlineOrderBadge() {
+  const item = menu.querySelector('[data-navigation-family="tiendaOnline"]');
+  if (item) appendOnlineOrderBadge(item);
+}
+
+async function refreshOnlineOrderSummary() {
+  if (!state.context || !sectionAvailable('tiendaOnline')) return state.onlineOrderSummary;
+  try {
+    state.onlineOrderSummary = await api('/api/tienda-online/pedidos-resumen');
+    updateOnlineOrderBadge();
+    workspaceExperience?.refresh();
+  } catch (_) { /* Un fallo temporal no debe interrumpir el resto de la aplicación. */ }
+  return state.onlineOrderSummary;
+}
+
+function startOnlineOrderPolling() {
+  if (onlineOrderPollTimer || !sectionAvailable('tiendaOnline')) return;
+  onlineOrderPollTimer = window.setInterval(() => {
+    if (document.visibilityState === 'visible') void refreshOnlineOrderSummary();
+  }, 30000);
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') void refreshOnlineOrderSummary();
+  });
+  window.addEventListener('focus', () => void refreshOnlineOrderSummary());
+  window.addEventListener('administrau:online-orders-updated', () => void refreshOnlineOrderSummary());
 }
 
 document.getElementById('logoutBtn')?.addEventListener('click', async () => {
@@ -5680,6 +5726,7 @@ async function initializeApp() {
   initializeShell();
   await loadContext();
   renderMenu();
+  startOnlineOrderPolling();
   const topic = new URLSearchParams(window.location.search).get('help');
   if (topic) {
     requestedHelpTopic = topic;

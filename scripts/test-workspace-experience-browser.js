@@ -23,9 +23,9 @@ function markup() {
     <div id="storeName">Tienda de prueba</div><header class="topbar"><div><h1>Inicio</h1></div><div id="workspaceTools"></div></header>
     <main class="content"><section id="view"><div class="dashboard-hero"><div><h2>Resumen de hoy</h2></div></div><section data-dashboard-widget="ventas" data-dashboard-label="Ventas"><h3>Ventas</h3></section><form><label>Nombre<input></label><div><button type="submit">Guardar</button></div></form></section></main>
     <div id="workspaceExperienceRoot"></div><script src="/workspace.js"></script><script>
-      const appState = { productos: [{ idProducto: 1, nombre: 'PAN', categoria: 'ABARROTES', stockUnidadesTotal: 0, stockMinimo: 2 }], clientes: [{ idCliente: 1, nombre: 'ANA', telefono: '70000000' }], fiados: [{ saldoPendiente: 10 }] };
+      const appState = { productos: [{ idProducto: 1, nombre: 'PAN', categoria: 'ABARROTES', stockUnidadesTotal: 0, stockMinimo: 2 }], clientes: [{ idCliente: 1, nombre: 'ANA', telefono: '70000000' }], fiados: [{ saldoPendiente: 10 }], onlineOrderSummary: { pendientes: 1, noLeidos: [{ idPedidoOnline: 9, numeroPedido: 9, nombreCliente: 'CARLA', total: 27.5 }] } };
       window.lastNavigation = '';
-      window.experience = WorkspaceExperience.create({ sections: [['inicio', 'Inicio', 'Resumen'], ['ventas', 'Vender', 'Punto de venta'], ['productos', 'Productos', 'Inventario'], ['clientes', 'Clientes', 'Personas'], ['pagos', 'Fiados', 'Cobranza'], ['auditoria', 'Auditoría', 'Actividad'], ['ayuda', 'Ayuda', 'Centro de ayuda']], navigate: (id) => { window.lastNavigation = id; }, getState: () => appState, api: async () => ({ resultados: [{ accion: 'registro_venta', categoria: 'venta', resultado: 'correcto' }] }), escapeHtml: (value) => String(value).replace(/[&<>"']/g, '') });
+      window.experience = WorkspaceExperience.create({ sections: [['inicio', 'Inicio', 'Resumen'], ['ventas', 'Vender', 'Punto de venta'], ['productos', 'Productos', 'Inventario'], ['clientes', 'Clientes', 'Personas'], ['pagos', 'Fiados', 'Cobranza'], ['tiendaOnline', 'Tienda online', 'Pedidos'], ['auditoria', 'Auditoría', 'Actividad'], ['ayuda', 'Ayuda', 'Centro de ayuda']], navigate: (id) => { window.lastNavigation = id; }, getState: () => appState, api: async (url) => url.includes('/leido') ? ({ leido: true }) : ({ resultados: [{ accion: 'registro_venta', categoria: 'venta', resultado: 'correcto' }] }), escapeHtml: (value) => String(value).replace(/[&<>"']/g, '') });
       experience.init(); experience.afterView('inicio');
     </script></body></html>`;
 }
@@ -53,6 +53,10 @@ async function main() {
       assert.strictEqual(await page.locator('.workspace-search-result').count(), 1);
       await page.keyboard.press('Escape');
       assert.strictEqual(await page.locator('.workspace-command').count(), 0);
+      await page.locator('[data-workspace-notifications]').click();
+      assert.strictEqual(await page.locator('.workspace-notification').count(), 3);
+      await page.locator('[data-online-order-id="9"]').click();
+      assert.strictEqual(await page.evaluate(() => window.lastNavigation), 'tiendaOnline');
       await page.locator('[data-workspace-notifications]').click();
       assert.strictEqual(await page.locator('.workspace-notification').count(), 2);
       assert.strictEqual(await page.locator('.workspace-activity-item').count(), 1);

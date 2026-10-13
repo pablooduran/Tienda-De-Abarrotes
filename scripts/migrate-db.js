@@ -78,6 +78,13 @@ async function validateExactMigrationContext(connection, allFiles, target, { all
     'SELECT nombre FROM schema_migrations ORDER BY nombre'
   );
   const registered = new Set(registeredRows.map((row) => String(row.nombre)));
+  if (registered.has(target)) {
+    if (!await requirementsSatisfied(connection, target)) {
+      throw new Error(`La migracion ${target} figura registrada pero no satisface su contrato fisico.`);
+    }
+    console.log(`Migracion exacta ya registrada y validada: ${target}.`);
+    return;
+  }
   const missing = previous.filter((file) => !registered.has(file));
   const later = registeredRows
     .map((row) => String(row.nombre))
@@ -1396,6 +1403,17 @@ const migrationRequirements = {
     checks: [
       ['administrador', 'chk_administrador_correo_pendiente'],
       ['administrador', 'chk_administrador_telefono']
+    ]
+  },
+  '036_novedades_pedidos_online.sql': {
+    columns: {
+      pedidoTiendaOnline: ['leidoEn']
+    },
+    indexes: [
+      ['pedidoTiendaOnline', 'idx_pedidoOnline_tienda_leido_estado_fecha', ['idTienda', 'leidoEn', 'estado', 'creadoEn'], false]
+    ],
+    checks: [
+      ['pedidoTiendaOnline', 'chk_pedidoOnline_leido_fecha']
     ]
   }
 };

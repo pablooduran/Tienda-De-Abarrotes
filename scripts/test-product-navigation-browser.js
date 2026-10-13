@@ -48,9 +48,11 @@ function createServer(requests) {
   return http.createServer((request, response) => {
     const url = new URL(request.url, 'http://127.0.0.1');
     requests.push({ method: request.method, path: url.pathname, search: url.search });
+    if (url.pathname === '/auth/account') return json(response, { usuario: 'propietario', rol: 'dueno_tienda', correo: null, correoVerificado: false, correoPendiente: null, telefono: null });
     if (url.pathname.startsWith('/api/')) {
       if (url.pathname === '/api/contexto') return json(response, context());
       if (url.pathname === '/api/lotes/acceso') return json(response, { productosControlados: 0 });
+      if (url.pathname === '/api/tienda-online/pedidos-resumen') return json(response, { pendientes: 2, noLeidos: [] });
       if (url.pathname === '/api/dashboard') return json(response, dashboard());
       if (['/api/productos', '/api/clientes', '/api/proveedores', '/api/fiados', '/api/ventas', '/api/categorias'].includes(url.pathname)) return json(response, []);
       return json(response, { rows: [], resultados: [], paginas: 1 });
@@ -82,7 +84,9 @@ async function verifyViewport(browser, baseUrl, viewport, includeKeyboard) {
   });
   const page = await browserContext.newPage();
   const errors = [];
-  page.on('console', (message) => { if (message.type() === 'error') errors.push(message.text()); });
+  page.on('console', (message) => {
+    if (message.type() === 'error') errors.push(`${message.text()}${message.location().url ? ` (${message.location().url})` : ''}`);
+  });
   page.on('pageerror', (error) => errors.push(error.message));
   try {
     await page.goto(`${baseUrl}/app.html`);
@@ -102,7 +106,9 @@ async function verifyViewport(browser, baseUrl, viewport, includeKeyboard) {
 
     const families = await page.locator('[data-navigation-family]').evaluateAll((nodes) => nodes.map((node) => node.dataset.navigationFamily));
     assert.deepStrictEqual(families, ['inicio', 'ventas', 'inventario', 'clientes', 'reportes', 'tiendaOnline']);
-    assert.strictEqual(await page.locator('[data-navigation-family="tiendaOnline"]').textContent(), 'Tienda online');
+    assert((await page.locator('[data-navigation-family="tiendaOnline"]').textContent()).startsWith('Tienda online'));
+    assert.strictEqual(await page.locator('[data-navigation-family="tiendaOnline"] .nav-order-count').textContent(), '2');
+    assert.strictEqual(await page.locator('[data-navigation-family="tiendaOnline"] .nav-order-count').getAttribute('aria-label'), '2 pedidos online nuevos');
     assert.strictEqual(await page.locator('[data-navigation-family="ventas"] [data-view="compensaciones"]').textContent(), 'Devoluciones y anulaciones');
     assert.strictEqual(await page.locator('#accountMenu a[href="/suscripcion.html"]').count(), 1);
     assert.strictEqual(await page.locator('#subscriptionSummary').evaluate((element) => element.tagName), 'P');
@@ -166,7 +172,7 @@ async function main() {
     await verifyViewport(browser, baseUrl, { width: 768, height: 1024 }, false);
     await verifyViewport(browser, baseUrl, { width: 1366, height: 768 }, false);
     assert(requests.every((request) => !request.search.includes('idTienda')), 'La navegacion envio idTienda.');
-    const unexpected = requests.filter((request) => !(request.path.startsWith('/api/') || request.path.startsWith('/js/') || request.path.startsWith('/css/') || request.path.startsWith('/assets/') || request.path === '/app.html' || request.path === '/favicon.ico' || request.path === '/manifest.webmanifest' || request.path === '/sw.js'));
+    const unexpected = requests.filter((request) => !(request.path.startsWith('/api/') || request.path === '/auth/account' || request.path.startsWith('/js/') || request.path.startsWith('/css/') || request.path.startsWith('/assets/') || request.path === '/app.html' || request.path === '/favicon.ico' || request.path === '/manifest.webmanifest' || request.path === '/sw.js'));
     assert.deepStrictEqual(unexpected, [], `El arnes uso rutas inesperadas: ${unexpected.map((request) => request.path).join(', ')}`);
     console.log('test:product-navigation-browser OK');
   } finally {

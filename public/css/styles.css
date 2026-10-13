@@ -182,7 +182,10 @@ body {
 .nav-family > summary::after { content: '+'; color: #b8d1ca; font-size: 18px; line-height: 1; }
 .nav-family[open] > summary::after { content: '-'; }
 .sidebar .nav-family-single {
-  display: block;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
   width: 100%;
   min-height: 44px;
   padding: 10px 12px;
@@ -193,6 +196,8 @@ body {
   text-decoration: none;
   cursor: pointer;
 }
+.nav-order-count{display:inline-grid;place-items:center;min-width:23px;height:23px;margin-left:auto;padding:0 6px;border:1px solid rgba(255,255,255,.55);border-radius:999px;background:#f2c14e;color:#10261d;font-size:12px;font-weight:900;line-height:1;box-shadow:0 2px 8px rgba(0,0,0,.18)}
+.online-order-card.is-unread{box-shadow:inset 4px 0 0 #f2c14e}
 .sidebar .nav-family-single.active,
 .sidebar .nav-family-single:hover { background: var(--sidebar-active); }
 .nav-family > summary.active,

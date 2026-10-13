@@ -475,6 +475,50 @@ function createOnlineStoreService({
     };
   }
 
+  async function getOrderAlerts(idTienda) {
+    const storeId = positiveId(idTienda, 'La tienda');
+    const [[pendingRow], [unreadRows]] = await Promise.all([
+      database.query(
+        "SELECT COUNT(*) pendientes FROM pedidoTiendaOnline WHERE idTienda=? AND estado='pendiente'",
+        [storeId]
+      ),
+      database.query(
+        `SELECT p.idPedidoOnline,p.nombreCliente,p.total,p.creadoEn,
+                (SELECT COUNT(*) FROM pedidoTiendaOnline secuencia
+                 WHERE secuencia.idTienda=p.idTienda AND secuencia.idPedidoOnline<=p.idPedidoOnline) numeroPedido
+         FROM pedidoTiendaOnline p
+         WHERE p.idTienda=? AND p.leidoEn IS NULL AND p.estado='pendiente'
+         ORDER BY p.creadoEn DESC LIMIT 20`,
+        [storeId]
+      )
+    ]);
+    return {
+      pendientes: Number(pendingRow[0]?.pendientes || 0),
+      noLeidos: unreadRows.map((order) => ({
+        idPedidoOnline: Number(order.idPedidoOnline),
+        numeroPedido: Number(order.numeroPedido),
+        nombreCliente: order.nombreCliente,
+        total: Number(order.total),
+        creadoEn: order.creadoEn
+      }))
+    };
+  }
+
+  async function markOrderRead(context, idPedidoOnline) {
+    const idTienda = positiveId(context?.idTienda, 'La tienda');
+    const idAdministrador = positiveId(context?.idAdministrador, 'El administrador');
+    const orderId = positiveId(idPedidoOnline, 'El pedido');
+    const now = clock();
+    const [result] = await database.query(
+      `UPDATE pedidoTiendaOnline
+       SET leidoEn=COALESCE(leidoEn,?),idAdministradorActualiza=COALESCE(idAdministradorActualiza,?)
+       WHERE idTienda=? AND idPedidoOnline=?`,
+      [now, idAdministrador, idTienda, orderId]
+    );
+    if (!result.affectedRows) throw new AppError(404, 'El pedido no existe.', 'ONLINE_STORE_ORDER_NOT_FOUND');
+    return { leido: true, idPedidoOnline: orderId };
+  }
+
   async function lockOrderItems(connection, idTienda, orderId) {
     const [items] = await connection.query(
       `SELECT d.idDetallePedidoOnline,d.idProducto,d.nombreProductoSnapshot,d.unidadMedidaSnapshot,
@@ -797,9 +841,9 @@ function createOnlineStoreService({
         : null;
       const paymentStatus = status === 'entregado' ? requestedPaymentStatus : 'pendiente';
       const [result] = await connection.query(
-        `UPDATE pedidoTiendaOnline SET estado=?,estadoPago=?,actualizadoEn=?,idAdministradorActualiza=?
+        `UPDATE pedidoTiendaOnline SET estado=?,estadoPago=?,actualizadoEn=?,leidoEn=COALESCE(leidoEn,?),idAdministradorActualiza=?
          WHERE idTienda=? AND idPedidoOnline=? AND estado=?`,
-        [status, paymentStatus, now, idAdministrador, idTienda, orderId, currentStatus]
+        [status, paymentStatus, now, now, idAdministrador, idTienda, orderId, currentStatus]
       );
       if (!result.affectedRows) throw new AppError(409, 'El pedido no pudo actualizarse.', 'ONLINE_STORE_ORDER_UPDATE_CONFLICT');
       await connection.commit?.();
@@ -899,7 +943,7 @@ function createOnlineStoreService({
     }
   }
 
-  return Object.freeze({ getConfiguration, updateConfiguration, listProducts, updateProduct, getPublicCatalog, identifyPublicCustomer, createPublicOrder, listOrders, updateOrder, updateOrderItems });
+  return Object.freeze({ getConfiguration, updateConfiguration, listProducts, updateProduct, getPublicCatalog, identifyPublicCustomer, createPublicOrder, listOrders, getOrderAlerts, markOrderRead, updateOrder, updateOrderItems });
 }
 
 const onlineStoreService = createOnlineStoreService();

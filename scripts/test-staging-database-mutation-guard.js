@@ -1,5 +1,6 @@
 const assert = require('assert/strict');
 const path = require('path');
+const fs = require('fs');
 const { spawnSync } = require('child_process');
 const {
   INITIAL_STAGING_DATABASE,
@@ -58,6 +59,9 @@ function assertScriptFailsBeforeRemoteConnection(script) {
 }
 
 async function main() {
+  const migratorSource = fs.readFileSync(path.join(__dirname, 'migrate-db.js'), 'utf8');
+  assert(migratorSource.includes('Migracion exacta ya registrada y validada'), 'La migración exacta debe poder repetirse como no-op validado.');
+  assert(migratorSource.includes('requirementsSatisfied(connection, target)'), 'El no-op remoto debe validar el contrato físico.');
   assert.deepStrictEqual(resolveDatabaseMutationMode({ environment: localEnvironment() }), { type: 'local' });
   assert.deepStrictEqual(resolveDatabaseMutationMode({
     args: [REMOTE_STAGING_ARGUMENT], environment: stagingEnvironment()
@@ -80,6 +84,14 @@ async function main() {
       STAGING_DB_MIGRATION_CONFIRMATION: REMOTE_STAGING_EXACT_MIGRATION_CONFIRMATION
     })
   }), { type: 'remote-staging-exact', migration: '034_separar_comprobantes_por_canal.sql' });
+  for (const migration of ['035_datos_cuenta_administrador.sql', '036_novedades_pedidos_online.sql']) {
+    assert.deepStrictEqual(resolveDatabaseMutationMode({
+      args: [REMOTE_STAGING_ARGUMENT, '--only', migration],
+      environment: stagingEnvironment({
+        STAGING_DB_MIGRATION_CONFIRMATION: REMOTE_STAGING_EXACT_MIGRATION_CONFIRMATION
+      })
+    }), { type: 'remote-staging-exact', migration });
+  }
   assert.throws(() => resolveDatabaseMutationMode({
     args: [REMOTE_STAGING_ARGUMENT, '--only', REMOTE_STAGING_EXACT_MIGRATION],
     environment: stagingEnvironment({ STAGING_DB_MIGRATION_CONFIRMATION: '' })

@@ -14,6 +14,7 @@ const migration = fs.readFileSync(path.join(root, 'database', 'migrations', '031
 const visibilityMigration = fs.readFileSync(path.join(root, 'database', 'migrations', '032_catalogo_online_visible_por_defecto.sql'), 'utf8');
 const ordersMigration = fs.readFileSync(path.join(root, 'database', 'migrations', '033_pedidos_tienda_online.sql'), 'utf8');
 const receiptChannelsMigration = fs.readFileSync(path.join(root, 'database', 'migrations', '034_separar_comprobantes_por_canal.sql'), 'utf8');
+const orderNotificationsMigration = fs.readFileSync(path.join(root, 'database', 'migrations', '036_novedades_pedidos_online.sql'), 'utf8');
 const schema = fs.readFileSync(path.join(root, 'database', 'tienda_abarrotes.sql'), 'utf8');
 const server = fs.readFileSync(path.join(root, 'server.js'), 'utf8');
 const migrator = fs.readFileSync(path.join(root, 'scripts', 'migrate-db.js'), 'utf8');
@@ -51,6 +52,16 @@ for (const sql of [receiptChannelsMigration, schema]) {
 assert(receiptChannelsMigration.includes("THEN 'online'"));
 assert(receiptChannelsMigration.includes("THEN 'O' ELSE 'T'"));
 assert(migrator.includes("'034_separar_comprobantes_por_canal.sql':"));
+for (const sql of [orderNotificationsMigration, schema]) {
+  assert(sql.includes('leidoEn DATETIME NULL'));
+  assert(sql.includes('idx_pedidoOnline_tienda_leido_estado_fecha'));
+  assert(sql.includes('chk_pedidoOnline_leido_fecha'));
+}
+assert(migrator.includes("'036_novedades_pedidos_online.sql':"));
+assert(onlineStoreRoutes.includes("'/pedidos-resumen'"));
+assert(onlineStoreRoutes.includes("'/pedidos/:idPedidoOnline/leido'"));
+assert(fs.readFileSync(path.join(root, 'services', 'online-store-service.js'), 'utf8').includes('getOrderAlerts'));
+assert(ownerUi.includes('administrau:online-orders-updated'));
 assert(app.includes("channel === 'online' ? 'Online' : 'Tienda física'"));
 assert(app.includes("features.includes('portal_clientes')"));
 assert(ownerUi.includes('/api/tienda-online/productos/'));
@@ -621,7 +632,30 @@ async function orderItemsEditContract() {
   assert.deepStrictEqual(events, ['begin', 'detalle-actualizado', 'detalle-eliminado', 'pedido-recalculado', 'commit', 'release']);
 }
 
-Promise.all([serviceContract(), orderContract(), orderWorkflowContract(), orderCreditWorkflowContract(), orderInventoryContract(), orderReadyShortageContract(), stockShortageContract(), reservedStockContract(), orderItemsEditContract()])
+async function orderAlertsContract() {
+  const calls = [];
+  const database = {
+    async query(sql, params) {
+      calls.push({ sql, params });
+      if (sql.includes('COUNT(*) pendientes')) return [[{ pendientes: 2 }]];
+      if (sql.includes('p.leidoEn IS NULL')) return [[{
+        idPedidoOnline: 41, numeroPedido: 6, nombreCliente: 'Carla', total: 64, creadoEn: '2026-10-13 10:00:00'
+      }]];
+      if (sql.startsWith('UPDATE pedidoTiendaOnline')) return [{ affectedRows: 1 }];
+      throw new Error(`Consulta inesperada: ${sql.slice(0, 90)}`);
+    }
+  };
+  const service = createOnlineStoreService({ database, clock: () => '2026-10-13 10:05:00' });
+  assert.deepStrictEqual(await service.getOrderAlerts(7), {
+    pendientes: 2,
+    noLeidos: [{ idPedidoOnline: 41, numeroPedido: 6, nombreCliente: 'Carla', total: 64, creadoEn: '2026-10-13 10:00:00' }]
+  });
+  assert.deepStrictEqual(await service.markOrderRead({ idTienda: 7, idAdministrador: 3 }, 41), { leido: true, idPedidoOnline: 41 });
+  const readCall = calls.find((call) => call.sql.startsWith('UPDATE pedidoTiendaOnline'));
+  assert.deepStrictEqual(readCall.params, ['2026-10-13 10:05:00', 3, 7, 41]);
+}
+
+Promise.all([serviceContract(), orderContract(), orderWorkflowContract(), orderCreditWorkflowContract(), orderInventoryContract(), orderReadyShortageContract(), stockShortageContract(), reservedStockContract(), orderItemsEditContract(), orderAlertsContract()])
   .then(() => console.log('test:online-store-foundation OK'))
   .catch((error) => {
     console.error(`Error: ${error.message}`);

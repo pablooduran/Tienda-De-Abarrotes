@@ -20,6 +20,11 @@
     let orderStatus = 'todos';
     let announcementTimer = null;
     let announcementSequence = 0;
+    let readObserver = null;
+
+    function notifyOrdersChanged() {
+      global.dispatchEvent(new CustomEvent('administrau:online-orders-updated'));
+    }
 
     function messageFor(error) {
       return patterns?.messageFor?.(error) || error?.message || 'No se pudo completar la operación.';
@@ -258,6 +263,7 @@
           orders = data.pedidos;
           renderOrderSummary();
           renderOrders();
+          notifyOrdersChanged();
           setAnnouncement('Pedido actualizado. Las unidades retiradas volvieron a quedar disponibles.');
         } catch (error) {
           button.disabled = false;
@@ -282,6 +288,7 @@
         orders = data.pedidos;
         renderOrderSummary();
         renderOrders();
+        notifyOrdersChanged();
         global.scrollTo({ top: scrollTop, behavior: 'auto' });
       } catch (error) {
         buttons.forEach((button) => { button.disabled = isReadOnly(); });
@@ -297,6 +304,8 @@
     function renderOrders() {
       const target = root.querySelector('[data-online-orders]');
       if (!target) return;
+      readObserver?.disconnect();
+      readObserver = null;
       const visibleOrders = orderStatus === 'todos'
         ? orders
         : orders.filter((order) => {
@@ -320,7 +329,7 @@
         const progressStatus = order.estado === 'confirmado' ? 'preparando' : order.estado;
         const progress = ['pendiente', 'preparando', 'listo', 'entregado'];
         const progressIndex = progress.indexOf(progressStatus);
-        return `<article class="online-order-card" data-online-order="${order.idPedidoOnline}" data-online-state="${order.estado}">
+        return `<article class="online-order-card${order.leidoEn ? '' : ' is-unread'}" data-online-order="${order.idPedidoOnline}" data-online-state="${order.estado}" ${order.leidoEn ? '' : 'data-online-unread'}>
           <header><div><span class="eyebrow">PEDIDO ${orderNumberLabel(order)}</span><h5>${escapeHtml(order.nombreCliente)}</h5><p>${escapeHtml(order.telefonoCliente)} · ${order.tipoEntrega === 'entrega' ? 'Entrega a domicilio' : 'Recojo en tienda'} · ${order.franjaEntrega}</p></div><strong>Bs ${Number(order.total).toFixed(2)}</strong></header>
           ${productDetails}
           ${order.direccionEntrega ? `<p class="online-order-address"><strong>Dirección:</strong> ${escapeHtml(order.direccionEntrega)}</p>` : ''}
@@ -360,6 +369,24 @@
           void updateOrder(card, 'cancelado', 'pendiente', message);
         });
       });
+      if ('IntersectionObserver' in global) {
+        readObserver = new global.IntersectionObserver((entries) => {
+          entries.filter((entry) => entry.isIntersecting).forEach(async (entry) => {
+            const card = entry.target;
+            readObserver?.unobserve(card);
+            const orderId = Number(card.dataset.onlineOrder);
+            try {
+              await api(`/api/tienda-online/pedidos/${orderId}/leido`, { method: 'PATCH' });
+              const order = orders.find((item) => Number(item.idPedidoOnline) === orderId);
+              if (order) order.leidoEn = new Date().toISOString();
+              card.classList.remove('is-unread');
+              card.removeAttribute('data-online-unread');
+              notifyOrdersChanged();
+            } catch (_) { /* Se intentará nuevamente al volver a mostrar el pedido. */ }
+          });
+        }, { threshold: 0.45 });
+        target.querySelectorAll('[data-online-unread]').forEach((card) => readObserver.observe(card));
+      }
     }
 
     function renderOrderSummary() {
@@ -504,6 +531,7 @@
       try {
         model = await api('/api/tienda-online/configuracion', { method: 'PUT', body: JSON.stringify(payload) });
         render();
+        notifyOrdersChanged();
         setAnnouncement('La configuración de tu tienda online quedó guardada.');
       } catch (error) {
         setAnnouncement(messageFor(error), true);
@@ -521,6 +549,7 @@
           api('/api/tienda-online/pedidos?estado=todos')
         ]);
         render();
+        notifyOrdersChanged();
       } catch (error) {
         root.innerHTML = `<section class="panel empty-state" role="alert"><h3>No se pudo abrir la tienda online</h3><p>${escapeHtml(messageFor(error))}</p></section>`;
       }

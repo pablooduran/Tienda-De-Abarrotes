@@ -24,11 +24,17 @@ assert(appHtml.indexOf('/js/workspace-experience.js') < appHtml.indexOf('/js/app
   "event.key === 'F2'",
   'data-dashboard-widget',
   "saveDraft(name, payload)",
+  'app.onlineOrderSummary?.noLeidos',
+  'data-online-order-id',
+  '/api/tienda-online/pedidos/${orderId}/leido',
   "api('/api/auditoria?page=1&pageSize=5')"
 ].forEach((fragment) => assert(experience.includes(fragment), `Falta el contrato de experiencia: ${fragment}`));
 
 assert(!experience.includes('idTienda'), 'La experiencia del navegador no debe enviar ni decidir el tenant.');
 assert(appJs.includes('workspaceExperience?.afterView(id)'), 'Las mejoras no se aplican después de cada vista.');
+assert(appJs.includes("api('/api/tienda-online/pedidos-resumen')"), 'La aplicación no actualiza el resumen de pedidos online.');
+assert(appJs.includes('nav-order-count'), 'La navegación no muestra el contador de pedidos pendientes.');
+assert(styles.includes('.nav-order-count'), 'Falta el estilo de la insignia de pedidos online.');
 assert(appJs.includes("workspaceExperience?.clearDraft('ventas')"), 'La venta no limpia su borrador al completarse.');
 assert(appJs.includes('workspaceExperience?.clearDraft(kind)'), 'La operación no limpia su borrador al completarse.');
 assert(appJs.includes('confirmation-impact'), 'Las confirmaciones no muestran el impacto de la operación.');

@@ -2,7 +2,7 @@
   const STORAGE_PREFIX = 'administrau-workspace-v1';
 
   function create(options) {
-    const { sections, navigate, getState, api, escapeHtml } = options;
+    const { sections, navigate, getState, api, escapeHtml, onOnlineOrderRead = () => {} } = options;
     const root = document.getElementById('workspaceExperienceRoot');
     const tools = document.getElementById('workspaceTools');
     const state = { activeView: 'inicio', searchOpen: false, notificationsOpen: false };
@@ -43,6 +43,14 @@
       const debts = (app.fiados || []).filter((debt) => Number(debt.saldoPendiente || debt.saldo || 0) > 0);
       const savedDrafts = drafts();
       const items = [];
+      const unreadOnlineOrders = app.onlineOrderSummary?.noLeidos || [];
+      unreadOnlineOrders.forEach((order) => items.push({
+        tone: 'success',
+        title: `Nuevo pedido online ${String(Number(order.numeroPedido || order.idPedidoOnline || 0)).padStart(3, '0')}`,
+        detail: `${order.nombreCliente} · Bs ${Number(order.total || 0).toFixed(2)}`,
+        view: 'tiendaOnline',
+        orderId: Number(order.idPedidoOnline)
+      }));
       if (lowStock.length) items.push({ tone: 'warning', title: `${lowStock.length} producto${lowStock.length === 1 ? '' : 's'} con stock bajo`, detail: 'Revisa inventario antes de la próxima venta.', view: 'productos' });
       if (debts.length) items.push({ tone: 'info', title: `${debts.length} fiado${debts.length === 1 ? '' : 's'} activo${debts.length === 1 ? '' : 's'}`, detail: 'Tienes saldos que puedes revisar en Cobranza.', view: 'pagos' });
       savedDrafts.forEach((name) => items.push({ tone: 'success', title: name === 'ventas' ? 'Venta guardada como borrador' : 'Compra guardada como borrador', detail: 'Puedes retomarla sin volver a cargar los productos.', view: name }));
@@ -126,11 +134,26 @@
       const items = notificationItems();
       root.innerHTML = `<div class="workspace-overlay workspace-overlay-clear" data-workspace-close></div><aside class="workspace-drawer" role="dialog" aria-modal="true" aria-labelledby="workspaceNotificationsTitle">
         <header><div><span class="eyebrow">Tu tienda hoy</span><h3 id="workspaceNotificationsTitle">Novedades y actividad</h3></div><button type="button" class="icon-button" data-workspace-close aria-label="Cerrar">×</button></header>
-        <section class="workspace-drawer-section"><h4>Requiere atención</h4><div data-notification-items>${items.length ? items.map((item) => `<button type="button" class="workspace-notification ${item.tone}" data-notification-view="${item.view}"><strong>${escapeHtml(item.title)}</strong><span>${escapeHtml(item.detail)}</span></button>`).join('') : '<div class="workspace-empty"><strong>Todo al día</strong><p>No hay avisos pendientes en este momento.</p></div>'}</div></section>
+        <section class="workspace-drawer-section"><h4>Requiere atención</h4><div data-notification-items>${items.length ? items.map((item) => `<button type="button" class="workspace-notification ${item.tone}" data-notification-view="${item.view}" ${item.orderId ? `data-online-order-id="${item.orderId}"` : ''}><strong>${escapeHtml(item.title)}</strong><span>${escapeHtml(item.detail)}</span></button>`).join('') : '<div class="workspace-empty"><strong>Todo al día</strong><p>No hay avisos pendientes en este momento.</p></div>'}</div></section>
         <section class="workspace-drawer-section"><div class="workspace-section-heading"><h4>Actividad reciente</h4><button type="button" class="link-button" data-open-audit>Ver todo</button></div><div class="workspace-activity" data-workspace-activity><p class="muted">Cargando actividad…</p></div></section>
       </aside>`;
       root.querySelectorAll('[data-workspace-close]').forEach((item) => item.addEventListener('click', closePanels));
-      root.querySelectorAll('[data-notification-view]').forEach((button) => button.addEventListener('click', () => { closePanels(); navigate(button.dataset.notificationView); }));
+      root.querySelectorAll('[data-notification-view]').forEach((button) => button.addEventListener('click', async () => {
+        const orderId = Number(button.dataset.onlineOrderId || 0);
+        if (orderId) {
+          button.disabled = true;
+          try {
+            await api(`/api/tienda-online/pedidos/${orderId}/leido`, { method: 'PATCH' });
+            const app = getState();
+            if (app.onlineOrderSummary) {
+              app.onlineOrderSummary.noLeidos = (app.onlineOrderSummary.noLeidos || []).filter((order) => Number(order.idPedidoOnline) !== orderId);
+            }
+            onOnlineOrderRead(orderId);
+          } catch (_) { button.disabled = false; return; }
+        }
+        closePanels();
+        navigate(button.dataset.notificationView);
+      }));
       root.querySelector('[data-open-audit]').addEventListener('click', () => { closePanels(); navigate('auditoria'); });
       root.querySelector('[data-workspace-activity]').innerHTML = await activityMarkup();
       root.querySelector('.workspace-drawer button')?.focus();
