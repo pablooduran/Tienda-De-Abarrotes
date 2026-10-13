@@ -6,7 +6,7 @@
   "scripts": {
     "start": "node server.js",
     "start:local": "node scripts/start-local.js",
-    "dev": "nodemon server.js",
+    "dev": "node --watch server.js",
     "db:init": "node scripts/init-db.js",
     "db:create-staging-database": "node scripts/create-staging-database.js --remote-staging-create",
     "db:reset-staging-database": "node scripts/create-staging-database.js --remote-staging-reset",
@@ -191,7 +191,6 @@
     "redis": "^6.2.1"
   },
   "devDependencies": {
-    "nodemon": "^3.1.4",
     "playwright-core": "^1.61.1"
   },
   "overrides": {
