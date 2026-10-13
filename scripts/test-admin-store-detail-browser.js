@@ -41,7 +41,11 @@ function fixture(catalogQueries) {
       ventas: { cantidad: 0, total: 0 },
       pagosPendientes: 0
     });
-    if (pathname === '/api/admin/planes') return json(response, []);
+    if (pathname === '/api/admin/planes') return json(response, [{
+      idPlan: 1, codigo: 'basico', nombre: 'Basic', descripcion: 'Plan inicial', activo: 1,
+      precioMensual: 0, duracionDias: 30, limitePropietarios: 1, limiteProductos: 100,
+      limiteClientes: 250, limiteProveedores: 20
+    }]);
     if (pathname === '/api/admin/tiendas') return json(response, [store, suspendedStore]);
     if (pathname === '/api/admin/tiendas/1') return json(response, store);
     if (pathname === '/api/admin/tiendas/1/propietarios') return json(response, []);
@@ -108,6 +112,27 @@ async function verify(browser, baseUrl, width, catalogQueries) {
       await page.waitForFunction(() => document.querySelector('.admin-sidebar').getBoundingClientRect().width > 240);
       await page.locator('#adminSidebarToggle').click();
     }
+    await page.locator('#createStoreButton').click();
+    await page.locator('#formDialog[open]').waitFor();
+    assert.doesNotMatch(await page.locator('#formDialog').textContent(), /Slug|Propietario activo/,
+      'El alta no debe mostrar términos técnicos ni opciones innecesarias.');
+    await page.locator('#dynamicForm [name="nombre"]').fill('Tienda De Prueba David');
+    assert.strictEqual(await page.locator('#dynamicForm [name="usuario"]').inputValue(), 'tienda.de.prueba.david');
+    assert.match(await page.locator('.store-address-preview').textContent(), /\/tienda\/tienda-de-prueba-david$/);
+    assert.match(await page.locator('.store-expiry-preview').textContent(), /estará vigente hasta el/i);
+    assert.match(await page.locator('.store-plan-preview').textContent(), /100 productos/);
+    await page.locator('#dynamicForm [name="password"]').fill('SeguraTemporal12');
+    await page.locator('#dynamicForm [name="confirmacionPassword"]').fill('SeguraTemporal12');
+    assert.strictEqual(await page.locator('.password-status.matches').textContent(), 'Las contraseñas coinciden.');
+    await page.locator('.password-visibility-button').first().click();
+    assert.strictEqual(await page.locator('#dynamicForm [name="password"]').getAttribute('type'), 'text');
+    await page.locator('#formSubmitButton').click();
+    await page.locator('#confirmDialog[open]').waitFor();
+    assert.match(await page.locator('#confirmMessage').textContent(), /Tienda De Prueba David[\s\S]*Basic[\s\S]*tienda\.de\.prueba\.david/);
+    await page.locator('#confirmCancel').click();
+    assert.strictEqual(await page.locator('#formDialog').evaluate((node) => node.open), true,
+      'Cancelar el resumen debe conservar el formulario y sus datos.');
+    await page.locator('#formDialog [data-close-dialog]').first().click();
     const detailButton = page.locator('#storesTableBody .table-action').first();
     await detailButton.waitFor();
     assert.strictEqual(await page.locator('#storesTableBody tr').count(), 2, 'Deben cargarse las dos tiendas de prueba.');

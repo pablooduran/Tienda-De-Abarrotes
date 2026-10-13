@@ -708,6 +708,144 @@ function openConfirmation(title, message, acceptLabel = 'Confirmar') {
   });
 }
 
+function webAddressPart(value) {
+  return String(value || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 80);
+}
+
+function suggestedOwnerUser(value) {
+  const suggestion = webAddressPart(value).replace(/-/g, '.').slice(0, 40);
+  return suggestion && suggestion.length < 3 ? `${suggestion}.admin` : suggestion;
+}
+
+function storeAccessEndDate(days) {
+  const duration = Number(days);
+  if (!Number.isFinite(duration) || duration < 1) return '';
+  const date = new Date();
+  date.setHours(12, 0, 0, 0);
+  date.setDate(date.getDate() + duration);
+  return new Intl.DateTimeFormat('es-BO', { dateStyle: 'long' }).format(date);
+}
+
+function appendFieldFeedback(input, className, ariaLive = false) {
+  const feedback = document.createElement('small');
+  feedback.className = className;
+  if (ariaLive) feedback.setAttribute('aria-live', 'polite');
+  input.closest('.form-field')?.appendChild(feedback);
+  return feedback;
+}
+
+function addPasswordVisibility(input) {
+  const wrapper = document.createElement('div');
+  wrapper.className = 'password-field-control';
+  input.parentNode.insertBefore(wrapper, input);
+  wrapper.appendChild(input);
+  const button = document.createElement('button');
+  button.type = 'button';
+  button.className = 'password-visibility-button';
+  button.textContent = 'Mostrar';
+  button.setAttribute('aria-label', 'Mostrar contraseña');
+  button.addEventListener('click', () => {
+    const visible = input.type === 'text';
+    input.type = visible ? 'password' : 'text';
+    button.textContent = visible ? 'Mostrar' : 'Ocultar';
+    button.setAttribute('aria-label', visible ? 'Mostrar contraseña' : 'Ocultar contraseña');
+  });
+  wrapper.appendChild(button);
+}
+
+function setupCreateStoreForm() {
+  const form = elements.dynamicForm;
+  const name = form.elements.nombre;
+  const address = form.elements.slug;
+  const owner = form.elements.usuario;
+  const subscriptionType = form.elements.tipoSuscripcion;
+  const duration = form.elements.duracionDias;
+  const plan = form.elements.planCodigo;
+  const password = form.elements.password;
+  const confirmation = form.elements.confirmacionPassword;
+  let ownerWasEdited = false;
+
+  const addressPreview = appendFieldFeedback(address, 'store-address-preview', true);
+  const durationPreview = appendFieldFeedback(duration, 'store-expiry-preview', true);
+  const planPreview = appendFieldFeedback(plan, 'store-plan-preview', true);
+  const passwordStatus = appendFieldFeedback(password, 'password-status', true);
+  const confirmationStatus = appendFieldFeedback(confirmation, 'password-status', true);
+  addPasswordVisibility(password);
+  addPasswordVisibility(confirmation);
+
+  const updateAddress = () => {
+    const generated = webAddressPart(address.value || name.value);
+    addressPreview.textContent = generated
+      ? `El enlace público será: ${window.location.origin}/tienda/${generated}`
+      : 'Escribe el nombre de la tienda para ver su enlace público.';
+  };
+  const updateOwner = () => {
+    if (!ownerWasEdited) owner.value = suggestedOwnerUser(name.value);
+  };
+  const updateDuration = () => {
+    const typeLabel = { prueba: 'La prueba', cortesia: 'La cortesía', pagada: 'El acceso pagado' }[subscriptionType.value]
+      || 'El acceso';
+    const endDate = storeAccessEndDate(duration.value);
+    durationPreview.textContent = endDate
+      ? `${typeLabel} estará vigente hasta el ${endDate}.`
+      : 'Indica cuántos días tendrá acceso.';
+    const label = duration.closest('.form-field')?.querySelector(':scope > span');
+    if (label) label.textContent = subscriptionType.value === 'prueba'
+      ? 'Días de prueba'
+      : subscriptionType.value === 'cortesia' ? 'Días de cortesía' : 'Duración del acceso (días)';
+  };
+  const updatePlan = () => {
+    const selected = state.plans.find((item) => item.codigo === plan.value);
+    if (!selected) {
+      planPreview.textContent = '';
+      return;
+    }
+    const limits = [
+      selected.limiteProductos ? `${selected.limiteProductos} productos` : null,
+      selected.limiteClientes ? `${selected.limiteClientes} clientes` : null,
+      selected.limitePropietarios ? `${selected.limitePropietarios} propietario${Number(selected.limitePropietarios) === 1 ? '' : 's'}` : null
+    ].filter(Boolean);
+    planPreview.textContent = limits.length ? `Incluye hasta ${limits.join(', ')}.` : (selected.descripcion || 'Plan sin límites configurados.');
+  };
+  const updatePasswords = () => {
+    const checks = [password.value.length >= 12, /[a-z]/.test(password.value), /[A-Z]/.test(password.value), /\d/.test(password.value)];
+    const complete = checks.filter(Boolean).length;
+    passwordStatus.className = `password-status strength-${complete}`;
+    passwordStatus.textContent = !password.value
+      ? 'Usa al menos 12 caracteres; combina mayúsculas, minúsculas y números.'
+      : complete === 4 ? 'Contraseña segura.' : `Seguridad ${complete <= 2 ? 'baja' : 'media'}: completa los requisitos indicados.`;
+    confirmationStatus.textContent = !confirmation.value
+      ? ''
+      : confirmation.value === password.value ? 'Las contraseñas coinciden.' : 'Las contraseñas no coinciden.';
+    confirmationStatus.className = `password-status ${confirmation.value === password.value ? 'matches' : 'does-not-match'}`;
+    confirmation.setCustomValidity(confirmation.value && confirmation.value !== password.value
+      ? 'Las contraseñas no coinciden.' : '');
+  };
+
+  name.addEventListener('input', () => {
+    updateAddress();
+    updateOwner();
+  });
+  address.addEventListener('input', updateAddress);
+  owner.addEventListener('input', () => { ownerWasEdited = Boolean(owner.value.trim()); });
+  subscriptionType.addEventListener('change', updateDuration);
+  duration.addEventListener('input', updateDuration);
+  plan.addEventListener('change', updatePlan);
+  password.addEventListener('input', updatePasswords);
+  confirmation.addEventListener('input', updatePasswords);
+  updateAddress();
+  updateDuration();
+  updatePlan();
+  updatePasswords();
+}
+
 function createStore() {
   const planOptions = state.plans.filter((plan) => isCommercialPlan(plan)).map((plan) => ({
     value: plan.codigo, label: plan.nombre
@@ -715,9 +853,12 @@ function createStore() {
   openForm({
     title: 'Crear tienda y propietario',
     submitLabel: 'Crear tienda',
+    eyebrow: 'Nueva cuenta comercial',
+    intro: 'Configura la tienda, su periodo de acceso y las credenciales de la persona propietaria.',
+    formClass: 'modal-create-store',
     fields: [
-      { name: 'nombre', label: 'Nombre de la tienda', required: true, full: true },
-      { name: 'slug', label: 'Slug (opcional)', placeholder: 'Se genera desde el nombre', full: true },
+      { name: 'nombre', label: 'Nombre de la tienda', required: true, full: true, section: 'Datos de la tienda', sectionHint: 'Este nombre será visible para el propietario y sus clientes.' },
+      { name: 'slug', label: 'Dirección web personalizada (opcional)', placeholder: 'Se genera automáticamente desde el nombre', hint: 'Solo cámbiala si quieres una dirección distinta al nombre de la tienda.', full: true },
       {
         name: 'estado', label: 'Estado inicial', type: 'select', value: 'activa',
         options: [
@@ -726,8 +867,7 @@ function createStore() {
           { value: 'inactiva', label: 'Inactiva' }
         ]
       },
-      { name: 'propietarioActivo', label: 'Propietario activo', type: 'checkbox', value: true },
-      { name: 'planCodigo', label: 'Plan', type: 'select', value: 'basico', options: planOptions, required: true },
+      { name: 'planCodigo', label: 'Plan', type: 'select', value: 'basico', options: planOptions, required: true, section: 'Plan y periodo de acceso', sectionHint: 'Elige qué funciones tendrá y durante cuánto tiempo estarán habilitadas.' },
       {
         name: 'tipoSuscripcion', label: 'Tipo de suscripción', type: 'select', value: 'prueba',
         options: [
@@ -736,12 +876,21 @@ function createStore() {
           { value: 'cortesia', label: 'Cortesía' }
         ]
       },
-      { name: 'duracionDias', label: 'Duración en días', type: 'number', value: '14', min: 1, max: 3650, required: true },
-      { name: 'usuario', label: 'Usuario del propietario', required: true, autocomplete: 'off', full: true },
-      { name: 'password', label: 'Contraseña', type: 'password', required: true, minLength: 12, autocomplete: 'new-password' },
+      { name: 'duracionDias', label: 'Días de prueba', type: 'number', value: '14', min: 1, max: 3650, required: true },
+      { name: 'usuario', label: 'Usuario para iniciar sesión', required: true, autocomplete: 'off', full: true, section: 'Acceso del propietario', sectionHint: 'La cuenta se habilitará automáticamente al crear la tienda.', hint: 'Se sugiere uno desde el nombre; puedes reemplazarlo.' },
+      { name: 'password', label: 'Contraseña temporal', type: 'password', required: true, minLength: 12, autocomplete: 'new-password' },
       { name: 'confirmacionPassword', label: 'Confirmar contraseña', type: 'password', required: true, minLength: 12, autocomplete: 'new-password' }
     ],
     action: async (values) => {
+      const generatedAddress = webAddressPart(values.slug || values.nombre);
+      const selectedPlan = state.plans.find((plan) => plan.codigo === values.planCodigo);
+      const typeLabel = { prueba: 'Prueba gratuita', pagada: 'Pagada manualmente', cortesia: 'Cortesía' }[values.tipoSuscripcion];
+      const confirmed = await openConfirmation(
+        'Revisa antes de crear la tienda',
+        `${values.nombre}\nDirección: ${window.location.origin}/tienda/${generatedAddress}\nPlan: ${selectedPlan?.nombre || values.planCodigo} · ${typeLabel}\nAcceso hasta: ${storeAccessEndDate(values.duracionDias)}\nUsuario propietario: ${values.usuario}`,
+        'Sí, crear tienda'
+      );
+      if (!confirmed) return false;
       const result = await api('/api/admin/tiendas', {
         method: 'POST',
         body: {
@@ -753,7 +902,7 @@ function createStore() {
             usuario: values.usuario,
             password: values.password,
             confirmacionPassword: values.confirmacionPassword,
-            activo: values.propietarioActivo
+            activo: true
           },
           suscripcion: {
             planCodigo: values.planCodigo,
@@ -765,8 +914,10 @@ function createStore() {
       });
       showToast(result.message);
       await loadStores(result.tienda.idTienda);
+      return true;
     }
   });
+  setupCreateStoreForm();
 }
 
 function manageSubscription() {
@@ -1317,8 +1468,8 @@ elements.dynamicForm.addEventListener('submit', async (event) => {
   elements.formError.hidden = true;
   elements.formSubmitButton.disabled = true;
   try {
-    await state.formAction(formValues());
-    elements.formDialog.close();
+    const completed = await state.formAction(formValues());
+    if (completed !== false) elements.formDialog.close();
   } catch (error) {
     elements.formError.textContent = error.message;
     elements.formError.hidden = false;

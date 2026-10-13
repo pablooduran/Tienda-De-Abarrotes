@@ -904,6 +904,7 @@ tbody tr:hover {
 .confirm-content p {
   color: var(--muted);
   line-height: 1.55;
+  white-space: pre-line;
 }
 
 .toast {
@@ -1693,6 +1694,33 @@ html[data-theme="dark"] {
 .modal-product .form-grid { gap: 14px; padding: 18px 22px 22px; }
 .modal-product .checkbox-field { padding: 10px 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); }
 .modal-product .checkbox-field:has(input:checked) { border-color: var(--brand); background: var(--brand-soft); }
+.modal-create-store { width: min(850px, calc(100vw - 28px)); }
+.modal-create-store header { background: linear-gradient(110deg, color-mix(in srgb, var(--brand) 11%, var(--surface)), var(--surface)); }
+.modal-create-store .form-grid { gap: 14px; padding: 18px 22px 22px; }
+.store-address-preview,
+.store-expiry-preview,
+.store-plan-preview,
+.password-status { display: block; color: var(--muted); font-size: .76rem; font-weight: 600; line-height: 1.4; overflow-wrap: anywhere; }
+.store-address-preview,
+.store-expiry-preview { padding: 9px 11px; border: 1px solid color-mix(in srgb, var(--brand) 28%, var(--line)); border-radius: 7px; background: var(--brand-soft); color: var(--brand-dark); }
+.password-field-control { position: relative; display: grid; }
+.password-field-control input { padding-right: 78px; }
+.password-visibility-button { position: absolute; top: 50%; right: 7px; padding: 5px 8px; transform: translateY(-50%); border: 0; border-radius: 5px; color: var(--brand-dark); background: var(--brand-soft); cursor: pointer; font-size: .72rem; font-weight: 800; }
+.password-status.strength-4,
+.password-status.matches { color: var(--brand-dark); }
+.password-status.does-not-match { color: var(--danger); }
+html[data-theme="dark"] .store-address-preview,
+html[data-theme="dark"] .store-expiry-preview,
+html[data-theme="dark"] .password-visibility-button,
+html[data-theme="dark"] .password-status.strength-4,
+html[data-theme="dark"] .password-status.matches { color: #95e3a5; }
+
+@media (max-width: 600px) {
+  .modal-create-store { width: 100%; max-width: none; max-height: 100dvh; margin: 0; border-radius: 0; }
+  .modal-create-store .form-grid { padding: 14px; }
+  .modal-create-store header,
+  .modal-create-store footer { padding-inline: 14px; }
+}
 
 @media (max-width: 920px) {
   .saas-summary,
